@@ -1,0 +1,66 @@
+//! Analysis rule: detect magic numbers.
+
+use super::kinds;
+use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::syntax::parser::TsNode;
+
+/// Node kinds for numeric literals (cross-language).
+const NUMBER_KINDS: &[&str] = &[
+    "integer_literal", // Rust
+    "float_literal",   // Rust
+    "number",          // JavaScript, TypeScript, Python
+    "integer",         // Python
+    "float",           // Python
+];
+
+/// Numbers that are almost never "magic" — too common to flag.
+const TRIVIAL_VALUES: &[&str] = &["0", "1", "2", "0.0", "1.0"];
+
+/// Additional safe parents specific to numeric literals.
+const NUMERIC_SAFE_PARENTS: &[&str] = &[
+    "index_expression",
+    "range_expression",
+    "range",
+    "type_arguments",
+    "type_identifier",
+    "unary_expression",
+    "prefix_expression",
+];
+
+struct MagicNumber;
+
+impl AnalysisRule for MagicNumber {
+    fn id(&self) -> &'static str { "magic-number" }
+
+    fn node_kinds(&self) -> &'static [&'static str] { NUMBER_KINDS }
+
+    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+        let text = node.text();
+
+        if TRIVIAL_VALUES.contains(&text) {
+            return None;
+        }
+
+        // Walk up to find the context — skip unary negation.
+        let mut ancestor = node.raw().parent()?;
+        if ancestor.kind() == "unary_expression" || ancestor.kind() == "prefix_expression" {
+            ancestor = ancestor.parent()?;
+        }
+
+        if kinds::is_safe_literal_context(ancestor, NUMERIC_SAFE_PARENTS) {
+            return None;
+        }
+
+        let start_line = node.raw().start_position().row;
+
+        Some(Hint {
+            rule_id: self.id(),
+            severity: Severity::Info,
+            line_range: start_line..start_line,
+            message: format!("Magic number `{text}` — extract to a named constant for clarity"),
+            suggestions: vec!["Extract to a `const` or `static` with a descriptive name".into()],
+        })
+    }
+}
+
+register_analysis_rule!(MagicNumber);

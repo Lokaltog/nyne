@@ -1,0 +1,14 @@
+# TODOs
+{% for file in files %}
+
+## {{ file.path }}
+{% for entry in file.entries %}
+
+- **L{{ entry.line }}** `{{ entry.tag }}` {{ entry.text }}
+  [`{{ file.path }}@/symbols/at-line/{{ entry.line }}`]
+{% endfor %}
+{% endfor %}
+{% if files is not defined or files | length == 0 %}
+
+No TODO/FIXME comments found.
+{% endif %}

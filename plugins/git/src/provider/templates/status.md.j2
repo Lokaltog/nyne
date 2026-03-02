@@ -1,0 +1,59 @@
+# Status
+
+**Branch:** {{ data.branch }}
+{% if data.tracking %}
+**Tracking:** {{ data.tracking.remote }} (ahead {{ data.tracking.ahead }}, behind {{ data.tracking.behind }})
+{% endif %}
+{% if data.stash_count %}
+**Stash:** {{ data.stash_count }} {{ "entry" if data.stash_count == 1 else "entries" }}
+{% endif %}
+
+{% if data.conflicted %}
+## Conflicted
+
+{% for path in data.conflicted %}
+- {{ path }}
+{% endfor %}
+
+{% endif %}
+{% if data.staged %}
+## Staged
+
+| File | Status |
+|-|-|
+{% for e in data.staged %}
+| {{ e.path }} | {{ e.label }} |
+{% endfor %}
+
+{% endif %}
+{% if data.modified %}
+## Modified
+
+| File | Status |
+|-|-|
+{% for e in data.modified %}
+| {{ e.path }} | {{ e.label }} |
+{% endfor %}
+
+{% endif %}
+{% if data.untracked %}
+## Untracked
+
+{% for path in data.untracked %}
+- {{ path }}
+{% endfor %}
+
+{% endif %}
+{% if not data.conflicted and not data.staged and not data.modified and not data.untracked %}
+_Working tree clean._
+{% endif %}
+{% if data.recent_commits %}
+
+## Recent Commits
+
+| Hash | Author | Date | Message |
+|-|-|-|-|
+{% for c in data.recent_commits %}
+| `{{ c.hash }}` | {{ c.author }} | {{ c.date }} | {{ c.message }} |
+{% endfor %}
+{% endif %}

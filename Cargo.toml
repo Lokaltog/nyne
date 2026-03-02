@@ -1,0 +1,191 @@
+[package]
+name = "nyne-bin"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "nyne"
+path = "src/main.rs"
+
+[dependencies]
+nyne.workspace = true
+nyne-git.workspace = true
+nyne-coding.workspace = true
+clap.workspace = true
+color-eyre.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
+
+[workspace]
+resolver = "3"
+members = ["nyne", "nyne-macros", "plugins/*"]
+default-members = [".", "nyne", "nyne-macros", "plugins/*"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.93"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+# Internal crates
+nyne = { path = "nyne" }
+nyne-macros = { path = "nyne-macros" }
+nyne-git = { package = "nyne-plugin-git", path = "plugins/git" }
+nyne-coding = { package = "nyne-plugin-coding", path = "plugins/coding" }
+
+# Core
+aho-corasick = { version = "1.1.4", features = ["logging"] }
+base64 = "0.22.1"
+clap = { version = "4", features = ["derive"] }
+color-eyre = "0.6"
+console = "0.16.3"
+convert_case = "0.11.0"
+crop = { version = "0.4.3", features = ["serde", "utf16-metric"] }
+crossbeam-channel = "0.5.15"
+directories = "6"
+filetime = "0.2.27"
+fuser = "0.17"
+garde = { version = "0.22", features = ["derive", "serde"] }
+git2 = { version = "0.20", default-features = false }
+humantime = "2"
+humantime-serde = "1"
+ignore = { version = "0.4.25", features = ["simd-accel"] }
+jiff = { version = "0.2", features = ["serde"] }
+libc = "0.2"
+linkme = "0.3.35"
+lsp-types = "0.97.0"
+minijinja = { version = "2.18.0", features = ["builtins"] }
+notify = "8.2.0"
+owo-colors = "4.3.0"
+palette = { version = "0.7.6", features = ["std"] }
+parking_lot = "0.12.5"
+proc-macro2 = "1"
+quote = "1"
+rustix = "1.1.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+signal-hook = "0.4.3"
+similar = "2.7.0"
+slab = "0.4.12"
+strum = { version = "0.28", features = ["derive"] }
+syn = { version = "2", features = ["full", "extra-traits"] }
+thiserror = "2.0.18"
+toml = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tree-sitter = "0.26"
+tree-sitter-fennel = { path = "plugins/coding/vendor/tree-sitter-fennel" }
+tree-sitter-jinja = "0.11.1"
+tree-sitter-md = "0.5.3"
+tree-sitter-nix = "0.3.0"
+tree-sitter-python = "0.25.0"
+tree-sitter-rust = "0.24"
+tree-sitter-toml-ng = "0.7.0"
+tree-sitter-typescript = "0.23.2"
+url = "2.5.8"
+
+# Testing
+assert_cmd = "2"
+assert_fs = "1"
+criterion = { version = "0.8.2", features = ["html_reports"] }
+insta = { version = "1", features = ["json", "filters"] }
+predicates = "3"
+proptest = "1.10.0"
+rstest = "0.26.1"
+similar-asserts = "1"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+
+# Noisy nursery lints — false positive prone
+option_if_let_else = "allow"
+significant_drop_tightening = "allow"
+fallible_impl_from = "allow"          # conflicts with idiomatic From impls
+
+# Noisy pedantic lints — valid but not worth fighting
+module_name_repetitions = "allow"       # task::TaskError is fine
+must_use_candidate = "allow"            # too noisy on every fn returning a value
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+missing_docs_in_private_items = "allow" # if you ever enable this via rustdoc
+
+# Safety & correctness — hard errors
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+indexing_slicing = "deny"         # forces .get() over [i]
+as_conversions = "allow"          # too noisy for FUSE code
+cast_possible_truncation = "deny" # u64 as u32 — data loss
+cast_possible_wrap = "deny"       # u64 as i64 — sign issues
+cast_sign_loss = "deny"           # i64 as u64 — negative → huge
+cast_precision_loss = "warn"      # f64 as f32
+
+# Clone / copy discipline
+clone_on_ref_ptr = "warn"            # Arc::clone(&x) not x.clone()
+redundant_clone = "warn"
+needless_pass_by_value = "warn"      # fn f(s: String) where &str works
+implicit_clone = "warn"              # hidden .to_owned() on owned types
+large_types_passed_by_value = "warn" # big structs should be &
+
+# Ownership & borrowing discipline
+needless_borrow = "warn"            # &String where String derefs to &str
+needless_pass_by_ref_mut = "warn"   # &mut when only & is needed
+ref_option_ref = "warn"             # &Option<&T> is usually a smell
+trivially_copy_pass_by_ref = "warn" # &u64 where u64 (Copy) is fine
+
+# String handling consistency
+str_to_string = "warn"       # .to_owned() over .to_string() for &str
+string_add = "warn"          # String + &str — prefer format! or push_str
+string_lit_as_bytes = "warn" # "foo".as_bytes() → b"foo"
+
+# Control flow — enforce early return style
+if_then_some_else_none = "warn" # use .then(|| x)
+manual_let_else = "warn"        # use let-else over if-let + return
+match_bool = "warn"             # use if/else not match on bool
+needless_return = "warn"        # trailing return keyword
+needless_continue = "warn"
+single_match = "warn"           # match with one arm → if let
+single_match_else = "warn"      # match with two arms → if let else
+
+# Iterator / functional style
+manual_filter_map = "warn"           # .filter().map() → .filter_map()
+manual_find_map = "warn"             # .find().map() → .find_map()
+flat_map_option = "warn"             # .flat_map(|x| x) → .flatten()
+iter_not_returning_iterator = "warn" # fn iter() that doesn't return Iterator
+
+# Import hygiene
+wildcard_imports = "warn"              # no use foo::*
+enum_glob_use = "warn"                 # no use MyEnum::*
+single_component_path_imports = "warn" # useless `use std;`
+absolute_paths = "warn"
+
+# Code smell detection
+cognitive_complexity = "warn"      # flags deeply nested / complex fns
+too_many_lines = "warn"            # flags oversized functions
+fn_params_excessive_bools = "warn" # fn f(a: bool, b: bool, c: bool) smell
+struct_excessive_bools = "warn"    # struct with 3+ bool fields — use enum
+large_stack_arrays = "warn"        # accidental [0u8; 1_000_000] on stack
+create_dir = "warn"                # create_dir → create_dir_all
+filetype_is_file = "warn"          # .is_file() misses symlinks
+
+# Library code hygiene (remove these if building a CLI/app only)
+print_stdout = "warn" # no println! — use tracing/log
+print_stderr = "warn" # no eprintln! — use tracing/log

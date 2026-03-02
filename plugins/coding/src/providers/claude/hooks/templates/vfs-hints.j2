@@ -1,0 +1,16 @@
+{# Shared macros for VFS hint fragments across hook templates. #}
+
+{% macro vfs_analysis(file="<file>", sym="<Symbol>") %}
+  Read {{ file }}@/symbols/{{ sym }}@/{{ FILE_CALLERS }}    — who calls it (with code context)
+  Read {{ file }}@/symbols/{{ sym }}@/{{ FILE_DEPS }}       — what it calls
+  Read {{ file }}@/symbols/{{ sym }}@/{{ FILE_REFERENCES }} — all usage sites
+{% endmacro %}
+
+{% macro structural_nav(dir="<dir>", file="<file>") %}
+  Read {{ dir }}@/{{ FILE_OVERVIEW }}  — aggregated view of all files and symbols
+  ls {{ file }}@/symbols/     — list all symbols in a file
+{% endmacro %}
+
+{% macro ssot_reminder(rel) %}
+SSOT/DRY check on {{ rel }}: does this change duplicate logic, constants, or patterns that exist elsewhere in the codebase? If yes, stop and extract a shared abstraction before continuing.
+{% endmacro %}

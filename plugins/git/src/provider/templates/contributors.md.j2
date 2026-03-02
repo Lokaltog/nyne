@@ -1,0 +1,11 @@
+# Contributors
+
+{% if data %}
+| Author | Commits |
+|-|-|
+{% for c in data %}
+| {{ c.name }} | {{ c.commits }} |
+{% endfor %}
+{% else %}
+_No contributors found._
+{% endif %}

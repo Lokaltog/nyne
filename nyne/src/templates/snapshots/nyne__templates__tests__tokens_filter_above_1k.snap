@@ -1,0 +1,5 @@
+---
+source: src/templates/tests.rs
+expression: "engine.render(\"test\", &V { count: 2100 })"
+---
+~2.1k

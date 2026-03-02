@@ -1,0 +1,104 @@
+# nyne Path Patterns — Complete Reference
+
+## Root-Level Virtual Files
+
+```
+@/GUIDE.md                    # agent-friendly nyne guide (generated)
+@/STATUS.md                   # mount status: tier, languages, LSP, cache stats, errors
+```
+
+## File-Level Namespace
+
+```
+file.{{ ext }}@/OVERVIEW.md                  # symbol table with line ranges
+file.{{ ext }}@/lines                        # all lines: read, write (replaces), append (to EOF)
+file.{{ ext }}@/lines:M                      # line M: read, write (replaces), append (inserts after)
+file.{{ ext }}@/lines:M-N                    # range: read, write (replaces range), append (inserts after N)
+```
+
+Line ranges with `:M-N` are lookup-only — they don't appear in `readdir`.
+
+## File-Level Git
+
+```
+file.{{ ext }}@/git/BLAME.md                # per-line authorship
+file.{{ ext }}@/git/BLAME.md:M-N            # blame scoped to range (lookup-only)
+file.{{ ext }}@/git/CONTRIBUTORS.md         # contributors ranked by line ownership
+file.{{ ext }}@/git/LOG.md                  # commit log
+file.{{ ext }}@/git/LOG.md:-10              # last 10 commits (lookup-only)
+file.{{ ext }}@/git/LOG.md:5-15             # commits 5-15 (lookup-only)
+file.{{ ext }}@/git/NOTES.md               # git notes for commits touching this file
+file.{{ ext }}@/diff/HEAD.diff              # uncommitted changes
+```
+
+## File-Level LSP
+
+```
+file.{{ ext }}@/DIAGNOSTICS.md              # all diagnostics as markdown
+file.{{ ext }}@/actions/                     # LSP code actions as .diff files
+```
+
+## Symbol Namespace
+
+### Structure
+
+```
+file.{{ ext }}@/symbols/OVERVIEW.md              # symbol listing
+file.{{ ext }}@/symbols/imports.{{ ext }}               # import block (read, write, append)
+file.{{ ext }}@/symbols/docstring.txt            # module-level docstring
+file.{{ ext }}@/symbols/by-kind/                 # type-filtered views
+file.{{ ext }}@/symbols/by-kind/fn/             # symlinks to all functions
+file.{{ ext }}@/symbols/by-kind/struct/         # symlinks to all structs
+file.{{ ext }}@/symbols/at-line/                 # line-to-symbol lookup (lookup-only)
+```
+
+### Per-Symbol Files
+
+```
+file.{{ ext }}@/symbols/Foo@/body.{{ ext }}             # symbol body (read, write splices back, append inserts after)
+file.{{ ext }}@/symbols/Foo@/signature.{{ ext }}        # declaration line (read, write changes signature)
+file.{{ ext }}@/symbols/Foo@/docstring.txt       # docstring (read, write, append, truncate clears)
+file.{{ ext }}@/symbols/Foo@/OVERVIEW.md         # child symbol listing
+```
+
+### Per-Symbol LSP
+
+```
+file.{{ ext }}@/symbols/Foo@/callers/            # symlinks to caller symbols
+file.{{ ext }}@/symbols/Foo@/CALLERS.md          # caller sites with inline code context
+file.{{ ext }}@/symbols/Foo@/deps/               # symlinks to callee/dependency symbols
+file.{{ ext }}@/symbols/Foo@/DEPS.md             # callees as markdown
+file.{{ ext }}@/symbols/Foo@/references/         # symlinks to all reference sites
+file.{{ ext }}@/symbols/Foo@/REFERENCES.md       # reference sites with inline code context
+file.{{ ext }}@/symbols/Foo@/declaration/        # symlinks to declaration
+file.{{ ext }}@/symbols/Foo@/DECLARATION.md      # declaration as markdown
+file.{{ ext }}@/symbols/Foo@/definition/         # symlinks to definition
+file.{{ ext }}@/symbols/Foo@/DEFINITION.md       # definition as markdown
+file.{{ ext }}@/symbols/Foo@/DOC.md             # hover documentation and type info
+file.{{ ext }}@/symbols/Foo@/HINTS.md           # inlay hints
+file.{{ ext }}@/symbols/Foo@/actions/           # code actions as .diff files
+file.{{ ext }}@/symbols/Foo@/rename/new_name.diff    # rename preview (lookup-only)
+```
+
+### Per-Symbol Git
+
+```
+file.{{ ext }}@/symbols/Foo@/git/LOG.md         # commits touching this symbol
+file.{{ ext }}@/symbols/Foo@/git/BLAME.md       # per-line authorship scoped to symbol
+```
+
+### Filesystem Operations on Symbols
+
+```
+rmdir file.{{ ext }}@/symbols/Foo@/              # delete symbol from source
+rm file.{{ ext }}@/symbols/Foo.{{ ext }}          # shorthand — same effect
+mv file.{{ ext }}@/symbols/old@/ file.{{ ext }}@/symbols/new@/   # LSP rename
+```
+
+## Git — Repository Level
+
+```
+@/git/STATUS.md                # working tree status, staged changes
+@/git/branches/                # branch listing
+@/git/tags/                    # tag listing
+```

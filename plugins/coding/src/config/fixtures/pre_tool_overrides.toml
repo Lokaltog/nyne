@@ -1,0 +1,9 @@
+[hooks.pre_tool.default]
+deny_lines_threshold = 100
+include_symbol_table = true
+
+[hooks.pre_tool.filetype.markdown]
+deny_lines_threshold = -1
+
+[hooks.pre_tool.filetype.rust]
+include_symbol_table = false

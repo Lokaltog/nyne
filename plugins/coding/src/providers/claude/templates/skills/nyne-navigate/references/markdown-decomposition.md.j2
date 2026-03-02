@@ -1,0 +1,100 @@
+# Markdown Decomposition in nyne
+
+## How Markdown Files Decompose
+
+Markdown files are recursively decomposed at headers. Each section becomes a virtual file
+that can be read, edited, or reordered independently.
+
+```
+doc.md@/symbols/OVERVIEW.md                        # section listing with token estimates
+doc.md@/symbols/10-introduction.md                 # first section
+doc.md@/symbols/20-getting-started.md              # second section
+doc.md@/symbols/20-getting-started/                # nested subsections (if any)
+doc.md@/symbols/20-getting-started/10-install.md   # nested subsection
+```
+
+## Section Naming
+
+Section filenames use 10-increment numeric prefixes derived from document order.
+The text portion is derived from the header text, lowercased and hyphenated.
+
+Read `OVERVIEW.md` or `ls @/symbols/` to discover exact names — don't guess them.
+
+## Code Block Extraction
+
+Fenced code blocks within sections are extracted as editable files:
+
+```
+doc.md@/symbols/20-getting-started/code/10.rs    # first ```rust block
+doc.md@/symbols/20-getting-started/code/20.sh    # second ```sh block
+doc.md@/symbols/20-getting-started/code/30.txt   # unlabeled fence (no language tag)
+```
+
+Extensions come from the fence language tag. Unlabeled blocks get `.txt`.
+
+## Reading Markdown Efficiently
+
+### Exploration pattern
+
+```sh
+# 1. Get section overview
+cat doc.md@/symbols/OVERVIEW.md
+
+# 2. Read specific section
+cat doc.md@/symbols/30-phase-3.md
+
+# 3. Read a code example from that section
+cat doc.md@/symbols/30-phase-3/code/10.rs
+```
+
+### Searching across sections
+
+```sh
+# Find which sections mention a topic
+grep -l "caching" doc.md@/symbols/*.md
+
+# Search within code blocks
+grep -r "unwrap()" doc.md@/symbols/*/code/*.rs
+```
+
+## Editing Markdown Sections
+
+### Rewrite a section
+
+Write to the section file to replace its content:
+
+```sh
+# Replace section content (header is preserved)
+echo "New content here" > doc.md@/symbols/20-getting-started.md
+```
+
+### Reorder sections
+
+Rename the numeric prefix to change order:
+
+```sh
+mv doc.md@/symbols/50-appendix.md doc.md@/symbols/20-appendix.md
+```
+
+All sections are renumbered to maintain consistent 10-increments after a reorder.
+
+### Edit code blocks
+
+Code blocks are writable — edits splice back into the original markdown:
+
+```sh
+# Edit a code example directly
+echo 'fn main() { println!("fixed"); }' > doc.md@/symbols/20-getting-started/code/10.rs
+```
+
+Blocks that parse cleanly are validated by tree-sitter on write. Partial/incomplete
+snippets skip validation.
+
+## OVERVIEW.md for Markdown
+
+The overview includes:
+- Section hierarchy with nesting depth
+- Token estimates per section
+- Code block inventory per section (count and languages)
+
+Use the code block inventory to find examples without reading every section.

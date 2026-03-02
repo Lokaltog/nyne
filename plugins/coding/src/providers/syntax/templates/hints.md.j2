@@ -1,0 +1,21 @@
+# Analysis Hints
+{% if hints or collapsed %}
+
+| Line | Severity | Rule | Message |
+|-|-|-|-|
+{% for h in hints %}
+| {{ h.line_start }}{% if h.line_end != h.line_start %}-{{ h.line_end }}{% endif %} | {{ h.severity }} | {{ h.rule_id }} | {{ h.message }} |
+{% endfor %}
+{% for g in collapsed %}
+| — | {{ g.severity }} | {{ g.rule_id }} | ×{{ g.count }}: {{ g.summary }} |
+{% endfor %}
+{% if suggestions %}
+
+**Suggestions:**
+{% for s in suggestions %}
+- {{ s.rule_id }}: {{ s.text }}
+{% endfor %}
+{% endif %}
+{% else %}
+No hints.
+{% endif %}

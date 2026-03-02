@@ -1,0 +1,3 @@
+[sandbox.env]
+MY_CUSTOM_VAR = "hello"
+ANOTHER_VAR = "world"

@@ -1,0 +1,3 @@
+[claude.hooks]
+statusline = false
+stop = false

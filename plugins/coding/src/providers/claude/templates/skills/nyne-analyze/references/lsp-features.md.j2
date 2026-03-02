@@ -1,0 +1,57 @@
+# LSP Features — Complete Reference
+
+## Per-Symbol LSP Files
+
+| Virtual file | LSP method | Purpose |
+|-|-|-|
+| `CALLERS.md` / `callers/` | `callHierarchy/incomingCalls` | Who calls this symbol |
+| `DEPS.md` / `deps/` | `callHierarchy/outgoingCalls` | What this symbol calls |
+| `REFERENCES.md` / `references/` | `textDocument/references` | All reference sites |
+| `DECLARATION.md` / `declaration/` | `textDocument/declaration` | Where declared |
+| `DEFINITION.md` / `definition/` | `textDocument/definition` | Where defined |
+| `IMPLEMENTATION.md` / `implementation/` | `textDocument/implementation` | Where implemented |
+| `TYPE-DEFINITION.md` / `type-definition/` | `textDocument/typeDefinition` | Type definition location |
+| `DOC.md` / `hover/` | `textDocument/hover` | Hover documentation |
+| `HINTS.md` | `textDocument/inlayHint` | Inlay hints |
+| `DIAGNOSTICS.md` | `textDocument/publishDiagnostics` | Errors/warnings |
+| `actions/*.diff` | `textDocument/codeAction` | Suggested fixes |
+| `rename/new.diff` | `textDocument/rename` | Rename preview |
+
+## File-Level LSP Files
+
+| Virtual file | Aggregation |
+|-|-|
+| `file.ext@/DIAGNOSTICS.md` | All diagnostics in this file |
+| `file.ext@/actions/` | Code actions across the file |
+
+## Symlink Semantics
+
+All symlink directories (`callers/`, `deps/`, `references/`, etc.) point to symbol
+directories. The `.ext` shorthand resolves through symlinks:
+
+```
+callers/init.{{ ext }} → main.{{ ext }}@/symbols/init@/body.{{ ext }}
+deps/validate.{{ ext }} → utils.{{ ext }}@/symbols/validate@/body.{{ ext }}
+```
+
+Follow symlinks to traverse the codebase without knowing file paths.
+
+## Markdown vs Symlink Directories
+
+Each relationship has both forms:
+
+- **`CALLERS.md`** — human-readable, includes inline code context, good for one-shot reads
+- **`callers/`** — machine-navigable, symlinks for traversal and editing
+
+Use markdown files when reading for understanding. Use symlink directories when
+traversing to edit.
+
+## Fallback Behavior
+
+When LSP is unavailable for a language:
+
+- Markdown files return a note indicating LSP is unavailable
+- Symlink directories are empty
+- `ENOTSUP` on writes that require LSP (e.g., rename)
+- Tree-sitter decomposition still works — symbol bodies, signatures, etc. are available
+- Only LSP-dependent features (callers, references, rename, diagnostics) are affected

@@ -1,0 +1,27 @@
+---
+source: nyne-coding/src/syntax/tests.rs
+expression: result.fragments
+---
+[
+    Fragment {
+        name: "MAX_SIZE",
+        kind: Symbol(
+            Variable,
+        ),
+        byte_range: 0..14,
+        full_span: 0..14,
+        line_range: 0..1,
+        signature: Some(
+            "MAX_SIZE = 100",
+        ),
+        metadata: Code {
+            visibility: None,
+            doc_comment_range: None,
+            decorator_range: None,
+        },
+        name_byte_offset: 0,
+        children: [],
+        parent_name: None,
+        fs_name: None,
+    },
+]

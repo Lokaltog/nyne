@@ -1,0 +1,4 @@
+[[lsp.custom]]
+name = "gopls"
+command = "gopls"
+extensions = ["go"]

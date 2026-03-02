@@ -1,0 +1,29 @@
+---
+source: nyne-coding/src/syntax/tests.rs
+expression: result.fragments
+---
+[
+    Fragment {
+        name: "API_URL",
+        kind: Symbol(
+            Variable,
+        ),
+        byte_range: 0..45,
+        full_span: 0..45,
+        line_range: 0..1,
+        signature: Some(
+            "export const API_URL = 'https://example.com'",
+        ),
+        metadata: Code {
+            visibility: Some(
+                "export",
+            ),
+            doc_comment_range: None,
+            decorator_range: None,
+        },
+        name_byte_offset: 0,
+        children: [],
+        parent_name: None,
+        fs_name: None,
+    },
+]

@@ -1,0 +1,5 @@
+---
+source: src/templates/tests.rs
+expression: second
+---
+Hello, dynamic-1!

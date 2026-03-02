@@ -1,0 +1,356 @@
+//! Tree-sitter parsing utilities and code fragment construction.
+
+use std::ops::Range;
+use std::str::from_utf8;
+
+use color_eyre::eyre::{Result, eyre};
+use parking_lot::Mutex;
+
+use super::fragment::{DecomposedFile, Fragment, FragmentKind, FragmentMetadata, ImportSpan, ParseError, SymbolKind};
+
+/// Ergonomic wrapper around a [`tree_sitter::Node`] paired with its source
+/// bytes, eliminating the `(node, &[u8])` parameter pairs that dominate the
+/// raw tree-sitter API.
+#[derive(Clone, Copy)]
+pub struct TsNode<'a> {
+    node: tree_sitter::Node<'a>,
+    source: &'a [u8],
+}
+
+impl<'a> TsNode<'a> {
+    pub const fn new(node: tree_sitter::Node<'a>, source: &'a [u8]) -> Self { Self { node, source } }
+
+    pub fn kind(&self) -> &str { self.node.kind() }
+
+    pub fn text(&self) -> &'a str { self.node.utf8_text(self.source).unwrap_or("") }
+
+    pub fn byte_range(&self) -> Range<usize> { self.node.byte_range() }
+
+    pub fn start_byte(&self) -> usize { self.node.start_byte() }
+
+    /// Access a named field child (e.g. `"name"`, `"body"`, `"type"`).
+    pub fn field(&self, name: &str) -> Option<Self> {
+        self.node.child_by_field_name(name).map(|n| Self::new(n, self.source))
+    }
+
+    /// Text of a named field child, or `None` if the field is absent.
+    pub fn field_text(&self, name: &str) -> Option<&'a str> { self.field(name).map(|n| n.text()) }
+
+    /// Text content up to (but not including) the first occurrence of `ch`.
+    /// Falls back to the first line if `ch` is not found.
+    pub fn text_up_to(&self, ch: char) -> String {
+        let full = self.text();
+        if let Some(pos) = full.find(ch) {
+            let sig = full[..pos].trim();
+            if sig.is_empty() {
+                return self.first_line().to_owned();
+            }
+            return sig.to_owned();
+        }
+        self.first_line().to_owned()
+    }
+
+    /// First line of this node's text, trimmed.
+    pub fn first_line(&self) -> &'a str { self.text().lines().next().unwrap_or("").trim() }
+
+    pub fn type_signature(&self, keyword: &str, visibility: Option<&str>) -> String {
+        let name = self.field_text("name").unwrap_or("?");
+        match visibility {
+            Some(v) => format!("{v} {keyword} {name}"),
+            None => format!("{keyword} {name}"),
+        }
+    }
+
+    /// Byte offset of the `name` field child's start, if present.
+    pub fn name_start_byte(&self) -> Option<usize> { self.node.child_by_field_name("name").map(|n| n.start_byte()) }
+
+    /// The `body` field child, if present.
+    pub fn body(&self) -> Option<Self> { self.field("body") }
+
+    /// Parent node, if any.
+    pub fn parent(&self) -> Option<Self> { self.node.parent().map(|n| Self::new(n, self.source)) }
+
+    /// Previous sibling node, if any.
+    pub fn prev_sibling(&self) -> Option<Self> { self.node.prev_sibling().map(|n| Self::new(n, self.source)) }
+
+    /// Iterate over direct children.
+    pub fn children(&self) -> impl Iterator<Item = Self> + 'a {
+        let source = self.source;
+        let mut cursor = self.node.walk();
+        self.node
+            .children(&mut cursor)
+            .map(move |n| Self::new(n, source))
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+
+    /// Access the underlying `tree_sitter::Node`.
+    pub const fn raw(&self) -> tree_sitter::Node<'a> { self.node }
+
+    /// Source bytes this node was created with.
+    pub const fn source(&self) -> &'a [u8] { self.source }
+
+    /// Source bytes interpreted as UTF-8 (infallible for valid source).
+    pub fn source_str(&self) -> &'a str { from_utf8(self.source).unwrap_or("") }
+}
+
+pub fn merge_preceding_sibling_ranges(
+    node: TsNode<'_>,
+    mut collect_fn: impl FnMut(TsNode<'_>) -> Option<bool>,
+) -> Option<Range<usize>> {
+    let mut ranges: Vec<Range<usize>> = Vec::new();
+    let mut sibling = node.prev_sibling();
+
+    while let Some(sib) = sibling {
+        match collect_fn(sib) {
+            Some(true) => {
+                ranges.push(sib.byte_range());
+                sibling = sib.prev_sibling();
+            }
+            Some(false) => {
+                sibling = sib.prev_sibling();
+            }
+            None => break,
+        }
+    }
+
+    // Ranges were collected bottom-up; last element is the topmost.
+    let first = ranges.first()?;
+    let mut end = first.end;
+    let start = ranges.last().map_or(first.start, |r| r.start);
+
+    // Tree-sitter node ranges for line-based constructs (comments,
+    // attributes) may include the trailing newline. Trim it — the newline
+    // is a separator between the collected nodes and the target symbol,
+    // not part of the content.
+    let source = node.source();
+    while end > start && source.get(end - 1) == Some(&b'\n') {
+        end -= 1;
+    }
+
+    Some(start..end)
+}
+
+pub fn collect_import_span(root: TsNode<'_>, import_kinds: &[&str]) -> Option<ImportSpan> {
+    let import_nodes: Vec<TsNode<'_>> = root
+        .children()
+        .filter(|child| import_kinds.contains(&child.kind()))
+        .collect();
+
+    if import_nodes.is_empty() {
+        return None;
+    }
+
+    let first = import_nodes.first()?;
+    let last = import_nodes.last()?;
+
+    let mut end = last.raw().end_byte();
+    // Trim trailing newlines — same rationale as merge_preceding_sibling_ranges.
+    let source = root.source();
+    let start = first.start_byte();
+    while end > start && source.get(end - 1) == Some(&b'\n') {
+        end -= 1;
+    }
+
+    let byte_range = start..end;
+    let line_range = first.raw().start_position().row..last.raw().end_position().row + 1;
+    let content = source
+        .get(byte_range.clone())
+        .and_then(|s| from_utf8(s).ok())
+        .unwrap_or("")
+        .to_owned();
+
+    Some(ImportSpan {
+        byte_range,
+        line_range,
+        content,
+    })
+}
+
+/// Walk a tree-sitter tree and collect all ERROR and MISSING nodes.
+pub fn collect_parse_errors(tree: &tree_sitter::Tree, source: &[u8]) -> Vec<ParseError> {
+    let mut errors = Vec::new();
+    let mut cursor = tree.walk();
+    collect_errors_recursive(&mut cursor, source, &mut errors);
+    errors
+}
+
+fn collect_errors_recursive(cursor: &mut tree_sitter::TreeCursor<'_>, source: &[u8], errors: &mut Vec<ParseError>) {
+    let node = cursor.node();
+    if node.is_error() || node.is_missing() {
+        let start = node.start_position();
+        let end = node.end_position();
+        let raw = node.utf8_text(source).unwrap_or("");
+        let text = if raw.len() > 120 {
+            format!("{}...", &raw[..raw.floor_char_boundary(120)])
+        } else {
+            raw.to_owned()
+        };
+        errors.push(ParseError {
+            start_line: start.row,
+            start_col: start.column,
+            end_line: end.row,
+            end_col: end.column,
+            text,
+        });
+        return;
+    }
+    if cursor.goto_first_child() {
+        loop {
+            collect_errors_recursive(cursor, source, errors);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+        cursor.goto_parent();
+    }
+}
+
+/// Specification for constructing a code [`Fragment`] via
+/// [`build_code_fragment`].
+///
+/// Collects all the language-specific data extracted from a tree-sitter node
+/// into a single struct, so `build_code_fragment` can handle the common
+/// range-extension and `Fragment` assembly logic.
+pub struct CodeFragmentSpec {
+    pub name: String,
+    pub kind: SymbolKind,
+    pub signature: String,
+    pub name_byte_offset: usize,
+    pub visibility: Option<String>,
+    pub doc_comment_range: Option<Range<usize>>,
+    pub decorator_range: Option<Range<usize>>,
+    /// Pre-computed full symbol range (decorators + doc + signature + body).
+    /// Computed by [`LanguageSpec::full_symbol_range`](super::spec::LanguageSpec::full_symbol_range) in the caller.
+    pub full_span: Range<usize>,
+    pub children: Vec<Fragment>,
+}
+
+/// Build a [`Fragment`] from a tree-sitter node and a [`CodeFragmentSpec`].
+///
+/// Handles the common logic of extending byte/line ranges to cover preceding
+/// doc comments and assembling the final `Fragment` struct via [`Fragment::new`].
+pub fn build_code_fragment(span_node: TsNode<'_>, spec: CodeFragmentSpec, parent_name: Option<&str>) -> Fragment {
+    let source = span_node.source_str();
+
+    Fragment::new(
+        source,
+        spec.name,
+        FragmentKind::Symbol(spec.kind),
+        span_node.byte_range(),
+        spec.full_span,
+        Some(spec.signature),
+        FragmentMetadata::Code {
+            visibility: spec.visibility,
+            doc_comment_range: spec.doc_comment_range,
+            decorator_range: spec.decorator_range,
+        },
+        spec.name_byte_offset,
+        spec.children,
+        parent_name.map(String::from),
+    )
+}
+
+/// Shared tree-sitter parser wrapper used by all language decomposers.
+///
+/// Encapsulates the `Mutex<Parser>` pattern and provides common operations
+/// (parse, validate, error collection) so individual decomposers don't
+/// duplicate this boilerplate.
+pub struct TreeSitterParser {
+    parser: Mutex<tree_sitter::Parser>,
+}
+
+impl TreeSitterParser {
+    /// Create a new parser for the given tree-sitter language.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the language cannot be set (indicates a build/version
+    /// mismatch).
+    #[allow(clippy::expect_used)] // language is a linked grammar, failure = build mismatch
+    pub fn new(language: &tree_sitter::Language) -> Self {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(language)
+            .expect("failed to set tree-sitter language");
+        Self {
+            parser: Mutex::new(parser),
+        }
+    }
+
+    /// Parse `source` with tree-sitter and return the tree.
+    pub fn parse(&self, source: &str) -> Option<tree_sitter::Tree> {
+        let mut parser = self.parser.lock();
+        parser.parse(source, None)
+    }
+
+    pub fn validate(&self, source: &str, lang_name: &str) -> Result<()> {
+        let tree = self
+            .parse(source)
+            .ok_or_else(|| eyre!("tree-sitter failed to parse {lang_name} source"))?;
+        let root = tree.root_node();
+        if root.has_error() {
+            let errors = self.parse_errors(source);
+            let detail: Vec<String> = errors
+                .iter()
+                .take(3)
+                .map(|e| {
+                    format!(
+                        "  L{}:{}-L{}:{}: {:?}",
+                        e.start_line + 1,
+                        e.start_col,
+                        e.end_line + 1,
+                        e.end_col,
+                        e.text,
+                    )
+                })
+                .collect();
+            let detail_str = if detail.is_empty() {
+                String::new()
+            } else {
+                format!("\n{}", detail.join("\n"))
+            };
+            return Err(eyre!(
+                "{lang_name} source contains syntax errors ({} error(s), source_len={}){detail_str}",
+                errors.len(),
+                source.len(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Return tree-sitter parse errors found in `source`.
+    pub fn parse_errors(&self, source: &str) -> Vec<ParseError> {
+        self.parse(source)
+            .map(|tree| collect_parse_errors(&tree, source.as_bytes()))
+            .unwrap_or_default()
+    }
+
+    /// Run the standard decomposition pipeline: parse -> extract fragments ->
+    /// collect imports -> extract file doc.
+    ///
+    /// Language-specific behavior is injected via closures.
+    pub fn decompose(
+        &self,
+        source: &str,
+        max_depth: usize,
+        import_kinds: &[&str],
+        extract_fragments: impl FnOnce(TsNode<'_>, usize) -> Vec<Fragment>,
+        extract_file_doc: impl FnOnce(TsNode<'_>) -> Option<String>,
+    ) -> (DecomposedFile, Option<tree_sitter::Tree>) {
+        let Some(tree) = self.parse(source) else {
+            return (DecomposedFile::empty(), None);
+        };
+        let src = source.as_bytes();
+        let root = TsNode::new(tree.root_node(), src);
+        let fragments = extract_fragments(root, max_depth);
+        let imports = collect_import_span(root, import_kinds);
+        let file_doc = extract_file_doc(root);
+        let file = DecomposedFile {
+            fragments,
+            imports,
+            file_doc,
+        };
+        (file, Some(tree))
+    }
+}

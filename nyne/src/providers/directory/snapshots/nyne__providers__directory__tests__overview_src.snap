@@ -1,0 +1,15 @@
+---
+source: src/providers/directory/tests.rs
+expression: output
+---
+# src/
+
+| File | Tokens | Description |
+|-|-|-|
+| main.rs | ~250 | Entry point for the application. |
+| lib.rs | ~1.2k | Crate root — re-exports public API. |
+
+| Directory |
+|-|
+| config/ |
+| utils/ |

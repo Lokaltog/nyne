@@ -1,0 +1,10 @@
+---
+source: src/providers/directory/tests.rs
+expression: output
+---
+# root/
+
+| Directory |
+|-|
+| bin/ |
+| src/ |

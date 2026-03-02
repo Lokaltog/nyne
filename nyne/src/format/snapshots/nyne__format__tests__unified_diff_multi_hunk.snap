@@ -1,0 +1,18 @@
+---
+source: src/format/tests.rs
+expression: "unified_diff(old, new, \"src/foo.rs\")"
+---
+--- a/src/foo.rs
++++ b/src/foo.rs
+@@ -1,4 +1,4 @@
+-a
++A
+ b
+ c
+ d
+@@ -7,4 +7,4 @@
+ g
+ h
+ i
+-j
++J

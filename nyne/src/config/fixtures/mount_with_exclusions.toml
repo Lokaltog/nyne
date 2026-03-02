@@ -1,0 +1,4 @@
+[mount]
+source_dir = "/tmp/src"
+mountpoint = "/tmp/mnt"
+excluded_patterns = ["target", "*.o", ".git"]

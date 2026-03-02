@@ -1,0 +1,102 @@
+//! Analysis rule: detect repeated field accesses.
+
+use super::kinds;
+use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::syntax::parser::TsNode;
+
+/// Minimum consecutive sibling statements sharing the same field-access prefix.
+const MIN_REPETITIONS: usize = 3;
+
+struct RepeatedFieldAccess;
+
+impl AnalysisRule for RepeatedFieldAccess {
+    fn id(&self) -> &'static str { "repeated-field-access" }
+
+    fn node_kinds(&self) -> &'static [&'static str] { kinds::FUNCTION }
+
+    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+        let body = node.raw().child_by_field_name("body")?;
+        let source = node.source();
+        let mut cursor = body.walk();
+        let children: Vec<_> = body.named_children(&mut cursor).collect();
+
+        let (start_line, end_line, prefix) = find_longest_run(&children, source)?;
+
+        Some(Hint {
+            rule_id: self.id(),
+            severity: Severity::Info,
+            line_range: start_line..end_line,
+            message: format!("Repeated `{prefix}` access across consecutive statements"),
+            suggestions: vec![format!("Bind to a local: `let x = {prefix};`")],
+        })
+    }
+}
+
+/// Find the longest consecutive run of siblings sharing a field-access prefix.
+/// Returns `(start_line, end_line, prefix)` if a run of ≥ `MIN_REPETITIONS` exists.
+fn find_longest_run<'a>(children: &[tree_sitter::Node<'_>], source: &'a [u8]) -> Option<(usize, usize, &'a str)> {
+    let mut best: Option<(usize, usize, &'a str)> = None;
+    let mut i = 0;
+
+    while let Some(child) = children.get(i) {
+        let Some(prefix) = receiver_prefix(child, source) else {
+            i += 1;
+            continue;
+        };
+
+        let start = i;
+        while children
+            .get(i)
+            .and_then(|c| receiver_prefix(c, source))
+            .is_some_and(|p| p == prefix)
+        {
+            i += 1;
+        }
+
+        let run_len = i - start;
+        if run_len >= MIN_REPETITIONS && best.is_none_or(|(_, _, prev)| run_len > prev.len()) {
+            let start_line = children.get(start).map_or(0, |c| c.start_position().row);
+            let end_line = children.get(i.wrapping_sub(1)).map_or(0, |c| c.end_position().row);
+            best = Some((start_line, end_line, prefix));
+        }
+    }
+
+    best
+}
+
+/// Extract a two-segment receiver prefix like `self.foo.bar` from a statement's
+/// leading expression. Returns `None` if the statement doesn't start with a
+/// field access chain of depth ≥ 2.
+fn receiver_prefix<'a>(node: &tree_sitter::Node<'_>, source: &'a [u8]) -> Option<&'a str> {
+    let expr = if node.kind() == kinds::EXPRESSION_STATEMENT {
+        node.named_child(0)?
+    } else {
+        *node
+    };
+
+    let mut current = expr;
+    loop {
+        if kinds::FIELD_ACCESS.contains(&current.kind()) {
+            // Rust: `value:`, JS/TS: `object:`
+            let object = current
+                .child_by_field_name("value")
+                .or_else(|| current.child_by_field_name("object"))?;
+            if kinds::FIELD_ACCESS.contains(&object.kind()) {
+                return kinds::node_str(&object, source);
+            }
+            return None;
+        }
+        if let Some(child) = current
+            .child_by_field_name("function")
+            .or_else(|| current.child_by_field_name("left"))
+            .or_else(|| current.child_by_field_name("value"))
+            .or_else(|| current.named_child(0))
+        {
+            current = child;
+        } else {
+            return None;
+        }
+    }
+}
+
+register_analysis_rule!(RepeatedFieldAccess);

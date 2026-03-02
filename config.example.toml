@@ -1,0 +1,16 @@
+# nyne configuration
+# Place at: ~/.config/nyne/config.toml
+
+[general]
+
+# [plugin.coding.analysis]
+# enabled = true
+#
+# By default, all rules run except noisy ones (magic-string, magic-number).
+# Rule IDs match the kebab-case names shown in HINTS.md output.
+#
+# Explicit empty = all rules including noisy ones:
+# rules = []
+#
+# Specific allowlist:
+# rules = ["deep-nesting", "empty-catch", "unwrap-chain"]

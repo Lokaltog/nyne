@@ -1,0 +1,29 @@
+---
+source: nyne-coding/src/syntax/tests.rs
+expression: result.fragments
+---
+[
+    Fragment {
+        name: "Color",
+        kind: Symbol(
+            Enum,
+        ),
+        byte_range: 0..51,
+        full_span: 0..51,
+        line_range: 0..5,
+        signature: Some(
+            "export enum Color",
+        ),
+        metadata: Code {
+            visibility: Some(
+                "export",
+            ),
+            doc_comment_range: None,
+            decorator_range: None,
+        },
+        name_byte_offset: 12,
+        children: [],
+        parent_name: None,
+        fs_name: None,
+    },
+]

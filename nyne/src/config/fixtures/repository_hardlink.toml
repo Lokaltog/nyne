@@ -1,0 +1,2 @@
+[repository]
+storage_strategy = "hardlink"

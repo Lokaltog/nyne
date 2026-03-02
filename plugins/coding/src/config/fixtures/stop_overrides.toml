@@ -1,0 +1,3 @@
+[hooks.stop]
+min_files = 3
+ignore_extensions = ["toml", "md"]

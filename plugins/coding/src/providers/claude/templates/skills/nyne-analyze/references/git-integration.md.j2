@@ -1,0 +1,79 @@
+# Git Integration — Advanced Patterns
+
+## Per-Symbol Git History
+
+nyne scopes git operations to symbol line ranges, filtering out unrelated commits.
+
+### Symbol-scoped log
+
+```sh
+cat file.{{ ext }}@/symbols/Foo@/git/LOG.md
+```
+
+Shows only commits that modified lines within `Foo`'s range. More precise than
+`git log -L` because nyne tracks symbol boundaries through renames and refactors.
+
+### Symbol-scoped blame
+
+```sh
+cat file.{{ ext }}@/symbols/Foo@/git/BLAME.md         # full symbol blame
+cat file.{{ ext }}@/symbols/Foo@/git/BLAME.md:5-10    # lines 5-10 within the symbol
+```
+
+Line numbers are relative to the symbol, not the file.
+
+## File-Level Git
+
+### Commit log with slicing
+
+```sh
+cat file.{{ ext }}@/git/LOG.md           # full log
+cat file.{{ ext }}@/git/LOG.md:-10       # last 10 commits
+cat file.{{ ext }}@/git/LOG.md:5-15      # commits 5-15
+```
+
+The `:M-N` range syntax is a generic nyne pattern. Negative offsets count from the end.
+
+### Blame with line ranges
+
+```sh
+cat file.{{ ext }}@/git/BLAME.md            # full file blame
+cat file.{{ ext }}@/git/BLAME.md:42-55      # blame for specific lines
+```
+
+### Contributors
+
+```sh
+cat file.{{ ext }}@/git/CONTRIBUTORS.md     # ranked by line ownership
+cat dir@/git/CONTRIBUTORS.md         # aggregated across directory
+```
+
+### Uncommitted changes
+
+```sh
+cat file.{{ ext }}@/diff/HEAD.diff          # uncommitted changes for this file
+cat dir@/diff/HEAD.diff              # uncommitted changes across directory
+```
+
+## Repository-Level Git
+
+```sh
+cat @/git/STATUS.md            # working tree status, staged changes
+ls @/git/branches/             # branch listing
+ls @/git/tags/                 # tag listing
+```
+
+### Branch operations
+
+```sh
+# Rename a branch
+mv @/git/branches/old-name @/git/branches/new-name
+# → executes git branch -m
+```
+
+## Git Notes
+
+```sh
+cat file.{{ ext }}@/git/NOTES.md         # git notes for commits touching this file
+cat dir@/git/NOTES.md             # git notes aggregated across directory
+```

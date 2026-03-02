@@ -1,0 +1,44 @@
+---
+source: nyne/src/config/tests.rs
+expression: config
+---
+passthrough_processes = ['git']
+
+[mount]
+source_dir = '/tmp/src'
+mountpoint = '/tmp/mnt'
+excluded_patterns = []
+
+[repository]
+storage_strategy = 'passthrough'
+
+[sandbox]
+hostname = 'nyne-sandbox'
+bind_mounts = []
+[sandbox.env]
+
+[lsp]
+enabled = true
+cache_ttl = '5m'
+diagnostics_timeout = '2s'
+response_timeout = '10s'
+custom = []
+[lsp.servers]
+
+[agent_files]
+filenames = [
+    'CLAUDE.md',
+    'AGENTS.md',
+]
+
+[todo]
+enabled = true
+tags = [
+    'FIXME',
+    'SAFETY',
+    'HACK',
+    'XXX',
+    'TODO',
+]
+
+[plugin]

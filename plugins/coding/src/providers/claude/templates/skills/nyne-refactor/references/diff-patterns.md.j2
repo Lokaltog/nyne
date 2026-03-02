@@ -1,0 +1,86 @@
+# Diff Patterns — Advanced Composition
+
+## Diff Sources in nyne
+
+| Source | Path pattern | When generated |
+|-|-|-|
+| Code actions (LSP) | `Foo@/actions/*.diff` | After diagnostics from a write |
+| Rename preview | `Foo@/rename/new_name.diff` | On-demand (lookup-only, read to generate) |
+
+All are standard unified diff format (`---`/`+++`/`@@` headers).
+
+## Applying Diffs
+
+```sh
+# Single diff
+patch -p1 < file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff
+
+# All code actions for a symbol
+cat file.{{ ext }}@/symbols/Foo@/actions/*.diff | patch -p1
+
+# All code actions across a file
+cat file.{{ ext }}@/symbols/*@/actions/*.diff | patch -p1
+
+# Project-level rename
+patch -p1 < file.{{ ext }}@/symbols/old@/rename/new.diff
+
+# Multi-file diff
+patch -p1 < big-refactor.diff
+
+# Alternative: git apply
+cat file.{{ ext }}@/symbols/Foo@/rename/new.diff | git apply
+```
+
+## Inspecting Diffs Before Applying
+
+Always preview non-trivial diffs:
+
+```sh
+# Read the diff
+cat file.{{ ext }}@/symbols/process@/rename/handle.diff
+
+# Check how many files are affected
+grep "^---" file.{{ ext }}@/symbols/process@/rename/handle.diff | wc -l
+
+# Check for specific patterns in the diff
+grep "TODO\|FIXME\|HACK" file.{{ ext }}@/symbols/process@/rename/handle.diff
+```
+
+## Editing Diffs Before Applying
+
+Diffs are text files. Edit them to customize before applying:
+
+```sh
+# Read a code action diff
+cat file.{{ ext }}@/symbols/process@/actions/10-update-caller.diff > /tmp/custom.diff
+
+# Edit it (e.g., change a placeholder value)
+sed -i 's/Duration::default()/Duration::from_secs(30)/' /tmp/custom.diff
+
+# Apply the customized diff
+patch -p1 < /tmp/custom.diff
+```
+
+## Combining Diffs
+
+```sh
+# Concatenate multiple diffs into one
+cat file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff \
+    file.{{ ext }}@/symbols/Bar@/actions/10-fix.diff \
+    > /tmp/combined.diff
+
+# Apply as one operation
+patch -p1 < /tmp/combined.diff
+```
+
+## Error Handling
+
+Failed hunks are reported by `patch` on stderr. Common issues:
+- **Stale diff:** Source changed since diff was generated. Re-read the preview path to regenerate.
+- **Conflict:** Overlapping hunks from multiple diffs. Apply sequentially or combine manually.
+- **Fuzz/offset:** `patch` will report fuzz or offset when context lines shifted — review the result.
+
+## When to Use Diffs
+
+Diffs are best for LSP-generated changes (code actions, renames). For direct symbol
+edits, use the Edit tool on symbol bodies. For symbol deletion, use `rmdir`.

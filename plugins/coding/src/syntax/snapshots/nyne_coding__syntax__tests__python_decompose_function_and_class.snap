@@ -1,0 +1,74 @@
+---
+source: nyne-coding/src/syntax/tests.rs
+expression: result.fragments
+---
+[
+    Fragment {
+        name: "greet",
+        kind: Symbol(
+            Function,
+        ),
+        byte_range: 0..70,
+        full_span: 0..70,
+        line_range: 0..3,
+        signature: Some(
+            "def greet(name):",
+        ),
+        metadata: Code {
+            visibility: None,
+            doc_comment_range: Some(
+                21..41,
+            ),
+            decorator_range: None,
+        },
+        name_byte_offset: 4,
+        children: [],
+        parent_name: None,
+        fs_name: None,
+    },
+    Fragment {
+        name: "Person",
+        kind: Symbol(
+            Class,
+        ),
+        byte_range: 72..140,
+        full_span: 72..140,
+        line_range: 4..7,
+        signature: Some(
+            "class Person:",
+        ),
+        metadata: Code {
+            visibility: None,
+            doc_comment_range: None,
+            decorator_range: None,
+        },
+        name_byte_offset: 78,
+        children: [
+            Fragment {
+                name: "__init__",
+                kind: Symbol(
+                    Function,
+                ),
+                byte_range: 90..140,
+                full_span: 90..140,
+                line_range: 5..7,
+                signature: Some(
+                    "def __init__(self, name):",
+                ),
+                metadata: Code {
+                    visibility: None,
+                    doc_comment_range: None,
+                    decorator_range: None,
+                },
+                name_byte_offset: 94,
+                children: [],
+                parent_name: Some(
+                    "Person",
+                ),
+                fs_name: None,
+            },
+        ],
+        parent_name: None,
+        fs_name: None,
+    },
+]

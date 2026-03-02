@@ -1,0 +1,140 @@
+use super::ctx::RouteCtx;
+use super::segment::SegmentMatcher;
+use super::tree::{ChildrenHandler, LookupHandler, RouteNode, RouteTree, StaticFileEntry};
+use crate::node::VirtualNode;
+use crate::provider::{Node, Nodes};
+
+/// Builder for constructing route trees programmatically.
+///
+/// This is the underlying API that the `routes!` proc-macro generates
+/// calls to. Can also be used directly as an escape hatch [DD-11].
+pub struct RouteTreeBuilder<P> {
+    root: RouteNodeBuilder<P>,
+}
+
+pub struct RouteNodeBuilder<P> {
+    segment: SegmentMatcher,
+    children_handler: Option<ChildrenHandler<P>>,
+    lookup_handler: Option<LookupHandler<P>>,
+    static_files: Vec<StaticFileEntry>,
+    sub_routes: Vec<Self>,
+    emit: bool,
+}
+
+impl<P: Send + Sync + 'static> Default for RouteTreeBuilder<P> {
+    fn default() -> Self { Self::new() }
+}
+
+impl<P: Send + Sync + 'static> RouteTreeBuilder<P> {
+    pub fn new() -> Self {
+        Self {
+            root: RouteNodeBuilder::new(SegmentMatcher::Root),
+        }
+    }
+
+    /// Add a child route at the root level.
+    #[must_use]
+    pub fn route(mut self, child: RouteNodeBuilder<P>) -> Self {
+        self.root.sub_routes.push(child);
+        self
+    }
+
+    /// Set children handler at root level.
+    #[must_use]
+    pub fn children(mut self, handler: impl Fn(&P, &RouteCtx<'_>) -> Nodes + Send + Sync + 'static) -> Self {
+        self.root.children_handler = Some(Box::new(handler));
+        self
+    }
+
+    /// Set lookup handler at root level.
+    #[must_use]
+    pub fn lookup(mut self, handler: impl Fn(&P, &RouteCtx<'_>, &str) -> Node + Send + Sync + 'static) -> Self {
+        self.root.lookup_handler = Some(Box::new(handler));
+        self
+    }
+
+    /// Build the route tree. Sorts sub-routes by precedence.
+    pub fn build(self) -> RouteTree<P> { RouteTree::from_root(self.root.build()) }
+}
+
+impl<P: Send + Sync + 'static> RouteNodeBuilder<P> {
+    pub fn new(segment: SegmentMatcher) -> Self {
+        let emit = matches!(segment, SegmentMatcher::Exact(_));
+        Self {
+            segment,
+            children_handler: None,
+            lookup_handler: None,
+            static_files: Vec::new(),
+            sub_routes: Vec::new(),
+            emit,
+        }
+    }
+
+    /// Suppress auto-emission of a directory entry in the parent's readdir.
+    /// By default, Exact sub-routes emit; call this for lookup-only routes.
+    #[must_use]
+    pub const fn no_emit(mut self) -> Self {
+        self.emit = false;
+        self
+    }
+
+    /// Exact segment match.
+    pub fn exact(name: &'static str) -> Self { Self::new(SegmentMatcher::Exact(name)) }
+
+    /// Single-segment capture with optional prefix and/or suffix.
+    pub fn capture(name: &'static str, prefix: Option<&'static str>, suffix: Option<&'static str>) -> Self {
+        Self::new(SegmentMatcher::Capture { name, prefix, suffix })
+    }
+
+    /// Rest capture (1+ segments).
+    pub fn rest_capture(name: &'static str, suffix: Option<&'static str>) -> Self {
+        Self::new(SegmentMatcher::RestCapture { name, suffix })
+    }
+
+    /// Glob match.
+    pub fn glob() -> Self { Self::new(SegmentMatcher::Glob) }
+
+    /// Set children handler.
+    #[must_use]
+    pub fn children(mut self, handler: impl Fn(&P, &RouteCtx<'_>) -> Nodes + Send + Sync + 'static) -> Self {
+        self.children_handler = Some(Box::new(handler));
+        self
+    }
+
+    /// Set lookup handler.
+    #[must_use]
+    pub fn lookup(mut self, handler: impl Fn(&P, &RouteCtx<'_>, &str) -> Node + Send + Sync + 'static) -> Self {
+        self.lookup_handler = Some(Box::new(handler));
+        self
+    }
+
+    /// Add a static file via factory closure.
+    #[must_use]
+    pub fn file(mut self, name: &'static str, factory: impl Fn() -> VirtualNode + Send + Sync + 'static) -> Self {
+        self.static_files.push(StaticFileEntry {
+            name,
+            factory: Box::new(factory),
+        });
+        self
+    }
+
+    /// Add a sub-route.
+    #[must_use]
+    pub fn route(mut self, child: Self) -> Self {
+        self.sub_routes.push(child);
+        self
+    }
+
+    /// Build into a `RouteNode`, sorting children by precedence.
+    pub(super) fn build(mut self) -> RouteNode<P> {
+        self.sub_routes.sort_by_key(|r| r.segment.precedence());
+        RouteNode {
+            segment: self.segment,
+            children_handler: self.children_handler,
+            lookup_handler: self.lookup_handler,
+            static_files: self.static_files,
+            sub_routes: self.sub_routes.into_iter().map(Self::build).collect(),
+            emit: self.emit,
+        }
+    }
+}

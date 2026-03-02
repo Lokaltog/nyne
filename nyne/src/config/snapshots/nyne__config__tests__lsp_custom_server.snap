@@ -1,0 +1,17 @@
+---
+source: src/config/tests.rs
+assertion_line: 93
+expression: config.lsp.custom
+---
+[
+    CustomLspServer {
+        name: "ruff",
+        command: "ruff",
+        args: [
+            "server",
+        ],
+        extensions: [
+            "py",
+        ],
+    },
+]

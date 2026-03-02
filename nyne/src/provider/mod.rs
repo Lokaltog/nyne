@@ -1,0 +1,182 @@
+//! Provider interface and registration.
+
+pub(crate) mod mutation;
+use std::fmt;
+use std::sync::Arc;
+
+use color_eyre::eyre::Result;
+pub use mutation::MutationOp;
+
+use crate::dispatch::activation::ActivationContext;
+use crate::dispatch::context::RequestContext;
+use crate::dispatch::invalidation::InvalidationEvent;
+use crate::node::VirtualNode;
+use crate::node::middleware::{ReadMiddleware, WriteMiddleware};
+use crate::types::real_fs::RealFs;
+use crate::types::vfs_path::VfsPath;
+
+/// Unique identifier for a provider.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ProviderId(&'static str);
+
+impl ProviderId {
+    /// Create a new provider identifier.
+    pub const fn new(id: &'static str) -> Self { Self(id) }
+
+    /// Return the identifier as a string slice.
+    pub const fn as_str(&self) -> &'static str { self.0 }
+}
+
+impl fmt::Display for ProviderId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.0) }
+}
+
+/// Identifies the other party in a naming conflict.
+#[derive(Debug, Clone)]
+pub enum ConflictParty {
+    /// Another provider claims the same name.
+    Provider(ProviderId),
+    /// A real filesystem entry exists with the same name.
+    RealFile,
+}
+
+#[non_exhaustive]
+pub struct ConflictInfo {
+    pub name: String,
+    pub party: ConflictParty,
+}
+
+/// Result of conflict resolution by a provider.
+///
+/// Models NixOS-style priority resolution: providers can yield, force-win,
+/// or retry with adjusted names.
+#[non_exhaustive]
+pub enum ConflictResolution {
+    /// Drop this provider's conflicting nodes (default).
+    Yield,
+    /// This provider wins — use these nodes unconditionally.
+    /// If multiple providers Force for the same name, ALL are dropped (tied conflict).
+    Force(Vec<VirtualNode>),
+    /// Retry with adjusted names (e.g., rename to avoid collision).
+    Retry(Vec<VirtualNode>),
+}
+
+/// Outcome of a provider's [`Provider::handle_mutation`] attempt.
+pub enum MutationOutcome {
+    /// Provider handled the mutation (filesystem + bookkeeping).
+    Handled,
+    /// Provider does not handle this mutation.
+    NotHandled,
+}
+
+/// Return type for [`Provider::children`] — multiple nodes or nothing.
+pub type Nodes = Result<Option<Vec<VirtualNode>>>;
+
+/// Return type for [`Provider::lookup`], [`Provider::create`], [`Provider::mkdir`] — one node or nothing.
+pub type Node = Result<Option<VirtualNode>>;
+
+pub trait Provider: Send + Sync {
+    /// Unique identifier for this provider.
+    fn id(&self) -> ProviderId;
+
+    /// Whether this provider should activate for the given project.
+    /// Defaults to `true` (always active).
+    ///
+    /// Called during construction — use this for cheap checks (e.g.,
+    /// "is there a `.git/` directory?"). The `ActivationContext` provides
+    /// access to shared resources so providers don't need to duplicate
+    /// discovery logic.
+    fn should_activate(&self, _ctx: &ActivationContext) -> bool { true }
+
+    /// Return all known children for a directory path (visible + hidden).
+    ///
+    /// Called on L1 cache miss for a directory. Return `None` if this provider
+    /// has nothing for this directory. All providers are queried; results merged.
+    /// Visibility is controlled per-node via `.hidden()`, not by method choice.
+    fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes;
+
+    /// Look up a specific name not found in `children()` results.
+    ///
+    /// Called as fallback when a FUSE lookup finds no match in L1 cache
+    /// after `children()` has populated it. Used for hidden entries and
+    /// parameterized entries. Nodes returned here are NEVER visible in
+    /// directory listings. At most one provider may claim a given name.
+    fn lookup(self: Arc<Self>, _ctx: &RequestContext<'_>, _name: &str) -> Node { Ok(None) }
+
+    /// Conflict resolution for `children()` name collisions.
+    ///
+    /// Called when two providers emit the same node name via `children()`.
+    /// Return a [`ConflictResolution`] to indicate how to handle the conflict.
+    fn on_conflict(
+        self: Arc<Self>,
+        _ctx: &RequestContext<'_>,
+        _conflicts: &[ConflictInfo],
+    ) -> Result<ConflictResolution> {
+        Ok(ConflictResolution::Yield)
+    }
+
+    /// Handle file creation in a directory this provider contributes to.
+    ///
+    /// Called when FUSE receives `create()` for a name that doesn't exist.
+    /// Uses single-claim semantics like [`lookup`](Self::lookup): at most one provider may
+    /// claim a given name. Return `None` to decline.
+    fn create(self: Arc<Self>, _ctx: &RequestContext<'_>, _name: &str) -> Node { Ok(None) }
+
+    /// Handle directory creation in a directory this provider contributes to.
+    ///
+    /// Called when FUSE receives `mkdir()` for a name that doesn't exist.
+    /// Uses single-claim semantics like [`create`](Self::create): at most one provider may
+    /// claim a given name. Return `None` to decline.
+    fn mkdir(self: Arc<Self>, _ctx: &RequestContext<'_>, _name: &str) -> Node { Ok(None) }
+
+    /// Handle a real-file mutation via the overlay filesystem.
+    ///
+    /// Providers that manage external state (e.g., git index) can claim
+    /// a mutation by performing the filesystem operation through `real_fs`
+    /// and any necessary bookkeeping, then returning `Handled`.
+    ///
+    /// **Back-propagation pattern:** the filesystem mutation is performed
+    /// on the overlay merged view (via `OsFs`). This triggers inotify
+    /// events on the overlay root, which the watcher
+    /// converts to `VfsPath` changes and feeds back into the router for
+    /// cache invalidation. The FUSE layer then reflects the new state
+    /// on next access — no manual cache manipulation needed.
+    ///
+    /// Return `NotHandled` to decline — the router falls back to the
+    /// corresponding [`RealFs`] method for the operation.
+    fn handle_mutation(&self, _op: &MutationOp<'_>, _real_fs: &dyn RealFs) -> Result<MutationOutcome> {
+        Ok(MutationOutcome::NotHandled)
+    }
+
+    /// Default write middlewares for this provider's nodes.
+    /// Applied after node-specific middlewares, before global middlewares.
+    fn write_middlewares(&self) -> Vec<Box<dyn WriteMiddleware>> { Vec::new() }
+
+    /// Called when real filesystem changes are detected by the watcher.
+    ///
+    /// `changed` contains the [`VfsPath`]s of files/directories that were
+    /// created, modified, or removed on the real filesystem. Providers can
+    /// return [`InvalidationEvent`]s to request cache invalidation of their
+    /// virtual content (e.g., invalidate `@/git/branches/` when `.git/refs/`
+    /// changes).
+    ///
+    /// These events originate from two sources:
+    /// - **External changes** — the user or another tool modifies files
+    ///   outside nyne (e.g., `git commit`, editor save).
+    /// - **Back-propagated provider actions** — when a provider mutates
+    ///   the real filesystem via `real_fs` (e.g., `handle_mutation`), those
+    ///   mutations trigger inotify events that flow back through the
+    ///   watcher into this callback. This is the intended propagation
+    ///   path — providers perform real-FS mutations and let the watcher
+    ///   pipeline handle FUSE cache invalidation automatically.
+    ///
+    /// The router handles general cache invalidation (L1/L2/kernel) for
+    /// the changed real-FS paths before calling this method. Providers
+    /// only need to return events here for *derived* virtual content
+    /// that maps to different VFS paths than the changed real paths.
+    fn on_fs_change(&self, _changed: &[VfsPath]) -> Vec<InvalidationEvent> { Vec::new() }
+
+    /// Default read middlewares for this provider's nodes.
+    /// Applied after node-specific middlewares, before global middlewares.
+    fn read_middlewares(&self) -> Vec<Box<dyn ReadMiddleware>> { Vec::new() }
+}

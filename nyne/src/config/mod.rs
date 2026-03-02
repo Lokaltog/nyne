@@ -1,0 +1,439 @@
+use std::collections::HashMap;
+use std::fs;
+use std::io::ErrorKind;
+use std::path::PathBuf;
+use std::time::Duration;
+
+use color_eyre::eyre::{Result, WrapErr};
+use directories::ProjectDirs;
+use garde::Validate;
+use rustix::mount::MountFlags;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct NyneConfig {
+    /// Mount configuration (optional — omit if not using FUSE mount).
+    #[garde(dive)]
+    pub mount: Option<MountConfig>,
+
+    /// Repository configuration — controls how the project is exposed to the daemon.
+    #[serde(default)]
+    #[garde(skip)]
+    pub repository: RepositoryConfig,
+
+    /// Sandbox configuration — controls namespace isolation settings.
+    #[serde(default)]
+    #[garde(skip)]
+    pub sandbox: SandboxConfig,
+
+    /// LSP configuration. Always present with sensible defaults.
+    /// No `[lsp]` section needed — users only add one to override or disable.
+    #[serde(default)]
+    #[garde(dive)]
+    pub lsp: LspConfig,
+
+    /// Agent file configuration (virtual files with module maps).
+    #[serde(default)]
+    #[garde(dive)]
+    pub agent_files: AgentFilesConfig,
+
+    /// TODO/FIXME comment aggregation configuration.
+    #[serde(default)]
+    #[garde(skip)]
+    pub todo: TodoConfig,
+
+    /// Process names that see only the real filesystem (full passthrough).
+    ///
+    /// Matched against `/proc/{pid}/comm` (auto-truncated to 15 chars).
+    /// Defaults to `["git"]`. Plugins may contribute additional entries
+    /// at activation time (e.g., LSP servers via [`PassthroughProcesses`]).
+    #[garde(skip)]
+    #[serde(default = "default_passthrough_processes")]
+    pub passthrough_processes: Vec<String>,
+
+    /// Per-plugin configuration sections.
+    ///
+    /// Each key is a plugin ID (e.g., `"coding"`, `"git"`). Values are
+    /// opaque TOML tables — plugins deserialize their own config.
+    ///
+    /// ```toml
+    /// [plugin.coding]
+    /// lsp.enabled = true
+    /// ```
+    #[serde(default)]
+    #[garde(skip)]
+    pub plugin: HashMap<String, toml::Value>,
+}
+
+impl Default for NyneConfig {
+    fn default() -> Self {
+        Self {
+            mount: None,
+            repository: RepositoryConfig::default(),
+            sandbox: SandboxConfig::default(),
+            lsp: LspConfig::default(),
+            agent_files: AgentFilesConfig::default(),
+            todo: TodoConfig::default(),
+            passthrough_processes: default_passthrough_processes(),
+            plugin: HashMap::default(),
+        }
+    }
+}
+
+/// Repository configuration — controls how the project is exposed to the daemon.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[derive(Default)]
+pub struct RepositoryConfig {
+    /// How the project is exposed to the FUSE daemon.
+    ///
+    /// See [`StorageStrategy`] for variant descriptions.
+    #[serde(default)]
+    pub storage_strategy: StorageStrategy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SandboxConfig {
+    /// Hostname visible inside the sandbox (via UTS namespace).
+    ///
+    /// Appears in shell prompts as `user@<hostname>`. Set to distinguish
+    /// sandboxed shells from regular ones at a glance.
+    #[serde(default = "default_sandbox_hostname")]
+    pub hostname: String,
+
+    /// Additional bind mounts to expose host directories inside the sandbox.
+    ///
+    /// Each entry creates a bind mount from a host path to a sandbox path
+    /// with configurable mount flags (read-only, noexec, nosuid, nodev).
+    #[serde(default)]
+    pub bind_mounts: Vec<BindMount>,
+
+    /// Extra environment variables set in sandbox subprocesses (e.g., LSP
+    /// servers). These are merged on top of the default propagated set —
+    /// use this to inject variables the sandbox wouldn't otherwise see.
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+}
+
+impl Default for SandboxConfig {
+    fn default() -> Self {
+        Self {
+            hostname: default_sandbox_hostname(),
+            bind_mounts: Vec::new(),
+            env: HashMap::new(),
+        }
+    }
+}
+
+/// Return the default sandbox hostname.
+fn default_sandbox_hostname() -> String { "nyne-sandbox".to_owned() }
+
+/// Mount flags for user-configured bind mounts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BindMountFlag {
+    /// Mount as read-only.
+    ReadOnly,
+    /// Prevent execution of binaries.
+    Noexec,
+    /// Ignore setuid/setgid bits.
+    Nosuid,
+    /// Ignore device special files.
+    Nodev,
+}
+
+impl BindMountFlag {
+    const fn to_mount_flag(self) -> MountFlags {
+        use rustix::mount::MountFlags;
+
+        match self {
+            Self::ReadOnly => MountFlags::RDONLY,
+            Self::Noexec => MountFlags::NOEXEC,
+            Self::Nosuid => MountFlags::NOSUID,
+            Self::Nodev => MountFlags::NODEV,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BindMount {
+    /// Absolute path on the host to bind-mount from.
+    pub source: PathBuf,
+
+    /// Absolute path inside the sandbox where `source` will appear.
+    pub target: PathBuf,
+
+    /// Mount flags to apply (default: none — mount is RW with exec).
+    #[serde(default)]
+    pub flags: Vec<BindMountFlag>,
+}
+
+impl BindMount {
+    pub fn mount_flags(&self) -> Option<MountFlags> {
+        use rustix::mount::MountFlags;
+
+        let mut flags = MountFlags::empty();
+        for flag in &self.flags {
+            flags |= flag.to_mount_flag();
+        }
+        if flags.is_empty() { None } else { Some(flags) }
+    }
+}
+
+/// Strategy for exposing the project to the FUSE daemon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, strum::Display)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum StorageStrategy {
+    /// Bind-mount the repository directly — no clone, no overlayfs.
+    ///
+    /// Writes through FUSE hit the real filesystem. The sandbox still
+    /// isolates the rest of the host, but the project directory is not
+    /// protected from modification.
+    #[default]
+    Passthrough,
+    /// Copy only HEAD tree objects via the git object database.
+    ///
+    /// Minimal disk usage (~working tree size), works across filesystems.
+    /// The clone borrows no state from the source repo at runtime — all
+    /// required objects are copied into the target's object store.
+    /// Overlayfs captures writes in `~/.cache/nyne/overlay/`.
+    Snapshot,
+    /// Full `git clone --local` with hardlinked objects.
+    ///
+    /// Near-zero object store overhead when source and target are on the
+    /// same filesystem (hardlinks). Falls back to a full copy when they
+    /// are on different filesystems — this can be very large for repos
+    /// with extensive history. Overlayfs captures writes.
+    Hardlink,
+}
+
+/// Top-level LSP configuration.
+///
+/// Built-in server defaults come from `register_lsp!` declarations.
+/// This config provides overrides and additions only — users never
+/// need to re-declare built-in knowledge.
+///
+/// Always present in `NyneConfig` (via `#[serde(default)]`).
+/// LSP is enabled by default; set `enabled = false` to disable.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct LspConfig {
+    /// Whether LSP integration is enabled at all.
+    #[serde(default = "default_true")]
+    #[garde(skip)]
+    pub enabled: bool,
+
+    /// Cache TTL for LSP query results.
+    #[serde(default = "default_lsp_cache_ttl")]
+    #[serde(with = "humantime_serde")]
+    #[garde(skip)]
+    pub cache_ttl: Duration,
+
+    /// Timeout for waiting on LSP diagnostics after a write.
+    #[serde(default = "default_diagnostics_timeout")]
+    #[serde(with = "humantime_serde")]
+    #[garde(skip)]
+    pub diagnostics_timeout: Duration,
+
+    /// Timeout for individual LSP request-response cycles.
+    ///
+    /// Guards against deadlocks where an LSP server stops responding
+    /// (e.g., blocked on unhandled protocol messages). Applies to all
+    /// `send_request` calls including the initialize handshake.
+    #[serde(default = "default_response_timeout")]
+    #[serde(with = "humantime_serde")]
+    #[garde(skip)]
+    pub response_timeout: Duration,
+
+    /// Override built-in server configurations by name.
+    /// Keys must match a server name from `register_lsp!` declarations.
+    #[serde(default)]
+    #[garde(skip)]
+    pub servers: HashMap<String, LspServerOverride>,
+
+    /// Additional custom LSP servers not covered by built-in declarations.
+    #[serde(default)]
+    #[garde(skip)]
+    pub custom: Vec<CustomLspServer>,
+}
+
+impl Default for LspConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_true(),
+            cache_ttl: default_lsp_cache_ttl(),
+            diagnostics_timeout: default_diagnostics_timeout(),
+            response_timeout: default_response_timeout(),
+            servers: HashMap::new(),
+            custom: Vec::new(),
+        }
+    }
+}
+
+/// Override properties of a built-in LSP server.
+///
+/// Only specified fields are overridden; omitted fields keep their defaults.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LspServerOverride {
+    /// Set to `false` to disable this server entirely.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Override the server command.
+    pub command: Option<String>,
+    /// Override the server arguments.
+    pub args: Option<Vec<String>>,
+}
+
+/// A custom LSP server defined entirely in config.
+///
+/// Unlike built-in servers, custom servers have no detection function —
+/// they're always considered applicable for their declared extensions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CustomLspServer {
+    /// Unique name for this server.
+    pub name: String,
+    /// Command to spawn.
+    pub command: String,
+    /// Arguments passed to the server process.
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// File extensions this server handles.
+    pub extensions: Vec<String>,
+}
+
+/// Return true as the default value.
+const fn default_true() -> bool { true }
+
+/// Return the default LSP cache TTL.
+const fn default_lsp_cache_ttl() -> Duration {
+    Duration::from_secs(300) // 5 minutes
+}
+
+/// Return the default diagnostics timeout.
+const fn default_diagnostics_timeout() -> Duration { Duration::from_secs(2) }
+
+/// Return the default response timeout.
+const fn default_response_timeout() -> Duration { Duration::from_secs(10) }
+
+/// Configuration for the FUSE virtual mount.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct MountConfig {
+    /// Path to the source directory to expose via FUSE.
+    #[garde(skip)]
+    pub source_dir: PathBuf,
+
+    /// Path where the virtual filesystem will be mounted.
+    #[garde(skip)]
+    pub mountpoint: PathBuf,
+
+    /// Glob patterns for files/directories to exclude from the virtual mount.
+    #[garde(skip)]
+    #[serde(default)]
+    pub excluded_patterns: Vec<String>,
+}
+
+/// Configuration for agent-facing virtual files injected into every directory.
+///
+/// These files contain a module map of top-level symbols for all source files
+/// in the directory, with optional user-authored content from real files.
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct AgentFilesConfig {
+    /// Filenames to expose as virtual agent files in every directory.
+    /// If a real file with the same name exists, its content is prepended.
+    #[serde(default = "default_agent_filenames")]
+    #[garde(skip)]
+    pub filenames: Vec<String>,
+}
+
+/// Return the default list of agent-facing virtual filenames.
+pub(crate) fn default_agent_filenames() -> Vec<String> { vec!["CLAUDE.md".to_owned(), "AGENTS.md".to_owned()] }
+
+/// Return the default passthrough process list.
+fn default_passthrough_processes() -> Vec<String> { vec!["git".to_owned()] }
+
+impl Default for AgentFilesConfig {
+    fn default() -> Self {
+        Self {
+            filenames: default_agent_filenames(),
+        }
+    }
+}
+
+/// TODO/FIXME comment aggregation configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TodoConfig {
+    /// Whether the todo provider is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Tags to scan for, ordered by priority (first = highest).
+    /// Case-insensitive matching; canonical case used for display/grouping.
+    /// This single list is the SSOT for: scanning, priority, directory names,
+    /// .md file generation, and template rendering.
+    #[serde(default = "default_todo_tags")]
+    pub tags: Vec<String>,
+}
+
+impl Default for TodoConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            tags: default_todo_tags(),
+        }
+    }
+}
+
+/// Return the default list of TODO tags to aggregate.
+fn default_todo_tags() -> Vec<String> {
+    ["FIXME", "SAFETY", "HACK", "XXX", "TODO"]
+        .into_iter()
+        .map(String::from)
+        .collect()
+}
+
+/// Return the XDG config file path for nyne.
+///
+/// Resolves to `~/.config/nyne/config.toml` on Linux.
+fn config_path() -> Option<PathBuf> {
+    ProjectDirs::from("", "", "nyne").map(|dirs| dirs.config_dir().join("config.toml"))
+}
+
+impl NyneConfig {
+    pub fn load() -> Result<Self> {
+        let Some(path) = config_path() else {
+            tracing::debug!("no XDG config directory found, using defaults");
+            return Ok(Self::default());
+        };
+
+        tracing::debug!(path = %path.display(), "loading config");
+
+        let contents = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) if e.kind() == ErrorKind::NotFound => {
+                tracing::debug!(path = %path.display(), "config file not found, using defaults");
+                return Ok(Self::default());
+            }
+            Err(e) => {
+                return Err(e).wrap_err_with(|| format!("reading {}", path.display()));
+            }
+        };
+
+        let config: Self = toml::from_str(&contents).wrap_err_with(|| format!("parsing {}", path.display()))?;
+
+        config.validate().wrap_err("config validation failed")?;
+
+        Ok(config)
+    }
+}
+
+#[cfg(test)]
+mod tests;

@@ -1,0 +1,71 @@
+# Interface Changes — Detailed Walkthrough
+
+## Worked Example: Add a Parameter
+
+**Scenario:** Add `timeout: Duration` to `fn process(input: &str) -> Result<()>`.
+8 callers across 5 files.
+
+### Step 1: Read the function body
+
+```
+Read src/lib.{{ ext }}@/symbols/process.{{ ext }}
+→ 25 lines, ~375 tokens
+```
+
+### Step 2: Read callers
+
+```
+Read src/lib.{{ ext }}@/symbols/process@/CALLERS.md
+→ all 8 callers with inline code context
+```
+
+### Step 3: Write the new signature
+
+```
+Write src/lib.{{ ext }}@/symbols/process@/signature.{{ ext }}
+  content: "pub fn process(input: &str, timeout: Duration) -> Result<()>"
+→ blocking write: validates, formats
+```
+
+### Step 4: Mass-apply code action diffs
+
+```
+Bash "cat src/lib.{{ ext }}@/symbols/process@/actions/*.diff | patch -p1"
+→ applies placeholder fixes to all call sites
+```
+
+### Step 5: Fix call sites that need specific values
+
+Use the caller context from Step 2 to edit each caller's body via symlinks:
+
+```
+Edit src/lib.{{ ext }}@/symbols/process@/callers/init.{{ ext }}
+  old_string: "process(input, Duration::default())"
+  new_string: "process(input, self.timeout)"
+```
+
+### Step 6: Edit the function body
+
+```
+Edit src/lib.{{ ext }}@/symbols/process@/body.{{ ext }}
+  old_string: "let response = client.send(request)?;"
+  new_string: "let response = client.send_timeout(request, timeout)?;"
+```
+
+### Step 7: Check diagnostics
+
+```
+Read src/lib.{{ ext }}@/DIAGNOSTICS.md
+→ verify 0 errors
+```
+
+**Total: ~7 tool calls. ~1000 tokens consumed.**
+Compare: without nyne, ~24 tool calls, ~34,000 tokens.
+
+## Handling Errors After Apply
+
+If diagnostics remain after applying diffs:
+
+1. Read the specific diagnostic: `cat file.{{ ext }}@/DIAGNOSTICS.md`
+2. The diagnostic includes line numbers — use `at-line/` to find the symbol
+3. Fix via targeted edits to symbol bodies

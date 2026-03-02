@@ -1,0 +1,8 @@
+[[sandbox.bind_mounts]]
+source = "/data/models"
+target = "/models"
+flags = ["read_only", "noexec"]
+
+[[sandbox.bind_mounts]]
+source = "/tmp/scratch"
+target = "/scratch"

@@ -1,0 +1,11 @@
+# Blame
+
+{% if data %}
+| Lines | Hash | Author | Date | Message |
+|-|-|-|-|-|
+{% for h in data %}
+| {{ h.lines }} | `{{ h.hash }}` | {{ h.author }} | {{ h.date }} | {{ h.message }} |
+{% endfor %}
+{% else %}
+_No blame data available._
+{% endif %}

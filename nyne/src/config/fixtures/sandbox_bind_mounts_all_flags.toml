@@ -1,0 +1,4 @@
+[[sandbox.bind_mounts]]
+source = "/opt/tools"
+target = "/tools"
+flags = ["read_only", "noexec", "nosuid", "nodev"]

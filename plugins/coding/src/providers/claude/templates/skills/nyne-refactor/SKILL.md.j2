@@ -1,0 +1,298 @@
+---
+name: nyne-refactor
+description: >
+  This skill should be used when the user asks to "rename a symbol", "rename a file",
+  "move a function to another file", "change a function signature", "add a parameter",
+  "update all callers", "refactor", "extract a function", "batch edit", "stage edits",
+  "multi-symbol edit", or performs any operation that changes interfaces and requires
+  updating multiple call sites. Provides diff-first mutation patterns that reduce
+  refactoring from ~24 tool calls to ~4. Auto-triggers when working with
+  `@/symbols/*/rename/`, `@/symbols/*/move/`, `@/edit/`, `CALLERS.md`, `USAGES.md`,
+  or `actions/*.diff` paths.
+---
+
+# nyne-refactor — Renames, Moves & Interface Changes
+
+Refactoring through nyne's VFS reduces tool calls by an order of magnitude. The key
+mechanisms: scoped reads eliminate wasted tokens, rich reference files provide all caller
+context in one read, and diff-first mutations let bulk changes apply in a single command.
+
+## MANDATORY: Before Any Refactoring
+
+1. **Read `CALLERS.md`** — understand who depends on what you're changing.
+2. **Read `REFERENCES.md`** — find all usage sites (especially for types/traits).
+3. **Preview diffs before applying** — `cat rename/new_name.diff` or `cat actions/10-fix.diff`.
+
+## Core Principle: Diff-First Mutations
+
+Every mutation the VFS can perform is previewable as a `.diff` file. **Always preview
+before applying** — this is the default workflow, not the alternative.
+
+| Operation | Preview (read first) | Apply |
+|-|-|-|
+| Symbol rename | `cat Foo@/rename/new_name.diff` | `patch -p1 < Foo@/rename/new_name.diff` |
+| Code action | `cat Foo@/actions/10-fix.diff` | `patch -p1 < Foo@/actions/10-fix.diff` |
+| Batch edit | `cat file.{{ ext }}@/symbols/Foo@/edit/staged.diff` | `rm file.{{ ext }}@/symbols/Foo@/edit/staged.diff` |
+| Cross-file batch | `cat @/edit/staged.diff` | `rm @/edit/staged.diff` |
+| Direct rename | — | `mv file.{{ ext }}@/symbols/old@/ file.{{ ext }}@/symbols/new@/` |
+
+All preview paths are lookup-only (generated on read, not listed in `readdir`).
+
+## Workflow: Rename a Symbol
+
+**Step 1: Preview the rename diff**
+
+```sh
+cat file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
+```
+
+This shows every file that will change, with full diff context. Review it.
+
+**Step 2: Apply**
+
+```sh
+# Option A: apply the previewed diff
+patch -p1 < file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
+
+# Option B: filesystem rename (direct, no preview)
+mv file.{{ ext }}@/symbols/old_name@/ file.{{ ext }}@/symbols/new_name@/
+```
+
+Both are LSP-powered — project-wide, single operation.
+
+## Workflow: Change a Function Signature (Interface Change)
+
+This is the highest-value workflow — turns 24 tool calls into 4.
+
+### Step 1: Read callers first (MANDATORY)
+
+```sh
+cat src/lib.{{ ext }}@/symbols/process@/CALLERS.md
+```
+
+Understand every call site before changing the interface.
+
+### Step 2: Read and edit the function body (scoped)
+
+```sh
+cat src/lib.{{ ext }}@/symbols/process.{{ ext }}          # ~25 lines, not 400
+```
+
+### Step 3: Write the new signature
+
+```sh
+# Write just the signature — body untouched
+echo 'pub fn process(input: &str, timeout: Duration) -> Result<()>' \
+  > src/lib.{{ ext }}@/symbols/process@/signature.{{ ext }}
+```
+
+### Step 4: Fix callers
+
+**Option A — Check and apply code action diffs:**
+
+```sh
+# See what auto-fixes are available
+ls src/lib.{{ ext }}@/symbols/process@/actions/
+
+# Preview a fix
+cat src/lib.{{ ext }}@/symbols/process@/actions/10-fix.diff
+
+# Apply all fixes at once
+cat src/lib.{{ ext }}@/symbols/process@/actions/*.diff | patch -p1
+```
+
+**Option B — Edit callers through symlinks:**
+
+```sh
+# Edit a caller directly — no need to find which file it's in
+Edit src/lib.{{ ext }}@/symbols/process@/callers/init.{{ ext }}
+  old_string: "process(input)"
+  new_string: "process(input, timeout)"
+```
+
+### Step 5: Edit the function body
+
+```sh
+Edit src/lib.{{ ext }}@/symbols/process@/body.{{ ext }}
+  old_string: "client.send(request)?"
+  new_string: "client.send_timeout(request, timeout)?"
+```
+
+**Total: ~4-5 tool calls. ~725 tokens consumed.**
+
+## Workflow: Extract a Function
+
+### Step 1: Read the source function
+
+```sh
+cat src/lib.{{ ext }}@/symbols/process.{{ ext }}
+```
+
+### Step 2: Write the extracted function after the source
+
+Append to `body.{{ ext }}` — nyne detects a standalone symbol and uses insert-after semantics:
+
+```sh
+# Append new function after process
+echo 'fn validate(input: &str) -> Result<()> { ... }' \
+  >> src/lib.{{ ext }}@/symbols/process@/body.{{ ext }}
+```
+
+### Step 3: Replace extracted lines with a call
+
+```
+Edit src/lib.{{ ext }}@/symbols/process@/body.{{ ext }}
+  old_string: <the extracted lines>
+  new_string: "validate(input)?;"
+```
+
+**Total: 3 tool calls.**
+
+## Workflow: Batch Edit (Multi-Symbol Changes)
+
+Stage edits at the symbol level, preview per-symbol or globally, apply atomically.
+Every decomposed symbol has its own `edit/` directory with write-only staging files.
+
+### Step 1: Stage edits by writing to symbol edit files
+
+Each symbol's `edit/` directory contains write-only files for each edit kind:
+
+```sh
+# Replace a symbol's body (code only — doc comments are preserved)
+echo 'fn new_impl() { ... }' > file.{{ ext }}@/symbols/old_func@/edit/replace
+
+# Delete a symbol
+echo '' > file.{{ ext }}@/symbols/deprecated_func@/edit/delete
+
+# Insert after a symbol
+echo 'fn helper() { ... }' > file.{{ ext }}@/symbols/process@/edit/insert_after
+
+# Insert before a symbol
+echo '/// Module docs' > file.{{ ext }}@/symbols/MyStruct@/edit/insert_before
+
+# Append as last child of a scope (impl blocks, modules — not leaf functions)
+echo '    fn new_method(&self) { ... }' > file.{{ ext }}@/symbols/MyStruct~Impl@/edit/append
+```
+
+Staged actions appear as numbered `.diff` files in `edit/staged/`:
+
+```
+file.{{ ext }}@/symbols/old_func@/edit/staged/10-replace.diff
+file.{{ ext }}@/symbols/process@/edit/staged/10-insert-after.diff
+```
+
+### Step 2: Review staged actions
+
+```sh
+# List staged actions for a symbol
+ls file.{{ ext }}@/symbols/old_func@/edit/staged/
+
+# Read a staged action's diff
+cat file.{{ ext }}@/symbols/old_func@/edit/staged/10-replace.diff
+
+# Remove a staged action without applying
+rm file.{{ ext }}@/symbols/old_func@/edit/staged/10-replace.diff
+```
+
+### Step 3: Preview the combined diff
+
+```sh
+# Per-symbol preview — shows all staged edits for one symbol
+cat file.{{ ext }}@/symbols/old_func@/edit/staged.diff
+
+# Global preview — shows all staged edits across all files
+cat @/edit/staged.diff
+```
+
+### Step 4: Apply staged edits
+
+```sh
+# Apply edits for one symbol
+rm file.{{ ext }}@/symbols/old_func@/edit/staged.diff
+
+# Or apply all edits across all files atomically
+rm @/edit/staged.diff
+```
+
+Application is blocking — validates with tree-sitter before writing. The staging
+area is cleared on success.
+
+### Cross-file batch edits
+
+Stage edits across multiple files, then preview/apply them all:
+
+```sh
+# Stage edits in different symbols across files
+echo '...' > file1.{{ ext }}@/symbols/foo@/edit/replace
+echo '...' > file2.{{ ext }}@/symbols/bar@/edit/replace
+
+# Preview all staged edits across all files
+cat @/edit/staged.diff
+
+# Apply all atomically
+rm @/edit/staged.diff
+```
+
+## Symlink Traversal for Editing
+
+Edit through symlinks without resolving file paths:
+
+```sh
+# Read a caller's body via symlink
+cat file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}
+# → resolves to main.{{ ext }}@/symbols/init@/body.{{ ext }}
+
+# Edit a caller's body via symlink
+Edit file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}
+  old_string: "process(input)"
+  new_string: "process(input, timeout)"
+
+# Check a caller's available actions through symlink
+ls file.{{ ext }}@/symbols/process@/callers/init/actions/
+
+# Chain traversal: caller → its deps → edit
+cat file.{{ ext }}@/symbols/process@/callers/init/deps/
+```
+
+## Deleting Symbols
+
+```sh
+# Delete a symbol from source (splices out decorators + doc + signature + body)
+rmdir file.{{ ext }}@/symbols/Foo@/
+
+# Shorthand — same effect
+rm file.{{ ext }}@/symbols/Foo.{{ ext }}
+
+# Delete a nested symbol (e.g., a method from an impl block)
+rmdir file.{{ ext }}@/symbols/Bar~Impl@/method@/
+```
+
+The deletion is atomic — trailing blank lines are consumed, and inotify
+propagates the change for cache invalidation.
+
+## Key Reference Files
+
+| File | Purpose | When to read |
+|-|-|-|
+| `CALLERS.md` | All caller sites with inline code context | **Before any interface change** (mandatory) |
+| `DEPS.md` | Callees/dependencies with inline code context | Understanding what a function calls |
+| `REFERENCES.md` | All reference sites | **Before renames or deletions** (mandatory) |
+| `DIAGNOSTICS.md` | File-level diagnostics | After writes — instant, no build command |
+| `actions/*.diff` | LSP code action diffs | After writes cause errors — check for auto-fixes |
+
+## Anti-Patterns
+
+| Anti-pattern | Correct approach |
+|-|-|
+| Grep for callers, read each file, edit each file | Read `CALLERS.md` → edit through symlinks or apply diffs |
+| `cargo check` after every edit | `cat file.{{ ext }}@/DIAGNOSTICS.md` — instant |
+| Manual find-and-replace for rename | Preview: `cat rename/new.diff`, then `patch -p1` or `mv` |
+| Reading full files to find call sites | `CALLERS.md` has inline code context |
+| Modifying a function without checking callers | **Always** read `CALLERS.md` first |
+
+## Additional Resources
+
+### Reference Files
+
+- **`references/interface-changes.md`** — Detailed walkthrough of the signature change workflow with all hook injection points
+- **`references/diff-patterns.md`** — Advanced diff composition: editing diffs before applying, combining diffs, conflict resolution

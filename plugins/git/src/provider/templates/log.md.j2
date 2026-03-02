@@ -1,0 +1,11 @@
+# Log
+
+{% if data %}
+| Hash | Author | Date | Message |
+|-|-|-|-|
+{% for e in data %}
+| `{{ e.hash }}` | {{ e.author }} | {{ e.date }} | {{ e.message }} |
+{% endfor %}
+{% else %}
+_No history available._
+{% endif %}

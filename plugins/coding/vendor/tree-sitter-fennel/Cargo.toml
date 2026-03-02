@@ -1,0 +1,18 @@
+[package]
+name = "tree-sitter-fennel"
+version = "0.0.1"
+edition = "2024"
+publish = false
+description = "Fennel grammar for tree-sitter (build-time fetch)"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+tree-sitter-language = "0.1"
+
+[build-dependencies]
+cc = "1"
+ureq = "3"
+flate2 = "1"
+tar = "0.4"

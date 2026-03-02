@@ -1,0 +1,13 @@
+//! Provider utilities for nyne-coding.
+
+use nyne::dispatch::activation::ActivationContext;
+use nyne::types::ExtensionCounts;
+
+const FALLBACK_EXT: &str = "ext";
+
+/// Get the dominant non-markdown extension from the activation context.
+pub fn dominant_ext(ctx: &ActivationContext) -> String {
+    ctx.get::<ExtensionCounts>()
+        .and_then(|c| c.0.iter().find(|(ext, _)| ext != "md").map(|(ext, _)| ext.clone()))
+        .unwrap_or_else(|| FALLBACK_EXT.to_owned())
+}

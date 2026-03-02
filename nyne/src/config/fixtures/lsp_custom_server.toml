@@ -1,0 +1,5 @@
+[[lsp.custom]]
+name = "ruff"
+command = "ruff"
+args = ["server"]
+extensions = ["py"]

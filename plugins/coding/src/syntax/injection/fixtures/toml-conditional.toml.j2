@@ -1,0 +1,7 @@
+{% if env == 'production' %}
+[database]
+host = "prod-db"
+{% else %}
+[database]
+host = "dev-db"
+{% endif %}

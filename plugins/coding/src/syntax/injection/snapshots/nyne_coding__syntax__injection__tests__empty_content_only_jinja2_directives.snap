@@ -1,0 +1,5 @@
+---
+source: nyne-coding/src/syntax/injection/tests.rs
+expression: file.fragments
+---
+[]

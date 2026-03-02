@@ -1,0 +1,11 @@
+# Inlay Hints
+{% if hints %}
+
+| Line | Col | Label | Kind |
+|-|-|-|-|
+{% for h in hints %}
+| {{ h.line }} | {{ h.col }} | {{ h.label }} | {{ h.kind }} |
+{% endfor %}
+{% else %}
+No inlay hints available.
+{% endif %}

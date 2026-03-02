@@ -1,0 +1,9 @@
+cognitive-complexity-threshold = 25 # default=25
+too-many-arguments-threshold = 6    # default=7
+too-many-lines-threshold = 100      # default=100
+type-complexity-threshold = 250     # default=250
+large-error-threshold = 128         # flag Result<T, E> where E > 128 bytes
+excessive-nesting-threshold = 4     # flag deeply nested code
+allow-unwrap-in-tests = true        # don't fight unwrap in tests
+absolute-paths-max-segments = 2     # allow std::fs, flag std::fs::File
+absolute-paths-allowed-crates = []  # no exceptions

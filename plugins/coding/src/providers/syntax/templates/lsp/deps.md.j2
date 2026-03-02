@@ -1,0 +1,11 @@
+# Dependencies
+{% if items %}
+
+| Callee | File | Line |
+|-|-|-|
+{% for item in items %}
+| {{ item.name }} | {{ item.file }} | {{ item.line }} |
+{% endfor %}
+{% else %}
+No dependencies found.
+{% endif %}

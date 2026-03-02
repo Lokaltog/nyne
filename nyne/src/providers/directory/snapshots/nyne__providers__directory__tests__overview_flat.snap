@@ -1,0 +1,9 @@
+---
+source: src/providers/directory/tests.rs
+expression: output
+---
+# flat/
+
+| File | Tokens | Description |
+|-|-|-|
+| README.md | ~80 |  |

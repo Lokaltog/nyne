@@ -1,0 +1,29 @@
+---
+source: nyne-coding/src/syntax/tests.rs
+expression: result.fragments
+---
+[
+    Fragment {
+        name: "App",
+        kind: Symbol(
+            Function,
+        ),
+        byte_range: 0..54,
+        full_span: 0..54,
+        line_range: 0..3,
+        signature: Some(
+            "export function App()",
+        ),
+        metadata: Code {
+            visibility: Some(
+                "export",
+            ),
+            doc_comment_range: None,
+            decorator_range: None,
+        },
+        name_byte_offset: 16,
+        children: [],
+        parent_name: None,
+        fs_name: None,
+    },
+]

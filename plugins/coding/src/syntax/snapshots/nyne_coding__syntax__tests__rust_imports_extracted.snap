@@ -1,0 +1,11 @@
+---
+source: nyne-coding/src/syntax/tests.rs
+expression: result.imports
+---
+Some(
+    ImportSpan {
+        byte_range: 0..26,
+        line_range: 0..2,
+        content: "use std::io;\nuse std::fmt;",
+    },
+)

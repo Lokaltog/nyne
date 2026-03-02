@@ -1,0 +1,11 @@
+# Diagnostics
+{% if items %}
+
+| Line | Col | Severity | Code | Source | Message |
+|-|-|-|-|-|-|
+{% for d in items %}
+| {{ d.line }} | {{ d.col }} | {{ d.severity }} | {{ d.code }} | {{ d.source }} | {{ d.message }} |
+{% endfor %}
+{% else %}
+No diagnostics.
+{% endif %}

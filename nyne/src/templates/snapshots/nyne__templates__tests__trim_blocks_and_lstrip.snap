@@ -1,0 +1,7 @@
+---
+source: src/templates/tests.rs
+expression: "engine.render(\"test\", &view)"
+---
+- a
+- b
+done

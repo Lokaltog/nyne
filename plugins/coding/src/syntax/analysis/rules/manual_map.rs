@@ -1,0 +1,93 @@
+//! Analysis rule: suggest manual map patterns.
+
+use super::kinds;
+use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::syntax::parser::TsNode;
+
+struct ManualMap;
+
+impl AnalysisRule for ManualMap {
+    fn id(&self) -> &'static str { "manual-map" }
+
+    fn node_kinds(&self) -> &'static [&'static str] { kinds::MATCH }
+
+    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+        let raw = node.raw();
+        let source = node.source();
+
+        // Rust: arms live inside `match_block` (body field).
+        let body = raw.child_by_field_name("body").unwrap_or(raw);
+        let mut cursor = body.walk();
+
+        // Collect match arms/cases.
+        let arms: Vec<_> = body
+            .named_children(&mut cursor)
+            .filter(|c| kinds::MATCH_ARM.contains(&c.kind()))
+            .collect();
+
+        // Exactly 2 arms for the Some/None pattern.
+        let [first, second] = arms.as_slice() else {
+            return None;
+        };
+
+        let (some_arm, none_arm) = if is_some_arm(first, source) && is_none_arm(second, source) {
+            (first, second)
+        } else if is_none_arm(first, source) && is_some_arm(second, source) {
+            (second, first)
+        } else {
+            return None;
+        };
+
+        // The Some arm must produce Some(...) and the None arm must produce None.
+        if !arm_body_wraps_some(some_arm, source) || !arm_body_is_none(none_arm, source) {
+            return None;
+        }
+
+        let start_line = raw.start_position().row;
+        let end_line = raw.end_position().row;
+
+        Some(Hint {
+            rule_id: self.id(),
+            severity: Severity::Info,
+            line_range: start_line..end_line,
+            message: "`match` on Option with Some → Some, None → None is a manual `.map()`".into(),
+            suggestions: vec!["Use `.map(|v| f(v))`".into()],
+        })
+    }
+}
+
+fn is_some_arm(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
+    if let Some(pattern) = arm.child_by_field_name("pattern") {
+        return kinds::node_bytes(&pattern, source).starts_with(b"Some(");
+    }
+    false
+}
+
+fn is_none_arm(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
+    if let Some(pattern) = arm.child_by_field_name("pattern") {
+        return kinds::node_bytes(&pattern, source) == b"None";
+    }
+    false
+}
+
+fn arm_body_wraps_some(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
+    if let Some(body) = arm
+        .child_by_field_name("value")
+        .or_else(|| arm.child_by_field_name("body"))
+    {
+        return kinds::node_bytes(&body, source).starts_with(b"Some(");
+    }
+    false
+}
+
+fn arm_body_is_none(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
+    if let Some(body) = arm
+        .child_by_field_name("value")
+        .or_else(|| arm.child_by_field_name("body"))
+    {
+        return kinds::node_bytes(&body, source) == b"None";
+    }
+    false
+}
+
+register_analysis_rule!(ManualMap);

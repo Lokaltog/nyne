@@ -1,0 +1,51 @@
+---
+source: nyne-coding/src/syntax/tests.rs
+expression: result.fragments
+---
+[
+    Fragment {
+        name: "Display_for_Foo",
+        kind: Symbol(
+            Impl,
+        ),
+        byte_range: 0..102,
+        full_span: 0..102,
+        line_range: 0..3,
+        signature: Some(
+            "impl Display for Foo",
+        ),
+        metadata: Code {
+            visibility: None,
+            doc_comment_range: None,
+            decorator_range: None,
+        },
+        name_byte_offset: 0,
+        children: [
+            Fragment {
+                name: "fmt",
+                kind: Symbol(
+                    Function,
+                ),
+                byte_range: 27..100,
+                full_span: 27..100,
+                line_range: 1..2,
+                signature: Some(
+                    "fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result",
+                ),
+                metadata: Code {
+                    visibility: None,
+                    doc_comment_range: None,
+                    decorator_range: None,
+                },
+                name_byte_offset: 30,
+                children: [],
+                parent_name: Some(
+                    "Display_for_Foo",
+                ),
+                fs_name: None,
+            },
+        ],
+        parent_name: None,
+        fs_name: None,
+    },
+]

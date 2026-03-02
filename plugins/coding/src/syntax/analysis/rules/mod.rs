@@ -1,0 +1,33 @@
+//! Analysis rules for detecting code smells and potential improvements.
+
+mod ascii_separator;
+mod boolean_parameter;
+mod deep_nesting;
+mod deep_super_import;
+mod deeply_nested_type;
+mod deprecation_marker;
+mod else_if_chain;
+mod empty_catch;
+mod fat_trait;
+mod god_struct;
+mod index_in_loop;
+mod kinds;
+mod large_closure;
+mod long_match;
+mod long_parameter_list;
+mod magic_number;
+mod magic_string;
+mod manual_map;
+mod negated_condition;
+mod redundant_clone;
+mod repeated_field_access;
+mod single_use_variable;
+mod string_concat_loop;
+mod string_format_push;
+mod stringly_typed_match;
+mod todo_fixme;
+mod too_many_locals;
+mod too_many_methods;
+mod type_in_variable_name;
+mod unnecessary_else;
+mod unwrap_chain;

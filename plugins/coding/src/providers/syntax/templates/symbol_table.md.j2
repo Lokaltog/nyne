@@ -1,0 +1,9 @@
+{% if fragments %}
+{% set has_code = fragments | selectattr("code_blocks") | list | length > 0 %}
+| Symbol | Kind | Lines | Tokens |{% if has_code %} Code |{% endif %} Description |
+|-|-|-|-|{% if has_code %}-|{% endif %}-|
+{% for frag in fragments recursive %}
+| {{ "  " * loop.depth0 }}{% if frag.fs_name %}{{ frag.fs_name }}@/{% else %}{{ frag.name }}{% endif %} | {{ frag.visibility }}{% if frag.visibility %} {% endif %}{{ frag.kind }} | {{ frag.line_range }} | {{ frag.bytes|tokens }}{% if frag.child_count > 1 %} ({{ frag.child_count }}){% endif %} |{% if has_code %} {{ frag.code_blocks }} |{% endif %} {{ frag.description() }} |
+{% if frag.children %}{{ loop(frag.children) }}{% endif %}
+{% endfor %}
+{% endif %}

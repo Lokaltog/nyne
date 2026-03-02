@@ -1,0 +1,29 @@
+---
+source: nyne-coding/src/syntax/tests.rs
+expression: result.fragments
+---
+[
+    Fragment {
+        name: "index",
+        kind: Symbol(
+            Function,
+        ),
+        byte_range: 0..37,
+        full_span: 0..37,
+        line_range: 0..3,
+        signature: Some(
+            "@app.route('/')",
+        ),
+        metadata: Code {
+            visibility: None,
+            doc_comment_range: None,
+            decorator_range: Some(
+                0..15,
+            ),
+        },
+        name_byte_offset: 20,
+        children: [],
+        parent_name: None,
+        fs_name: None,
+    },
+]

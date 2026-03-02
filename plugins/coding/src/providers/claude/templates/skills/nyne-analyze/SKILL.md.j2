@@ -1,0 +1,179 @@
+---
+name: nyne-analyze
+description: >
+  This skill should be used when the user asks to "find callers", "check references",
+  "what calls this", "who uses this", "check diagnostics", "find errors",
+  "understand impact", "check blast radius", "find dependencies",
+  "git blame", "who changed this", "commit history for a function", or needs to understand
+  code relationships in a nyne-mounted codebase. Provides LSP intelligence, impact analysis,
+  diagnostics, and per-symbol git history through virtual files. Auto-triggers when reading
+  `CALLERS.md`, `REFERENCES.md`, `IMPACT.md`, `DIAGNOSTICS.md`, `DEPS.md`, or
+  `git/LOG.md` paths.
+---
+
+# nyne-analyze — LSP Intelligence, Impact & Diagnostics
+
+Every symbol in a nyne mount exposes rich LSP intelligence and git history as virtual
+files. Read them to understand code relationships, assess blast radius before changes,
+and check diagnostics — all without running build commands or grepping for patterns.
+
+## MANDATORY: Pre-Modification Checklist
+
+**Before modifying any function, method, struct, or trait — read these files FIRST:**
+
+1. **`CALLERS.md`** — `cat file.{{ ext }}@/symbols/Foo@/CALLERS.md`
+   Shows all callers with **inline code context** (the actual call expression + surrounding lines).
+   One read replaces N grep + file read cycles.
+
+2. **`DEPS.md`** — `cat file.{{ ext }}@/symbols/Foo@/DEPS.md`
+   Shows what this function calls — understand internal dependencies before refactoring.
+
+3. **`REFERENCES.md`** — `cat file.{{ ext }}@/symbols/Foo@/REFERENCES.md`
+   Every place `Foo` is referenced — uses, type annotations, trait bounds, etc.
+   Essential before renaming or deleting.
+
+**Do not skip this.** Understanding blast radius before making changes prevents cascading fixes.
+
+## Symlink Traversal — Edit Through the Graph
+
+Callers, deps, and references are **symlinks to other symbols' `@/` directories**.
+Follow them to read, edit, or inspect actions without resolving file paths:
+
+```sh
+# List callers as traversable symlinks
+ls file.{{ ext }}@/symbols/process@/callers/
+# init-main.{{ ext }}:15 → main.{{ ext }}@/symbols/init@/
+# start-server.{{ ext }}:42 → server.{{ ext }}@/symbols/start@/
+
+# Read a caller's body directly through the symlink
+cat file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}
+# → reads main.{{ ext }}@/symbols/init@/body.{{ ext }}
+
+# Edit a caller directly — no need to know which file it lives in
+Edit file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}
+
+# Check what code actions are available on a caller
+ls file.{{ ext }}@/symbols/process@/callers/init/actions/
+
+# Follow the chain: Foo → callers → bar → deps → baz
+cat file.{{ ext }}@/symbols/Foo@/callers/bar/deps/baz.{{ ext }}
+```
+
+This enables powerful workflows: find who calls a function → edit the caller → check the caller's
+actions → apply a fix — all without ever resolving a file path manually.
+
+## Diagnostics
+
+### File-level diagnostics
+
+```sh
+cat file.{{ ext }}@/DIAGNOSTICS.md                   # all diagnostics for this file
+```
+
+**Use this instead of running build commands.** After VFS writes, diagnostics are collected
+before the write returns. Read `DIAGNOSTICS.md` for instant feedback — no `cargo check` needed.
+
+### Per-symbol code actions
+
+```sh
+ls file.{{ ext }}@/symbols/Foo@/actions/             # LSP code actions scoped to this symbol
+cat file.{{ ext }}@/symbols/Foo@/actions/10-add-missing-fields.diff   # preview
+patch -p1 < file.{{ ext }}@/symbols/Foo@/actions/10-add-missing-fields.diff   # apply
+```
+
+Code actions are `.diff` files — inspect with `cat`, apply with `patch -p1 < file.diff`.
+**After a write causes errors**, always check `actions/` — the LSP may already have an auto-fix.
+
+## Call Graph Detail
+
+### CALLERS.md format
+
+```markdown
+## init — src/main.{{ ext }} (L15-16)
+\`\`\`rust
+let result = process(input, &config)?;
+handle_result(result);
+\`\`\`
+
+## start — src/server.{{ ext }} (L42)
+\`\`\`rust
+let output = process(request.body(), &server_config)?;
+\`\`\`
+```
+
+### DEPS.md — What this symbol calls
+
+```sh
+cat file.{{ ext }}@/symbols/process@/DEPS.md
+```
+
+Lists callees/dependencies with the same inline code context format.
+
+## Definitions and Declarations
+
+```sh
+cat file.{{ ext }}@/symbols/Foo@/DEFINITION.md       # where Foo is defined
+cat file.{{ ext }}@/symbols/Foo@/DECLARATION.md      # where Foo is declared
+cat file.{{ ext }}@/symbols/Foo@/IMPLEMENTATION.md   # where Foo is implemented
+
+# Symlink directories for traversal
+ls file.{{ ext }}@/symbols/Foo@/definition/
+ls file.{{ ext }}@/symbols/Foo@/declaration/
+ls file.{{ ext }}@/symbols/Foo@/implementation/
+```
+
+## Documentation
+
+```sh
+# Hover documentation and type info
+cat file.{{ ext }}@/symbols/Foo@/DOC.md
+
+# Inlay hints (inferred types, parameter names)
+cat file.{{ ext }}@/symbols/Foo@/HINTS.md
+```
+
+## Per-Symbol Git History
+
+### Commit log scoped to a symbol
+
+```sh
+cat file.{{ ext }}@/symbols/Foo@/git/LOG.md         # commits touching Foo's line range
+```
+
+Only shows commits that actually modified this symbol — not the entire file history.
+
+### Blame scoped to a symbol
+
+```sh
+cat file.{{ ext }}@/symbols/Foo@/git/BLAME.md       # per-line authorship within Foo
+cat file.{{ ext }}@/symbols/Foo@/git/BLAME.md:5-10  # blame for lines 5-10 within Foo
+```
+
+### File-level git
+
+```sh
+cat file.{{ ext }}@/git/LOG.md                       # file commit log
+cat file.{{ ext }}@/git/LOG.md:-10                   # last 10 commits
+cat file.{{ ext }}@/git/BLAME.md                     # full file blame
+cat file.{{ ext }}@/git/BLAME.md:42-55              # blame for line range
+cat file.{{ ext }}@/git/CONTRIBUTORS.md             # contributors ranked by ownership
+cat file.{{ ext }}@/git/NOTES.md                    # git notes
+cat file.{{ ext }}@/diff/HEAD.diff                  # uncommitted changes
+```
+
+## Anti-Patterns
+
+| Anti-pattern | Correct approach |
+|-|-|
+| `Grep "fn foo" src/` to find callers | `cat file.{{ ext }}@/symbols/foo@/CALLERS.md` — one read, with code context |
+| `Grep "Foo" src/` to find references | `cat file.{{ ext }}@/symbols/Foo@/REFERENCES.md` |
+| `cargo check` after every edit | `cat file.{{ ext }}@/DIAGNOSTICS.md` — instant, scoped |
+| Reading N files to understand call sites | `CALLERS.md` has inline code context for all sites |
+| Manually resolving which file a caller is in | Follow symlinks: `callers/bar.{{ ext }}` → reads body directly |
+
+## Additional Resources
+
+### Reference Files
+
+- **`references/lsp-features.md`** — Complete LSP feature matrix: which languages support which features, fallback behavior
+- **`references/git-integration.md`** — Advanced git patterns: cross-branch diffs, history navigation, co-change analysis

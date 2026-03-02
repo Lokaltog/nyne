@@ -1,0 +1,11 @@
+# Mount Status
+
+| Property | Value |
+|-|-|
+| **Source** | `{{ source_dir }}` |
+| **State** | mounted |
+| **Languages** | {{ languages }} |
+| **Providers** | {{ providers | join(", ") }} |
+{% if uptime %}
+| **Uptime** | {{ uptime }} |
+{% endif %}

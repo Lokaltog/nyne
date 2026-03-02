@@ -1,0 +1,26 @@
+⚠️ Blocked: broad read of raw source file ({{ total_lines }} lines, {{ total_bytes|tokens }} tokens). Use the nyne VFS instead.
+
+{% if sym %}
+Read the symbol directly:
+  Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
+
+Edit a symbol at a known line:
+  Edit {{ rel }}@/symbols/at-line/<line>
+
+Or browse the symbol table first:
+  Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
+{% else %}
+Read the symbol table, then read specific symbol bodies:
+  Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
+
+Edit a symbol at a known line:
+  Edit {{ rel }}@/symbols/at-line/<line>
+{% endif %}
+
+Read/splice/append lines (no prior read needed, not intercepted):
+  cat {{ rel }}@/lines:M-N
+{% if config.include_symbol_table %}
+
+{{ rel }}@/symbols/{{ FILE_OVERVIEW }}:
+{% include "syntax/symbol_table" %}
+{% endif %}

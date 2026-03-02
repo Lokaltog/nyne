@@ -1,0 +1,126 @@
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+
+use color_eyre::eyre::Result;
+use nyne::dispatch::activation::ActivationContext;
+use nyne::templates::{TemplateEngine, TemplateView};
+use serde::Serialize;
+
+use crate::providers::fragment_resolver::FragmentResolver;
+use crate::syntax::analysis::{AnalysisContext, AnalysisEngine, Hint, HintView};
+
+/// View for the file-level `HINTS.md` — runs analysis at read time.
+pub(in crate::providers::syntax) struct HintsContent {
+    pub resolver: FragmentResolver,
+    pub activation: Arc<ActivationContext>,
+}
+
+impl TemplateView for HintsContent {
+    fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
+        let shared = self.resolver.decompose()?;
+        let ctx = AnalysisContext {
+            source: &shared.source,
+            activation: &self.activation,
+        };
+
+        let hints = shared
+            .tree
+            .as_ref()
+            .map(|tree| {
+                #[expect(clippy::expect_used, reason = "plugin activation invariant")]
+                self.activation
+                    .get::<Arc<AnalysisEngine>>()
+                    .expect("coding plugin not activated")
+                    .analyze(tree, &ctx)
+            })
+            .unwrap_or_default();
+
+        let (hint_rows, collapsed, suggestions) = build_view(&hints);
+
+        let view = minijinja::context! {
+            hints => hint_rows,
+            collapsed => collapsed,
+            suggestions => suggestions,
+        };
+        Ok(engine.render_bytes(template, &view))
+    }
+}
+
+/// A group of hints collapsed into a single summary when count exceeds a threshold.
+#[derive(Serialize)]
+struct CollapsedGroup {
+    rule_id: &'static str,
+    severity: &'static str,
+    count: usize,
+    /// Representative message (first occurrence, without the specific value).
+    summary: &'static str,
+}
+
+/// Threshold: rules with this many or more hits get collapsed into a summary row.
+const COLLAPSE_THRESHOLD: usize = 3;
+
+/// A suggestion row for analysis hints.
+#[derive(Serialize)]
+struct SuggestionRow {
+    rule_id: &'static str,
+    text: String,
+}
+
+/// Rule-level summary messages used when collapsing repeated hits.
+fn collapse_summary(rule_id: &str) -> &'static str {
+    match rule_id {
+        "magic-string" => "multiple magic strings — extract to named constants for clarity",
+        "magic-number" => "multiple magic numbers — extract to named constants for clarity",
+        "single-use-variable" => "multiple single-use bindings — consider inlining",
+        "unwrap-chain" => "multiple `.unwrap()` chains — consider propagating errors",
+        "redundant-clone" => "multiple redundant `.clone()` calls",
+        _ => "multiple occurrences",
+    }
+}
+
+fn build_view(hints: &[Hint]) -> (Vec<HintView>, Vec<CollapsedGroup>, Vec<SuggestionRow>) {
+    // Count occurrences per rule to decide what gets collapsed.
+    let counts: HashMap<&'static str, usize> = hints.iter().fold(HashMap::new(), |mut acc, h| {
+        *acc.entry(h.rule_id).or_default() += 1;
+        acc
+    });
+
+    let is_collapsed = |id: &str| counts.get(id).copied().unwrap_or(0) >= COLLAPSE_THRESHOLD;
+
+    // Individual rows for low-frequency rules only.
+    let rows: Vec<HintView> = hints
+        .iter()
+        .filter(|h| !is_collapsed(h.rule_id))
+        .map(HintView::from)
+        .collect();
+
+    // One summary row per high-frequency rule (first occurrence wins for severity).
+    let mut seen = HashSet::new();
+    let collapsed: Vec<CollapsedGroup> = hints
+        .iter()
+        .filter(|h| is_collapsed(h.rule_id) && seen.insert(h.rule_id))
+        .map(|h| CollapsedGroup {
+            rule_id: h.rule_id,
+            severity: h.severity.as_str(),
+            count: counts.get(h.rule_id).copied().unwrap_or(0),
+            summary: collapse_summary(h.rule_id),
+        })
+        .collect();
+
+    // Deduplicated suggestions: one entry per unique (rule_id, text) pair.
+    let mut seen_suggestions: HashSet<(&str, &str)> = HashSet::new();
+    let suggestions: Vec<SuggestionRow> = hints
+        .iter()
+        .flat_map(|h| h.suggestions.iter().map(move |s| (h.rule_id, s)))
+        .filter(|(rule_id, text)| seen_suggestions.insert((rule_id, text)))
+        .map(|(rule_id, text)| SuggestionRow {
+            rule_id,
+            text: text.clone(),
+        })
+        .collect();
+
+    (rows, collapsed, suggestions)
+}
+
+#[cfg(test)]
+mod tests;

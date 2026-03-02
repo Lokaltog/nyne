@@ -1,0 +1,3 @@
+[mount]
+source_dir = "/tmp/src"
+mountpoint = "/tmp/mnt"

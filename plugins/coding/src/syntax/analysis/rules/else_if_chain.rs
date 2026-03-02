@@ -1,0 +1,68 @@
+//! Analysis rule: detect else-if chains.
+
+use super::kinds;
+use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::syntax::parser::TsNode;
+
+/// Minimum else-if branches to trigger (3 = if + 3 else-ifs = 4 total).
+const MIN_ELSE_IFS: usize = 3;
+
+struct ElseIfChain;
+
+impl AnalysisRule for ElseIfChain {
+    fn id(&self) -> &'static str { "else-if-chain" }
+
+    fn node_kinds(&self) -> &'static [&'static str] { kinds::IF }
+
+    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+        // Only fire on the outermost if — don't re-fire on inner else-ifs.
+        if let Some(parent) = node.raw().parent() {
+            let pk = parent.kind();
+            if pk == "else_clause" || pk == "elif_clause" || pk == "else" {
+                return None;
+            }
+        }
+
+        let count = count_else_ifs(node.raw());
+        if count < MIN_ELSE_IFS {
+            return None;
+        }
+
+        let start_line = node.raw().start_position().row;
+        let end_line = node.raw().end_position().row;
+
+        Some(Hint {
+            rule_id: self.id(),
+            severity: Severity::Warning,
+            line_range: start_line..end_line,
+            message: format!("{count} chained else-if branches — consider a `match`/`switch` or lookup map"),
+            suggestions: vec![
+                "Refactor to a match/switch expression".into(),
+                "Use a HashMap/dict lookup for value mapping".into(),
+            ],
+        })
+    }
+}
+
+/// Count else-if branches by walking the alternative chain.
+fn count_else_ifs(mut node: tree_sitter::Node<'_>) -> usize {
+    let mut count = 0;
+    while let Some(alt) = node.child_by_field_name("alternative") {
+        // The alternative might be an else_clause containing an if, or directly an if.
+        let inner = if kinds::IF.contains(&alt.kind()) {
+            alt
+        } else {
+            // Look for an if inside the else clause.
+            match alt.named_child(0).filter(|c| kinds::IF.contains(&c.kind())) {
+                Some(inner_if) => inner_if,
+                None => break, // Plain else — end of chain.
+            }
+        };
+
+        count += 1;
+        node = inner;
+    }
+    count
+}
+
+register_analysis_rule!(ElseIfChain);

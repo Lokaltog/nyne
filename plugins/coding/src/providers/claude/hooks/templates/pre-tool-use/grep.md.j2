@@ -1,0 +1,16 @@
+{% if kind == "callers" %}
+Hint: Instead of grepping for symbol usage, use nyne's LSP-powered analysis:
+  Read <file>@/symbols/{{ symbol }}@/{{ FILE_CALLERS }} — all callers with inline code context
+  Read <file>@/symbols/{{ symbol }}@/{{ FILE_REFERENCES }} — all reference sites
+  Read <file>@/symbols/{{ symbol }}@/{{ FILE_DEPS }} — all dependencies/callees
+These return structured results with code context in a single read.
+{% elif kind == "references" %}
+Hint: Instead of grepping for type references, use nyne's LSP-powered analysis:
+  Read <file>@/symbols/{{ symbol }}@/{{ FILE_REFERENCES }} — all reference sites with code context
+  Read <file>@/symbols/{{ symbol }}@/{{ FILE_CALLERS }} — all callers
+  Read <file>@/symbols/{{ symbol }}@/{{ FILE_IMPLEMENTATION }} — trait implementations
+{% elif kind == "imports" %}
+Hint: For import analysis, use nyne's LSP features:
+  Read <file>@/symbols/imports.rs — read/write/append to the import block directly
+  Read <file>@/symbols/Foo@/{{ FILE_REFERENCES }} — find everywhere Foo is referenced
+{% endif %}

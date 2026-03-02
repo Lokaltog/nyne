@@ -1,0 +1,44 @@
+---
+source: nyne-coding/src/syntax/injection/tests.rs
+expression: file.fragments
+---
+[
+    Fragment {
+        name: "title",
+        kind: Symbol(
+            Module,
+        ),
+        byte_range: 0..46,
+        full_span: 0..46,
+        line_range: 0..3,
+        signature: Some(
+            "{% block title %}",
+        ),
+        metadata: Code {
+            visibility: None,
+            doc_comment_range: None,
+            decorator_range: None,
+        },
+        name_byte_offset: 9,
+        children: [],
+        parent_name: None,
+        fs_name: None,
+    },
+    Fragment {
+        name: "Hello World",
+        kind: Section {
+            level: 1,
+        },
+        byte_range: 18..32,
+        full_span: 18..32,
+        line_range: 1..3,
+        signature: None,
+        metadata: Document {
+            index: 0,
+        },
+        name_byte_offset: 18,
+        children: [],
+        parent_name: None,
+        fs_name: None,
+    },
+]

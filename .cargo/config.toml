@@ -1,0 +1,19 @@
+[alias]
+lint = ["clippy", "--fix", "--allow-dirty", "--", "-D", "warnings"]
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[profile.dev.package."*"]
+debug = false
+
+# Performance-sensitive C/FFI deps: keep fast even in dev builds
+[profile.dev.package.tree-sitter]
+opt-level = 2
+
+[profile.dev.package.git2]
+opt-level = 2
+
+[profile.dev.package.libgit2-sys]
+opt-level = 2

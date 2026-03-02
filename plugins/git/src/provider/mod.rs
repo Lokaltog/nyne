@@ -1,0 +1,348 @@
+//! Git provider — exposes blame, history, log, contributors, diff, branches, and tags.
+//!
+//! Creates virtual files/directories under two scopes:
+//! - `file.rs@/git/` — per-file git metadata (blame, log, contributors, notes)
+//! - `@/git/` — repository-wide browsing (branches, tags, status)
+//!
+//! Symbol-scoped git features (per-symbol blame/history) live in `nyne-coding`.
+
+use std::sync::Arc;
+
+use color_eyre::eyre::Result;
+use nyne::dispatch::activation::ActivationContext;
+use nyne::dispatch::context::RequestContext;
+use nyne::dispatch::invalidation::InvalidationEvent;
+use nyne::dispatch::routing::ctx::RouteCtx;
+use nyne::dispatch::routing::tree::RouteTree;
+use nyne::helpers::{dispatch_children, dispatch_lookup, source_file};
+use nyne::node::{CachePolicy, Lifecycle, NodeAttr, VirtualNode};
+use nyne::provider::{MutationOp, MutationOutcome, Node, Nodes, Provider, ProviderId};
+use nyne::templates::TemplateHandle;
+use nyne::types::GitDirName;
+use nyne::types::real_fs::RealFs;
+use nyne::types::vfs_path::VfsPath;
+use nyne_macros::routes;
+
+use crate::names::{
+    self as names, DIR_BRANCHES, DIR_DIFF, DIR_GIT, DIR_HISTORY, DIR_TAGS, FILE_BLAME, FILE_HEAD_DIFF, FILE_LOG,
+    FILE_STATUS,
+};
+use crate::repo::GitRepo;
+
+/// Define a per-file git view struct backed by `FileViewCtx`.
+macro_rules! git_template_view {
+    ($(#[$attr:meta])* $name:ident, |$repo:ident, $path:ident| $fetch:expr) => {
+        $(#[$attr])*
+        pub(super) struct $name(pub super::repo::FileViewCtx);
+
+        impl nyne::templates::TemplateView for $name {
+            fn render(
+                &self,
+                engine: &nyne::templates::TemplateEngine,
+                template: &str,
+            ) -> color_eyre::eyre::Result<Vec<u8>> {
+                let $repo = &self.0.repo;
+                let $path = &self.0.rel_path;
+                let data = $fetch?;
+                Ok(engine.render_bytes(template, &minijinja::context!(data)))
+            }
+        }
+    };
+}
+
+mod blame;
+mod branches;
+mod contributors;
+mod diff;
+pub mod history;
+mod log;
+mod notes;
+pub mod repo;
+mod status;
+pub mod views;
+
+use branches::{branch_segments_at_prefix, branch_tree_nodes};
+use diff::{DiffContent, DiffTarget};
+use status::GitStatusView;
+use views::{SlicedBlameView, SlicedLogView};
+
+/// Lifecycle that reports a git commit timestamp as the node's mtime.
+pub struct CommitMtime(pub i64);
+
+impl Lifecycle for CommitMtime {
+    fn getattr(&self, _ctx: &RequestContext<'_>) -> Option<NodeAttr> {
+        Some(NodeAttr {
+            mtime: Some(u64::try_from(self.0).unwrap_or(0)),
+            ..NodeAttr::default()
+        })
+    }
+}
+
+/// Template handles for git-backed virtual files.
+pub struct GitHandles {
+    pub blame: TemplateHandle,
+    pub log: TemplateHandle,
+    pub contributors: TemplateHandle,
+    pub status: TemplateHandle,
+    pub notes: TemplateHandle,
+}
+
+/// Git provider for file-level blame, history, diff, log, contributors, and
+/// repository browsing (branches, tags).
+///
+/// Symbol-scoped git features (per-symbol blame/history) are provided by
+/// nyne-coding's git-symbols extension.
+pub(crate) struct GitProvider {
+    ctx: Arc<ActivationContext>,
+    handles: GitHandles,
+    git_dir_component: Option<String>,
+    at_routes: RouteTree<Self>,
+    companion_routes: RouteTree<Self>,
+}
+
+impl GitProvider {
+    pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("git");
+
+    pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
+        let git_dir_component = ctx.get::<GitDirName>().and_then(|g| g.0.clone());
+
+        let mut b = names::handle_builder();
+        let blame_key = b.register("git/blame", include_str!("templates/blame.md.j2"));
+        let log_key = b.register("git/log", include_str!("templates/log.md.j2"));
+        let contributors_key = b.register("git/contributors", include_str!("templates/contributors.md.j2"));
+        let status_key = b.register("git/status", include_str!("templates/status.md.j2"));
+        let notes_key = b.register("git/notes", include_str!("templates/notes.md.j2"));
+        let engine = b.finish();
+        let handles = GitHandles {
+            blame: TemplateHandle::new(&engine, blame_key),
+            log: TemplateHandle::new(&engine, log_key),
+            contributors: TemplateHandle::new(&engine, contributors_key),
+            status: TemplateHandle::new(&engine, status_key),
+            notes: TemplateHandle::new(&engine, notes_key),
+        };
+
+        let at_routes = routes!(Self, {
+            no_emit "@" {
+                "git" => children_git_root {
+                    "branches" => children_branches {
+                        "{..prefix}" => children_branches_nested,
+                    }
+                    "tags" => children_tags,
+                }
+            }
+        });
+
+        let companion_routes = routes!(Self, {
+            children(children_companion_root),
+            "git" => children_companion_git {
+                lookup "BLAME.md:{spec}" => lookup_sliced_blame,
+                lookup "LOG.md:{spec}" => lookup_sliced_log,
+            }
+            "diff" => children_diff {
+                lookup "{ref}.diff" => lookup_diff_ref,
+            }
+            "history" => children_history,
+        });
+
+        Self {
+            ctx,
+            handles,
+            git_dir_component,
+            at_routes,
+            companion_routes,
+        }
+    }
+
+    fn repo(&self) -> Result<Arc<GitRepo>> {
+        self.ctx
+            .get::<Arc<GitRepo>>()
+            .cloned()
+            .ok_or_else(|| color_eyre::eyre::eyre!("git repo not available"))
+    }
+
+    fn children_git_root(&self, _ctx: &RouteCtx<'_>) -> Nodes {
+        let repo = self.repo()?;
+        let secs = repo.head_epoch_secs();
+        Ok(Some(vec![
+            VirtualNode::directory(DIR_BRANCHES).with_lifecycle(CommitMtime(secs)),
+            VirtualNode::directory(DIR_TAGS).with_lifecycle(CommitMtime(secs)),
+            self.handles
+                .status
+                .node(FILE_STATUS, GitStatusView { repo })
+                .with_cache_policy(CachePolicy::Never)
+                .with_lifecycle(CommitMtime(secs)),
+        ]))
+    }
+
+    fn children_branches(&self, _ctx: &RouteCtx<'_>) -> Nodes { branch_segments_at_prefix(&self.repo()?, "") }
+
+    fn children_branches_nested(&self, ctx: &RouteCtx<'_>) -> Nodes {
+        let repo = self.repo()?;
+        let segs = ctx.params("prefix");
+
+        // Try as a branch namespace prefix first (e.g., segs=["feat"] for feat/foo, feat/bar).
+        let mut ns_prefix = segs.join("/");
+        ns_prefix.push('/');
+        if let Some(nodes) = branch_segments_at_prefix(&repo, &ns_prefix)? {
+            return Ok(Some(nodes));
+        }
+
+        // Not a namespace — find the longest branch name that is a prefix of the segments.
+        // e.g., segs=["main","src"] → branch "main", tree_path "src"
+        // e.g., segs=["feat","foo","src"] → branch "feat/foo", tree_path "src"
+        let branches = repo.branches()?;
+        for split in (1..=segs.len()).rev() {
+            let candidate = segs.get(..split).unwrap_or_default().join("/");
+            if branches.iter().any(|b| b == &candidate) {
+                let tree_path = segs.get(split..).unwrap_or_default().join("/");
+                return branch_tree_nodes(&repo, &candidate, &tree_path);
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn children_tags(&self, _ctx: &RouteCtx<'_>) -> Nodes {
+        let repo = self.repo()?;
+        let head_mtime = repo.head_epoch_secs();
+        let tags = repo.tags()?;
+        let nodes = tags
+            .iter()
+            .map(|name| VirtualNode::directory(name).with_lifecycle(CommitMtime(head_mtime)))
+            .collect();
+        Ok(Some(nodes))
+    }
+
+    fn children_companion_root(&self, ctx: &RouteCtx<'_>) -> Nodes {
+        let source = source_file(ctx)?;
+        let repo = self.repo()?;
+        let rel = repo.rel_path(&source);
+        let secs = repo.file_epoch_secs(&rel);
+        Ok(Some(vec![
+            VirtualNode::directory(DIR_GIT).with_lifecycle(CommitMtime(secs)),
+            VirtualNode::directory(DIR_HISTORY).with_lifecycle(CommitMtime(secs)),
+            VirtualNode::directory(DIR_DIFF).with_lifecycle(CommitMtime(secs)),
+        ]))
+    }
+
+    fn children_diff(&self, ctx: &RouteCtx<'_>) -> Nodes {
+        let source = source_file(ctx)?;
+        let repo = self.repo()?;
+        let rel = repo.rel_path(&source);
+        let secs = repo.head_epoch_secs();
+        Ok(Some(vec![
+            VirtualNode::file(FILE_HEAD_DIFF, DiffContent {
+                repo: Arc::clone(&repo),
+                rel_path: rel,
+                target: DiffTarget::Workdir { source_file: source },
+            })
+            .with_lifecycle(CommitMtime(secs)),
+        ]))
+    }
+
+    fn children_companion_git(&self, ctx: &RouteCtx<'_>) -> Nodes {
+        let source = source_file(ctx)?;
+        let repo = self.repo()?;
+        let rel = repo.rel_path(&source);
+        Ok(Some(self.resolve_companion_git(&repo, rel)))
+    }
+
+    fn lookup_sliced_blame(&self, ctx: &RouteCtx<'_>) -> Node {
+        use nyne::edit::slice::parse_spec;
+        let Some(spec) = parse_spec(ctx.param("spec")) else {
+            return Ok(None);
+        };
+        let source = source_file(ctx)?;
+        let repo = self.repo()?;
+        let fctx = repo::FileViewCtx::new(&repo, repo.rel_path(&source));
+        let spec_label = ctx.param("spec");
+        Ok(Some(self.handles.blame.node(
+            format!("{FILE_BLAME}:{spec_label}"),
+            SlicedBlameView { ctx: fctx, spec },
+        )))
+    }
+
+    fn lookup_sliced_log(&self, ctx: &RouteCtx<'_>) -> Node {
+        use nyne::edit::slice::parse_spec;
+        let Some(spec) = parse_spec(ctx.param("spec")) else {
+            return Ok(None);
+        };
+        let source = source_file(ctx)?;
+        let repo = self.repo()?;
+        let fctx = repo::FileViewCtx::new(&repo, repo.rel_path(&source));
+        let spec_label = ctx.param("spec");
+        Ok(Some(self.handles.log.node(
+            format!("{FILE_LOG}:{spec_label}"),
+            SlicedLogView { ctx: fctx, spec },
+        )))
+    }
+
+    fn lookup_diff_ref(&self, ctx: &RouteCtx<'_>) -> Node {
+        let refspec = ctx.param("ref");
+        if refspec == "HEAD" {
+            return Ok(None);
+        }
+        let source = source_file(ctx)?;
+        let repo = self.repo()?;
+        Ok(Some(VirtualNode::file(format!("{refspec}.diff"), DiffContent {
+            repo: Arc::clone(&repo),
+            rel_path: repo.rel_path(&source),
+            target: DiffTarget::Ref(refspec.to_owned()),
+        })))
+    }
+
+    fn children_history(&self, ctx: &RouteCtx<'_>) -> Nodes {
+        let source = source_file(ctx)?;
+        let repo = self.repo()?;
+        let rel = repo.rel_path(&source);
+        let ext = source.extension().unwrap_or("");
+        let entries = repo.file_history(&rel, views::HISTORY_LIMIT)?;
+        let nodes = entries
+            .into_iter()
+            .enumerate()
+            .map(|(i, entry)| {
+                let filename = views::history_filename(i, &entry, ext);
+                let secs = entry.commit.epoch_secs;
+                VirtualNode::file(filename, history::HistoryVersionContent {
+                    repo: Arc::clone(&repo),
+                    rel_path: rel.clone(),
+                    oid: entry.oid,
+                })
+                .with_lifecycle(CommitMtime(secs))
+            })
+            .collect();
+        Ok(Some(nodes))
+    }
+}
+
+impl Provider for GitProvider {
+    fn id(&self) -> ProviderId { Self::PROVIDER_ID }
+
+    fn handle_mutation(&self, _op: &MutationOp<'_>, _real_fs: &dyn RealFs) -> Result<MutationOutcome> {
+        Ok(MutationOutcome::NotHandled)
+    }
+
+    fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes {
+        dispatch_children(&self.at_routes, &self.companion_routes, &self, ctx, true)
+    }
+
+    fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node {
+        dispatch_lookup(&self.at_routes, &self.companion_routes, &self, ctx, name, true)
+    }
+
+    fn on_fs_change(&self, changed: &[VfsPath]) -> Vec<InvalidationEvent> {
+        let Some(git_dir) = &self.git_dir_component else {
+            return Vec::new();
+        };
+        let dominated_by_git = changed
+            .iter()
+            .any(|p| p.components().next().is_some_and(|first| first == git_dir.as_str()));
+        if !dominated_by_git {
+            return Vec::new();
+        }
+        vec![InvalidationEvent::Provider { provider_id: self.id() }]
+    }
+}
+
+#[cfg(test)]
+mod tests;

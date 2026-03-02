@@ -1,0 +1,4 @@
+# Use clippy for fly-check diagnostics (matches pre-commit workflow)
+[check]
+command = "clippy"
+extraArgs = ["--", "-D", "warnings"]

@@ -1,0 +1,12 @@
+# Notes
+
+{% if data %}
+{% for n in data %}
+## `{{ n.hash }}` — {{ n.date }} — {{ n.commit_message }}
+
+{{ n.note }}
+
+{% endfor %}
+{% else %}
+_No notes found._
+{% endif %}

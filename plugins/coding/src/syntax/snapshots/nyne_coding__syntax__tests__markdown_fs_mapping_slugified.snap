@@ -1,0 +1,45 @@
+---
+source: nyne-coding/src/syntax/tests.rs
+expression: result.fragments
+---
+[
+    Fragment {
+        name: "Getting Started",
+        kind: Section {
+            level: 1,
+        },
+        byte_range: 0..48,
+        full_span: 0..48,
+        line_range: 0..8,
+        signature: None,
+        metadata: Document {
+            index: 0,
+        },
+        name_byte_offset: 0,
+        children: [
+            Fragment {
+                name: "Quick Setup",
+                kind: Section {
+                    level: 2,
+                },
+                byte_range: 26..48,
+                full_span: 26..48,
+                line_range: 4..8,
+                signature: None,
+                metadata: Document {
+                    index: 0,
+                },
+                name_byte_offset: 26,
+                children: [],
+                parent_name: None,
+                fs_name: Some(
+                    "00-quick-setup",
+                ),
+            },
+        ],
+        parent_name: None,
+        fs_name: Some(
+            "00-getting-started",
+        ),
+    },
+]

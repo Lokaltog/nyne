@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Only lint if .rs files are staged
+if ! git diff --cached --name-only --diff-filter=d | grep -q '\.rs$'; then
+  exit 0
+fi
+
+# Run lint, then re-stage any .rs files that were modified by the linter
+staged_rs=$(git diff --cached --name-only --diff-filter=d | grep '\.rs$')
+just lint
+echo "$staged_rs" | xargs git add

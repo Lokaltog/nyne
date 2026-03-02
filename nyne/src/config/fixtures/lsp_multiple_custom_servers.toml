@@ -1,0 +1,11 @@
+[[lsp.custom]]
+name = "ruff"
+command = "ruff"
+args = ["server"]
+extensions = ["py"]
+
+[[lsp.custom]]
+name = "deno"
+command = "deno"
+args = ["lsp"]
+extensions = ["ts", "tsx"]

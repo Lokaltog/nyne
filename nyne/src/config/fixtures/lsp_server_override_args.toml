@@ -1,0 +1,2 @@
+[lsp.servers.rust-analyzer]
+args = ["--log-file", "/tmp/ra.log"]
