@@ -36,7 +36,7 @@ impl PostToolUse {
     pub fn new() -> Self {
         let mut b = names::handle_builder();
         b.register_partial(super::PARTIAL_VFS_HINTS, super::PARTIAL_VFS_HINTS_SRC);
-        b.register(TMPL_POST, include_str!("templates/post-tool-use.md.j2"));
+        b.register(TMPL_POST, include_str!("../templates/post-tool-use.md.j2"));
         Self { engine: b.finish() }
     }
 }
@@ -231,6 +231,9 @@ fn source_rel_path(input: &HookInput, tool_name: &str, root: &str) -> Option<Str
 
     src.strip_prefix(root).map(str::to_owned)
 }
+
+#[cfg(test)]
+mod tests;
 
 /// Run syntax analysis on the file targeted by an Edit/Write tool call.
 ///
