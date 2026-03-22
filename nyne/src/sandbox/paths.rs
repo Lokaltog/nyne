@@ -37,6 +37,13 @@ pub fn newroot(pid: Pid) -> PathBuf { PathBuf::from(format!("/tmp/nyne-root-{pid
 /// internals are not exposed.
 pub const SANDBOX_CODE: &str = "/code";
 
+/// Directory for the nyne binary inside the sandbox.
+///
+/// The invoking nyne binary is bind-mounted here so the sandbox always
+/// uses the same binary that started the session — not whatever version
+/// happens to be installed on the host `PATH`.
+pub const NYNE_BIN_DIR: &str = "/nyne/bin";
+
 /// Per-PID subdirectory under the persist root for overlay upperdirs.
 pub fn persist_slot(persist_root: &Path, pid: Pid) -> PathBuf { persist_root.join(format!("upper-{pid}")) }
 

@@ -419,6 +419,14 @@ fn init_main(
             process::set_env(key, value);
         }
 
+        // Prepend the nyne bin directory so the sandbox resolves the same
+        // binary that was invoked, regardless of what's installed on PATH.
+        let nyne_path = match env::var("PATH") {
+            Ok(existing) => format!("{}:{existing}", paths::NYNE_BIN_DIR),
+            Err(_) => paths::NYNE_BIN_DIR.to_owned(),
+        };
+        process::set_env("PATH", &nyne_path);
+
         let exit_code = process::run_init(command)?;
         exit(exit_code);
     };

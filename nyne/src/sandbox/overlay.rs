@@ -29,10 +29,10 @@
 //!                                real fs (via clone lowerdir)
 //! ```
 
-use std::fs;
 use std::fs::File;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use color_eyre::eyre::{ContextCompat, Result, WrapErr};
 use directories::BaseDirs;
@@ -70,6 +70,10 @@ pub(super) fn setup(fuse_path: &Path, bind_mounts: &[BindMount]) -> Result<()> {
     let newroot = paths::newroot(process::getpid());
 
     build_newroot(&newroot, base_dirs.as_ref())?;
+
+    // Bind-mount the current nyne binary so the sandbox uses the same
+    // version that was invoked, not whatever is installed on the host.
+    bind_self_exe(&newroot)?;
 
     // Apply user-configured bind mounts before pivot — sources are
     // still visible on the host filesystem at this point.
@@ -175,6 +179,22 @@ fn build_newroot(newroot: &Path, base_dirs: Option<&BaseDirs>) -> Result<()> {
         bind_xdg_dirs(newroot, base_dirs)?;
     }
 
+    Ok(())
+}
+
+/// Bind-mount the running nyne binary into the sandbox.
+///
+/// Resolves `/proc/self/exe` to find the invoking binary and mounts it
+/// at `<newroot>/nyne/bin/nyne`. The corresponding `PATH` prepend happens
+/// in [`super::init_main`] after user env vars are applied.
+fn bind_self_exe(newroot: &Path) -> Result<()> {
+    let exe = env::current_exe().wrap_err("resolving current executable")?;
+    let bin_dir = newroot.join(paths::relative_to_root(Path::new(paths::NYNE_BIN_DIR)));
+    let target = bin_dir.join("nyne");
+    dirs(&[&bin_dir])?;
+    File::create(&target).wrap_err_with(|| format!("creating mount point at {}", target.display()))?;
+    mnt::bind(&exe, &target)?;
+    debug!(exe = %exe.display(), "self binary bind-mounted");
     Ok(())
 }
 
