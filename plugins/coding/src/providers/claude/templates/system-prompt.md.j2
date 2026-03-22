@@ -26,7 +26,7 @@ Use the **Read tool** for single paths, **Bash `cat`** for line ranges and multi
 
 | What | Path |
 |-|-|
-| File symbol table | `Read file.{{ ext }}@/symbols/OVERVIEW.md` |
+| File overview (metadata + symbols + access guide) | `Read file.{{ ext }}@/OVERVIEW.md` |
 | Directory overview | `Read src/module@/OVERVIEW.md` |
 | Symbol body | `Read file.{{ ext }}@/symbols/Foo.{{ ext }}` |
 | Signature only | `Read file.{{ ext }}@/symbols/Foo@/signature.{{ ext }}` |
@@ -35,11 +35,18 @@ Use the **Read tool** for single paths, **Bash `cat`** for line ranges and multi
 | Import block | `Read file.{{ ext }}@/symbols/imports.{{ ext }}` |
 | Generated docs | `Read file.{{ ext }}@/symbols/Foo@/DOC.md` |
 
-**When you have a line number** (from errors, grep, OVERVIEW), resolve it to a symbol — don't read raw lines:
+**When you have a line number** (from errors, grep, OVERVIEW), use `at-line` — it's a **symlink** to the containing symbol's body:
 
 ```sh
-# Resolve line number to its containing symbol (gives full body + @/ namespace)
+# Read the symbol at line 42 (follows symlink → body)
 Read file.{{ ext }}@/symbols/at-line/42
+
+# Discover which symbol contains line 42 (zero token cost — no file read)
+readlink file.{{ ext }}@/symbols/at-line/42
+# → ../Foo~Impl@/process@/body.{{ ext }}
+
+# Write directly to the symbol at a known line
+sed -i 's/old/new/' file.{{ ext }}@/symbols/at-line/42
 
 # Raw line range — only when you genuinely need lines outside any symbol
 cat file.{{ ext }}@/lines:10-20
@@ -103,18 +110,22 @@ echo 'let x = 42;' >file.{{ ext }}@/lines:10-15
 
 ## Refactoring
 
+All diff files (code actions, renames) are applied by deleting them (`rm`). Preview with `cat`, apply with `rm`.
+
 ```sh
-# LSP rename — project-wide, updates all references
+# LSP rename — immediate, project-wide
 mv file.{{ ext }}@/symbols/old_name@/ file.{{ ext }}@/symbols/new_name@/
 
-# Preview rename as diff
+# Or preview rename as diff first, then apply
 cat file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
-
-# Apply a code action
-patch -p1 < file.{{ ext }}@/symbols/process@/actions/10-fix.diff
+rm file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
 
 # List available code actions
 ls file.{{ ext }}@/symbols/process@/actions/
+
+# Preview a code action, then apply
+cat file.{{ ext }}@/symbols/process@/actions/01-fix.diff
+rm file.{{ ext }}@/symbols/process@/actions/01-fix.diff
 ```
 
 ## Analysis
@@ -124,11 +135,13 @@ ls file.{{ ext }}@/symbols/process@/actions/
 | Callers (incoming) | `Read file.{{ ext }}@/symbols/Foo@/CALLERS.md` |
 | Dependencies (outgoing) | `Read file.{{ ext }}@/symbols/Foo@/DEPS.md` |
 | All references | `Read file.{{ ext }}@/symbols/Foo@/REFERENCES.md` |
+| Trait implementations | `Read file.{{ ext }}@/symbols/MyTrait@/IMPLEMENTATION.md` |
 | Compiler diagnostics | `Read file.{{ ext }}@/DIAGNOSTICS.md` |
+| Project TODOs | `Read @/todo/TODO.md` |
 
-Symlinks in `callers/`, `deps/`, `references/` point into related symbols' `@/` namespaces — follow them to read, edit, and inspect without resolving paths.
+Symlinks in `callers/`, `deps/`, `references/`, `implementation/` point into related symbols' `@/` namespaces — follow them to read, edit, and inspect without resolving paths.
 
-## Git
+## Git & History
 
 ```sh
 cat file.{{ ext }}@/git/BLAME.md              # file-level blame
@@ -138,18 +151,41 @@ cat file.{{ ext }}@/git/LOG.md:-10            # last 10 commits
 cat file.{{ ext }}@/symbols/Foo@/git/BLAME.md # symbol-level blame
 cat file.{{ ext }}@/symbols/Foo@/git/LOG.md   # symbol-level log
 cat @/git/STATUS.md                           # working tree status
+
+# Uncommitted changes for a file
+cat file.{{ ext }}@/diff/HEAD.diff
+
+# Diff against any branch or ref
+cat file.{{ ext }}@/diff/main.diff
+
+# Browse files at a specific branch
+ls @/git/branches/feature/src/
+
+# Historical versions of a file (or symbol)
+ls file.{{ ext }}@/history/
+ls file.{{ ext }}@/symbols/Foo@/git/history/
 ```
 
 ## Batch Edit Staging
 
-Stage multiple edits across symbols, then preview as a unified diff before applying:
+The go-to for multi-step edits: stage changes across symbols, preview as a validated diff, then apply atomically.
 
 ```sh
-echo 'fn foo(){}' >file.{{ ext }}@/symbols/Foo@/edit/replace    # stage body replacement
-echo 1 >file.{{ ext }}@/symbols/Foo@/edit/delete                 # stage deletion
-echo '/// doc' >file.{{ ext }}@/symbols/Foo@/edit/insert-before  # stage insertion before
-cat file.{{ ext }}@/symbols/Foo@/edit/staged.diff                # preview per-symbol
-cat @/edit/staged.diff                                            # preview all staged
+# 1. Stage edits (write to any symbol's edit/ namespace)
+echo 'fn new_impl(){}' >file.{{ ext }}@/symbols/Foo@/edit/replace
+echo 'fn helper(){}' >file.{{ ext }}@/symbols/Bar@/edit/insert-after
+echo '/// docs' >file.{{ ext }}@/symbols/Baz@/edit/insert-before
+echo 1 >file.{{ ext }}@/symbols/Old@/edit/delete
+
+# 2. Preview (tree-sitter validated — shows errors before apply)
+cat file.{{ ext }}@/symbols/Foo@/edit/staged.diff   # per-symbol
+cat @/edit/staged.diff                               # all staged
+
+# 3. Apply all staged edits atomically
+rm @/edit/staged.diff
+
+# Or clear without applying (truncate)
+> @/edit/staged.diff
 ```
 
 ## Symbol Naming
@@ -166,7 +202,7 @@ Full path:       file.{{ ext }}@/symbols/MyImpl@/symbols/process.{{ ext }}
 - Name collisions: `symbols/Foo~Struct.{{ ext }}`, `symbols/Foo~Fn.{{ ext }}`
 - Nested (impl methods): `symbols/Foo~Impl@/symbols/new.{{ ext }}`
 
-When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesystem entries.
+When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesystem entries. For the full VFS reference, `Read @/GUIDE.md`.
 
 </nyne-vfs>
 
