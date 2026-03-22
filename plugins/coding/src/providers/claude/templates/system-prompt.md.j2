@@ -17,7 +17,7 @@ This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every sour
 3. **Never `cat` via Bash then use Edit.** Bash reads don't satisfy Edit's read prerequisite — use the Read tool first.
 4. **Never read raw source files** when VFS paths exist. Read `OVERVIEW.md` first, then specific symbol bodies.
 5. **Always start with `OVERVIEW.md`** to discover exact symbol names before accessing them.
-6. **Read `CALLERS.md` before modifying** any function or type to understand blast radius.
+6. **Use VFS analysis, not Grep**, for call-graph questions. `CALLERS.md` before modifying (blast radius), `DEPS.md` for tracing callees, `REFERENCES.md` before renaming/deleting. These replace grep-for-usage workflows.
 7. **Check `actions/`** before manual fixes — an LSP code action `.diff` may already exist.
 
 ## Reading
@@ -134,14 +134,13 @@ rm file.{{ ext }}@/symbols/process@/actions/01-fix.diff
 
 ## Analysis
 
-| What | Path |
-|-|-|
-| Callers (incoming) | `Read file.{{ ext }}@/symbols/Foo@/CALLERS.md` |
-| Dependencies (outgoing) | `Read file.{{ ext }}@/symbols/Foo@/DEPS.md` |
-| All references | `Read file.{{ ext }}@/symbols/Foo@/REFERENCES.md` |
-| Trait implementations | `Read file.{{ ext }}@/symbols/MyTrait@/IMPLEMENTATION.md` |
-| Compiler diagnostics | `Read file.{{ ext }}@/DIAGNOSTICS.md` |
-| Project TODOs | `Read @/todo/TODO.md` |
+| What | When to use | Path |
+|-|-|-|
+| Callers (incoming) | Before changing signature or behavior — shows who will break | `Read file.{{ ext }}@/symbols/Foo@/CALLERS.md` |
+| Dependencies (outgoing) | Tracing what a function calls — don't Grep for callees | `Read file.{{ ext }}@/symbols/Foo@/DEPS.md` |
+| All references | Before renaming, moving, or deleting — every usage site | `Read file.{{ ext }}@/symbols/Foo@/REFERENCES.md` |
+| Trait implementations | Working with a trait — all concrete impls | `Read file.{{ ext }}@/symbols/MyTrait@/IMPLEMENTATION.md` |
+| Project TODOs | Scanning for outstanding work | `Read @/todo/TODO.md` |
 
 Symlinks in `callers/`, `deps/`, `references/`, `implementation/` point into related symbols' `@/` namespaces — follow them to read, edit, and inspect without resolving paths.
 
