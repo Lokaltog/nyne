@@ -212,7 +212,8 @@ fn extract_cat_overview_path(cmd: &str) -> Option<String> {
 
 /// Extract the source file's relative path from an Edit/Write tool call.
 ///
-/// Returns `None` for non-file tools, VFS paths, or paths outside root.
+/// Returns `None` for non-file tools or paths outside root.
+/// VFS paths are resolved to their underlying source file.
 /// Returns an owned `String` because the file path is deserialized from
 /// the hook input and not borrowed from a longer-lived source.
 fn source_rel_path(input: &HookInput, tool_name: &str, root: &str) -> Option<String> {
@@ -222,17 +223,19 @@ fn source_rel_path(input: &HookInput, tool_name: &str, root: &str) -> Option<Str
         _ => return None,
     }?;
 
-    if super::is_vfs_path(&file_path) {
-        return None;
-    }
+    let src = if super::is_vfs_path(&file_path) {
+        super::source_file_of(&file_path)
+    } else {
+        &file_path
+    };
 
-    file_path.strip_prefix(root).map(str::to_owned)
+    src.strip_prefix(root).map(str::to_owned)
 }
 
 /// Run syntax analysis on the file targeted by an Edit/Write tool call.
 ///
-/// Returns an empty vec for non-file tools, VFS paths, or files without
-/// tree-sitter support.
+/// Returns an empty vec for non-file tools or files without tree-sitter
+/// support. VFS paths are resolved to their underlying source file.
 fn run_analysis_for_tool(
     engine: &AnalysisEngine,
     ctx: &ScriptContext<'_>,
@@ -281,9 +284,10 @@ fn run_analysis_for_tool(
 
 /// Fetch LSP diagnostics for the file targeted by an Edit/Write tool call.
 ///
-/// Returns an empty vec for non-file tools, VFS paths, or files without
-/// LSP support. Blocks up to `diagnostics_timeout` if the file was
-/// recently changed (waiting for the server to push fresh diagnostics).
+/// Returns an empty vec for non-file tools or files without LSP support.
+/// VFS paths are resolved to their underlying source file. Blocks up to
+/// `diagnostics_timeout` if the file was recently changed (waiting for the
+/// server to push fresh diagnostics).
 fn fetch_diagnostics_for_tool(
     ctx: &ScriptContext<'_>,
     input: &HookInput,
