@@ -1,12 +1,11 @@
 {% if tool_name == "Edit" and sym %}
-Hint (nyne VFS): instead of editing the raw file, try:
-  Edit {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
-  (same old_string/new_string — the symbol body contains the code you're targeting)
+Hint (nyne VFS): instead of editing the raw file, edit the symbol body via Bash:
+  sed -i 's/old/new/g' {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
+  cat <<'EOF' >{{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}  (heredoc for full rewrite)
 
-Or edit via line lookup (preferred):
-  Edit {{ rel }}@/symbols/at-line/<line>
+Do NOT use the Edit tool on @/ paths — read-tracking breaks with VFS inodes.
 
-Or browse the symbol table:
+Or browse the symbol table first:
   Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
 {% elif sym %}
 Hint (nyne VFS): instead of {{ tool_name | lower }}ing the raw file, try:
