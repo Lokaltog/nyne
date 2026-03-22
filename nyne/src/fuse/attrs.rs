@@ -124,7 +124,9 @@ impl NyneFs {
                             //
                             // The sentinel must be non-zero: st_size=0 causes
                             // tools like `cat` and `wc` to report empty files.
-                            self.router.content_cache_size(ino).unwrap_or(u64::from(BLKSIZE))
+                            self.router
+                                .content_cache_size(ino)
+                                .unwrap_or_else(|| u64::from(BLKSIZE))
                         }
                         _ => 0,
                     });
