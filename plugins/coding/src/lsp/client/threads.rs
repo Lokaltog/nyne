@@ -44,8 +44,10 @@ pub(super) fn writer_loop(
 ///   [`DiagnosticStore`], waking any FUSE threads waiting for fresh
 ///   diagnostics.
 /// - **Other notifications** (no `id`): logged and discarded.
-/// - **Server requests** (`id` + `method`): acknowledged with an empty
-///   success response via the write channel.
+/// - **`workspace/diagnostic/refresh` requests**: acknowledged and used
+///   to signal the [`DiagnosticStore`] that pull diagnostics are ready.
+/// - **Other server requests** (`id` + `method`): acknowledged with an
+///   empty success response via the write channel.
 /// - **Responses** (`id`, no `method`): dispatched to the waiting caller
 ///   via the pending response map.
 ///
@@ -77,8 +79,8 @@ pub(super) fn reader_loop(
             }
         };
 
-        // Notifications: no id field.
-        let Some(id) = msg.get("id") else {
+        // Notifications: no id field (or id: null per some implementations).
+        let Some(id) = msg.get("id").filter(|v| !v.is_null()) else {
             handle_notification(&msg, diagnostic_store, server_name);
             continue;
         };
@@ -93,6 +95,14 @@ pub(super) fn reader_loop(
                 method,
                 "acknowledging server request",
             );
+
+            // workspace/diagnostic/refresh: the pull-model signal that
+            // diagnostics are ready to be re-pulled. Clear dirty flags
+            // so blocked get_or_wait calls unblock immediately.
+            if method == "workspace/diagnostic/refresh" {
+                diagnostic_store.signal_refresh();
+            }
+
             let ack = json!({
                 "jsonrpc": "2.0",
                 "id": id,

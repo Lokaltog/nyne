@@ -3,9 +3,9 @@
 use lsp_types::{
     CallHierarchyClientCapabilities, ClientCapabilities, CodeActionCapabilityResolveSupport,
     CodeActionClientCapabilities, CodeActionKind, CodeActionKindLiteralSupport, CodeActionLiteralSupport,
-    DiagnosticClientCapabilities, GotoCapability, InlayHintClientCapabilities, ReferenceClientCapabilities,
-    RenameClientCapabilities, TextDocumentClientCapabilities, TextDocumentSyncClientCapabilities,
-    TypeHierarchyClientCapabilities,
+    DiagnosticClientCapabilities, GotoCapability, InlayHintClientCapabilities, PublishDiagnosticsClientCapabilities,
+    ReferenceClientCapabilities, RenameClientCapabilities, TextDocumentClientCapabilities,
+    TextDocumentSyncClientCapabilities, TypeHierarchyClientCapabilities,
 };
 
 /// Environment variables propagated from the parent process into LSP server
@@ -65,6 +65,7 @@ pub(super) fn client_capabilities() -> ClientCapabilities {
             declaration: Some(GOTO_CAPABILITY),
             type_definition: Some(GOTO_CAPABILITY),
             implementation: Some(GOTO_CAPABILITY),
+            publish_diagnostics: Some(PublishDiagnosticsClientCapabilities::default()),
             diagnostic: Some(DiagnosticClientCapabilities {
                 dynamic_registration: Some(false),
                 related_document_support: Some(false),

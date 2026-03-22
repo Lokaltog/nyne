@@ -100,6 +100,22 @@ impl DiagnosticStore {
 
     /// Remove a file's entry entirely (e.g., on `didClose`).
     pub(crate) fn remove(&self, path: &Path) { self.files.lock().remove(path); }
+
+    /// Signal that the server has refreshed diagnostics (pull model).
+    ///
+    /// Called when the server sends `workspace/diagnostic/refresh` — the
+    /// pull-model equivalent of `publishDiagnostics`. Clears dirty flags
+    /// on all files so blocked [`get_or_wait`] calls unblock and the
+    /// caller can issue a fresh `textDocument/diagnostic` pull request.
+    pub(crate) fn signal_refresh(&self) {
+        {
+            let mut files = self.files.lock();
+            for entry in files.values_mut() {
+                entry.dirty = false;
+            }
+        }
+        self.notify.notify_all();
+    }
 }
 
 #[cfg(test)]

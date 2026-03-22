@@ -126,29 +126,23 @@ impl<'a> FileQuery<'a> {
     ///
     /// Two strategies depending on server capabilities:
     ///
-    /// - **Pull model** (server supports `textDocument/diagnostic`): if the
-    ///   file is dirty, waits for `publishDiagnostics` to signal freshness,
-    ///   then sends a pull request for the authoritative result.
+    /// - **Pull model** (server supports `textDocument/diagnostic`): sends
+    ///   a pull request directly — the server responds synchronously with
+    ///   current diagnostics. No freshness gate needed; the request itself
+    ///   is the freshness mechanism.
     /// - **Push-only** (no pull capability): returns diagnostics from the
     ///   [`DiagnosticStore`], blocking if the file is dirty until the server
     ///   pushes fresh results or `diagnostics_timeout` expires.
     pub(crate) fn diagnostics(&self) -> Result<Vec<Diagnostic>> {
-        let timeout = self.manager.diagnostics_timeout();
-        let store = self.client.diagnostic_store();
-
         if self.client.capabilities().diagnostic_provider.is_some() {
-            // Pull model: wait for push signal (freshness gate), then pull.
-            store.get_or_wait(self.lsp_file, timeout);
-            let key = CacheKey {
-                path: self.lsp_file,
-                method: "diagnostics",
-                line: 0,
-                param: 0,
-            };
-            self.manager
-                .cached_query(&key, || self.client.diagnostics(self.lsp_file))
+            // Pull model: pull directly. The server processes pending
+            // didChange notifications before responding, so the result
+            // reflects the current file content.
+            self.client.diagnostics(self.lsp_file)
         } else {
             // Push-only: return whatever the store has, blocking if dirty.
+            let timeout = self.manager.diagnostics_timeout();
+            let store = self.client.diagnostic_store();
             Ok(store.get_or_wait(self.lsp_file, timeout))
         }
     }
