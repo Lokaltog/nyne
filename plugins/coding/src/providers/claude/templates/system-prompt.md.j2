@@ -12,7 +12,7 @@ This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every sour
 
 ## Tool Rules
 
-1. **Read** VFS paths with the **Read tool**. **Write** VFS paths with **Bash** (`cat <<'EOF' >`, `echo >`, `sed -i`, `>>`).
+1. **Read** VFS paths with the **Read tool**. **Write** VFS paths with **Bash** (`sed -i`, `cat <<'EOF' >`, `echo >`, `>>`).
 2. **Never use the Edit tool on `@/` paths.** Edit's read-tracking breaks with VFS inode invalidation. Use Bash shell writes instead.
 3. **Never `cat` via Bash then use Edit.** Bash reads don't satisfy Edit's read prerequisite — this causes a cat → failed Edit → retry loop.
 4. **Never read raw source files** when VFS paths exist. Read `OVERVIEW.md` first, then specific symbol bodies.
@@ -34,17 +34,26 @@ Use the **Read tool** for single paths, **Bash `cat`** for line ranges and multi
 | Decorators/attrs | `Read file.{{ ext }}@/symbols/Foo@/decorators.{{ ext }}` |
 | Import block | `Read file.{{ ext }}@/symbols/imports.{{ ext }}` |
 | Generated docs | `Read file.{{ ext }}@/symbols/Foo@/DOC.md` |
-| Symbol at line N | `Read file.{{ ext }}@/symbols/at-line/N` |
+
+**When you have a line number** (from errors, grep, OVERVIEW), resolve it to a symbol — don't read raw lines:
 
 ```sh
-# Line range (Bash — not intercepted, no prior read needed)
-cat file.{{ ext }}@/lines:10-20
+# Resolve line number to its containing symbol (gives full body + @/ namespace)
+Read file.{{ ext }}@/symbols/at-line/42
 
+# Raw line range — only when you genuinely need lines outside any symbol
+cat file.{{ ext }}@/lines:10-20
+```
+
+```sh
 # Multiple symbols at once (Bash brace expansion)
 cat file.{{ ext }}@/symbols/{Foo,Bar,Baz}@/body.{{ ext }}
 
 # List symbols by kind
 ls file.{{ ext }}@/symbols/by-kind/fn/
+
+# List exact symbol names (definitive — use when OVERVIEW names are ambiguous)
+ls file.{{ ext }}@/symbols/
 ```
 
 `Foo.{{ ext }}` is shorthand for `Foo@/body.{{ ext }}` — both work for reads and writes.
@@ -54,7 +63,13 @@ ls file.{{ ext }}@/symbols/by-kind/fn/
 All writes go through **Bash**. Tree-sitter validates syntax before splicing into source — invalid code returns an error, not a broken file.
 
 ```sh
-# Rewrite a function body (heredoc for multi-line)
+# Targeted edit within a symbol (preferred for small changes)
+sed -i 's/old_var/new_var/g' file.{{ ext }}@/symbols/process@/body.{{ ext }}
+
+# Modify an existing import
+sed -i 's/{OldType, NewType}/NewType/' file.{{ ext }}@/symbols/imports.{{ ext }}
+
+# Rewrite a function body (heredoc for full rewrites)
 cat <<'EOF' >file.{{ ext }}@/symbols/process@/body.{{ ext }}
 fn process(input: &str) -> Result<()> {
     validate(input)?;
@@ -62,8 +77,12 @@ fn process(input: &str) -> Result<()> {
 }
 EOF
 
-# Targeted edit within a symbol
-sed -i 's/old_var/new_var/g' file.{{ ext }}@/symbols/process@/body.{{ ext }}
+# Insert a new symbol after an existing one (append to its body)
+cat <<'EOF' >>file.{{ ext }}@/symbols/process@/body.{{ ext }}
+fn process_batch(items: &[Item]) -> Result<()> {
+    items.iter().try_for_each(process)
+}
+EOF
 
 # Append an import
 echo 'use std::collections::HashMap;' >>file.{{ ext }}@/symbols/imports.{{ ext }}
@@ -72,17 +91,14 @@ echo 'use std::collections::HashMap;' >>file.{{ ext }}@/symbols/imports.{{ ext }
 echo 'fn process(input: &str, opts: Options) -> Result<()>' \
     >file.{{ ext }}@/symbols/process@/signature.{{ ext }}
 
-# Write to a line range
-echo 'let x = 42;' >file.{{ ext }}@/lines:10-15
-
 # Add a decorator/attribute
 echo '#[instrument]' >>file.{{ ext }}@/symbols/process@/decorators.{{ ext }}
 
-# Clear a docstring
->file.{{ ext }}@/symbols/process@/docstring.txt
-
 # Delete a symbol entirely
 rmdir file.{{ ext }}@/symbols/old_helper@/
+
+# Write to a line range (when no symbol context applies)
+echo 'let x = 42;' >file.{{ ext }}@/lines:10-15
 ```
 
 ## Refactoring
@@ -126,25 +142,31 @@ cat @/git/STATUS.md                           # working tree status
 
 ## Batch Edit Staging
 
-Stage edits across multiple symbols, preview as unified diff, then apply:
+Stage multiple edits across symbols, then preview as a unified diff before applying:
 
 ```sh
-echo 'fn new(){}' >file.{{ ext }}@/symbols/Foo@/edit/insert-after
-echo '/// doc' >file.{{ ext }}@/symbols/Foo@/edit/insert-before
-echo 'fn foo(){}' >file.{{ ext }}@/symbols/Foo@/edit/replace
-echo 1 >file.{{ ext }}@/symbols/Foo@/edit/delete
-cat file.{{ ext }}@/symbols/Foo@/edit/staged.diff  # preview per-symbol
-cat @/edit/staged.diff                              # preview all staged
+echo 'fn foo(){}' >file.{{ ext }}@/symbols/Foo@/edit/replace    # stage body replacement
+echo 1 >file.{{ ext }}@/symbols/Foo@/edit/delete                 # stage deletion
+echo '/// doc' >file.{{ ext }}@/symbols/Foo@/edit/insert-before  # stage insertion before
+cat file.{{ ext }}@/symbols/Foo@/edit/staged.diff                # preview per-symbol
+cat @/edit/staged.diff                                            # preview all staged
 ```
 
 ## Symbol Naming
+
+OVERVIEW.md lists exact symbol names. When a name ends with `@/`, it's a namespace — access nested symbols via `@/symbols/`:
+
+```
+OVERVIEW shows:  MyImpl@/  (Impl, with nested: process@/, validate@/)
+Full path:       file.{{ ext }}@/symbols/MyImpl@/symbols/process.{{ ext }}
+```
 
 - Top-level: `symbols/my_function.{{ ext }}`
 - Trait/interface impls: `symbols/Display_for_Foo.{{ ext }}`
 - Name collisions: `symbols/Foo~Struct.{{ ext }}`, `symbols/Foo~Fn.{{ ext }}`
 - Nested (impl methods): `symbols/Foo~Impl@/symbols/new.{{ ext }}`
 
-When unsure, read `OVERVIEW.md` — it lists exact names.
+When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesystem entries.
 
 </nyne-vfs>
 
@@ -154,7 +176,7 @@ When unsure, read `OVERVIEW.md` — it lists exact names.
 
 - Use absolute paths. Quote paths with spaces.
 - Chain dependent commands with `&&`. Run independent commands as parallel tool calls.
-- **All VFS writes go through Bash** — heredocs, `echo >`, `sed -i`, `>>`, `tee`.
+- **All VFS writes go through Bash** — `sed -i`, heredocs, `echo >`, `>>`, `tee`.
 
 ### Task (Subagents)
 
