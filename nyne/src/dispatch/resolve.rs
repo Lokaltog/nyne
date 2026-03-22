@@ -13,8 +13,8 @@ use color_eyre::eyre::{Report, Result, bail};
 
 use super::cache::CachedNodeKind;
 use crate::dispatch::context::RequestContext;
+use crate::node::VirtualNode;
 use crate::node::kind::NodeKind;
-use crate::node::{CachePolicy, VirtualNode};
 use crate::provider::{ConflictInfo, ConflictParty, ConflictResolution, Provider, ProviderId};
 
 /// Catch panics from a provider closure, logging them with provider identity.
@@ -149,13 +149,14 @@ fn apply_force_resolution(name: &str, forces: Vec<(ProviderId, Vec<VirtualNode>)
             // different content (passthrough vs virtual). The FUSE kernel cache
             // is per-inode not per-process, so any TTL > 0 would let a
             // non-passthrough response poison the cache for passthrough callers.
-            // CachePolicy::Never gives TTL=0, forcing the kernel to always call
-            // our handlers where resolve_for_request can demote appropriately.
+            // `mark_shadows_real()` causes the FUSE layer to set TTL=0 for
+            // these inodes, forcing the kernel to always call our handlers
+            // where resolve_for_request can demote appropriately.
             Some(
                 nodes
                     .into_iter()
                     .map(|node| OwnedNode {
-                        node: node.with_cache_policy(CachePolicy::Never),
+                        node: node.mark_shadows_real(),
                         provider_id: pid,
                     })
                     .collect(),

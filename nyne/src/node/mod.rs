@@ -24,14 +24,20 @@ use crate::types::vfs_path::VfsPath;
 
 /// Controls whether the L2 content cache stores this node's read output.
 ///
-/// Virtual nodes default to [`CachePolicy::Cache`] — content is generated
-/// once and served from cache until explicitly invalidated. Nodes whose
-/// content depends on external mutable state (e.g., `git status`) should
-/// use [`CachePolicy::Never`] so every read re-executes the content
-/// generator.
+/// This affects the dispatch-layer L2 cache **only**. The FUSE kernel
+/// attr/entry cache TTL is determined structurally: derived inodes (those
+/// with a [`source`](VirtualNode::source)) and shadow inodes (those that
+/// won force-resolution over a real file) always get TTL=0 regardless of
+/// this policy.
 ///
-/// This affects the dispatch-layer L2 cache only. The FUSE kernel page
-/// cache is controlled separately by the FUSE `TTL` and `DIRECT_IO` flag.
+/// Virtual nodes default to [`CachePolicy::Cache`] — content is generated
+/// once and served from the daemon's L2 cache until explicitly invalidated
+/// (via [`FileGenerations`](crate::dispatch::content_cache::FileGenerations)
+/// staleness or direct eviction).
+///
+/// Nodes whose content depends on external mutable state that changes
+/// outside the FUSE write pipeline (e.g., `git status`) should use
+/// [`CachePolicy::Never`] so every read re-executes the content generator.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum CachePolicy {
     /// Content is cached indefinitely until explicit invalidation (default).
@@ -53,6 +59,12 @@ pub struct VirtualNode {
     permissions: Option<u16>,
     cache_policy: CachePolicy,
     visibility: Visibility,
+
+    /// When `true`, this node shadows a real filesystem entry (won via
+    /// force-resolution). The kernel cache must be bypassed (TTL=0)
+    /// because visibility demoting is per-process while the kernel
+    /// cache is per-inode.
+    shadows_real: bool,
 
     // Capabilities
     readable: Option<Box<dyn Readable>>,
@@ -109,6 +121,7 @@ impl VirtualNode {
             permissions: None,
             cache_policy: CachePolicy::default(),
             visibility: Visibility::default(),
+            shadows_real: false,
             readable: None,
             writable: None,
             renameable: None,
@@ -185,6 +198,10 @@ impl VirtualNode {
     /// Defaults to [`CachePolicy::Cache`]. Use [`CachePolicy::Never`] for
     /// nodes whose content depends on external mutable state that changes
     /// outside the FUSE write pipeline (e.g., git status, system info).
+    ///
+    /// This does **not** affect the FUSE kernel cache TTL — that is
+    /// determined structurally from [`source`](Self::source) and
+    /// [`shadows_real`](Self::shadows_real).
     pub const fn with_cache_policy(mut self, policy: CachePolicy) -> Self {
         self.cache_policy = policy;
         self
@@ -211,6 +228,17 @@ impl VirtualNode {
     /// Hidden nodes are still accessible by name (FUSE lookup).
     pub const fn hidden(mut self) -> Self {
         self.visibility = Visibility::Hidden;
+        self
+    }
+
+    /// Mark this node as shadowing a real filesystem entry.
+    ///
+    /// Set by the conflict resolution system when a provider Force-wins
+    /// over a real file. Causes the kernel cache to be bypassed (TTL=0)
+    /// because visibility demoting is per-process while the kernel cache
+    /// is per-inode.
+    pub(crate) const fn mark_shadows_real(mut self) -> Self {
+        self.shadows_real = true;
         self
     }
 
@@ -269,6 +297,9 @@ impl VirtualNode {
     /// (e.g., `@/git/status`, `@/nyne/`). Companion-namespace nodes return
     /// `Some((source_file, generation_at_creation))`.
     pub fn source(&self) -> Option<(&VfsPath, u64)> { self.source.as_ref().map(|(f, g)| (f, *g)) }
+
+    /// Whether this node shadows a real filesystem entry.
+    pub(crate) const fn shadows_real(&self) -> bool { self.shadows_real }
 
     /// Permissions: explicit override, or auto-derived from capabilities.
     pub fn permissions(&self) -> u16 {

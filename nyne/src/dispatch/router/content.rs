@@ -1,11 +1,8 @@
 //! Content I/O operations.
 
-use std::sync::Arc;
-
 use color_eyre::eyre::Result;
 
 use super::Router;
-use crate::dispatch::cache::CachedNodeKind;
 use crate::dispatch::context::RequestContext;
 use crate::dispatch::write_mode::WriteMode;
 use crate::node::{CachePolicy, VirtualNode, WriteOutcome};
@@ -14,29 +11,17 @@ use crate::provider::Provider;
 impl Router {
     /// Read content for a virtual inode through the L2 cache.
     ///
-    /// Detects stale nodes by comparing their source generation against
-    /// the current [`FileGenerations`] counter. When stale, evicts the
-    /// parent directory from L1, invalidates L2 + kernel page cache,
-    /// re-resolves, and reads from the fresh node.
+    /// Content freshness is enforced by two complementary mechanisms:
+    /// - **Structural:** `ensure_resolved` (called during lookup/readdir)
+    ///   detects source-file staleness via `DirState::is_source_stale` and
+    ///   re-resolves the directory, producing fresh nodes.
+    /// - **Content:** `ContentCache::get` checks `FileGenerations` and
+    ///   evicts stale entries, causing a pipeline re-run.
+    ///
+    /// With derived inodes having TTL=0, every access hits the daemon and
+    /// passes through `ensure_resolved` before reaching this method, so
+    /// the node reference is always structurally fresh.
     pub(crate) fn read_content(
-        &self,
-        inode: u64,
-        node: &VirtualNode,
-        provider: &dyn Provider,
-        ctx: &RequestContext<'_>,
-    ) -> Result<Vec<u8>> {
-        // Check node-level staleness before reading.
-        if let Some((source_file, created_gen)) = node.source()
-            && self.file_generations.get(source_file) > created_gen
-        {
-            return self.revalidate_and_read(inode, node.name(), ctx);
-        }
-        self.read_content_unchecked(inode, node, provider, ctx)
-    }
-
-    /// Read content without staleness checks — used after re-resolution
-    /// to avoid infinite recursion.
-    fn read_content_unchecked(
         &self,
         inode: u64,
         node: &VirtualNode,
@@ -56,56 +41,14 @@ impl Router {
         Ok(data)
     }
 
-    /// Evict stale caches, re-resolve the parent directory, and read
-    /// fresh content from the newly-created node.
-    fn revalidate_and_read(&self, inode: u64, node_name: &str, ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
-        // Evict L1 + L2 + kernel page cache.
-        self.cache.invalidate_dir(ctx.path);
-        self.content_cache.invalidate(inode);
-        if let Some(notifier) = self.kernel_notifier.get() {
-            notifier.inval_inode(inode);
-        }
-
-        // Re-resolve: providers re-emit fresh nodes for this directory.
-        self.ensure_resolved(ctx)?;
-
-        // Look up the fresh node from L1 by name.
-        let handle = self
-            .cache
-            .get(ctx.path)
-            .ok_or_else(|| color_eyre::eyre::eyre!("directory vanished after re-resolve: {}", ctx.path))?;
-        let dir = handle.read();
-        let cached = dir
-            .get(node_name)
-            .ok_or_else(|| color_eyre::eyre::eyre!("node {node_name} vanished after re-resolve in {}", ctx.path))?;
-        let CachedNodeKind::Virtual { ref node, provider_id } = cached.kind else {
-            color_eyre::eyre::bail!("node {node_name} became real after re-resolve in {}", ctx.path);
-        };
-        let node = Arc::clone(node);
-        drop(dir);
-
-        let provider = self
-            .find_provider(provider_id)
-            .ok_or_else(|| color_eyre::eyre::eyre!("provider {provider_id} vanished after re-resolve"))?;
-        self.read_content_unchecked(inode, &node, provider.as_ref(), ctx)
-    }
-
-    pub(crate) fn content_size(
-        &self,
-        inode: u64,
-        node: &VirtualNode,
-        provider: &dyn Provider,
-        ctx: &RequestContext<'_>,
-    ) -> u64 {
-        if let Some(size) = self.content_cache.get_size(inode) {
-            return size;
-        }
-        // Cache miss — read through the pipeline to populate L2.
-        // On failure, return 1 so the kernel still attempts a read
-        // (st_size=0 causes tools to skip reading the file entirely).
-        self.read_content(inode, node, provider, ctx)
-            .map_or(1, |data| data.len() as u64)
-    }
+    /// Get the L2 cached content size for an inode, if available.
+    ///
+    /// This is a cheap lookup-only operation — it does not run the read
+    /// pipeline on cache miss. Used by `build_attr` to report `st_size`
+    /// without the cost of a full pipeline execution. With `FOPEN_DIRECT_IO`,
+    /// `st_size` is advisory (the kernel reads until EOF), so a cache miss
+    /// simply returns `None` and the caller uses a sentinel value.
+    pub(crate) fn content_cache_size(&self, inode: u64) -> Option<u64> { self.content_cache.get_size(inode) }
 
     /// Write content for a virtual inode through the write pipeline.
     ///

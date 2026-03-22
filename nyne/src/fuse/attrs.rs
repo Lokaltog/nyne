@@ -7,8 +7,8 @@ use fuser::{Errno, FileType, Generation, INodeNo, ReplyDirectoryPlus, Request};
 
 use super::NyneFs;
 use crate::dispatch::{ReaddirEntry, ResolvedInode, Router};
+use crate::node::NodeKind;
 use crate::node::default_permissions::{DIR_RO, DIR_RW, FILE_RW};
-use crate::node::{CachePolicy, NodeKind};
 use crate::types::file_kind::FileKind;
 
 /// TTL for cached attribute/entry responses on most paths.
@@ -63,17 +63,12 @@ fn make_attr(ino: u64, size: u64, kind: FileType, perm: u16, ts: Timestamps, req
 
 impl NyneFs {
     /// Build a `fuser::FileAttr` and TTL for a given inode.
-    ///
-    /// Returns a longer TTL for gitignored / git-internal entries — they
-    /// are pure passthrough with no virtual overlays, so stale dentry/attr
-    /// cache is harmless.
     pub(super) fn build_attr(&self, ino: u64, req: &Request) -> Option<(fuser::FileAttr, Duration)> {
         if ino == Router::ROOT_INODE {
             return Some((Self::root_attr(req), TTL));
         }
         match self.resolve_for_request(ino, req)? {
             ResolvedInode::Real { file_type, path } => {
-                let ttl = TTL;
                 let meta = self.router.real_fs().metadata(&path).ok()?;
                 // Directories report r-xr-xr-x to prevent editors from
                 // attempting atomic saves (rename-write-unlink). Without
@@ -98,13 +93,13 @@ impl NyneFs {
                         },
                         req,
                     ),
-                    ttl,
+                    TTL,
                 ))
             }
             ResolvedInode::Virtual {
                 node,
                 dir_path,
-                provider_id,
+                provider_id: _,
             } => {
                 // Query lifecycle for custom attribute overrides.
                 let ctx = self.router.make_request_context(&dir_path);
@@ -119,11 +114,17 @@ impl NyneFs {
                     })
                     .unwrap_or_else(|| match node.kind() {
                         NodeKind::File { .. } => {
-                            // Read real content size through the L2 cache.
-                            // Falls back to a full read pipeline on cache miss.
-                            self.router
-                                .find_provider(provider_id)
-                                .map_or(0, |p| self.router.content_size(ino, &node, p.as_ref(), &ctx))
+                            // All virtual files use FOPEN_DIRECT_IO, so st_size
+                            // is advisory — the kernel reads until EOF regardless.
+                            // Use the L2 cached size when available (cheap lookup),
+                            // otherwise fall back to a non-zero sentinel. This
+                            // avoids running the full read pipeline just for a
+                            // byte count, which matters especially for derived
+                            // inodes that now have TTL=0 (more frequent getattr).
+                            //
+                            // The sentinel must be non-zero: st_size=0 causes
+                            // tools like `cat` and `wc` to report empty files.
+                            self.router.content_cache_size(ino).unwrap_or(u64::from(BLKSIZE))
                         }
                         _ => 0,
                     });
@@ -143,6 +144,18 @@ impl NyneFs {
                     .and_then(|a| a.ctime)
                     .map_or(mtime, |secs| UNIX_EPOCH + Duration::from_secs(secs));
 
+                // Kernel cache TTL is structural, not configurable:
+                // - Derived inodes (have a source file) → TTL=0 so every
+                //   access consults the daemon's generation-based staleness.
+                // - Shadow inodes (force-won over real file) → TTL=0 so
+                //   per-process visibility demoting works correctly.
+                // - All others → standard TTL.
+                let ttl = if node.source().is_some() || node.shadows_real() {
+                    Duration::ZERO
+                } else {
+                    TTL
+                };
+
                 Some((
                     make_attr(
                         ino,
@@ -156,10 +169,7 @@ impl NyneFs {
                         },
                         req,
                     ),
-                    match node.cache_policy() {
-                        CachePolicy::Never => Duration::ZERO,
-                        CachePolicy::Cache => TTL,
-                    },
+                    ttl,
                 ))
             }
         }
