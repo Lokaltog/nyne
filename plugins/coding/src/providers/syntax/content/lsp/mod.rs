@@ -80,6 +80,11 @@ pub(in crate::providers::syntax) fn build_lsp_symbol_nodes(
 }
 
 /// Build the file-level DIAGNOSTICS.md node.
+///
+/// Uses `no_cache()` because diagnostics depend on external LSP state
+/// that changes asynchronously — the `DiagnosticStore::get_or_wait`
+/// freshness gate in the read pipeline handles blocking until the LSP
+/// publishes fresh results after a `didChange`.
 pub(in crate::providers::syntax) fn build_diagnostics_node(
     name: &str,
     handle: &Arc<LspHandle>,
@@ -88,6 +93,7 @@ pub(in crate::providers::syntax) fn build_diagnostics_node(
     lsp_handles
         .diagnostics
         .node(name, DiagnosticsLspView(Arc::clone(handle)))
+        .no_cache()
 }
 
 /// Query the LSP for symlink directory targets.
