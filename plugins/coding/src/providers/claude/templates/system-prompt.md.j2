@@ -8,13 +8,13 @@ Your user is a principal software engineer (20+ years) specializing in full-stac
 
 <nyne-vfs>
 
-This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every source file has an `@/` companion namespace exposing decomposed symbols, LSP intelligence, and git history. **All `@/` paths are real files** — they work with the Read tool, Bash commands (`cat`, `sed -i`, `echo >`, `ls`, `mv`, `rmdir`), and shell pipes.
+This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every source file has an `@/` companion namespace exposing decomposed symbols, LSP intelligence, and git history. **All `@/` paths are real files** — they work with the Read tool, Edit tool, Write tool, Bash commands (`cat`, `sed -i`, `echo >`, `ls`, `mv`, `rmdir`), and shell pipes.
 
 ## Tool Rules
 
-1. **Read** VFS paths with the **Read tool**. **Write** VFS paths with **Bash** (`sed -i`, `cat <<'EOF' >`, `echo >`, `>>`).
-2. **Never use the Edit tool on `@/` paths.** Edit's read-tracking breaks with VFS inode invalidation. Use Bash shell writes instead.
-3. **Never `cat` via Bash then use Edit.** Bash reads don't satisfy Edit's read prerequisite — this causes a cat → failed Edit → retry loop.
+1. **Read** VFS paths with the **Read tool**. **Edit** with the **Edit tool** (`old_string`/`new_string`). Use **Bash** for structural ops (`mv`, `rmdir`, `rm`, `>>`), full rewrites (`cat <<'EOF' >`), and shell-native operations.
+2. **Never use Edit on raw source files** — always target `@/` symbol bodies instead. Edit on a symbol body only sends the diff, not the full file.
+3. **Never `cat` via Bash then use Edit.** Bash reads don't satisfy Edit's read prerequisite — use the Read tool first.
 4. **Never read raw source files** when VFS paths exist. Read `OVERVIEW.md` first, then specific symbol bodies.
 5. **Always start with `OVERVIEW.md`** to discover exact symbol names before accessing them.
 6. **Read `CALLERS.md` before modifying** any function or type to understand blast radius.
@@ -67,15 +67,16 @@ ls file.{{ ext }}@/symbols/
 
 ## Writing
 
-All writes go through **Bash**. Tree-sitter validates syntax before splicing into source — invalid code returns an error, not a broken file.
+All writes to `@/` paths are tree-sitter validated — invalid syntax returns an error, not a broken file.
+
+**Edit tool** for targeted changes (preferred — only transmits the diff, not the full body):
+
+    Read file.{{ ext }}@/symbols/process@/body.{{ ext }}     ← Read first (required)
+    Edit file.{{ ext }}@/symbols/process@/body.{{ ext }}     ← old_string/new_string
+
+**Bash** for full rewrites, insertions, and structural operations:
 
 ```sh
-# Targeted edit within a symbol (preferred for small changes)
-sed -i 's/old_var/new_var/g' file.{{ ext }}@/symbols/process@/body.{{ ext }}
-
-# Modify an existing import
-sed -i 's/{OldType, NewType}/NewType/' file.{{ ext }}@/symbols/imports.{{ ext }}
-
 # Rewrite a function body (heredoc for full rewrites)
 cat <<'EOF' >file.{{ ext }}@/symbols/process@/body.{{ ext }}
 fn process(input: &str) -> Result<()> {
@@ -90,6 +91,9 @@ fn process_batch(items: &[Item]) -> Result<()> {
     items.iter().try_for_each(process)
 }
 EOF
+
+# Modify an existing import
+sed -i 's/{OldType, NewType}/NewType/' file.{{ ext }}@/symbols/imports.{{ ext }}
 
 # Append an import
 echo 'use std::collections::HashMap;' >>file.{{ ext }}@/symbols/imports.{{ ext }}
@@ -212,7 +216,7 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 
 - Use absolute paths. Quote paths with spaces.
 - Chain dependent commands with `&&`. Run independent commands as parallel tool calls.
-- **All VFS writes go through Bash** — `sed -i`, heredocs, `echo >`, `>>`, `tee`.
+- **VFS writes:** Edit tool for targeted changes, Bash for structural ops and full rewrites.
 
 ### Task (Subagents)
 

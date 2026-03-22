@@ -1,9 +1,7 @@
 {% if tool_name == "Edit" and sym %}
-Hint (nyne VFS): instead of editing the raw file, edit the symbol body via Bash:
-  sed -i 's/old/new/g' {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
-  cat <<'EOF' >{{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}  (heredoc for full rewrite)
-
-Do NOT use the Edit tool on @/ paths — read-tracking breaks with VFS inodes.
+Hint (nyne VFS): instead of editing the raw file, target the symbol body:
+  Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← read first
+  Edit {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← then edit (same old_string/new_string)
 
 Or browse the symbol table first:
   Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}

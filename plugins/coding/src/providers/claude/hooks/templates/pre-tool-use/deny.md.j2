@@ -4,8 +4,9 @@
 Read the symbol directly:
   Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
 
-Edit via Bash (do NOT use the Edit tool on @/ paths):
-  sed -i 's/old/new/g' {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
+Edit the symbol body (read first, then edit):
+  Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
+  Edit {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
 
 Or browse the symbol table first:
   Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
@@ -13,8 +14,9 @@ Or browse the symbol table first:
 Read the symbol table, then read specific symbol bodies:
   Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
 
-Edit via Bash (do NOT use the Edit tool on @/ paths):
-  sed -i 's/old/new/g' {{ rel }}@/symbols/<symbol>@/body.{{ ext }}
+Edit a symbol body (read first, then edit):
+  Read {{ rel }}@/symbols/<symbol>@/body.{{ ext }}
+  Edit {{ rel }}@/symbols/<symbol>@/body.{{ ext }}
 {% endif %}
 
 Read/splice/append lines (no prior read needed, not intercepted):
