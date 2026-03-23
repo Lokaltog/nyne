@@ -18,7 +18,7 @@ use std::{fs, thread};
 use base64::prelude::{BASE64_STANDARD as BASE64, Engine};
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::dispatch::ScriptRegistry;
 use crate::dispatch::activation::ActivationContext;
@@ -232,15 +232,20 @@ fn handle_exec(
         }
     };
 
-    debug!(address, stdin_len = stdin.len(), "exec request");
+    let payload = String::from_utf8_lossy(&stdin);
+    trace!(target: "wire", address, %payload, "exec request");
 
     let ctx = ScriptContext::new(activation);
     match registry.exec(address, &ctx, &stdin) {
-        Ok(stdout) => ControlResponse::Exec {
-            ok: true,
-            data: Some(BASE64.encode(&stdout)),
-            error: None,
-        },
+        Ok(stdout) => {
+            let response = String::from_utf8_lossy(&stdout);
+            trace!(target: "wire", address, %response, "exec response");
+            ControlResponse::Exec {
+                ok: true,
+                data: Some(BASE64.encode(&stdout)),
+                error: None,
+            }
+        }
         Err(e) => {
             let msg = format!("{e:#}");
             error!(address, error = %msg, "script execution failed");
