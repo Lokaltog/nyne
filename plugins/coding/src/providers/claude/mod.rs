@@ -107,13 +107,16 @@ impl ClaudeProvider {
         register_skill_templates(&mut b);
         let output_style_key = b.register("claude/output-style", include_str!("templates/output-style.md.j2"));
         let system_prompt_key = b.register("claude/system-prompt", include_str!("templates/system-prompt.md.j2"));
+        let agent_nyne_key = b.register("claude/agent-nyne", include_str!("templates/agents/nyne.md.j2"));
         let templates = b.finish();
-
         let settings_root = ctx.root().to_owned();
         let skill_view = SkillView {
             source_dir: ctx.root().display().to_string(),
             ext: dominant_ext(&ctx),
         };
+        // Clones for routes! macro — each file() closure captures by move.
+        let agent_skill_view = skill_view.clone();
+        let agent_templates = Arc::clone(&templates);
         let style_templates = Arc::clone(&templates);
         let prompt_templates = Arc::clone(&templates);
         let prompt_ctx = Arc::clone(&ctx);
@@ -125,6 +128,11 @@ impl ClaudeProvider {
                     "{skill}" => children_skill_dir {
                         "references" => children_skill_references,
                     }
+                }
+                "agents" {
+                    file("nyne.md",
+                        TemplateContent::new(&agent_templates, agent_nyne_key,
+                            serialize_view(agent_skill_view.clone()))),
                 }
                 "output-styles" {
                     file("principal-swe.md",
