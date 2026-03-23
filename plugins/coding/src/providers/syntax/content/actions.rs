@@ -7,8 +7,8 @@ use lsp_types::{CodeAction, Position, Range};
 use nyne::dispatch::context::RequestContext;
 use nyne::format;
 use nyne::node::VirtualNode;
-use nyne::node::diff_action::{DiffAction, DiffActionNode};
 
+use crate::edit::diff_action::{DiffAction, DiffActionNode};
 use crate::edit::plan::FileEditResult;
 use crate::lsp::edit::resolve_workspace_edit;
 use crate::lsp::handle::SymbolQuery;

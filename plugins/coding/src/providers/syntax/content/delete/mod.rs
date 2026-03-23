@@ -5,9 +5,9 @@ use std::sync::Arc;
 use color_eyre::eyre::{Result, eyre};
 use nyne::dispatch::activation::ActivationContext;
 use nyne::dispatch::context::RequestContext;
-use nyne::node::diff_action::DiffAction;
 use nyne::types::vfs_path::VfsPath;
 
+use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOp, EditOutcome, EditPlan, FileEditResult, ValidationResult};
 use crate::syntax::decomposed::DecompositionCache;
 use crate::syntax::fragment::Fragment;
@@ -20,7 +20,7 @@ use crate::syntax::fragment::Fragment;
 /// Implements [`DiffAction`] — wrap in [`DiffActionNode`] for `Readable`
 /// (diff preview) and `Unlinkable` (apply-on-delete) capabilities.
 ///
-/// [`DiffActionNode`]: nyne::node::diff_action::DiffActionNode
+/// [`DiffActionNode`]: crate::edit::diff_action::DiffActionNode
 #[derive(Clone)]
 pub(in crate::providers::syntax) struct SymbolDelete {
     pub ctx: Arc<ActivationContext>,

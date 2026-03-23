@@ -7,11 +7,11 @@ use color_eyre::eyre::{Result, eyre};
 use nyne::dispatch::activation::ActivationContext;
 use nyne::dispatch::context::RequestContext;
 use nyne::node::capabilities::Readable;
-use nyne::node::diff_action::DiffAction;
 use nyne::types::vfs_path::VfsPath;
 
 use super::StagingMap;
 use super::staging::StagingKey;
+use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOutcome, EditPlan, FileEditResult, ValidationResult};
 use crate::syntax::decomposed::DecompositionCache;
 

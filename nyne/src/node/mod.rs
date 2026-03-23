@@ -2,7 +2,6 @@
 
 pub mod builtins;
 pub mod capabilities;
-pub mod diff_action;
 pub mod kind;
 pub(crate) mod line_slice;
 pub mod middleware;

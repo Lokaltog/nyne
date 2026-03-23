@@ -7,10 +7,10 @@ use std::sync::Arc;
 use color_eyre::eyre::{Result, eyre};
 use nyne::dispatch::context::{RenameContext, RequestContext};
 use nyne::node::capabilities::Renameable;
-use nyne::node::diff_action::DiffAction;
 use nyne::types::path_conventions::strip_companion_suffix;
 use nyne::types::vfs_path::VfsPath;
 
+use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{FileEditResult, apply_file_edits};
 use crate::lsp::edit::resolve_workspace_edit;
 use crate::lsp::handle::{LspHandle, SymbolQuery};
@@ -22,7 +22,7 @@ use crate::syntax::fs_mapping::split_disambiguator;
 /// Used by both the preview file (`rename/new_name.diff` via [`DiffActionNode`])
 /// and the apply path (`mv old@/ new@/` via [`SymbolRename`]).
 ///
-/// [`DiffActionNode`]: nyne::node::diff_action::DiffActionNode
+/// [`DiffActionNode`]: crate::edit::diff_action::DiffActionNode
 #[derive(Clone)]
 pub(in crate::providers::syntax) struct RenameDiff {
     pub query: SymbolQuery,
@@ -86,7 +86,7 @@ impl Renameable for SymbolRename {
 /// asks the LSP server what import-path updates would be needed if the file
 /// were renamed. The unified diff is returned without performing the rename.
 ///
-/// [`DiffAction`]: nyne::node::diff_action::DiffAction
+/// [`DiffAction`]: crate::edit::diff_action::DiffAction
 pub(in crate::providers::syntax) struct FileRenameDiff {
     pub handle: Arc<LspHandle>,
     pub source_file: VfsPath,

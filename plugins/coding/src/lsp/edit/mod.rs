@@ -204,7 +204,7 @@ fn resolve_edits(edit: &WorkspaceEdit, resolver: &super::path::LspPathResolver) 
 /// Path translation is encapsulated: absolute overlay paths from LSP are
 /// converted to relative `VfsPath`s, and display paths use the FUSE root.
 ///
-/// [`DiffAction`]: nyne::node::diff_action::DiffAction
+/// [`DiffAction`]: crate::edit::diff_action::DiffAction
 pub fn resolve_workspace_edit(
     edit: &WorkspaceEdit,
     resolver: &super::path::LspPathResolver,

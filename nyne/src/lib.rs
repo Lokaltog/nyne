@@ -1,26 +1,11 @@
 //! Nyne — expose source code as a FUSE filesystem.
 extern crate self as nyne;
 
-/// Extension trait for converting [`rustix::io::Errno`] into [`color_eyre::eyre::Report`].
-///
-/// Eliminates the `.map_err(|e| eyre!(e))` boilerplate at every rustix call site.
-pub(crate) mod err {
-    use color_eyre::eyre;
-    use rustix::io::Errno;
-
-    pub trait ErrnoExt<T> {
-        fn into_eyre(self) -> eyre::Result<T>;
-    }
-
-    impl<T> ErrnoExt<T> for Result<T, Errno> {
-        fn into_eyre(self) -> eyre::Result<T> { self.map_err(|e| eyre::eyre!(e)) }
-    }
-}
+pub(crate) mod err;
 
 pub mod cli;
 pub mod config;
 pub mod dispatch;
-pub mod edit;
 pub mod format;
 // Re-export provider helpers for plugin crates.
 pub use providers::{

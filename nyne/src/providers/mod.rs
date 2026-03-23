@@ -46,7 +46,6 @@ pub fn is_file_companion(split: &CompanionSplit, real_fs: &dyn RealFs) -> bool {
     real_fs.exists(&split.source_file) && !real_fs.is_dir(&split.source_file)
 }
 
-// Re-export from SSOT in syntax::fs_mapping.
 use std::sync::Arc;
 
 use crate::dispatch::context::RequestContext;

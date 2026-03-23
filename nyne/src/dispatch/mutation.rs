@@ -9,8 +9,7 @@ use super::cache::{CachedNodeKind, NodeEntry, NodeSource};
 use super::resolve::{self, OwnedNode};
 use super::router::{ResolvedInode, Router};
 use crate::dispatch::context::{RenameContext, RequestContext};
-use crate::provider::mutation::MutationOp;
-use crate::provider::{MutationOutcome, Provider, ProviderId};
+use crate::provider::{MutationOp, MutationOutcome, Provider, ProviderId};
 use crate::types::file_kind::FileKind;
 use crate::types::vfs_path::VfsPath;
 

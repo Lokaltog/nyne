@@ -8,11 +8,11 @@
 use std::iter;
 
 use color_eyre::eyre::{Result, eyre};
+use nyne::RequestContext;
+use nyne::format::unified_diff;
+use nyne::node::capabilities::{Readable, Unlinkable};
 
-use super::capabilities::{Readable, Unlinkable};
-use crate::dispatch::context::RequestContext;
-use crate::edit::{FileEditResult, ValidationResult, apply_file_edits};
-use crate::format::unified_diff;
+use super::plan::{EditOutcome, FileEditResult, ValidationResult, apply_file_edits};
 
 /// Sentinel content returned when a diff action produces no edits.
 const NO_CHANGES: &[u8] = b"No changes.\n";
@@ -70,9 +70,9 @@ impl<T> DiffActionNode<T> {
 
 impl<T: DiffAction + Clone + 'static> DiffActionNode<T> {
     /// Create a file node with both diff preview (`Readable`) and apply-on-delete (`Unlinkable`).
-    pub fn into_node(name: impl Into<String>, action: T) -> super::VirtualNode {
+    pub fn into_node(name: impl Into<String>, action: T) -> nyne::VirtualNode {
         let name = name.into();
-        super::VirtualNode::file(&name, Self::new(&name, action.clone())).with_unlinkable(Self::new(&name, action))
+        nyne::VirtualNode::file(&name, Self::new(&name, action.clone())).with_unlinkable(Self::new(&name, action))
     }
 }
 
@@ -151,8 +151,6 @@ fn format_header(lines: &[String]) -> String {
 
 /// Format a single [`FileEditResult`] as a diff or comment string.
 fn format_edit(edit: &FileEditResult) -> String {
-    use crate::edit::EditOutcome;
-
     match &edit.outcome {
         EditOutcome::Delete => format!("# Deleted: {}\n", edit.display_path),
         EditOutcome::Create => unified_diff("", &edit.modified, &edit.display_path),
@@ -169,22 +167,19 @@ fn format_edit(edit: &FileEditResult) -> String {
 ///
 /// Returns an empty iterator if all edits are `Skipped` (no validation performed).
 fn validation_header_lines(edits: &[FileEditResult]) -> impl Iterator<Item = String> + '_ {
-    let has_validated = edits.iter().any(|e| !matches!(e.validation, ValidationResult::Skipped));
-
-    let has_failures = edits.iter().any(|e| matches!(e.validation, ValidationResult::Fail(_)));
-
-    let status_line = has_validated.then(|| {
-        if has_failures {
-            "Validation: FAIL".to_owned()
-        } else {
-            "Validation: PASS".to_owned()
-        }
-    });
-
-    let error_lines = edits.iter().filter_map(|e| match &e.validation {
-        ValidationResult::Fail(msg) => Some(format!("Error: {msg}")),
-        _ => None,
-    });
-
-    status_line.into_iter().chain(error_lines)
+    edits
+        .iter()
+        .any(|e| !matches!(e.validation, ValidationResult::Skipped))
+        .then(|| {
+            if edits.iter().any(|e| matches!(e.validation, ValidationResult::Fail(_))) {
+                "Validation: FAIL".to_owned()
+            } else {
+                "Validation: PASS".to_owned()
+            }
+        })
+        .into_iter()
+        .chain(edits.iter().filter_map(|e| match &e.validation {
+            ValidationResult::Fail(msg) => Some(format!("Error: {msg}")),
+            _ => None,
+        }))
 }

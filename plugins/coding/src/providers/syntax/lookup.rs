@@ -3,13 +3,13 @@ use std::sync::Arc;
 use color_eyre::eyre::eyre;
 use nyne::dispatch::context::RequestContext;
 use nyne::node::VirtualNode;
-use nyne::node::diff_action::DiffActionNode;
 use nyne::provider::Node;
 use nyne::types::vfs_path::VfsPath;
 
 use super::SyntaxProvider;
 use super::content::{delete, rename};
 use super::resolve::fragment_body_path;
+use crate::edit::diff_action::DiffActionNode;
 use crate::lsp::handle::LspHandle;
 use crate::providers::names::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
 use crate::syntax::decomposed::DecompositionCache;

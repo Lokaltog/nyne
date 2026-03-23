@@ -8,12 +8,12 @@ use color_eyre::eyre::{Result, eyre};
 use nyne::dispatch::activation::ActivationContext;
 use nyne::dispatch::context::RequestContext;
 use nyne::node::VirtualNode;
-use nyne::node::diff_action::DiffActionNode;
 use nyne::types::SymbolLineRange;
 use nyne::types::vfs_path::VfsPath;
 
 use super::SyntaxProvider;
 use super::content::{FileOverviewContent, FragmentResolver, LinesContent, LinesWrite, delete, rename};
+use crate::edit::diff_action::DiffActionNode;
 use crate::lsp::handle::LspHandle;
 use crate::providers::names::{COMPANION_SUFFIX, FILE_BODY, FILE_OVERVIEW, SUBDIR_SYMBOLS};
 use crate::syntax::decomposed::{DecomposedSource, DecompositionCache};

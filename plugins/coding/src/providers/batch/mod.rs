@@ -25,12 +25,12 @@ use nyne::dispatch::routing::tree::RouteTree;
 use nyne::node::WriteOutcome;
 use nyne::node::builtins::StaticContent;
 use nyne::node::capabilities::{Unlinkable, Writable};
-use nyne::node::diff_action::DiffActionNode;
 use nyne::{companion_symbol_path, dispatch_children, dispatch_lookup, source_file};
 use strum::IntoEnumIterator;
 
 use super::names::{FILE_STAGED_DIFF, SUBDIR_EDIT, SUBDIR_STAGED};
 use super::prelude::*;
+use crate::edit::diff_action::DiffActionNode;
 use crate::edit::plan::EditOpKind;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::decomposed::DecompositionCache;
