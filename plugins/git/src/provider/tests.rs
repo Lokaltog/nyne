@@ -372,31 +372,31 @@ mod branch_segment_tests {
         (Arc::new(repo), dir)
     }
 
-    /// Collect sorted (name, has_rename) pairs from `branch_segments_at_prefix`.
-    fn segments(repo: &Arc<GitRepo>, prefix: &str) -> Vec<(String, bool)> {
+    /// Collect sorted (name, has_rename, has_unlink) tuples from `branch_segments_at_prefix`.
+    fn segments(repo: &Arc<GitRepo>, prefix: &str) -> Vec<(String, bool, bool)> {
         let Some(nodes) = super::branches::branch_segments_at_prefix(repo, prefix).expect("should not error") else {
             return Vec::new();
         };
         let mut result: Vec<_> = nodes
             .iter()
-            .map(|n| (n.name().to_owned(), n.renameable().is_some()))
+            .map(|n| (n.name().to_owned(), n.renameable().is_some(), n.unlinkable().is_some()))
             .collect();
         result.sort();
         result
     }
 
     #[rstest]
-    #[case::flat_at_root(&["alpha", "beta"], "", &[("alpha", true), ("beta", true)])]
-    #[case::slashed_decomposes(&["feat/foo", "feat/bar", "fix/bug"], "", &[("feat", false), ("fix", false)])]
-    #[case::nested_prefix(&["feat/foo", "feat/bar"], "feat/", &[("bar", true), ("foo", true)])]
-    #[case::deep_root(&["a/b/c", "a/b/d"], "", &[("a", false)])]
-    #[case::deep_mid(&["a/b/c", "a/b/d"], "a/", &[("b", false)])]
-    #[case::deep_leaf(&["a/b/c", "a/b/d"], "a/b/", &[("c", true), ("d", true)])]
+    #[case::flat_at_root(&["alpha", "beta"], "", &[("alpha", true, true), ("beta", true, true)])]
+    #[case::slashed_decomposes(&["feat/foo", "feat/bar", "fix/bug"], "", &[("feat", false, false), ("fix", false, false)])]
+    #[case::nested_prefix(&["feat/foo", "feat/bar"], "feat/", &[("bar", true, true), ("foo", true, true)])]
+    #[case::deep_root(&["a/b/c", "a/b/d"], "", &[("a", false, false)])]
+    #[case::deep_mid(&["a/b/c", "a/b/d"], "a/", &[("b", false, false)])]
+    #[case::deep_leaf(&["a/b/c", "a/b/d"], "a/b/", &[("c", true, true), ("d", true, true)])]
     #[case::nonexistent_prefix(&["feat/foo"], "nonexistent/", &[])]
-    fn branch_segments(#[case] branches: &[&str], #[case] prefix: &str, #[case] expected: &[(&str, bool)]) {
+    fn branch_segments(#[case] branches: &[&str], #[case] prefix: &str, #[case] expected: &[(&str, bool, bool)]) {
         let (repo, _dir) = repo_with_branches(branches);
         let segs = segments(&repo, prefix);
-        let expected: Vec<(String, bool)> = expected.iter().map(|(n, r)| ((*n).into(), *r)).collect();
+        let expected: Vec<(String, bool, bool)> = expected.iter().map(|(n, r, u)| ((*n).into(), *r, *u)).collect();
         // Use contains checks — HEAD branch (main/master) also appears at root.
         for entry in &expected {
             assert!(segs.contains(entry), "missing {entry:?} in {segs:?}");
@@ -405,6 +405,74 @@ mod branch_segment_tests {
         if !prefix.is_empty() {
             assert_eq!(segs, expected);
         }
+    }
+}
+mod delete_branch_tests {
+    use std::sync::Arc;
+
+    use crate::repo::GitRepo;
+
+    /// Create a temp repo with an initial commit on the default branch,
+    /// plus additional branches. Returns (repo, tempdir, initial_commit_oid).
+    fn repo_with_branches(branch_names: &[&str]) -> (Arc<GitRepo>, tempfile::TempDir, git2::Oid) {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let git_repo = git2::Repository::init(dir.path()).expect("git init");
+
+        let sig = git2::Signature::now("Test", "t@t.com").expect("sig");
+        let tree_oid = git_repo.index().expect("idx").write_tree().expect("tree");
+        let tree = git_repo.find_tree(tree_oid).expect("find tree");
+        let commit_oid = git_repo
+            .commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
+            .expect("commit");
+        let commit = git_repo.find_commit(commit_oid).expect("find commit");
+
+        for name in branch_names {
+            git_repo.branch(name, &commit, false).expect("create branch");
+        }
+
+        let repo = GitRepo::open(dir.path()).expect("open");
+        (Arc::new(repo), dir, commit_oid)
+    }
+
+    #[test]
+    fn delete_merged_branch() {
+        let (repo, _dir, _) = repo_with_branches(&["merged-feature"]);
+        // Branch points at same commit as HEAD → fully merged.
+        repo.delete_branch("merged-feature")
+            .expect("should delete merged branch");
+        let branches = repo.branches().expect("list branches");
+        assert!(!branches.contains(&"merged-feature".to_owned()));
+    }
+
+    #[test]
+    fn delete_head_branch_refused() {
+        let (repo, _dir, _) = repo_with_branches(&[]);
+        let head = repo.head_branch();
+        let err = repo.delete_branch(&head).expect_err("should refuse HEAD deletion");
+        let io_err = err.downcast_ref::<std::io::Error>().expect("should be io::Error");
+        assert_eq!(io_err.kind(), std::io::ErrorKind::PermissionDenied);
+    }
+
+    #[test]
+    fn delete_unmerged_branch_refused() {
+        let (repo, dir, _) = repo_with_branches(&["diverged"]);
+        // Add a commit only on `diverged` so it's not an ancestor of HEAD.
+        {
+            let git_repo = git2::Repository::open(dir.path()).expect("open raw");
+            let sig = git2::Signature::now("Test", "t@t.com").expect("sig");
+            let head_commit = git_repo.head().expect("head").peel_to_commit().expect("commit");
+            let tree = head_commit.tree().expect("tree");
+            let diverged_oid = git_repo
+                .commit(None, &sig, &sig, "diverge", &tree, &[&head_commit])
+                .expect("commit");
+            let diverged_commit = git_repo.find_commit(diverged_oid).expect("find");
+            git_repo
+                .branch("diverged", &diverged_commit, true)
+                .expect("update branch");
+        }
+        let err = repo.delete_branch("diverged").expect_err("should refuse unmerged");
+        let io_err = err.downcast_ref::<std::io::Error>().expect("should be io::Error");
+        assert_eq!(io_err.kind(), std::io::ErrorKind::PermissionDenied);
     }
 }
 

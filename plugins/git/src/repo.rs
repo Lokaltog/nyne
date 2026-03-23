@@ -231,10 +231,13 @@ impl GitRepo {
             .target()
             .ok_or_else(|| eyre!("HEAD has no target commit"))?;
 
-        if !repo
-            .graph_descendant_of(head_oid, branch_oid)
-            .wrap_err("merge-base check failed")?
-        {
+        // graph_descendant_of returns false when OIDs are equal, but a
+        // branch at the same commit as HEAD is trivially merged.
+        let merged = branch_oid == head_oid
+            || repo
+                .graph_descendant_of(head_oid, branch_oid)
+                .wrap_err("merge-base check failed")?;
+        if !merged {
             return Err(io_err(
                 io::ErrorKind::PermissionDenied,
                 format!("branch {name} is not fully merged into HEAD"),

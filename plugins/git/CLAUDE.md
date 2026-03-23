@@ -13,3 +13,5 @@ If no git repo is found during `activate()`, no providers are created — the pl
 ## Branch Browsing
 
 Branch names with `/` (e.g., `feat/lsp-diag-fix`) are decomposed into nested directories — FUSE dirent names cannot contain `/`. The `{..prefix}` rest-capture route handles arbitrary nesting depth. `children_branches_nested` does a two-phase dispatch: namespace prefix first, then longest-match branch name + tree path for file tree browsing via `GitRepo::ref_tree_entries`/`blob_at_ref`.
+
+Leaf branch directories support `mv` (rename via `BranchRename`) and `rmdir` (delete via `BranchRemove`). Deletion only succeeds for branches fully merged into HEAD — unmerged or HEAD branches return `EACCES`.
