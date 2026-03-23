@@ -82,6 +82,7 @@ impl SyntaxProvider {
             .collect();
         nodes.extend(build_fragment_nodes(
             &section_children,
+            &dctx.shared.source,
             source_file,
             fragment_path,
             &self.ctx,

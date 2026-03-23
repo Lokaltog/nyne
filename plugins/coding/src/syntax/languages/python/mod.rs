@@ -62,22 +62,17 @@ impl LanguageSpec for PythonLanguage {
 
     fn extract_doc_range(node: TsNode<'_>) -> Option<Range<usize>> { extract_body_docstring_range(node) }
 
-    fn extract_file_doc(root: TsNode<'_>) -> Option<String> {
+    fn extract_file_doc_range(root: TsNode<'_>) -> Option<Range<usize>> {
         let first_stmt = root.children().find(|child| child.kind() != Self::COMMENT)?;
         if first_stmt.kind() != Self::EXPRESSION_STATEMENT {
             return None;
         }
-        let docstring = first_stmt.children().find(|inner| {
+        first_stmt.children().find(|inner| {
             (inner.kind() == Self::STRING || inner.kind() == Self::CONCATENATED_STRING)
                 && is_triple_quoted(inner.text())
         })?;
-        let (content, _) = strip_triple_quotes(docstring.text());
-        let dedented = dedent_docstring(content);
-        dedented
-            .lines()
-            .map(str::trim)
-            .find(|l| !l.is_empty())
-            .map(String::from)
+        // Return the expression_statement range (matches extract_body_docstring_range).
+        Some(first_stmt.byte_range())
     }
 
     fn strip_doc_comment(raw: &str) -> String {
@@ -142,9 +137,6 @@ fn build_assignment_fragment(
         .field("left")
         .map_or_else(|| range_node.start_byte(), |n| n.start_byte());
 
-    let node_range = range_node.byte_range();
-    let full_span = PythonLanguage::full_symbol_range(&node_range, None, None);
-
     Some(build_code_fragment(
         range_node,
         CodeFragmentSpec {
@@ -153,9 +145,6 @@ fn build_assignment_fragment(
             signature,
             name_byte_offset: name_offset,
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
-            full_span,
             children: Vec::new(),
         },
         parent_name,

@@ -16,19 +16,19 @@ fn basic() -> DecomposedFile {
 /// 2 h1 sections (Introduction, API Reference) = 3 fragments.
 #[rstest]
 fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.fragments.len(), 3);
+    assert_eq!(basic.len(), 3);
 }
 
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
+    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, &["preamble", "Introduction", "API Reference"]);
 }
 
 /// First fragment is a preamble containing frontmatter and intro text.
 #[rstest]
 fn preamble_is_first(basic: DecomposedFile) {
-    let first = &basic.fragments[0];
+    let first = &basic[0];
     assert_eq!(first.name, "preamble");
     assert_eq!(first.kind, FragmentKind::Preamble);
 }
@@ -37,7 +37,7 @@ fn preamble_is_first(basic: DecomposedFile) {
 /// Getting Started has child Prerequisites.
 #[rstest]
 fn introduction_children(basic: DecomposedFile) {
-    let intro = basic.fragments.iter().find(|f| f.name == "Introduction").unwrap();
+    let intro = basic.iter().find(|f| f.name == "Introduction").unwrap();
     let child_names: Vec<_> = intro.children.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(child_names, &["Getting Started", "Configuration"]);
 
@@ -49,7 +49,7 @@ fn introduction_children(basic: DecomposedFile) {
 /// API Reference has one child: Endpoints.
 #[rstest]
 fn api_reference_children(basic: DecomposedFile) {
-    let api = basic.fragments.iter().find(|f| f.name == "API Reference").unwrap();
+    let api = basic.iter().find(|f| f.name == "API Reference").unwrap();
     let child_names: Vec<_> = api.children.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(child_names, &["Endpoints"]);
 }
@@ -57,5 +57,6 @@ fn api_reference_children(basic: DecomposedFile) {
 /// No imports in Markdown.
 #[rstest]
 fn no_imports(basic: DecomposedFile) {
-    assert!(basic.imports.is_none());
+    use crate::syntax::fragment::find_fragment_of_kind;
+    assert!(find_fragment_of_kind(&basic, &FragmentKind::Imports).is_none());
 }

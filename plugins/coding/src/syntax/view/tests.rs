@@ -14,8 +14,8 @@ fn decompose_fixture(reg: &SyntaxRegistry, ext: &str, name: &str) -> Arc<Decompo
     let source = load_fixture(name);
     let decomposer = reg.get(ext).expect("no decomposer for extension");
     let (mut file, _tree) = decomposer.decompose(&source, DEFAULT_MAX_DEPTH);
-    decomposer.map_to_fs(&mut file.fragments);
-    resolve_conflicts(&mut file.fragments, decomposer);
+    decomposer.map_to_fs(&mut file);
+    resolve_conflicts(&mut file, decomposer);
     Arc::new(DecomposedSource {
         source,
         decomposed: file,
@@ -28,7 +28,6 @@ fn decompose_fixture(reg: &SyntaxRegistry, ext: &str, name: &str) -> Arc<Decompo
 fn find_view(shared: &Arc<DecomposedSource>, name: &str) -> FragmentView {
     let frag = shared
         .decomposed
-        .fragments
         .iter()
         .find(|f| f.name == name)
         .unwrap_or_else(|| panic!("fragment '{name}' not found"));
@@ -48,18 +47,13 @@ fn find_view(shared: &Arc<DecomposedSource>, name: &str) -> FragmentView {
 #[case(FragmentKind::CodeBlock { lang: None }, "CodeBlock")]
 fn format_kind_renders(#[case] kind: FragmentKind, #[case] expected: &str) {
     let source = "x";
+    let _ = source;
     let frag = crate::syntax::fragment::Fragment::new(
-        source,
         "test".into(),
         kind,
         0..1,
-        0..1,
         None,
-        FragmentMetadata::Code {
-            visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
-        },
+        FragmentMetadata::Code { visibility: None },
         0,
         Vec::new(),
         None,
@@ -99,7 +93,6 @@ fn code_block_summary_deduplicates_non_adjacent_langs() {
     // Collect all code block children across all sections.
     let all_blocks: Vec<_> = shared
         .decomposed
-        .fragments
         .iter()
         .flat_map(|f| &f.children)
         .filter(|c| matches!(c.kind, FragmentKind::CodeBlock { .. }))
@@ -173,7 +166,7 @@ fn visibility_empty_for_sections() {
 fn fragment_list_filters_code_blocks() {
     let reg = registry();
     let shared = decompose_fixture(&reg, "md", "section_with_code_blocks.md");
-    let list = fragment_list(&shared.decomposed.fragments, &shared);
+    let list = fragment_list(&shared.decomposed, &shared);
     // Should only contain sections, not code blocks.
     let seq = list.try_iter().expect("should be iterable");
     for item in seq {

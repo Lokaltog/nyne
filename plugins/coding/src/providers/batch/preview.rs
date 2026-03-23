@@ -44,7 +44,7 @@ impl DiffAction for SymbolPreview {
             .get(&self.key.source_file)?;
 
         let plan = batch.to_edit_plan();
-        let resolved = plan.resolve(&parsed.decomposed.fragments, &parsed.source)?;
+        let resolved = plan.resolve(&parsed.decomposed, &parsed.source)?;
         let modified = EditPlan::apply(&parsed.source, &resolved);
 
         let validation = match parsed.decomposer.validate(&modified) {
@@ -117,7 +117,7 @@ impl DiffAction for CrossFilePreview {
             let all_ops: Vec<_> = plans.iter().flat_map(|p| p.ops.iter().cloned()).collect();
             let plan = EditPlan { ops: all_ops };
 
-            let resolved = plan.resolve(&parsed.decomposed.fragments, &parsed.source)?;
+            let resolved = plan.resolve(&parsed.decomposed, &parsed.source)?;
             let modified = EditPlan::apply(&parsed.source, &resolved);
 
             let validation = match parsed.decomposer.validate(&modified) {

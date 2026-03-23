@@ -37,7 +37,7 @@ fn resolve_symbol_link(
         .expect("coding plugin not activated")
         .get(target_vfs)
         .ok()?;
-    let frag_path = find_fragment_at_line(&target_shared.decomposed.fragments, target_line as usize)?;
+    let frag_path = find_fragment_at_line(&target_shared.decomposed, target_line as usize, &target_shared.source)?;
     let mut to = VfsPath::new(&format!("{rel_path}{COMPANION_SUFFIX}/{SUBDIR_SYMBOLS}")).ok()?;
     for name in &frag_path {
         to = to.join(&format!("{name}{COMPANION_SUFFIX}")).ok()?;
@@ -116,7 +116,7 @@ impl SyntaxProvider {
             &dctx.shared.source,
             frag.name_byte_offset,
             lsp_dir,
-            &frag.line_range,
+            &frag.line_range(&dctx.shared.source),
         )?;
 
         if targets.is_empty() {
@@ -178,7 +178,7 @@ impl SyntaxProvider {
         };
 
         let sym = lsp_handle.at(&dctx.shared.source, frag.name_byte_offset);
-        let resolved = actions::resolve_code_actions(&sym, &frag.line_range);
+        let resolved = actions::resolve_code_actions(&sym, &frag.line_range(&dctx.shared.source));
         let nodes = actions::build_action_nodes(resolved, &sym);
         Ok(Some(nodes))
     }

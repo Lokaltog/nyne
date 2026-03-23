@@ -8,7 +8,7 @@ use crate::lsp::handle::LspHandle;
 use crate::providers::names::{FILE_IMPORTS, FILE_OVERVIEW, SUBDIR_BY_KIND, SUBDIR_SYMBOLS};
 use crate::providers::syntax::content::{MetaSplice, OverviewContent, SourceSlice, SpliceTarget};
 use crate::providers::syntax::{SyntaxProvider, newline};
-use crate::syntax::fragment::FragmentKind;
+use crate::syntax::fragment::{FragmentKind, find_fragment_of_kind};
 
 impl SyntaxProvider {
     pub(in super::super) fn resolve_symbols_root(&self, source_file: &VfsPath, _ctx: &RequestContext<'_>) -> Nodes {
@@ -28,7 +28,7 @@ impl SyntaxProvider {
         }));
 
         // Imports file (if present). Byte range resolved lazily by SourceSlice.
-        if dctx.shared.decomposed.imports.is_some() {
+        if find_fragment_of_kind(&dctx.shared.decomposed, &FragmentKind::Imports).is_some() {
             let name = format!("{FILE_IMPORTS}.{}", dctx.ext);
             let node = VirtualNode::file(name, SourceSlice {
                 resolver: resolver.clone(),
@@ -45,7 +45,6 @@ impl SyntaxProvider {
         if dctx
             .shared
             .decomposed
-            .fragments
             .iter()
             .any(|f| matches!(f.kind, FragmentKind::Symbol(_)))
         {
@@ -55,7 +54,8 @@ impl SyntaxProvider {
         // Top-level fragments — all as @-suffixed directories.
         let lsp_handle = LspHandle::for_file(&self.ctx, source_file);
         nodes.extend(build_fragment_nodes(
-            &dctx.shared.decomposed.fragments,
+            &dctx.shared.decomposed,
+            &dctx.shared.source,
             source_file,
             &[],
             &self.ctx,
@@ -73,11 +73,15 @@ impl SyntaxProvider {
         let mut kinds: Vec<String> = dctx
             .shared
             .decomposed
-            .fragments
             .iter()
             .filter_map(|f| match &f.kind {
                 FragmentKind::Symbol(k) => Some(k.directory_name()),
-                FragmentKind::Section { .. } | FragmentKind::CodeBlock { .. } | FragmentKind::Preamble => None,
+                FragmentKind::Section { .. }
+                | FragmentKind::CodeBlock { .. }
+                | FragmentKind::Preamble
+                | FragmentKind::Docstring
+                | FragmentKind::Imports
+                | FragmentKind::Decorator => None,
             })
             .collect();
         kinds.sort();
@@ -99,11 +103,15 @@ impl SyntaxProvider {
         let nodes: Vec<VirtualNode> = dctx
             .shared
             .decomposed
-            .fragments
             .iter()
             .filter(|f| match &f.kind {
                 FragmentKind::Symbol(k) => k.directory_name() == kind_filter,
-                FragmentKind::Section { .. } | FragmentKind::CodeBlock { .. } | FragmentKind::Preamble => false,
+                FragmentKind::Section { .. }
+                | FragmentKind::CodeBlock { .. }
+                | FragmentKind::Preamble
+                | FragmentKind::Docstring
+                | FragmentKind::Imports
+                | FragmentKind::Decorator => false,
             })
             .filter_map(|f| {
                 let fs_name = f.fs_name.as_deref()?;

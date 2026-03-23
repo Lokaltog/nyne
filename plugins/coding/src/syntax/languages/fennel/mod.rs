@@ -158,8 +158,18 @@ fn build_macro_fragment(node: TsNode<'_>, _source: &str, parent_name: Option<&st
 fn build_fennel_fragment(node: TsNode<'_>, name: String, kind: SymbolKind, parent_name: Option<&str>) -> Fragment {
     let signature = node.first_line().to_owned();
     let doc_range = FennelLanguage::extract_doc_range(node);
-    let node_range = node.byte_range();
-    let full_span = FennelLanguage::full_symbol_range(&node_range, doc_range.as_ref(), None);
+    let parent = Some(name.clone());
+
+    let mut children = Vec::new();
+    if let Some(range) = doc_range {
+        children.push(Fragment::structural(
+            "docstring",
+            FragmentKind::Docstring,
+            range,
+            parent,
+        ));
+    }
+
     build_code_fragment(
         node,
         CodeFragmentSpec {
@@ -168,10 +178,7 @@ fn build_fennel_fragment(node: TsNode<'_>, name: String, kind: SymbolKind, paren
             signature,
             name_byte_offset: node.start_byte(),
             visibility: None,
-            doc_comment_range: doc_range,
-            decorator_range: None,
-            full_span,
-            children: Vec::new(),
+            children,
         },
         parent_name,
     )

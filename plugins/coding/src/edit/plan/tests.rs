@@ -2,29 +2,35 @@ use super::*;
 use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata, SymbolKind};
 
 /// Helper to build a code fragment with `fs_name` set.
+///
+/// `doc_range` optionally adds a Docstring child fragment.
 fn code_fragment(
-    source: &str,
+    _source: &str,
     name: &str,
     kind: SymbolKind,
     byte_range: std::ops::Range<usize>,
-    full_span: std::ops::Range<usize>,
+    doc_range: Option<std::ops::Range<usize>>,
     children: Vec<Fragment>,
 ) -> Fragment {
-    let name_offset = full_span.start;
+    let name_offset = byte_range.start;
+    let mut all_children = Vec::new();
+    if let Some(dr) = doc_range {
+        all_children.push(Fragment::structural(
+            "docstring",
+            FragmentKind::Docstring,
+            dr,
+            Some(name.to_owned()),
+        ));
+    }
+    all_children.extend(children);
     let mut frag = Fragment::new(
-        source,
         name.to_owned(),
         FragmentKind::Symbol(kind),
         byte_range,
-        full_span,
         Some(format!("fn {name}()")),
-        FragmentMetadata::Code {
-            visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
-        },
+        FragmentMetadata::Code { visibility: None },
         name_offset,
-        children,
+        all_children,
         None,
     );
     frag.fs_name = Some(name.to_owned());
@@ -40,12 +46,7 @@ fn replace_body_uses_full_span_including_doc_comment() {
     //            ^0              ^16              ^34^36
     // full_span covers doc comment + body: 0..36
     // byte_range covers just the fn node: 16..36
-    let mut frag = code_fragment(source, "foo", SymbolKind::Function, 16..36, 0..36, vec![]);
-    frag.metadata = FragmentMetadata::Code {
-        visibility: None,
-        doc_comment_range: Some(0..15),
-        decorator_range: None,
-    };
+    let mut frag = code_fragment(source, "foo", SymbolKind::Function, 16..36, Some(0..15), vec![]);
     frag.signature = Some("fn foo()".to_owned());
 
     let plan = EditPlan {
@@ -58,7 +59,7 @@ fn replace_body_uses_full_span_including_doc_comment() {
     let resolved = plan.resolve(&[frag], source).unwrap();
     assert_eq!(resolved.len(), 1);
 
-    // The resolved range must cover the full_span (0..38), not byte_range (16..38).
+    // The resolved range must cover the full_span (0..36), not byte_range (16..36).
     // line_start_of(source, 0) == 0.
     assert_eq!(
         resolved[0].byte_range,
@@ -75,12 +76,7 @@ fn replace_body_round_trip_is_noop() {
     // Round-trip: reading the body (full_span) and writing it back via
     // edit/replace must be a no-op.
     let source = "/// Doc\nfn bar() {}\n";
-    let mut frag = code_fragment(source, "bar", SymbolKind::Function, 8..20, 0..20, vec![]);
-    frag.metadata = FragmentMetadata::Code {
-        visibility: None,
-        doc_comment_range: Some(0..7),
-        decorator_range: None,
-    };
+    let mut frag = code_fragment(source, "bar", SymbolKind::Function, 8..20, Some(0..7), vec![]);
     frag.signature = Some("fn bar()".to_owned());
     let frag = frag;
 
@@ -108,7 +104,7 @@ fn replace_body_round_trip_is_noop() {
 fn append_into_empty_impl_block() {
     let source = "impl Foo {}\n";
     //            ^0         ^11^12
-    let mut frag = code_fragment(source, "Foo", SymbolKind::Impl, 0..11, 0..12, vec![]);
+    let mut frag = code_fragment(source, "Foo", SymbolKind::Impl, 0..12, None, vec![]);
     frag.signature = Some("impl Foo".to_owned());
     let frag = frag;
 
@@ -135,11 +131,11 @@ fn append_into_empty_impl_block() {
 fn append_into_scope_with_children_still_works() {
     let source = "impl Foo {\n    fn existing() {}\n}\n";
     //            ^0          ^11               ^30^31^32
-    let mut child = code_fragment(source, "existing", SymbolKind::Function, 15..29, 15..29, vec![]);
+    let mut child = code_fragment(source, "existing", SymbolKind::Function, 15..29, None, vec![]);
     child.signature = Some("fn existing()".to_owned());
     child.parent_name = Some("Foo".to_owned());
 
-    let mut frag = code_fragment(source, "Foo", SymbolKind::Impl, 0..31, 0..32, vec![child]);
+    let mut frag = code_fragment(source, "Foo", SymbolKind::Impl, 0..32, None, vec![child]);
     frag.signature = Some("impl Foo".to_owned());
     let frag = frag;
 

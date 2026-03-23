@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"tsx\", \"export function App() {\\n    return <div>Hello</div>;\\n}\\n\")"
 ---
 [
     Fragment {
@@ -9,8 +9,6 @@ expression: result.fragments
             Function,
         ),
         byte_range: 0..54,
-        full_span: 0..54,
-        line_range: 0..3,
         signature: Some(
             "export function App()",
         ),
@@ -18,8 +16,6 @@ expression: result.fragments
             visibility: Some(
                 "export",
             ),
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 16,
         children: [],

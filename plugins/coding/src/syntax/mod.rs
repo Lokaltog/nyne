@@ -190,10 +190,10 @@ impl SyntaxRegistry {
     #[must_use]
     pub fn extract_symbol(&self, source: &str, ext: &str, fragment_path: &[String]) -> Option<String> {
         let decomposer = self.get(ext)?;
-        let (mut file, _tree) = decomposer.decompose(source, fragment::DEFAULT_MAX_DEPTH);
-        decomposer.map_to_fs(&mut file.fragments);
-        resolve_conflicts(&mut file.fragments, decomposer);
-        let frag = find_fragment(&file.fragments, fragment_path)?;
+        let (mut fragments, _tree) = decomposer.decompose(source, fragment::DEFAULT_MAX_DEPTH);
+        decomposer.map_to_fs(&mut fragments);
+        resolve_conflicts(&mut fragments, decomposer);
+        let frag = find_fragment(&fragments, fragment_path)?;
         Some(source[frag.byte_range.start..frag.byte_range.end].to_owned())
     }
 }
@@ -255,15 +255,15 @@ pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<
 /// Nameless fragments (e.g. inherent impl blocks hidden by conflict
 /// resolution) are transparent — the search looks through to their children.
 /// Used by LSP symlink directories to reverse-map locations to symbols.
-pub fn find_fragment_at_line(fragments: &[fragment::Fragment], line: usize) -> Option<Vec<String>> {
-    let frag = fragments.iter().find(|f| f.line_range.contains(&line))?;
+pub fn find_fragment_at_line(fragments: &[fragment::Fragment], line: usize, source: &str) -> Option<Vec<String>> {
+    let frag = fragments.iter().find(|f| f.line_range(source).contains(&line))?;
 
     let Some(fs_name) = frag.fs_name.as_ref() else {
         // Nameless container: look through to children.
-        return find_fragment_at_line(&frag.children, line);
+        return find_fragment_at_line(&frag.children, line, source);
     };
 
-    let mut path = find_fragment_at_line(&frag.children, line).unwrap_or_default();
+    let mut path = find_fragment_at_line(&frag.children, line, source).unwrap_or_default();
     path.insert(0, fs_name.clone());
     Some(path)
 }
@@ -278,17 +278,21 @@ pub fn find_fragment_at_line(fragments: &[fragment::Fragment], line: usize) -> O
 /// Nameless fragments (e.g. inherent impl blocks hidden by conflict
 /// resolution) are transparent — when `line` falls inside one, the search
 /// narrows to its children.
-pub fn find_nearest_fragment_at_line(fragments: &[fragment::Fragment], line: usize) -> Option<Vec<String>> {
+pub fn find_nearest_fragment_at_line(
+    fragments: &[fragment::Fragment],
+    line: usize,
+    source: &str,
+) -> Option<Vec<String>> {
     // If line falls inside a nameless container, narrow search to its children.
     if let Some(frag) = fragments
         .iter()
-        .find(|f| f.line_range.contains(&line) && f.fs_name.is_none())
+        .find(|f| f.line_range(source).contains(&line) && f.fs_name.is_none())
     {
-        return find_nearest_fragment_at_line(&frag.children, line);
+        return find_nearest_fragment_at_line(&frag.children, line, source);
     }
 
     // Fast path: exact match.
-    if let Some(path) = find_fragment_at_line(fragments, line) {
+    if let Some(path) = find_fragment_at_line(fragments, line, source) {
         return Some(path);
     }
 
@@ -298,15 +302,16 @@ pub fn find_nearest_fragment_at_line(fragments: &[fragment::Fragment], line: usi
         .filter(|f| f.fs_name.is_some())
         .map(|f| {
             // Distance to nearest boundary of this fragment's line range.
-            let dist = if line < f.line_range.start {
-                f.line_range.start - line
+            let lr = f.line_range(source);
+            let dist = if line < lr.start {
+                lr.start - line
             } else {
-                // line >= f.line_range.end (since contains() failed above)
-                line - (f.line_range.end.saturating_sub(1))
+                // line >= lr.end (since contains() failed above)
+                line - (lr.end.saturating_sub(1))
             };
             // Prefer preceding fragments (end ≤ line) at equal distance
             // by making following fragments sort after.
-            let precedes = f.line_range.end <= line;
+            let precedes = lr.end <= line;
             let key = (dist, !precedes);
             (key, f)
         })

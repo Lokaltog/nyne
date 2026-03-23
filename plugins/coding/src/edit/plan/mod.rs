@@ -147,16 +147,17 @@ impl EditPlan {
                     // Use full_span (decorators + docstring + signature + body)
                     // to match body.rs read range — ensures round-trip:
                     // `cat body.rs > edit/replace` is a no-op.
-                    let start = line_start_of(source, frag.full_span.start);
+                    let span = frag.full_span();
+                    let start = line_start_of(source, span.start);
                     ResolvedEdit {
                         staged_index: *index,
-                        byte_range: start..frag.full_span.end,
+                        byte_range: start..span.end,
                         replacement: content.clone(),
                     }
                 }
                 EditOp::Delete { fragment_path } => {
                     let frag = require_fragment(fragments, fragment_path)?;
-                    let range = extend_delete_range(source, &frag.full_span);
+                    let range = extend_delete_range(source, &frag.full_span());
                     ResolvedEdit {
                         staged_index: *index,
                         byte_range: range,
@@ -165,7 +166,7 @@ impl EditPlan {
                 }
                 EditOp::InsertBefore { fragment_path, content } => {
                     let frag = require_fragment(fragments, fragment_path)?;
-                    let offset = line_start_of(source, frag.full_span.start);
+                    let offset = line_start_of(source, frag.full_span().start);
                     // Ensure trailing newline so the inserted content doesn't
                     // join directly to the anchor symbol's first line.
                     let replacement = ensure_trailing_newline(content);
@@ -177,7 +178,7 @@ impl EditPlan {
                 }
                 EditOp::InsertAfter { fragment_path, content } => {
                     let frag = require_fragment(fragments, fragment_path)?;
-                    let offset = frag.full_span.end;
+                    let offset = frag.full_span().end;
                     // Ensure leading newline so inserted content doesn't join
                     // directly to the anchor symbol's closing delimiter.
                     let replacement = ensure_leading_newline(source, offset, content);
@@ -265,7 +266,7 @@ pub use nyne::edit::{EditOutcome, FileEditResult, ValidationResult, apply_file_e
 /// Otherwise, finds the closing brace and inserts before it.
 fn append_offset(source: &str, frag: &Fragment) -> usize {
     if let Some(last) = frag.children.last() {
-        return last.full_span.end;
+        return last.full_span().end;
     }
     // Empty scope: find closing brace and insert before it.
     source[frag.byte_range.start..frag.byte_range.end]

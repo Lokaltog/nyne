@@ -63,22 +63,30 @@ impl LanguageSpec for RustLanguage {
         node.field_text("name").unwrap_or("anonymous").to_owned()
     }
 
-    fn extract_file_doc(root: TsNode<'_>) -> Option<String> {
-        let doc_lines: Vec<_> = root
+    fn extract_file_doc_range(root: TsNode<'_>) -> Option<Range<usize>> {
+        let doc_nodes: Vec<_> = root
             .children()
             .take_while(|child| child.kind() == Self::LINE_COMMENT && child.text().starts_with("//!"))
-            .map(|child| child.text().to_owned())
             .collect();
-        if doc_lines.is_empty() {
-            return None;
+        let first = doc_nodes.first()?;
+        let last = doc_nodes.last()?;
+        let start = first.start_byte();
+        let mut end = last.raw().end_byte();
+        // Trim trailing newlines — same convention as merge_preceding_sibling_ranges.
+        let source = root.source();
+        while end > start && source.get(end - 1) == Some(&b'\n') {
+            end -= 1;
         }
-        let joined = doc_lines.join("\n");
-        Self::clean_doc_comment(&joined)
+        Some(start..end)
     }
 
     fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &["///", "//!"]) }
 
     fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, "///", "/// ") }
+
+    fn wrap_file_doc_comment(plain: &str, indent: &str) -> String {
+        wrap_line_doc_comment(plain, indent, "//!", "//! ")
+    }
 
     fn extract_visibility(node: TsNode<'_>) -> Option<String> { extract_child_visibility(node, "visibility_modifier") }
 

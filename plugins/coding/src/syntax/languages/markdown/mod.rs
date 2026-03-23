@@ -29,10 +29,8 @@ impl LanguageSpec for MarkdownLanguage {
         if !preamble_text.trim().is_empty() {
             let span = 0..first_heading_byte;
             fragments.push(Fragment::new(
-                source,
                 "preamble".to_owned(),
                 FragmentKind::Preamble,
-                span.clone(),
                 span,
                 None,
                 FragmentMetadata::Document { index: 0 },
@@ -42,7 +40,7 @@ impl LanguageSpec for MarkdownLanguage {
             ));
         }
 
-        fragments.extend(build_section_fragments(&headings, &code_blocks, source));
+        fragments.extend(build_section_fragments(&headings, &code_blocks, source.len()));
         Some(fragments)
     }
 }
@@ -157,14 +155,13 @@ fn parse_fenced_code_block(node: TsNode<'_>, source: &str) -> CodeBlock {
 }
 
 /// Build hierarchically nested section fragments from headings and code blocks.
-fn build_section_fragments(headings: &[Heading], code_blocks: &[CodeBlock], source: &str) -> Vec<Fragment> {
-    build_sections_at_level(headings, code_blocks, source, source.len(), 0)
+fn build_section_fragments(headings: &[Heading], code_blocks: &[CodeBlock], source_len: usize) -> Vec<Fragment> {
+    build_sections_at_level(headings, code_blocks, source_len, 0)
 }
 
 fn build_sections_at_level(
     headings: &[Heading],
     code_blocks: &[CodeBlock],
-    source: &str,
     section_end_byte: usize,
     index_offset: usize,
 ) -> Vec<Fragment> {
@@ -203,24 +200,21 @@ fn build_sections_at_level(
             .map_or(headings.len(), |pos| children_start + pos);
 
         let child_headings = headings.get(children_start..children_end).unwrap_or(&[]);
-        let children = build_sections_at_level(child_headings, code_blocks, source, end_byte, 0);
+        let children = build_sections_at_level(child_headings, code_blocks, end_byte, 0);
 
         let byte_range = heading.start_byte..end_byte;
 
         // Collect code blocks that belong to this section (within its byte range
         // but not inside any child section).
-        let section_code_blocks = build_code_block_fragments(code_blocks, &byte_range, &children, source);
+        let section_code_blocks = build_code_block_fragments(code_blocks, &byte_range, &children);
 
         let mut all_children = children;
         all_children.extend(section_code_blocks);
 
-        let full_span = byte_range.clone();
         fragments.push(Fragment::new(
-            source,
             heading.name.clone(),
             FragmentKind::Section { level: heading.level },
             byte_range,
-            full_span,
             None,
             FragmentMetadata::Document {
                 index: index_offset + fragments.len(),
@@ -242,7 +236,6 @@ fn build_code_block_fragments(
     code_blocks: &[CodeBlock],
     section_range: &Range<usize>,
     child_sections: &[Fragment],
-    source: &str,
 ) -> Vec<Fragment> {
     code_blocks
         .iter()
@@ -259,11 +252,9 @@ fn build_code_block_fragments(
         .enumerate()
         .map(|(idx, cb)| {
             Fragment::new(
-                source,
                 cb.lang.clone().unwrap_or_default(),
                 FragmentKind::CodeBlock { lang: cb.lang.clone() },
                 cb.content_range.clone(),
-                cb.block_range.clone(),
                 None,
                 FragmentMetadata::CodeBlock { index: idx },
                 cb.block_range.start,

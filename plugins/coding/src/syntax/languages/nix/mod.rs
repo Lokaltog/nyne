@@ -94,7 +94,17 @@ fn build_binding_fragment(node: TsNode<'_>, source: &str, parent_name: Option<&s
     let value_kind = binding_value_kind(node);
     let is_attrset = matches!(value_kind, Some("attrset_expression" | "rec_attrset_expression"));
 
+    let parent = Some(name.clone());
+
     let mut children = Vec::new();
+    if let Some(range) = doc_range {
+        children.push(Fragment::structural(
+            "docstring",
+            FragmentKind::Docstring,
+            range,
+            parent,
+        ));
+    }
     if is_attrset {
         collect_nix_fragments(node, source, &mut children, Some(&name));
     }
@@ -105,9 +115,6 @@ fn build_binding_fragment(node: TsNode<'_>, source: &str, parent_name: Option<&s
         SymbolKind::Variable
     };
 
-    let node_range = node.byte_range();
-    let full_span = NixLanguage::full_symbol_range(&node_range, doc_range.as_ref(), None);
-
     build_code_fragment(
         node,
         CodeFragmentSpec {
@@ -116,9 +123,6 @@ fn build_binding_fragment(node: TsNode<'_>, source: &str, parent_name: Option<&s
             signature,
             name_byte_offset: node.start_byte(),
             visibility: None,
-            doc_comment_range: doc_range,
-            decorator_range: None,
-            full_span,
             children,
         },
         parent_name,

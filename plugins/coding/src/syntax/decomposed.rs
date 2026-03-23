@@ -55,12 +55,12 @@ fn decompose_source(
 ) -> Result<Arc<DecomposedSource>> {
     let raw = real_fs.read(source_path)?;
     let source = String::from_utf8(raw)?;
-    let (mut file, tree) = decomposer.decompose(&source, DEFAULT_MAX_DEPTH);
-    decomposer.map_to_fs(&mut file.fragments);
-    resolve_conflicts(&mut file.fragments, decomposer);
+    let (mut fragments, tree) = decomposer.decompose(&source, DEFAULT_MAX_DEPTH);
+    decomposer.map_to_fs(&mut fragments);
+    resolve_conflicts(&mut fragments, decomposer);
     Ok(Arc::new(DecomposedSource {
         source,
-        decomposed: file,
+        decomposed: fragments,
         decomposer: Arc::clone(decomposer),
         tree,
     }))

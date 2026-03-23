@@ -15,19 +15,19 @@ fn basic() -> DecomposedFile {
 /// Top-level: 5 bindings (name, version, buildInputs, meta, shellHook).
 #[rstest]
 fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.fragments.len(), 5);
+    assert_eq!(basic.len(), 5);
 }
 
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
+    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, &["name", "version", "buildInputs", "meta", "shellHook"]);
 }
 
 /// Simple bindings are Variables, attrset binding is Module.
 #[rstest]
 fn fragment_kinds(basic: DecomposedFile) {
-    let kinds: Vec<_> = basic.fragments.iter().map(|f| &f.kind).collect();
+    let kinds: Vec<_> = basic.iter().map(|f| &f.kind).collect();
     assert_eq!(kinds, &[
         &FragmentKind::Symbol(SymbolKind::Variable),
         &FragmentKind::Symbol(SymbolKind::Variable),
@@ -40,7 +40,7 @@ fn fragment_kinds(basic: DecomposedFile) {
 /// `meta` has nested attrset children (one level of decomposition).
 #[rstest]
 fn meta_children(basic: DecomposedFile) {
-    let meta = basic.fragments.iter().find(|f| f.name == "meta").unwrap();
+    let meta = basic.iter().find(|f| f.name == "meta").unwrap();
     let child_names: Vec<_> = meta.children.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(child_names, &["description", "license", "maintainers"]);
 }
@@ -48,5 +48,6 @@ fn meta_children(basic: DecomposedFile) {
 /// No imports in Nix (currently).
 #[rstest]
 fn no_imports(basic: DecomposedFile) {
-    assert!(basic.imports.is_none());
+    use crate::syntax::fragment::find_fragment_of_kind;
+    assert!(find_fragment_of_kind(&basic, &FragmentKind::Imports).is_none());
 }

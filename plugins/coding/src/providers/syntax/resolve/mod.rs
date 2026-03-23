@@ -32,7 +32,7 @@ pub(super) struct DecompositionContext {
 impl DecompositionContext {
     /// Look up a fragment by path within the cached decomposition.
     pub(super) fn find_fragment<'a>(&'a self, path: &[String]) -> Option<&'a Fragment> {
-        find_fragment(&self.shared.decomposed.fragments, path)
+        find_fragment(&self.shared.decomposed, path)
     }
 }
 
@@ -117,6 +117,7 @@ impl SyntaxProvider {
 
 pub(super) fn build_fragment_nodes(
     fragments: &[Fragment],
+    source: &str,
     source_file: &VfsPath,
     parent_path: &[String],
     activation: &Arc<ActivationContext>,
@@ -127,7 +128,7 @@ pub(super) fn build_fragment_nodes(
         .filter_map(|frag| {
             let fs_name = frag.fs_name.as_deref()?;
             let dirname = format!("{fs_name}{COMPANION_SUFFIX}");
-            let meta = SymbolLineRange::from_zero_based(&frag.line_range);
+            let meta = SymbolLineRange::from_zero_based(&frag.line_range(source));
             let mut node = VirtualNode::directory(dirname).prop(meta);
 
             let mut frag_path = parent_path.to_vec();

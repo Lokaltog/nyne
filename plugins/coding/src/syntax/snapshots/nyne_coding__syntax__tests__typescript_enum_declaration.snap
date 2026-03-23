@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"ts\", \"export enum Color {\\n    Red,\\n    Green,\\n    Blue,\\n}\\n\")"
 ---
 [
     Fragment {
@@ -9,8 +9,6 @@ expression: result.fragments
             Enum,
         ),
         byte_range: 0..51,
-        full_span: 0..51,
-        line_range: 0..5,
         signature: Some(
             "export enum Color",
         ),
@@ -18,8 +16,6 @@ expression: result.fragments
             visibility: Some(
                 "export",
             ),
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 12,
         children: [],

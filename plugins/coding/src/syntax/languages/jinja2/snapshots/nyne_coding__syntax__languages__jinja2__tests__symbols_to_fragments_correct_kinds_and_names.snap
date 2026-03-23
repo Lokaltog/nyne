@@ -1,5 +1,5 @@
 ---
-source: nyne-coding/src/syntax/languages/jinja2/tests.rs
+source: plugins/coding/src/syntax/languages/jinja2/tests.rs
 expression: fragments
 ---
 [
@@ -9,15 +9,11 @@ expression: fragments
             Module,
         ),
         byte_range: 0..36,
-        full_span: 0..36,
-        line_range: 0..1,
         signature: Some(
             "{% block title %}",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 9,
         children: [],
@@ -30,15 +26,11 @@ expression: fragments
             Variable,
         ),
         byte_range: 37..52,
-        full_span: 37..52,
-        line_range: 1..2,
         signature: Some(
             "{% set x = 1 %}",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 44,
         children: [],

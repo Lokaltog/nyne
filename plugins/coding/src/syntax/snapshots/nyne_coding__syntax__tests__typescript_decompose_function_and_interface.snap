@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"ts\", source)"
 ---
 [
     Fragment {
@@ -9,8 +9,6 @@ expression: result.fragments
             Function,
         ),
         byte_range: 0..81,
-        full_span: 0..81,
-        line_range: 0..3,
         signature: Some(
             "export function greet(name: string): void",
         ),
@@ -18,8 +16,6 @@ expression: result.fragments
             visibility: Some(
                 "export",
             ),
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 16,
         children: [],
@@ -32,15 +28,11 @@ expression: result.fragments
             Interface,
         ),
         byte_range: 83..139,
-        full_span: 83..139,
-        line_range: 4..8,
         signature: Some(
             "interface Config",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 93,
         children: [],

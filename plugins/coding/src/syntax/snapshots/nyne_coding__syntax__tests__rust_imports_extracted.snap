@@ -1,11 +1,19 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.imports
+source: plugins/coding/src/syntax/tests.rs
+expression: "super::fragment::find_fragment_of_kind(&result, FragmentKind::Imports)"
 ---
 Some(
-    ImportSpan {
+    Fragment {
+        name: "imports",
+        kind: Imports,
         byte_range: 0..26,
-        line_range: 0..2,
-        content: "use std::io;\nuse std::fmt;",
+        signature: None,
+        metadata: Code {
+            visibility: None,
+        },
+        name_byte_offset: 0,
+        children: [],
+        parent_name: None,
+        fs_name: None,
     },
 )

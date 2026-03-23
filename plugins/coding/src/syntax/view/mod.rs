@@ -44,12 +44,11 @@ impl Object for FragmentView {
             "kind" => Some(Value::from(format_kind(&self.frag))),
             "visibility" => Some(Value::from(self.visibility())),
             "signature" => self.frag.signature.as_deref().map(Value::from),
-            "line_range" => Some(Value::from(format!(
-                "{}-{}",
-                self.frag.line_range.start + 1,
-                self.frag.line_range.end
-            ))),
-            "bytes" => Some(Value::from(self.frag.full_span.len())),
+            "line_range" => {
+                let lr = self.frag.line_range(&self.shared.source);
+                Some(Value::from(format!("{}-{}", lr.start + 1, lr.end)))
+            }
+            "bytes" => Some(Value::from(self.frag.full_span().len())),
             "children" => Some(fragment_list(&self.frag.children, &self.shared)),
             "child_count" => {
                 let count = self
@@ -99,14 +98,11 @@ impl Object for FragmentView {
 impl FragmentView {
     /// Extract the description: doc comment first line, or first content line for sections.
     fn description(&self) -> String {
+        if let Some(doc) = self.frag.child_of_kind(&FragmentKind::Docstring) {
+            let raw = &self.shared.source[doc.byte_range.clone()];
+            return self.shared.decomposer.clean_doc_comment(raw).unwrap_or_default();
+        }
         match &self.frag.metadata {
-            FragmentMetadata::Code {
-                doc_comment_range: Some(range),
-                ..
-            } => {
-                let raw = &self.shared.source[range.clone()];
-                self.shared.decomposer.clean_doc_comment(raw).unwrap_or_default()
-            }
             FragmentMetadata::Document { .. } => {
                 let body = &self.shared.source[self.frag.byte_range.clone()];
                 section_first_line(body).unwrap_or_default()
@@ -145,6 +141,9 @@ pub fn fragment_list(fragments: &[Fragment], shared: &Arc<DecomposedSource>) -> 
 fn format_kind(frag: &Fragment) -> String {
     match &frag.kind {
         FragmentKind::Symbol(k) => k.to_string(),
+        FragmentKind::Docstring => "Docstring".into(),
+        FragmentKind::Imports => "Imports".into(),
+        FragmentKind::Decorator => "Decorator".into(),
         FragmentKind::Section { level } => format!("h{level}"),
         FragmentKind::CodeBlock { lang } => lang
             .as_ref()

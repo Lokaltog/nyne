@@ -15,7 +15,7 @@ use super::FragmentResolver;
 use super::overview::SymbolOverviewContent;
 use crate::edit::splice::{indent_at, line_start_of, splice_validate_write};
 use crate::syntax::decomposed::DecomposedSource;
-use crate::syntax::fragment::{Fragment, FragmentMetadata};
+use crate::syntax::fragment::{Fragment, FragmentKind, find_fragment_of_kind};
 use crate::syntax::spec::{Decomposer, SpliceMode};
 use crate::syntax::{self};
 
@@ -54,7 +54,7 @@ pub(in crate::providers::syntax) struct SignatureContent {
 impl Readable for SignatureContent {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
-        let frag = syntax::require_fragment(&shared.decomposed.fragments, &self.fragment_path)?;
+        let frag = syntax::require_fragment(&shared.decomposed, &self.fragment_path)?;
         let sig = frag
             .signature
             .as_deref()
@@ -72,17 +72,13 @@ pub(in crate::providers::syntax) struct DocstringContent {
 impl Readable for DocstringContent {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
-        let frag = syntax::require_fragment(&shared.decomposed.fragments, &self.fragment_path)?;
-        match &frag.metadata {
-            FragmentMetadata::Code {
-                doc_comment_range: Some(range),
-                ..
-            } => {
-                let comment = &shared.source[range.clone()];
-                Ok(shared.decomposer.strip_doc_comment(comment).into_bytes())
-            }
-            _ => eyre::bail!("no doc comment on fragment {:?}", self.fragment_path),
-        }
+        let frag = syntax::require_fragment(&shared.decomposed, &self.fragment_path)?;
+        let range = frag
+            .child_of_kind(&FragmentKind::Docstring)
+            .map(|c| &c.byte_range)
+            .ok_or_else(|| eyre::eyre!("no doc comment on fragment {:?}", self.fragment_path))?;
+        let comment = &shared.source[range.clone()];
+        Ok(shared.decomposer.strip_doc_comment(comment).into_bytes())
     }
 }
 
@@ -95,24 +91,20 @@ pub(in crate::providers::syntax) struct DecoratorsContent {
 impl Readable for DecoratorsContent {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
-        let frag = syntax::require_fragment(&shared.decomposed.fragments, &self.fragment_path)?;
-        match &frag.metadata {
-            FragmentMetadata::Code {
-                decorator_range: Some(range),
-                ..
-            } => {
-                let start = line_start_of(&shared.source, range.start);
-                let bytes = shared.source.as_bytes().get(start..range.end).ok_or_else(|| {
-                    eyre::eyre!(
-                        "decorator range {start}..{} out of bounds for {:?}",
-                        range.end,
-                        self.fragment_path,
-                    )
-                })?;
-                Ok(bytes.to_vec())
-            }
-            _ => eyre::bail!("no decorator range on fragment {:?}", self.fragment_path),
-        }
+        let frag = syntax::require_fragment(&shared.decomposed, &self.fragment_path)?;
+        let range = frag
+            .child_of_kind(&FragmentKind::Decorator)
+            .map(|c| &c.byte_range)
+            .ok_or_else(|| eyre::eyre!("no decorator range on fragment {:?}", self.fragment_path))?;
+        let start = line_start_of(&shared.source, range.start);
+        let bytes = shared.source.as_bytes().get(start..range.end).ok_or_else(|| {
+            eyre::eyre!(
+                "decorator range {start}..{} out of bounds for {:?}",
+                range.end,
+                self.fragment_path,
+            )
+        })?;
+        Ok(bytes.to_vec())
     }
 }
 
@@ -147,13 +139,10 @@ impl MetaSplice {
     fn resolve(&self) -> Result<ResolvedSplice> {
         let shared = self.resolver.decompose()?;
         let source = &shared.source;
-        let frags = &shared.decomposed.fragments;
+        let frags = &shared.decomposed;
         let byte_range = match &self.target {
             SpliceTarget::Imports => {
-                let imports = shared
-                    .decomposed
-                    .imports
-                    .as_ref()
+                let imports = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Imports)
                     .ok_or_else(|| eyre::eyre!("no import span in {}", self.resolver.source_file()))?;
                 let start = line_start_of(source, imports.byte_range.start);
                 start..imports.byte_range.end
@@ -162,10 +151,11 @@ impl MetaSplice {
                 let frag = syntax::require_fragment(frags, path)?;
                 match shared.decomposer.splice_mode() {
                     SpliceMode::Line => {
-                        let start = line_start_of(source, frag.full_span.start);
-                        start..frag.full_span.end
+                        let span = frag.full_span();
+                        let start = line_start_of(source, span.start);
+                        start..span.end
                     }
-                    SpliceMode::Byte => frag.full_span.clone(),
+                    SpliceMode::Byte => frag.full_span(),
                 }
             }
             SpliceTarget::FragmentSignature(path) => {
@@ -178,26 +168,18 @@ impl MetaSplice {
             }
             SpliceTarget::FragmentDocComment(path) => {
                 let frag = syntax::require_fragment(frags, path)?;
-                match &frag.metadata {
-                    FragmentMetadata::Code {
-                        doc_comment_range: Some(range),
-                        ..
-                    } => range.clone(),
-                    _ => eyre::bail!("no doc comment range on fragment {path:?}"),
-                }
+                frag.child_of_kind(&FragmentKind::Docstring)
+                    .map(|c| c.byte_range.clone())
+                    .ok_or_else(|| eyre::eyre!("no doc comment range on fragment {path:?}"))?
             }
             SpliceTarget::FragmentDecorators(path) => {
                 let frag = syntax::require_fragment(frags, path)?;
-                match &frag.metadata {
-                    FragmentMetadata::Code {
-                        decorator_range: Some(range),
-                        ..
-                    } => {
-                        let start = line_start_of(source, range.start);
-                        start..range.end
-                    }
-                    _ => eyre::bail!("no decorator range on fragment {path:?}"),
-                }
+                let range = frag
+                    .child_of_kind(&FragmentKind::Decorator)
+                    .map(|c| &c.byte_range)
+                    .ok_or_else(|| eyre::eyre!("no decorator range on fragment {path:?}"))?;
+                let start = line_start_of(source, range.start);
+                start..range.end
             }
             SpliceTarget::CodeBlockBody { parent_path, fs_name } => {
                 let parent = syntax::require_fragment(frags, parent_path)?;
@@ -353,11 +335,8 @@ pub(in crate::providers::syntax) fn build_meta_nodes(
         nodes.push(newline::with_newline_middlewares(node));
     }
 
-    // docstring.txt — only for Code fragments with a doc comment range.
-    if matches!(&frag.metadata, FragmentMetadata::Code {
-        doc_comment_range: Some(_),
-        ..
-    }) {
+    // docstring.txt — only for fragments with a docstring child.
+    if frag.child_of_kind(&FragmentKind::Docstring).is_some() {
         let node = VirtualNode::file(FILE_DOCSTRING, DocstringContent {
             resolver: resolver.clone(),
             fragment_path: path.clone(),
@@ -371,11 +350,8 @@ pub(in crate::providers::syntax) fn build_meta_nodes(
         nodes.push(newline::with_newline_middlewares(node));
     }
 
-    // decorators.<ext> — only for Code fragments with a decorator range.
-    if matches!(&frag.metadata, FragmentMetadata::Code {
-        decorator_range: Some(_),
-        ..
-    }) {
+    // decorators.<ext> — only for fragments with a decorator child.
+    if frag.child_of_kind(&FragmentKind::Decorator).is_some() {
         let name = format!("{FILE_DECORATORS}.{ext}");
         let node = VirtualNode::file(&name, DecoratorsContent {
             resolver: resolver.clone(),

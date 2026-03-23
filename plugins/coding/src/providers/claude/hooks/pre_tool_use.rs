@@ -126,7 +126,7 @@ impl PreToolUse {
         else {
             return HookOutput::empty();
         };
-        if decomposed.decomposed.fragments.is_empty() {
+        if decomposed.decomposed.is_empty() {
             return HookOutput::empty();
         }
 
@@ -148,8 +148,9 @@ impl PreToolUse {
                     .and_then(|r| r.offset)
                     .unwrap_or(0);
                 resolve_symbol_at_line(
-                    &decomposed.decomposed.fragments,
+                    &decomposed.decomposed,
                     usize::try_from(offset).unwrap_or(usize::MAX),
+                    &decomposed.source,
                 )
             }
             "Edit" => input
@@ -158,7 +159,7 @@ impl PreToolUse {
                 .and_then(|old| find_line_of_string(overlay, rel, &old))
                 .and_then(|line| {
                     let line = usize::try_from(line).unwrap_or(usize::MAX);
-                    resolve_symbol_at_line(&decomposed.decomposed.fragments, line.saturating_sub(1))
+                    resolve_symbol_at_line(&decomposed.decomposed, line.saturating_sub(1), &decomposed.source)
                 }),
             _ => None,
         };
@@ -182,7 +183,7 @@ impl PreToolUse {
         };
 
         let config = minijinja::Value::from_serialize(&policy);
-        let fragments = fragment_list(&decomposed.decomposed.fragments, &decomposed);
+        let fragments = fragment_list(&decomposed.decomposed, &decomposed);
         let view = minijinja::context! { mode, tool_name, rel, sym, ext, fragments, config, total_lines, total_bytes };
         let rendered = self.engine.render(TMPL_PRE, &view);
         let trimmed = rendered.trim();
@@ -285,7 +286,7 @@ fn find_line_of_string(overlay_root: &Path, rel: &str, needle: &str) -> Option<u
 }
 
 /// Resolve a 0-based line number to a VFS symbol `fs_name` path.
-fn resolve_symbol_at_line(fragments: &[Fragment], line: usize) -> Option<String> {
-    let path = find_fragment_at_line(fragments, line)?;
+fn resolve_symbol_at_line(fragments: &[Fragment], line: usize, source: &str) -> Option<String> {
+    let path = find_fragment_at_line(fragments, line, source)?;
     Some(path.join(names::VFS_SEP))
 }

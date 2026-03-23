@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"rs\", source)"
 ---
 [
     Fragment {
@@ -9,8 +9,6 @@ expression: result.fragments
             Struct,
         ),
         byte_range: 0..30,
-        full_span: 0..30,
-        line_range: 0..3,
         signature: Some(
             "pub struct Foo",
         ),
@@ -18,8 +16,6 @@ expression: result.fragments
             visibility: Some(
                 "pub",
             ),
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 11,
         children: [],
@@ -32,15 +28,11 @@ expression: result.fragments
             Impl,
         ),
         byte_range: 32..99,
-        full_span: 32..99,
-        line_range: 4..9,
         signature: Some(
             "impl Foo",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 32,
         children: [
@@ -50,8 +42,6 @@ expression: result.fragments
                     Function,
                 ),
                 byte_range: 47..97,
-                full_span: 47..97,
-                line_range: 5..8,
                 signature: Some(
                     "pub fn new() -> Self",
                 ),
@@ -59,8 +49,6 @@ expression: result.fragments
                     visibility: Some(
                         "pub",
                     ),
-                    doc_comment_range: None,
-                    decorator_range: None,
                 },
                 name_byte_offset: 54,
                 children: [],

@@ -7,7 +7,7 @@
 
 use std::ops::Range;
 
-use super::fragment::{Fragment, FragmentMetadata};
+use super::fragment::Fragment;
 
 /// Maps virtual byte offsets (in concatenated content regions) to real byte
 /// offsets (in the original compound file).
@@ -159,30 +159,13 @@ impl SpanMap {
 
     /// Deep-remap all byte-offset fields in a fragment and its children.
     ///
-    /// Remapped fields: `byte_range`, `full_span`, `name_byte_offset`,
-    /// and (for `Code` metadata) `doc_comment_range`, `decorator_range`.
+    /// Remapped fields: `byte_range`, `name_byte_offset`.
     ///
-    /// `line_range` is **not** remapped — callers must recompute it from
-    /// the original source after remapping (it depends on newline positions
-    /// in the real file, not the virtual content).
+    /// `full_span()` and `line_range()` are derived methods — they recompute
+    /// from `byte_range` and children, so no explicit remapping is needed.
     pub(crate) fn remap_fragment(&self, mut fragment: Fragment) -> Fragment {
         fragment.byte_range = self.remap_range(fragment.byte_range);
-        fragment.full_span = self.remap_range(fragment.full_span);
         fragment.name_byte_offset = self.to_real(fragment.name_byte_offset);
-
-        if let FragmentMetadata::Code {
-            ref mut doc_comment_range,
-            ref mut decorator_range,
-            ..
-        } = fragment.metadata
-        {
-            if let Some(range) = doc_comment_range.take() {
-                *doc_comment_range = Some(self.remap_range(range));
-            }
-            if let Some(range) = decorator_range.take() {
-                *decorator_range = Some(self.remap_range(range));
-            }
-        }
 
         fragment.children = fragment.children.into_iter().map(|c| self.remap_fragment(c)).collect();
 

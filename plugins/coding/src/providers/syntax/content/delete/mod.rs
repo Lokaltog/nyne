@@ -36,7 +36,7 @@ impl SymbolDelete {
             .get::<DecompositionCache>()
             .ok_or_else(|| eyre!("coding plugin not activated"))?
             .get(&self.source_file)?;
-        Ok((parsed.source.clone(), parsed.decomposed.fragments.clone()))
+        Ok((parsed.source.clone(), parsed.decomposed.clone()))
     }
 }
 

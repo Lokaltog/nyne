@@ -1,6 +1,6 @@
 ---
 source: plugins/coding/src/syntax/injection/tests.rs
-expression: file.fragments
+expression: file
 ---
 [
     Fragment {
@@ -9,15 +9,11 @@ expression: file.fragments
             Module,
         ),
         byte_range: 0..73,
-        full_span: 0..73,
-        line_range: 0..5,
         signature: Some(
             "{% block config %}",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 9,
         children: [],
@@ -30,15 +26,11 @@ expression: file.fragments
             Module,
         ),
         byte_range: 19..59,
-        full_span: 19..59,
-        line_range: 1..5,
         signature: Some(
             "[server]",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 19,
         children: [],

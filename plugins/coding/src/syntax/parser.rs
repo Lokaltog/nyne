@@ -6,7 +6,7 @@ use std::str::from_utf8;
 use color_eyre::eyre::{Result, eyre};
 use parking_lot::Mutex;
 
-use super::fragment::{DecomposedFile, Fragment, FragmentKind, FragmentMetadata, ImportSpan, ParseError, SymbolKind};
+use super::fragment::{DecomposedFile, Fragment, FragmentKind, FragmentMetadata, ParseError, SymbolKind};
 
 /// Ergonomic wrapper around a [`tree_sitter::Node`] paired with its source
 /// bytes, eliminating the `(node, &[u8])` parameter pairs that dominate the
@@ -131,7 +131,12 @@ pub fn merge_preceding_sibling_ranges(
     Some(start..end)
 }
 
-pub fn collect_import_span(root: TsNode<'_>, import_kinds: &[&str]) -> Option<ImportSpan> {
+/// Collect the byte range spanning all import declarations at the root level.
+///
+/// Returns `None` when the root has no children matching `import_kinds`.
+/// Trailing newlines are trimmed (same convention as
+/// [`merge_preceding_sibling_ranges`]).
+pub fn collect_import_range(root: TsNode<'_>, import_kinds: &[&str]) -> Option<Range<usize>> {
     let import_nodes: Vec<TsNode<'_>> = root
         .children()
         .filter(|child| import_kinds.contains(&child.kind()))
@@ -152,19 +157,7 @@ pub fn collect_import_span(root: TsNode<'_>, import_kinds: &[&str]) -> Option<Im
         end -= 1;
     }
 
-    let byte_range = start..end;
-    let line_range = first.raw().start_position().row..last.raw().end_position().row + 1;
-    let content = source
-        .get(byte_range.clone())
-        .and_then(|s| from_utf8(s).ok())
-        .unwrap_or("")
-        .to_owned();
-
-    Some(ImportSpan {
-        byte_range,
-        line_range,
-        content,
-    })
+    Some(start..end)
 }
 
 /// Walk a tree-sitter tree and collect all ERROR and MISSING nodes.
@@ -211,39 +204,25 @@ fn collect_errors_recursive(cursor: &mut tree_sitter::TreeCursor<'_>, source: &[
 ///
 /// Collects all the language-specific data extracted from a tree-sitter node
 /// into a single struct, so `build_code_fragment` can handle the common
-/// range-extension and `Fragment` assembly logic.
+/// `Fragment` assembly logic.
 pub struct CodeFragmentSpec {
     pub name: String,
     pub kind: SymbolKind,
     pub signature: String,
     pub name_byte_offset: usize,
     pub visibility: Option<String>,
-    pub doc_comment_range: Option<Range<usize>>,
-    pub decorator_range: Option<Range<usize>>,
-    /// Pre-computed full symbol range (decorators + doc + signature + body).
-    /// Computed by [`LanguageSpec::full_symbol_range`](super::spec::LanguageSpec::full_symbol_range) in the caller.
-    pub full_span: Range<usize>,
     pub children: Vec<Fragment>,
 }
 
 /// Build a [`Fragment`] from a tree-sitter node and a [`CodeFragmentSpec`].
-///
-/// Handles the common logic of extending byte/line ranges to cover preceding
-/// doc comments and assembling the final `Fragment` struct via [`Fragment::new`].
 pub fn build_code_fragment(span_node: TsNode<'_>, spec: CodeFragmentSpec, parent_name: Option<&str>) -> Fragment {
-    let source = span_node.source_str();
-
     Fragment::new(
-        source,
         spec.name,
         FragmentKind::Symbol(spec.kind),
         span_node.byte_range(),
-        spec.full_span,
         Some(spec.signature),
         FragmentMetadata::Code {
             visibility: spec.visibility,
-            doc_comment_range: spec.doc_comment_range,
-            decorator_range: spec.decorator_range,
         },
         spec.name_byte_offset,
         spec.children,
@@ -326,8 +305,9 @@ impl TreeSitterParser {
             .unwrap_or_default()
     }
 
-    /// Run the standard decomposition pipeline: parse -> extract fragments ->
-    /// collect imports -> extract file doc.
+    /// Run the standard decomposition pipeline: parse → extract fragments →
+    /// collect imports → extract file doc. All results are unified into
+    /// `DecomposedFile.fragments`, sorted by byte position.
     ///
     /// Language-specific behavior is injected via closures.
     pub fn decompose(
@@ -336,21 +316,26 @@ impl TreeSitterParser {
         max_depth: usize,
         import_kinds: &[&str],
         extract_fragments: impl FnOnce(TsNode<'_>, usize) -> Vec<Fragment>,
-        extract_file_doc: impl FnOnce(TsNode<'_>) -> Option<String>,
+        extract_file_doc_range: impl FnOnce(TsNode<'_>) -> Option<Range<usize>>,
     ) -> (DecomposedFile, Option<tree_sitter::Tree>) {
         let Some(tree) = self.parse(source) else {
-            return (DecomposedFile::empty(), None);
+            return (Vec::new(), None);
         };
         let src = source.as_bytes();
         let root = TsNode::new(tree.root_node(), src);
-        let fragments = extract_fragments(root, max_depth);
-        let imports = collect_import_span(root, import_kinds);
-        let file_doc = extract_file_doc(root);
-        let file = DecomposedFile {
-            fragments,
-            imports,
-            file_doc,
-        };
-        (file, Some(tree))
+        let mut fragments = extract_fragments(root, max_depth);
+
+        if let Some(range) = collect_import_range(root, import_kinds) {
+            fragments.push(Fragment::structural("imports", FragmentKind::Imports, range, None));
+        }
+
+        if let Some(range) = extract_file_doc_range(root) {
+            fragments.push(Fragment::structural("file_doc", FragmentKind::Docstring, range, None));
+        }
+
+        // Natural source order: file_doc → imports → preamble → symbols.
+        fragments.sort_by_key(|f| f.byte_range.start);
+
+        (fragments, Some(tree))
     }
 }

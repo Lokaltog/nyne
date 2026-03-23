@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"rs\", \"pub fn hello() {}\\n\")"
 ---
 [
     Fragment {
@@ -9,8 +9,6 @@ expression: result.fragments
             Function,
         ),
         byte_range: 0..17,
-        full_span: 0..17,
-        line_range: 0..1,
         signature: Some(
             "pub fn hello()",
         ),
@@ -18,8 +16,6 @@ expression: result.fragments
             visibility: Some(
                 "pub",
             ),
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 7,
         children: [],

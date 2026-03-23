@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"py\", \"@app.route('/')\\ndef index():\\n    pass\\n\")"
 ---
 [
     Fragment {
@@ -9,20 +9,30 @@ expression: result.fragments
             Function,
         ),
         byte_range: 0..37,
-        full_span: 0..37,
-        line_range: 0..3,
         signature: Some(
             "@app.route('/')",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: Some(
-                0..15,
-            ),
         },
         name_byte_offset: 20,
-        children: [],
+        children: [
+            Fragment {
+                name: "decorators",
+                kind: Decorator,
+                byte_range: 0..15,
+                signature: None,
+                metadata: Code {
+                    visibility: None,
+                },
+                name_byte_offset: 0,
+                children: [],
+                parent_name: Some(
+                    "index",
+                ),
+                fs_name: None,
+            },
+        ],
         parent_name: None,
         fs_name: None,
     },

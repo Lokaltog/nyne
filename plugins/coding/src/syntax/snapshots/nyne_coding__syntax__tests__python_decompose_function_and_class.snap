@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"py\", source)"
 ---
 [
     Fragment {
@@ -9,20 +9,30 @@ expression: result.fragments
             Function,
         ),
         byte_range: 0..70,
-        full_span: 0..70,
-        line_range: 0..3,
         signature: Some(
             "def greet(name):",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: Some(
-                21..41,
-            ),
-            decorator_range: None,
         },
         name_byte_offset: 4,
-        children: [],
+        children: [
+            Fragment {
+                name: "docstring",
+                kind: Docstring,
+                byte_range: 21..41,
+                signature: None,
+                metadata: Code {
+                    visibility: None,
+                },
+                name_byte_offset: 21,
+                children: [],
+                parent_name: Some(
+                    "greet",
+                ),
+                fs_name: None,
+            },
+        ],
         parent_name: None,
         fs_name: None,
     },
@@ -32,15 +42,11 @@ expression: result.fragments
             Class,
         ),
         byte_range: 72..140,
-        full_span: 72..140,
-        line_range: 4..7,
         signature: Some(
             "class Person:",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 78,
         children: [
@@ -50,15 +56,11 @@ expression: result.fragments
                     Function,
                 ),
                 byte_range: 90..140,
-                full_span: 90..140,
-                line_range: 5..7,
                 signature: Some(
                     "def __init__(self, name):",
                 ),
                 metadata: Code {
                     visibility: None,
-                    doc_comment_range: None,
-                    decorator_range: None,
                 },
                 name_byte_offset: 94,
                 children: [],

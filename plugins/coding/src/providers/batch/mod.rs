@@ -261,7 +261,7 @@ impl Writable for StagingWriter {
             .ok_or_else(|| eyre!("coding plugin not activated"))?
             .get(&self.key.source_file)?;
 
-        let action = resolve_anchor(self.anchor, &self.key.fragment_path, data, &parsed.decomposed.fragments)?;
+        let action = resolve_anchor(self.anchor, &self.key.fragment_path, data, &parsed.decomposed)?;
 
         let mut map = self.batches.write();
         let batch = map.entry(self.key.clone()).or_insert_with(StagedBatch::new);

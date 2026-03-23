@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"md\", source)"
 ---
 [
     Fragment {
@@ -9,8 +9,6 @@ expression: result.fragments
             level: 1,
         },
         byte_range: 0..102,
-        full_span: 0..102,
-        line_range: 0..13,
         signature: None,
         metadata: Document {
             index: 0,
@@ -23,8 +21,6 @@ expression: result.fragments
                     level: 2,
                 },
                 byte_range: 37..75,
-                full_span: 37..75,
-                line_range: 4..9,
                 signature: None,
                 metadata: Document {
                     index: 0,
@@ -40,8 +36,6 @@ expression: result.fragments
                     level: 2,
                 },
                 byte_range: 75..102,
-                full_span: 75..102,
-                line_range: 8..13,
                 signature: None,
                 metadata: Document {
                     index: 1,
@@ -61,8 +55,6 @@ expression: result.fragments
             level: 1,
         },
         byte_range: 102..133,
-        full_span: 102..133,
-        line_range: 12..16,
         signature: None,
         metadata: Document {
             index: 1,

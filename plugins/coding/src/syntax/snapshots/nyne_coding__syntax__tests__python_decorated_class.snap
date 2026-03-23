@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y: int\\n\")"
 ---
 [
     Fragment {
@@ -9,35 +9,40 @@ expression: result.fragments
             Class,
         ),
         byte_range: 0..45,
-        full_span: 0..45,
-        line_range: 0..4,
         signature: Some(
             "@dataclass",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: Some(
-                0..10,
-            ),
         },
         name_byte_offset: 17,
         children: [
+            Fragment {
+                name: "decorators",
+                kind: Decorator,
+                byte_range: 0..10,
+                signature: None,
+                metadata: Code {
+                    visibility: None,
+                },
+                name_byte_offset: 0,
+                children: [],
+                parent_name: Some(
+                    "Point",
+                ),
+                fs_name: None,
+            },
             Fragment {
                 name: "x",
                 kind: Symbol(
                     Variable,
                 ),
                 byte_range: 28..34,
-                full_span: 28..34,
-                line_range: 2..3,
                 signature: Some(
                     "x: int",
                 ),
                 metadata: Code {
                     visibility: None,
-                    doc_comment_range: None,
-                    decorator_range: None,
                 },
                 name_byte_offset: 28,
                 children: [],
@@ -52,15 +57,11 @@ expression: result.fragments
                     Variable,
                 ),
                 byte_range: 39..45,
-                full_span: 39..45,
-                line_range: 3..4,
                 signature: Some(
                     "y: int",
                 ),
                 metadata: Code {
                     visibility: None,
-                    doc_comment_range: None,
-                    decorator_range: None,
                 },
                 name_byte_offset: 39,
                 children: [],

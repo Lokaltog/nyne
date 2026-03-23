@@ -4,6 +4,7 @@
 //! [`DecomposedFile`] holds the results of decomposing a complete file.
 
 use std::fmt::{self, Display, Formatter};
+use std::iter;
 use std::ops::Range;
 
 use nyne::types::line_of_byte;
@@ -49,6 +50,14 @@ impl SymbolKind {
 pub enum FragmentKind {
     /// A source-code symbol (function, struct, impl block, etc.).
     Symbol(SymbolKind),
+    /// A doc comment — file-level (`//!`) or symbol-level (`///`).
+    /// Appears as a child of its owning symbol, or at the top level for
+    /// file-level documentation.
+    Docstring,
+    /// A contiguous block of import/use declarations.
+    Imports,
+    /// Decorators or attributes preceding a symbol definition.
+    Decorator,
     /// A document section identified by a heading level.
     Section { level: u8 },
     /// A fenced code block inside a document section.
@@ -63,6 +72,9 @@ impl Display for FragmentKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Symbol(kind) => write!(f, "{kind}"),
+            Self::Docstring => write!(f, "Docstring"),
+            Self::Imports => write!(f, "Imports"),
+            Self::Decorator => write!(f, "Decorator"),
             Self::Section { level } => write!(f, "Section(h{level})"),
             Self::CodeBlock { lang: Some(lang) } => write!(f, "CodeBlock({lang})"),
             Self::CodeBlock { lang: None } => write!(f, "CodeBlock"),
@@ -75,35 +87,24 @@ impl Display for FragmentKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FragmentMetadata {
     /// Metadata for source-code fragments.
-    Code {
-        visibility: Option<String>,
-        doc_comment_range: Option<Range<usize>>,
-        /// Byte range of decorators/attributes preceding the symbol definition.
-        decorator_range: Option<Range<usize>>,
-    },
+    Code { visibility: Option<String> },
     /// Metadata for document fragments (e.g. markdown sections).
     Document { index: usize },
     /// Metadata for fenced code blocks inside document sections.
     CodeBlock { index: usize },
 }
 
-/// A single decomposed piece of a file — either a code symbol or a document
-/// section.
+/// A single decomposed piece of a file — a code symbol, docstring, import
+/// block, decorator, or document section.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fragment {
     pub name: String,
     pub kind: FragmentKind,
-    /// Byte range of the tree-sitter node (or wrapper node for decorated
-    /// definitions). Does NOT include preceding doc comments or decorators
-    /// that live outside the node — use `full_span` for the complete range.
+    /// Byte range of this fragment's own content. For symbols, this is the
+    /// tree-sitter node range (excluding doc comments and decorators, which
+    /// are separate child fragments). Use [`full_span()`](Self::full_span)
+    /// for the bounding box including children.
     pub byte_range: Range<usize>,
-    /// Byte range covering the complete symbol definition: decorators + doc
-    /// comment + signature + body. Computed at decomposition time by
-    /// [`LanguageSpec::full_symbol_range`](super::spec::LanguageSpec::full_symbol_range) (bounding box of all components).
-    ///
-    /// For document fragments, equals `byte_range`.
-    pub full_span: Range<usize>,
-    pub line_range: Range<usize>,
     pub signature: Option<String>,
     pub metadata: FragmentMetadata,
     /// Byte offset of the name token in the source text.
@@ -112,7 +113,7 @@ pub struct Fragment {
     /// the correct position. For sections and synthetic names (e.g. impl
     /// blocks), this equals `byte_range.start`.
     pub name_byte_offset: usize,
-    /// Nested fragments (e.g. methods inside an impl block, nested functions).
+    /// Nested fragments: docstrings, decorators, methods, nested functions.
     pub children: Vec<Self>,
     /// Name of the parent fragment, if this fragment is nested inside another.
     pub parent_name: Option<String>,
@@ -124,31 +125,26 @@ pub struct Fragment {
 }
 
 impl Fragment {
-    /// Construct a fragment, computing `line_range` from `full_span` + `source`.
+    /// Construct a fragment.
     ///
     /// This is the single source of truth for `Fragment` assembly. All
     /// construction sites (code symbols, document sections, code blocks)
     /// must use this constructor instead of struct literals.
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        source: &str,
+    pub const fn new(
         name: String,
         kind: FragmentKind,
         byte_range: Range<usize>,
-        full_span: Range<usize>,
         signature: Option<String>,
         metadata: FragmentMetadata,
         name_byte_offset: usize,
         children: Vec<Self>,
         parent_name: Option<String>,
     ) -> Self {
-        let line_range = line_of_byte(source, full_span.start)..line_of_byte(source, full_span.end) + 1;
         Self {
             name,
             kind,
             byte_range,
-            full_span,
-            line_range,
             signature,
             metadata,
             name_byte_offset,
@@ -157,36 +153,59 @@ impl Fragment {
             fs_name: None,
         }
     }
-}
 
-/// The result of decomposing a file into its constituent fragments.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DecomposedFile {
-    pub fragments: Vec<Fragment>,
-    pub imports: Option<ImportSpan>,
-    /// First line of the file-level doc comment (e.g. `//!` in Rust, module
-    /// docstring in Python). `None` when the file has no module-level doc.
-    pub file_doc: Option<String>,
-}
-
-impl DecomposedFile {
-    /// Return an empty decomposition result (no fragments, no imports).
-    #[must_use]
-    pub const fn empty() -> Self {
-        Self {
-            fragments: Vec::new(),
-            imports: None,
-            file_doc: None,
-        }
+    /// Construct a structural fragment (docstring, decorator, imports) from a
+    /// byte range. These carry no signature, no visibility, and no children.
+    pub fn structural(
+        name: impl Into<String>,
+        kind: FragmentKind,
+        byte_range: Range<usize>,
+        parent_name: Option<String>,
+    ) -> Self {
+        let start = byte_range.start;
+        Self::new(
+            name.into(),
+            kind,
+            byte_range,
+            None,
+            FragmentMetadata::Code { visibility: None },
+            start,
+            vec![],
+            parent_name,
+        )
     }
+
+    /// Bounding box covering this fragment and all its children (docstrings,
+    /// decorators, nested symbols). Derived from `byte_range` — never stale.
+    pub fn full_span(&self) -> Range<usize> {
+        let start = iter::once(self.byte_range.start)
+            .chain(self.children.iter().map(|c| c.byte_range.start))
+            .min()
+            .unwrap_or(self.byte_range.start);
+        let end = iter::once(self.byte_range.end)
+            .chain(self.children.iter().map(|c| c.byte_range.end))
+            .max()
+            .unwrap_or(self.byte_range.end);
+        start..end
+    }
+
+    /// Line range (0-based, exclusive end) covering this fragment and all
+    /// its children. Requires the source text for byte→line conversion.
+    pub fn line_range(&self, source: &str) -> Range<usize> {
+        let span = self.full_span();
+        line_of_byte(source, span.start)..line_of_byte(source, span.end) + 1
+    }
+
+    /// Find a child fragment by kind.
+    pub fn child_of_kind(&self, kind: &FragmentKind) -> Option<&Self> { self.children.iter().find(|c| c.kind == *kind) }
 }
 
-/// A contiguous range of import declarations extracted from source code.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ImportSpan {
-    pub byte_range: Range<usize>,
-    pub line_range: Range<usize>,
-    pub content: String,
+/// A decomposed source file: a flat/tree of fragments in source order.
+pub type DecomposedFile = Vec<Fragment>;
+
+/// Find the first fragment of a given kind in a fragment slice.
+pub fn find_fragment_of_kind<'a>(fragments: &'a [Fragment], kind: &FragmentKind) -> Option<&'a Fragment> {
+    fragments.iter().find(|f| f.kind == *kind)
 }
 
 /// Default maximum nesting depth for recursive fragment extraction.

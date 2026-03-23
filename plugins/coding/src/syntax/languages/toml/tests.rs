@@ -16,12 +16,12 @@ fn basic() -> DecomposedFile {
 /// [dev-dependencies] + [[bin]] + [[bin]] = 6 fragments.
 #[rstest]
 fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.fragments.len(), 6);
+    assert_eq!(basic.len(), 6);
 }
 
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
+    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, &[
         "preamble",
         "package",
@@ -35,7 +35,7 @@ fn fragment_names(basic: DecomposedFile) {
 /// First fragment is a preamble containing bare top-level key-value pairs.
 #[rstest]
 fn preamble_is_first(basic: DecomposedFile) {
-    let first = &basic.fragments[0];
+    let first = &basic[0];
     assert_eq!(first.name, "preamble");
     assert_eq!(first.kind, FragmentKind::Preamble);
 }
@@ -43,7 +43,7 @@ fn preamble_is_first(basic: DecomposedFile) {
 /// Table sections are `Module` symbols (opaque, no children).
 #[rstest]
 fn table_sections_are_opaque(basic: DecomposedFile) {
-    for frag in &basic.fragments[1..] {
+    for frag in &basic[1..] {
         assert_eq!(
             frag.kind,
             FragmentKind::Symbol(SymbolKind::Module),
@@ -61,5 +61,6 @@ fn table_sections_are_opaque(basic: DecomposedFile) {
 /// No imports in TOML.
 #[rstest]
 fn no_imports(basic: DecomposedFile) {
-    assert!(basic.imports.is_none());
+    use crate::syntax::fragment::find_fragment_of_kind;
+    assert!(find_fragment_of_kind(&basic, &FragmentKind::Imports).is_none());
 }

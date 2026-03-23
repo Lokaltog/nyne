@@ -17,7 +17,6 @@ impl LanguageSpec for TomlLanguage {
     fn grammar(_ext: &str) -> tree_sitter::Language { tree_sitter_toml_ng::LANGUAGE.into() }
 
     fn extract_custom(root: TsNode<'_>, _max_depth: usize) -> Option<Vec<Fragment>> {
-        let source = root.source_str();
         let mut fragments = Vec::new();
         let mut cursor = root.raw().walk();
 
@@ -43,25 +42,7 @@ impl LanguageSpec for TomlLanguage {
         // Insert preamble at the front if any bare pairs were found.
         if let Some(start) = preamble_start {
             let span = start..preamble_end;
-            fragments.insert(
-                0,
-                Fragment::new(
-                    source,
-                    "preamble".to_owned(),
-                    FragmentKind::Preamble,
-                    span.clone(),
-                    span,
-                    None,
-                    FragmentMetadata::Code {
-                        visibility: None,
-                        doc_comment_range: None,
-                        decorator_range: None,
-                    },
-                    start,
-                    Vec::new(),
-                    None,
-                ),
-            );
+            fragments.insert(0, Fragment::structural("preamble", FragmentKind::Preamble, span, None));
         }
 
         Some(fragments)
@@ -100,9 +81,17 @@ fn build_table_fragment(node: TsNode<'_>) -> Fragment {
     let name = extract_key_name(node);
     let signature = build_table_signature(node);
     let doc_range = TomlLanguage::extract_doc_range(node);
+    let parent = Some(name.clone());
 
-    let node_range = node.byte_range();
-    let full_span = TomlLanguage::full_symbol_range(&node_range, doc_range.as_ref(), None);
+    let mut children = Vec::new();
+    if let Some(range) = doc_range {
+        children.push(Fragment::structural(
+            "docstring",
+            FragmentKind::Docstring,
+            range,
+            parent,
+        ));
+    }
 
     build_code_fragment(
         node,
@@ -112,10 +101,7 @@ fn build_table_fragment(node: TsNode<'_>) -> Fragment {
             signature,
             name_byte_offset: node.name_start_byte().unwrap_or_else(|| node.start_byte()),
             visibility: None,
-            doc_comment_range: doc_range,
-            decorator_range: None,
-            full_span,
-            children: Vec::new(),
+            children,
         },
         None,
     )

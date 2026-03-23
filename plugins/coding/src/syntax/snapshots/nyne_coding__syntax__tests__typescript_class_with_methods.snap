@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"ts\", \"class Greeter {\\n    greet() { return 'hi'; }\\n}\\n\")"
 ---
 [
     Fragment {
@@ -9,15 +9,11 @@ expression: result.fragments
             Class,
         ),
         byte_range: 0..46,
-        full_span: 0..46,
-        line_range: 0..3,
         signature: Some(
             "class Greeter",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 6,
         children: [
@@ -27,15 +23,11 @@ expression: result.fragments
                     Function,
                 ),
                 byte_range: 20..44,
-                full_span: 20..44,
-                line_range: 1..2,
                 signature: Some(
                     "greet()",
                 ),
                 metadata: Code {
                     visibility: None,
-                    doc_comment_range: None,
-                    decorator_range: None,
                 },
                 name_byte_offset: 20,
                 children: [],

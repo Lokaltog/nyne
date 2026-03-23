@@ -33,11 +33,7 @@ impl SyntaxProvider {
             .ok_or_else(|| eyre!("coding plugin not activated"))?
             .get(source_file)?;
         // Verify the fragment actually exists at the top level.
-        let exists = shared
-            .decomposed
-            .fragments
-            .iter()
-            .any(|f| f.fs_name.as_deref() == Some(stem));
+        let exists = shared.decomposed.iter().any(|f| f.fs_name.as_deref() == Some(stem));
         if !exists {
             return Ok(None);
         }
@@ -69,7 +65,7 @@ impl SyntaxProvider {
             .get::<DecompositionCache>()
             .ok_or_else(|| eyre!("coding plugin not activated"))?
             .get(source_file)?;
-        let Some(frag) = find_fragment(&shared.decomposed.fragments, fragment_path) else {
+        let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
             return Ok(None);
         };
 
@@ -132,7 +128,7 @@ impl SyntaxProvider {
             .get::<DecompositionCache>()
             .ok_or_else(|| eyre!("coding plugin not activated"))?
             .get(source_file)?;
-        let Some(_frag) = find_fragment(&shared.decomposed.fragments, fragment_path) else {
+        let Some(_frag) = find_fragment(&shared.decomposed, fragment_path) else {
             return Ok(None);
         };
 
@@ -166,7 +162,7 @@ impl SyntaxProvider {
         let ext = decomposer.file_extension();
 
         // at-line/ uses 1-based lines; fragment functions use 0-based.
-        let Some(frag_path) = find_nearest_fragment_at_line(&shared.decomposed.fragments, line - 1) else {
+        let Some(frag_path) = find_nearest_fragment_at_line(&shared.decomposed, line - 1, &shared.source) else {
             return Ok(None);
         };
 

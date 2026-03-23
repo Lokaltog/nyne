@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"py\", \"MAX_SIZE = 100\\n\")"
 ---
 [
     Fragment {
@@ -9,15 +9,11 @@ expression: result.fragments
             Variable,
         ),
         byte_range: 0..14,
-        full_span: 0..14,
-        line_range: 0..1,
         signature: Some(
             "MAX_SIZE = 100",
         ),
         metadata: Code {
             visibility: None,
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 0,
         children: [],

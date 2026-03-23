@@ -20,6 +20,7 @@ pub(super) use self::{
 use crate::edit::splice::{line_end_of, line_start_of};
 pub(super) use crate::providers::fragment_resolver::FragmentResolver;
 use crate::syntax;
+use crate::syntax::fragment::{FragmentKind, find_fragment_of_kind};
 use crate::syntax::spec::SpliceMode;
 
 /// Readable content that returns a byte range of the original source.
@@ -40,25 +41,23 @@ pub(super) struct SourceSlice {
 impl Readable for SourceSlice {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
-        let frags = &shared.decomposed.fragments;
+        let frags = &shared.decomposed;
 
         let (byte_range, mask_span) = match &self.target {
             SpliceTarget::FragmentBody(path) => {
                 let frag = syntax::require_fragment(frags, path)?;
-                let body_start = line_start_of(&shared.source, frag.full_span.start);
+                let span = frag.full_span();
+                let body_start = line_start_of(&shared.source, span.start);
                 match shared.decomposer.splice_mode() {
-                    SpliceMode::Line => (body_start..frag.full_span.end, None),
+                    SpliceMode::Line => (body_start..span.end, None),
                     SpliceMode::Byte => {
-                        let body_end = line_end_of(&shared.source, frag.full_span.end);
-                        (body_start..body_end, Some(frag.full_span.clone()))
+                        let body_end = line_end_of(&shared.source, span.end);
+                        (body_start..body_end, Some(span))
                     }
                 }
             }
             SpliceTarget::Imports => {
-                let imports = shared
-                    .decomposed
-                    .imports
-                    .as_ref()
+                let imports = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Imports)
                     .ok_or_else(|| eyre!("no import span in {}", self.resolver.source_file()))?;
                 let start = line_start_of(&shared.source, imports.byte_range.start);
                 (start..imports.byte_range.end, None)

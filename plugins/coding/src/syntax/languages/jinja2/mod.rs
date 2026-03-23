@@ -305,7 +305,7 @@ fn find_first_identifier(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Nod
 ///
 /// Takes ownership to avoid unnecessary cloning — the caller (injection
 /// decomposer) doesn't need the symbols after conversion.
-pub fn symbols_to_fragments(symbols: Vec<Jinja2Symbol>, source: &str) -> Vec<Fragment> {
+pub fn symbols_to_fragments(symbols: Vec<Jinja2Symbol>) -> Vec<Fragment> {
     symbols
         .into_iter()
         .map(|sym| {
@@ -320,17 +320,11 @@ pub fn symbols_to_fragments(symbols: Vec<Jinja2Symbol>, source: &str) -> Vec<Fra
                 Some(sym.signature)
             };
             Fragment::new(
-                source,
                 sym.name,
                 kind,
-                sym.full_span.clone(),
                 sym.full_span,
                 signature,
-                FragmentMetadata::Code {
-                    visibility: None,
-                    doc_comment_range: None,
-                    decorator_range: None,
-                },
+                FragmentMetadata::Code { visibility: None },
                 sym.name_byte_offset,
                 Vec::new(),
                 None,

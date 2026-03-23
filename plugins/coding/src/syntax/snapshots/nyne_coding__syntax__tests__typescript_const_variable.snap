@@ -1,6 +1,6 @@
 ---
-source: nyne-coding/src/syntax/tests.rs
-expression: result.fragments
+source: plugins/coding/src/syntax/tests.rs
+expression: "decompose(\"ts\", \"export const API_URL = 'https://example.com';\\n\")"
 ---
 [
     Fragment {
@@ -9,8 +9,6 @@ expression: result.fragments
             Variable,
         ),
         byte_range: 0..45,
-        full_span: 0..45,
-        line_range: 0..1,
         signature: Some(
             "export const API_URL = 'https://example.com'",
         ),
@@ -18,8 +16,6 @@ expression: result.fragments
             visibility: Some(
                 "export",
             ),
-            doc_comment_range: None,
-            decorator_range: None,
         },
         name_byte_offset: 0,
         children: [],

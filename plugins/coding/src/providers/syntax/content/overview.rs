@@ -12,6 +12,8 @@ use nyne::templates::{TemplateEngine, TemplateView};
 
 use super::FragmentResolver;
 use crate::syntax;
+use crate::syntax::decomposed::DecomposedSource;
+use crate::syntax::fragment::{FragmentKind, find_fragment_of_kind};
 use crate::syntax::view::fragment_list;
 
 /// View that renders the OVERVIEW.md template for a file's symbol table.
@@ -27,8 +29,8 @@ impl TemplateView for OverviewContent {
         let shared = self.resolver.decompose()?;
         let view = minijinja::context! {
             filename => &self.filename,
-            file_doc => shared.decomposed.file_doc.as_deref(),
-            fragments => fragment_list(&shared.decomposed.fragments, &shared),
+            file_doc => file_doc_text(&shared),
+            fragments => fragment_list(&shared.decomposed, &shared),
         };
         Ok(engine.render_bytes(template, &view))
     }
@@ -45,7 +47,7 @@ pub(in crate::providers::syntax) struct SymbolOverviewContent {
 impl TemplateView for SymbolOverviewContent {
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
-        let frag = syntax::require_fragment(&shared.decomposed.fragments, &self.fragment_path)?;
+        let frag = syntax::require_fragment(&shared.decomposed, &self.fragment_path)?;
         let view = minijinja::context! {
             filename => &frag.name,
             file_doc => Value::UNDEFINED,
@@ -79,9 +81,16 @@ impl TemplateView for FileOverviewContent {
             ext,
             total_lines,
             total_bytes,
-            file_doc => shared.decomposed.file_doc.as_deref(),
-            fragments => fragment_list(&shared.decomposed.fragments, &shared),
+            file_doc => file_doc_text(&shared),
+            fragments => fragment_list(&shared.decomposed, &shared),
         };
         Ok(engine.render_bytes(template, &view))
     }
+}
+
+/// Extract the file-level doc comment as stripped plain text, if present.
+fn file_doc_text(shared: &DecomposedSource) -> Option<String> {
+    let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)?;
+    let raw = shared.source.get(frag.byte_range.clone())?;
+    Some(shared.decomposer.strip_doc_comment(raw))
 }

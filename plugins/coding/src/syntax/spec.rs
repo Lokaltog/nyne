@@ -143,15 +143,20 @@ pub trait LanguageSpec: Send + Sync + 'static {
         extract_preceding_doc_range(node, kind, Self::DOC_COMMENT_PREFIXES, Self::DOC_COMMENT_SKIP_KINDS)
     }
 
-    /// Extract the file-level doc comment (e.g. `//!` in Rust, module
-    /// docstring in Python).
-    fn extract_file_doc(_root: TsNode<'_>) -> Option<String> { None }
+    /// Extract the byte range of the file-level doc comment (e.g. `//!` in
+    /// Rust, module docstring in Python). Returns `None` when the file has
+    /// no module-level documentation.
+    fn extract_file_doc_range(_root: TsNode<'_>) -> Option<Range<usize>> { None }
 
     /// Strip language-specific doc comment markers from raw text.
     fn strip_doc_comment(raw: &str) -> String { raw.to_owned() }
 
     /// Wrap plain text in language-specific doc comment markers.
     fn wrap_doc_comment(plain: &str, _indent: &str) -> String { plain.to_owned() }
+
+    /// Wrap plain text in file-level doc comment markers (e.g. `//!` in Rust).
+    /// Default delegates to [`wrap_doc_comment`](Self::wrap_doc_comment).
+    fn wrap_file_doc_comment(plain: &str, indent: &str) -> String { Self::wrap_doc_comment(plain, indent) }
 
     /// Extract the first non-empty sentence from a raw doc comment.
     fn clean_doc_comment(raw: &str) -> Option<String> {
@@ -168,35 +173,6 @@ pub trait LanguageSpec: Send + Sync + 'static {
 
     /// Extract decorator/attribute byte range for a symbol node.
     fn extract_decorator_range(_node: TsNode<'_>) -> Option<Range<usize>> { None }
-
-    /// Compute the byte range covering the entire symbol definition:
-    /// decorators, doc comments, signature, and body.
-    ///
-    /// Default: computes the bounding box of `node_range`, `doc_comment_range`,
-    /// and `decorator_range`. This handles both preceding (Rust, TS) and
-    /// body-internal (Python) doc comments correctly — body-internal ranges
-    /// are already within `node_range`, so the bounding box is a no-op for them.
-    ///
-    /// Languages with unusual conventions can override.
-    fn full_symbol_range(
-        node_range: &Range<usize>,
-        doc_comment_range: Option<&Range<usize>>,
-        decorator_range: Option<&Range<usize>>,
-    ) -> Range<usize> {
-        let starts = [
-            Some(node_range.start),
-            doc_comment_range.map(|r| r.start),
-            decorator_range.map(|r| r.start),
-        ];
-        let ends = [
-            Some(node_range.end),
-            doc_comment_range.map(|r| r.end),
-            decorator_range.map(|r| r.end),
-        ];
-        let start = starts.into_iter().flatten().min().unwrap_or(node_range.start);
-        let end = ends.into_iter().flatten().max().unwrap_or(node_range.end);
-        start..end
-    }
 }
 
 /// Extract doc comment ranges by scanning preceding siblings.
@@ -288,6 +264,7 @@ pub trait Decomposer: Send + Sync {
     fn file_extension(&self) -> &'static str;
     fn strip_doc_comment(&self, raw: &str) -> String;
     fn wrap_doc_comment(&self, plain: &str, indent: &str) -> String;
+    fn wrap_file_doc_comment(&self, plain: &str, indent: &str) -> String;
     fn clean_doc_comment(&self, raw: &str) -> Option<String>;
     fn map_to_fs(&self, fragments: &mut [Fragment]);
     fn resolve_conflicts(&self, conflicts: &[ConflictSet]) -> Vec<Resolution>;
@@ -330,7 +307,7 @@ impl<L: LanguageSpec> Decomposer for CodeDecomposer<L> {
                 }
                 extract_fragments::<L>(root, depth, None)
             },
-            L::extract_file_doc,
+            L::extract_file_doc_range,
         )
     }
 
@@ -343,6 +320,8 @@ impl<L: LanguageSpec> Decomposer for CodeDecomposer<L> {
     fn strip_doc_comment(&self, raw: &str) -> String { L::strip_doc_comment(raw) }
 
     fn wrap_doc_comment(&self, plain: &str, indent: &str) -> String { L::wrap_doc_comment(plain, indent) }
+
+    fn wrap_file_doc_comment(&self, plain: &str, indent: &str) -> String { L::wrap_file_doc_comment(plain, indent) }
 
     fn clean_doc_comment(&self, raw: &str) -> Option<String> { L::clean_doc_comment(raw) }
 

@@ -16,18 +16,18 @@ fn basic() -> DecomposedFile {
 /// The require forms (lume, utils) should be coalesced into imports.
 #[rstest]
 fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.fragments.len(), 5);
+    assert_eq!(basic.len(), 5);
 }
 
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
+    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, &["MAX-RETRIES", "greet", "process", "with-retry", "config"]);
 }
 
 #[rstest]
 fn fragment_kinds(basic: DecomposedFile) {
-    let kinds: Vec<_> = basic.fragments.iter().map(|f| &f.kind).collect();
+    let kinds: Vec<_> = basic.iter().map(|f| &f.kind).collect();
     assert_eq!(kinds, &[
         &FragmentKind::Symbol(SymbolKind::Variable),
         &FragmentKind::Symbol(SymbolKind::Function),
@@ -40,7 +40,7 @@ fn fragment_kinds(basic: DecomposedFile) {
 /// Require bindings are excluded from fragments (not meaningful decomposition targets).
 #[rstest]
 fn require_bindings_excluded(basic: DecomposedFile) {
-    let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
+    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
     assert!(!names.contains(&"lume"), "require binding 'lume' should be excluded");
     assert!(!names.contains(&"utils"), "require binding 'utils' should be excluded");
 }
@@ -48,7 +48,7 @@ fn require_bindings_excluded(basic: DecomposedFile) {
 /// No nested children — Fennel forms are flat.
 #[rstest]
 fn no_children(basic: DecomposedFile) {
-    for frag in &basic.fragments {
+    for frag in &basic {
         assert!(
             frag.children.is_empty(),
             "fragment '{}' should have no children",

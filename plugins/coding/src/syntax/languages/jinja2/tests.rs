@@ -290,7 +290,7 @@ fn content_regions_produce_valid_span_map() {
 fn symbols_to_fragments_correct_kinds_and_names() {
     let source = "{% block title %}Hello{% endblock %}\n{% set x = 1 %}";
     let t = extract_template(source);
-    let fragments = symbols_to_fragments(t.symbols, source);
+    let fragments = symbols_to_fragments(t.symbols);
 
     insta::assert_debug_snapshot!(fragments);
 }
@@ -299,10 +299,10 @@ fn symbols_to_fragments_correct_kinds_and_names() {
 fn fragment_byte_ranges_extract_correct_source() {
     let source = "{% block title %}Hello{% endblock %}";
     let t = extract_template(source);
-    let fragments = symbols_to_fragments(t.symbols, source);
+    let fragments = symbols_to_fragments(t.symbols);
 
     let frag = &fragments[0];
-    assert_eq!(&source[frag.full_span.clone()], source);
+    assert_eq!(&source[frag.full_span()], source);
     assert_eq!(&source[frag.byte_range.clone()], source);
 }
 
@@ -310,7 +310,7 @@ fn fragment_byte_ranges_extract_correct_source() {
 fn fragment_name_byte_offset_extracts_name() {
     let source = "{% block header %}content{% endblock %}";
     let t = extract_template(source);
-    let fragments = symbols_to_fragments(t.symbols, source);
+    let fragments = symbols_to_fragments(t.symbols);
 
     let frag = &fragments[0];
     let extracted_name = &source[frag.name_byte_offset..frag.name_byte_offset + frag.name.len()];
@@ -320,7 +320,7 @@ fn fragment_name_byte_offset_extracts_name() {
 fn decompose_fixture(name: &str) -> Vec<super::Fragment> {
     let source = crate::test_support::load_fixture("syntax/languages/jinja2", name);
     let t = extract_template(&source);
-    symbols_to_fragments(t.symbols, &source)
+    symbols_to_fragments(t.symbols)
 }
 
 /// Fixture has: extends, import, set, 3 blocks (head, content, footer), 1 macro.

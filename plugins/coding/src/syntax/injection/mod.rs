@@ -7,7 +7,6 @@
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::types::line_of_byte;
 
 use super::fragment::{ConflictSet, DecomposedFile, Fragment, Resolution};
 use super::languages::jinja2::{extract_template, symbols_to_fragments};
@@ -35,39 +34,33 @@ impl Decomposer for InjectionDecomposer {
         let (span_map, inner_content) = SpanMap::build(source, &extraction.regions);
 
         // 3. Convert Jinja2 structural symbols into fragments.
-        let jinja2_fragments = symbols_to_fragments(extraction.symbols, source);
+        let jinja2_fragments = symbols_to_fragments(extraction.symbols);
 
         // 4. Run inner decomposer on concatenated content.
-        let (inner_file, _inner_tree) = if inner_content.is_empty() {
-            (DecomposedFile::empty(), None)
+        let (inner_fragments, _inner_tree) = if inner_content.is_empty() {
+            (Vec::new(), None)
         } else {
             self.inner.decompose(&inner_content, max_depth)
         };
 
         // 5. Remap all inner fragments' byte ranges from virtual → real offsets,
         //    then recompute line_range from the original source.
-        let remapped_fragments: Vec<Fragment> = inner_file
-            .fragments
+        let remapped_fragments: Vec<Fragment> = inner_fragments
             .into_iter()
             .map(|f| span_map.remap_fragment(f))
             .map(|mut f| {
-                recompute_line_ranges(&mut f, source);
+                recompute_byte_ranges_from_source(&mut f, source);
                 f
             })
             .collect();
 
         // 6. Merge Jinja2 + remapped inner fragments, sorted by position.
         let mut fragments: Vec<Fragment> = jinja2_fragments.into_iter().chain(remapped_fragments).collect();
-        fragments.sort_by_key(|f| f.full_span.start);
+        fragments.sort_by_key(|f| f.byte_range.start);
 
         // Injection decomposers don't produce a usable tree — the inner tree
         // is over concatenated content with remapped offsets.
-        let file = DecomposedFile {
-            fragments,
-            imports: inner_file.imports,
-            file_doc: inner_file.file_doc,
-        };
-        (file, None)
+        (fragments, None)
     }
 
     fn validate(&self, source: &str) -> Result<()> {
@@ -98,6 +91,10 @@ impl Decomposer for InjectionDecomposer {
         self.inner.resolve_conflicts(conflicts)
     }
 
+    fn wrap_file_doc_comment(&self, plain: &str, indent: &str) -> String {
+        self.inner.wrap_file_doc_comment(plain, indent)
+    }
+
     fn splice_mode(&self) -> SpliceMode {
         // Injection-decomposed files have non-content nodes (render expressions,
         // control directives) interspersed within content lines. Line-snapped
@@ -115,11 +112,12 @@ impl Decomposer for InjectionDecomposer {
 ///
 /// Uses [`line_of_byte`] — the SSOT for byte-offset → line-number conversion —
 /// matching the same formula used by [`Fragment::new`].
-fn recompute_line_ranges(fragment: &mut Fragment, source: &str) {
-    fragment.line_range =
-        line_of_byte(source, fragment.full_span.start)..line_of_byte(source, fragment.full_span.end) + 1;
+fn recompute_byte_ranges_from_source(fragment: &mut Fragment, _source: &str) {
+    // After SpanMap::remap_fragment, byte_range is already in real coordinates.
+    // Children are remapped recursively by remap_fragment itself, so this
+    // function is now a no-op — kept as a hook for future post-remap fixups.
     for child in &mut fragment.children {
-        recompute_line_ranges(child, source);
+        recompute_byte_ranges_from_source(child, _source);
     }
 }
 

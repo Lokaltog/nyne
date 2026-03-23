@@ -12,16 +12,17 @@ fn basic() -> DecomposedFile {
     result
 }
 
-/// Top-level: const, 2 fns, interface, class, enum, type alias = 7 fragments.
+/// Top-level: imports + const + 2 fns + interface + class + enum + type alias = 8 fragments.
 #[rstest]
 fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.fragments.len(), 7);
+    assert_eq!(basic.len(), 8);
 }
 
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
+    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, &[
+        "imports",
         "MAX_RETRIES",
         "greet",
         "helper",
@@ -34,8 +35,9 @@ fn fragment_names(basic: DecomposedFile) {
 
 #[rstest]
 fn fragment_kinds(basic: DecomposedFile) {
-    let kinds: Vec<_> = basic.fragments.iter().map(|f| &f.kind).collect();
+    let kinds: Vec<_> = basic.iter().map(|f| &f.kind).collect();
     assert_eq!(kinds, &[
+        &FragmentKind::Imports,
         &FragmentKind::Symbol(SymbolKind::Variable),
         &FragmentKind::Symbol(SymbolKind::Function),
         &FragmentKind::Symbol(SymbolKind::Function),
@@ -46,18 +48,21 @@ fn fragment_kinds(basic: DecomposedFile) {
     ]);
 }
 
-/// Imports are coalesced into a single ImportSpan.
+/// Imports are coalesced into a single Imports fragment.
 #[rstest]
 fn imports_extracted(basic: DecomposedFile) {
-    let imports = basic.imports.as_ref().expect("imports should be present");
-    assert!(imports.content.contains("import { readFile }"));
-    assert!(imports.content.contains("import type { Config }"));
+    let source = load_fixture("syntax/languages/typescript", "basic.ts");
+    let imports_frag = crate::syntax::fragment::find_fragment_of_kind(&basic, &FragmentKind::Imports)
+        .expect("imports fragment should be present");
+    let imports_text = &source[imports_frag.byte_range.clone()];
+    assert!(imports_text.contains("import { readFile }"));
+    assert!(imports_text.contains("import type { Config }"));
 }
 
 /// Class `AppConfig` has 3 method children: constructor, validate, reset.
 #[rstest]
 fn class_children(basic: DecomposedFile) {
-    let config = basic.fragments.iter().find(|f| f.name == "AppConfig").unwrap();
+    let config = basic.iter().find(|f| f.name == "AppConfig").unwrap();
     let child_names: Vec<_> = config.children.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(child_names, &["constructor", "validate", "reset"]);
 }
@@ -65,6 +70,6 @@ fn class_children(basic: DecomposedFile) {
 /// Interface has no children (method signatures are part of the body).
 #[rstest]
 fn interface_no_children(basic: DecomposedFile) {
-    let iface = basic.fragments.iter().find(|f| f.name == "Processor").unwrap();
+    let iface = basic.iter().find(|f| f.name == "Processor").unwrap();
     assert!(iface.children.is_empty());
 }

@@ -17,8 +17,8 @@ fn decompose_mapped(ext: &str, source: &str) -> Vec<Fragment> {
     let reg = registry();
     let d = reg.get(ext).unwrap();
     let (mut result, _tree) = d.decompose(source, DEFAULT_MAX_DEPTH);
-    d.map_to_fs(&mut result.fragments);
-    result.fragments
+    d.map_to_fs(&mut result);
+    result
 }
 
 // Registry
@@ -39,7 +39,7 @@ fn registry_registers_all_extensions() {
 
 #[test]
 fn rust_decompose_function() {
-    insta::assert_debug_snapshot!(decompose("rs", "pub fn hello() {}\n").fragments);
+    insta::assert_debug_snapshot!(decompose("rs", "pub fn hello() {}\n"));
 }
 
 #[test]
@@ -55,7 +55,7 @@ impl Foo {
     }
 }
 ";
-    insta::assert_debug_snapshot!(decompose("rs", source).fragments);
+    insta::assert_debug_snapshot!(decompose("rs", source));
 }
 
 #[test]
@@ -69,7 +69,7 @@ class Person:
     def __init__(self, name):
         self.name = name
 ";
-    insta::assert_debug_snapshot!(decompose("py", source).fragments);
+    insta::assert_debug_snapshot!(decompose("py", source));
 }
 
 #[test]
@@ -84,46 +84,48 @@ interface Config {
     port: number;
 }
 ";
-    insta::assert_debug_snapshot!(decompose("ts", source).fragments);
+    insta::assert_debug_snapshot!(decompose("ts", source));
 }
 
 #[test]
 fn python_decorated_function() {
-    insta::assert_debug_snapshot!(decompose("py", "@app.route('/')\ndef index():\n    pass\n").fragments);
+    insta::assert_debug_snapshot!(decompose("py", "@app.route('/')\ndef index():\n    pass\n"));
 }
 
 #[test]
 fn python_module_variable() {
-    insta::assert_debug_snapshot!(decompose("py", "MAX_SIZE = 100\n").fragments);
+    insta::assert_debug_snapshot!(decompose("py", "MAX_SIZE = 100\n"));
 }
 
 #[test]
 fn python_decorated_class() {
-    insta::assert_debug_snapshot!(decompose("py", "@dataclass\nclass Point:\n    x: int\n    y: int\n").fragments);
+    insta::assert_debug_snapshot!(decompose("py", "@dataclass\nclass Point:\n    x: int\n    y: int\n"));
 }
 
 #[test]
 fn typescript_const_variable() {
-    insta::assert_debug_snapshot!(decompose("ts", "export const API_URL = 'https://example.com';\n").fragments);
+    insta::assert_debug_snapshot!(decompose("ts", "export const API_URL = 'https://example.com';\n"));
 }
 
 #[test]
 fn tsx_uses_different_grammar() {
-    insta::assert_debug_snapshot!(
-        decompose("tsx", "export function App() {\n    return <div>Hello</div>;\n}\n").fragments
-    );
+    insta::assert_debug_snapshot!(decompose(
+        "tsx",
+        "export function App() {\n    return <div>Hello</div>;\n}\n"
+    ));
 }
 
 #[test]
 fn typescript_class_with_methods() {
-    insta::assert_debug_snapshot!(decompose("ts", "class Greeter {\n    greet() { return 'hi'; }\n}\n").fragments);
+    insta::assert_debug_snapshot!(decompose("ts", "class Greeter {\n    greet() { return 'hi'; }\n}\n"));
 }
 
 #[test]
 fn typescript_enum_declaration() {
-    insta::assert_debug_snapshot!(
-        decompose("ts", "export enum Color {\n    Red,\n    Green,\n    Blue,\n}\n").fragments
-    );
+    insta::assert_debug_snapshot!(decompose(
+        "ts",
+        "export enum Color {\n    Red,\n    Green,\n    Blue,\n}\n"
+    ));
 }
 
 #[test]
@@ -145,7 +147,7 @@ Run the binary.
 
 Details here.
 ";
-    insta::assert_debug_snapshot!(decompose("md", source).fragments);
+    insta::assert_debug_snapshot!(decompose("md", source));
 }
 
 #[test]
@@ -158,12 +160,13 @@ fn markdown_fs_mapping_slugified() {
 fn rust_trait_impl_naming() {
     let source =
         "impl Display for Foo {\n    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { Ok(()) }\n}\n";
-    insta::assert_debug_snapshot!(decompose("rs", source).fragments);
+    insta::assert_debug_snapshot!(decompose("rs", source));
 }
 
 #[test]
 fn rust_imports_extracted() {
-    insta::assert_debug_snapshot!(decompose("rs", "use std::io;\nuse std::fmt;\n\nfn main() {}\n").imports);
+    let result = decompose("rs", "use std::io;\nuse std::fmt;\n\nfn main() {}\n");
+    insta::assert_debug_snapshot!(super::fragment::find_fragment_of_kind(&result, &FragmentKind::Imports));
 }
 
 // Splice regression
@@ -195,21 +198,17 @@ Content B.
     let result = decompose("md", source);
 
     // Find "Section A" fragment.
-    let title_frag = result
-        .fragments
-        .iter()
-        .find(|f| f.name == "Title")
-        .expect("should find Title");
+    let title_frag = result.iter().find(|f| f.name == "Title").expect("should find Title");
     let section_a = title_frag
         .children
         .iter()
         .find(|f| f.name == "Section A")
         .expect("should find Section A");
 
-    // Simulate the fixed read path: line_start_of(start)..full_span.end
+    // Simulate the fixed read path: line_start_of(start)..full_span().end
     // (no line_end_of — that was the bug).
-    let body_start = line_start_of(source, section_a.full_span.start);
-    let body_end = section_a.full_span.end;
+    let body_start = line_start_of(source, section_a.full_span().start);
+    let body_end = section_a.full_span().end;
     let read_body = &source[body_start..body_end];
 
     // The read body must NOT include the next section's heading.
@@ -250,14 +249,14 @@ fn markdown_fixture_all_sections_roundtrip_without_duplication() {
         }
     }
     let mut sections = Vec::new();
-    collect_sections(&result.fragments, &mut sections);
+    collect_sections(&result, &mut sections);
     assert!(
         sections.len() >= 4,
         "fixture should have at least 4 sections, got {}",
         sections.len()
     );
 
-    // For each section, simulate read (line_start_of..full_span.end) then
+    // For each section, simulate read (line_start_of..full_span().end) then
     // splice_validate_write back — the file should remain identical.
     for section in &sections {
         let dir = tempfile::tempdir().unwrap();
@@ -267,13 +266,13 @@ fn markdown_fixture_all_sections_roundtrip_without_duplication() {
         let fs = nyne::types::OsFs::new(dir.path().to_path_buf());
         let vfs_path = vfs("test.md");
 
-        let body_start = line_start_of(fixture, section.full_span.start);
-        let body_end = section.full_span.end;
+        let body_start = line_start_of(fixture, section.full_span().start);
+        let body_end = section.full_span().end;
         let read_body = &fixture[body_start..body_end];
 
         splice_validate_write(&fs, &vfs_path, body_start..body_end, read_body, |spliced| {
             let (re_decomposed, _tree) = decomposer.decompose(spliced, DEFAULT_MAX_DEPTH);
-            if re_decomposed.fragments.is_empty() && !result.fragments.is_empty() {
+            if re_decomposed.is_empty() && !result.is_empty() {
                 return Err("re-decomposition lost all fragments".into());
             }
             Ok(())
@@ -294,7 +293,7 @@ fn markdown_fixture_all_sections_roundtrip_without_duplication() {
 /// an impl block) must not corrupt content after the impl block.
 ///
 /// Simulates the write path in `resolve_fragment_dir`: the body splice range
-/// is `line_start_of(source, frag.full_span.start)..frag.full_span.end`.
+/// is `line_start_of(source, frag.full_span().start)..frag.full_span().end`.
 #[test]
 fn nested_child_body_splice_does_not_corrupt_trailing_content() {
     use crate::edit::splice::{line_start_of, splice_content};
@@ -316,15 +315,14 @@ pub struct Bar {
 ";
     let result = decompose("rs", source);
     let impl_frag = result
-        .fragments
         .iter()
         .find(|f| f.kind == FragmentKind::Symbol(SymbolKind::Impl))
         .expect("should find impl");
     let child = &impl_frag.children[0];
     assert_eq!(child.name, "new");
 
-    let body_start = line_start_of(source, child.full_span.start);
-    let body_range = body_start..child.full_span.end;
+    let body_start = line_start_of(source, child.full_span().start);
+    let body_range = body_start..child.full_span().end;
     let original_body = &source[body_range.clone()];
 
     let new_body =
@@ -347,30 +345,36 @@ pub struct Bar {
 #[test]
 fn rust_doc_comment_extracted() {
     let result = decompose("rs", "/// Does a thing.\npub fn thing() {}\n");
-    assert_eq!(result.fragments.len(), 1);
+    assert_eq!(result.len(), 1);
     let doc = registry().get("rs").unwrap().clean_doc_comment("/// Does a thing.");
     assert_eq!(doc.as_deref(), Some("Does a thing."));
 }
 
 #[test]
 fn rust_doc_comment_range_extends_fragment() {
-    let result = decompose("rs", "/// Doc line.\npub fn documented() {}\n");
-    let frag = &result.fragments[0];
+    let source = "/// Doc line.\npub fn documented() {}\n";
+    let result = decompose("rs", source);
+    let frag = &result[0];
 
     assert_eq!(frag.byte_range.start, 14, "byte_range should start at fn keyword");
-    assert_eq!(frag.full_span.start, 0, "full_span should include doc comment");
-    assert_eq!(frag.line_range.start, 0, "line_range should include doc comment");
+    assert_eq!(frag.full_span().start, 0, "full_span should include doc comment");
+    assert_eq!(
+        frag.line_range(source).start,
+        0,
+        "line_range should include doc comment"
+    );
 }
 
 #[test]
 fn python_body_internal_docstring_does_not_shrink_range() {
     let result = decompose("py", "class Foo:\n    \"\"\"Docstring.\"\"\"\n    x = 1\n");
-    let frag = &result.fragments[0];
+    let frag = &result[0];
 
     assert_eq!(frag.byte_range.start, 0, "byte_range should start at class keyword");
-    assert_eq!(frag.full_span.start, 0, "full_span should start at class keyword");
+    assert_eq!(frag.full_span().start, 0, "full_span should start at class keyword");
     assert_eq!(
-        frag.full_span.end, frag.byte_range.end,
+        frag.full_span().end,
+        frag.byte_range.end,
         "full_span should match byte_range for body-internal docstrings"
     );
 }
@@ -384,10 +388,10 @@ fn python_body_internal_docstring_does_not_shrink_range() {
 #[case::typescript_bare("ts", "function bare() {}\n")]
 fn no_doc_comment_returns_none(#[case] ext: &str, #[case] source: &str) {
     let result = decompose(ext, source);
-    let FragmentMetadata::Code { doc_comment_range, .. } = &result.fragments[0].metadata else {
-        panic!("expected Code metadata");
-    };
-    assert!(doc_comment_range.is_none());
+    assert!(
+        result[0].child_of_kind(&FragmentKind::Docstring).is_none(),
+        "should have no doc comment child"
+    );
 }
 
 // Group 2: No decorator returns None
@@ -398,10 +402,10 @@ fn no_doc_comment_returns_none(#[case] ext: &str, #[case] source: &str) {
 #[case::typescript("ts", "function bare() {}\n")]
 fn no_decorator_returns_none(#[case] ext: &str, #[case] source: &str) {
     let result = decompose(ext, source);
-    let FragmentMetadata::Code { decorator_range, .. } = &result.fragments[0].metadata else {
-        panic!("expected Code metadata");
-    };
-    assert!(decorator_range.is_none());
+    assert!(
+        result[0].child_of_kind(&FragmentKind::Decorator).is_none(),
+        "should have no decorator child"
+    );
 }
 
 // Group 3: Doc comment range present with text checks
@@ -418,11 +422,10 @@ fn doc_comment_range_covers_expected(
     #[case] must_not_contain: &[&str],
 ) {
     let result = decompose(ext, source);
-    let FragmentMetadata::Code { doc_comment_range, .. } = &result.fragments[0].metadata else {
-        panic!("expected Code metadata");
-    };
-    let range = doc_comment_range.as_ref().expect("should have doc comment range");
-    let text = &source[range.clone()];
+    let doc_child = result[0]
+        .child_of_kind(&FragmentKind::Docstring)
+        .expect("should have doc comment child");
+    let text = &source[doc_child.byte_range.clone()];
     for &expected in must_contain {
         assert!(
             text.contains(expected),
@@ -445,10 +448,10 @@ fn doc_comment_range_covers_expected(
 #[case::typescript_triple_slash("ts", "/// A triple-slash doc.\nfunction foo() {}\n")]
 fn doc_comment_is_captured(#[case] ext: &str, #[case] source: &str) {
     let result = decompose(ext, source);
-    let FragmentMetadata::Code { doc_comment_range, .. } = &result.fragments[0].metadata else {
-        panic!("expected Code metadata");
-    };
-    assert!(doc_comment_range.is_some(), "doc comment should be captured");
+    assert!(
+        result[0].child_of_kind(&FragmentKind::Docstring).is_some(),
+        "doc comment should be captured"
+    );
 }
 
 // Group 5: Decorator range present with text checks
@@ -465,11 +468,10 @@ fn decorator_range_covers_expected(
     #[case] must_not_contain: &[&str],
 ) {
     let result = decompose(ext, source);
-    let FragmentMetadata::Code { decorator_range, .. } = &result.fragments[0].metadata else {
-        panic!("expected Code metadata");
-    };
-    let range = decorator_range.as_ref().expect("should have decorator range");
-    let text = &source[range.clone()];
+    let dec_child = result[0]
+        .child_of_kind(&FragmentKind::Decorator)
+        .expect("should have decorator child");
+    let text = &source[dec_child.byte_range.clone()];
     for &expected in must_contain {
         assert!(
             text.contains(expected),
@@ -494,7 +496,14 @@ fn decorator_range_covers_expected(
 )]
 #[case::python("py", "\"\"\"Module docstring.\"\"\"\n\ndef foo():\n    pass\n", "Module docstring.")]
 fn file_level_doc_extracted(#[case] ext: &str, #[case] source: &str, #[case] expected: &str) {
-    assert_eq!(decompose(ext, source).file_doc.as_deref(), Some(expected));
+    let result = decompose(ext, source);
+    let reg = registry();
+    let d = reg.get(ext).unwrap();
+    let doc_frag = super::fragment::find_fragment_of_kind(&result, &FragmentKind::Docstring)
+        .expect("should have file-level docstring fragment");
+    let raw = &source[doc_frag.byte_range.clone()];
+    let cleaned = d.clean_doc_comment(raw).expect("should clean doc comment");
+    assert_eq!(cleaned, expected);
 }
 
 // Group 7: Disjoint doc+decorator ranges
@@ -504,18 +513,14 @@ fn file_level_doc_extracted(#[case] ext: &str, #[case] source: &str, #[case] exp
 #[case::python("py", "@dataclass\nclass Cfg:\n    \"\"\"Config.\"\"\"\n    x: int = 0\n")]
 fn doc_and_decorator_ranges_are_disjoint(#[case] ext: &str, #[case] source: &str) {
     let result = decompose(ext, source);
-    let FragmentMetadata::Code {
-        doc_comment_range,
-        decorator_range,
-        ..
-    } = &result.fragments[0].metadata
-    else {
-        panic!("expected Code metadata");
-    };
-    let doc = doc_comment_range.as_ref().expect("should have doc range");
-    let dec = decorator_range.as_ref().expect("should have decorator range");
+    let doc = result[0]
+        .child_of_kind(&FragmentKind::Docstring)
+        .expect("should have doc child");
+    let dec = result[0]
+        .child_of_kind(&FragmentKind::Decorator)
+        .expect("should have decorator child");
     assert!(
-        doc.end <= dec.start || dec.end <= doc.start,
+        doc.byte_range.end <= dec.byte_range.start || dec.byte_range.end <= doc.byte_range.start,
         "ranges should not overlap"
     );
 }
@@ -538,18 +543,21 @@ fn byte_and_line_ranges_match(#[case] ext: &str, #[case] source: &str) {
 
     fn check_fragments(source: &str, fragments: &[Fragment]) {
         for frag in fragments {
-            let from_line = SymbolLineRange::from_zero_based(&frag.line_range);
-            let from_bytes = SymbolLineRange::from_byte_range(source, &frag.full_span);
+            let from_line = SymbolLineRange::from_zero_based(&frag.line_range(source));
+            let from_bytes = SymbolLineRange::from_byte_range(source, &frag.full_span());
             assert_eq!(
-                from_line, from_bytes,
+                from_line,
+                from_bytes,
                 "line_range mismatch for '{}': from_zero_based={from_line:?}, from_byte_range={from_bytes:?}, \
                  full_span={:?}, line_range={:?}",
-                frag.name, frag.full_span, frag.line_range,
+                frag.name,
+                frag.full_span(),
+                frag.line_range(source),
             );
             check_fragments(source, &frag.children);
         }
     }
-    check_fragments(source, &result.fragments);
+    check_fragments(source, &result);
 }
 
 // Line range: individual tests (from former line_range_symlink_tests submod)
@@ -560,11 +568,10 @@ fn decorator_byte_range_to_line_range() {
 
     let source = "/// Doc.\n#[derive(Debug)]\npub struct Foo;\n";
     let result = decompose("rs", source);
-    let FragmentMetadata::Code { decorator_range, .. } = &result.fragments[0].metadata else {
-        panic!("expected Code metadata");
-    };
-    let range = decorator_range.as_ref().expect("should have decorator range");
-    let line_range = SymbolLineRange::from_byte_range(source, range);
+    let dec_child = result[0]
+        .child_of_kind(&FragmentKind::Decorator)
+        .expect("should have decorator child");
+    let line_range = SymbolLineRange::from_byte_range(source, &dec_child.byte_range);
     assert_eq!(line_range, SymbolLineRange { start: 2, end: 2 });
 }
 
@@ -574,8 +581,8 @@ fn import_span_line_range_matches_byte_range() {
 
     let source = "use std::io;\nuse std::fmt;\n\nfn foo() {}\n";
     let result = decompose("rs", source);
-    let imports = result.imports.as_ref().expect("should have imports");
-    let from_line = SymbolLineRange::from_zero_based(&imports.line_range);
+    let imports = super::fragment::find_fragment_of_kind(&result, &FragmentKind::Imports).expect("should have imports");
+    let from_line = SymbolLineRange::from_zero_based(&imports.line_range(source));
     let from_bytes = SymbolLineRange::from_byte_range(source, &imports.byte_range);
     assert_eq!(
         from_line, from_bytes,
@@ -607,44 +614,48 @@ fn lines_suffix_roundtrips_through_parse() {
 #[test]
 fn full_span_bare_symbol_matches_byte_range() {
     let result = decompose("rs", "fn bare() {}\n");
-    let frag = &result.fragments[0];
-    assert_eq!(frag.full_span, frag.byte_range, "bare symbol: full_span == byte_range");
+    let frag = &result[0];
+    assert_eq!(
+        frag.full_span(),
+        frag.byte_range,
+        "bare symbol: full_span == byte_range"
+    );
 }
 
 #[test]
 fn full_span_rust_decorator_only() {
     let result = decompose("rs", "#[derive(Debug)]\npub struct Foo;\n");
-    let frag = &result.fragments[0];
-    assert_eq!(frag.full_span.start, 0, "full_span should include attribute");
+    let frag = &result[0];
+    assert_eq!(frag.full_span().start, 0, "full_span should include attribute");
     assert!(frag.byte_range.start > 0, "byte_range should start after attribute");
-    assert_eq!(frag.full_span.end, frag.byte_range.end, "ends should match");
+    assert_eq!(frag.full_span().end, frag.byte_range.end, "ends should match");
 }
 
 #[test]
 fn full_span_rust_decorator_and_doc_comment() {
     let result = decompose("rs", "/// Documented.\n#[derive(Debug)]\npub struct Foo;\n");
-    let frag = &result.fragments[0];
-    assert_eq!(frag.full_span.start, 0, "full_span should start at doc comment");
+    let frag = &result[0];
+    assert_eq!(frag.full_span().start, 0, "full_span should start at doc comment");
     assert!(frag.byte_range.start > 0, "byte_range should be the node range only");
-    assert_eq!(frag.full_span.end, frag.byte_range.end);
+    assert_eq!(frag.full_span().end, frag.byte_range.end);
 }
 
 #[test]
 fn full_span_python_decorated_class_with_docstring() {
     let result = decompose("py", "@dataclass\nclass Bar:\n    \"\"\"A bar.\"\"\"\n    x: int = 0\n");
-    let frag = &result.fragments[0];
-    assert_eq!(frag.full_span.start, 0, "full_span should include decorator");
+    let frag = &result[0];
+    assert_eq!(frag.full_span().start, 0, "full_span should include decorator");
     assert_eq!(frag.byte_range.start, 0, "wrapper node includes decorator");
-    assert_eq!(frag.full_span.end, frag.byte_range.end);
+    assert_eq!(frag.full_span().end, frag.byte_range.end);
 }
 
 #[test]
 fn full_span_typescript_jsdoc() {
     let result = decompose("ts", "/** Documented. */\nfunction greet() {}\n");
-    let frag = &result.fragments[0];
-    assert_eq!(frag.full_span.start, 0, "full_span should include JSDoc");
+    let frag = &result[0];
+    assert_eq!(frag.full_span().start, 0, "full_span should include JSDoc");
     assert!(frag.byte_range.start > 0, "byte_range should start at function keyword");
-    assert_eq!(frag.full_span.end, frag.byte_range.end);
+    assert_eq!(frag.full_span().end, frag.byte_range.end);
 }
 
 #[test]
@@ -659,13 +670,14 @@ class Second:
     pass
 ";
     let result = decompose("py", source);
-    assert_eq!(result.fragments.len(), 2);
+    assert_eq!(result.len(), 2);
 
-    let first = &result.fragments[0];
-    let second = &result.fragments[1];
+    let first = &result[0];
+    let second = &result[1];
 
     assert_eq!(
-        first.full_span.start, 0,
+        first.full_span().start,
+        0,
         "first class full_span starts at class keyword"
     );
     assert_eq!(
@@ -673,10 +685,10 @@ class Second:
         "first class byte_range starts at class keyword"
     );
     assert!(
-        first.full_span.end <= second.full_span.start,
-        "first.full_span.end ({}) must not overlap second.full_span.start ({})",
-        first.full_span.end,
-        second.full_span.start,
+        first.full_span().end <= second.full_span().start,
+        "first.full_span().end ({}) must not overlap second.full_span().start ({})",
+        first.full_span().end,
+        second.full_span().start,
     );
 }
 
@@ -716,7 +728,7 @@ fn typescript_strip_jsdoc() {
 #[test]
 fn rust_visibility_extracted() {
     let result = decompose("rs", "pub(crate) fn internal() {}\n");
-    let FragmentMetadata::Code { visibility, .. } = &result.fragments[0].metadata else {
+    let FragmentMetadata::Code { visibility, .. } = &result[0].metadata else {
         panic!("expected Code metadata");
     };
     assert_eq!(visibility.as_deref(), Some("pub(crate)"));
@@ -725,7 +737,7 @@ fn rust_visibility_extracted() {
 #[test]
 fn typescript_exported_visibility() {
     let result = decompose("ts", "export function greet() {}\n");
-    let FragmentMetadata::Code { visibility, .. } = &result.fragments[0].metadata else {
+    let FragmentMetadata::Code { visibility, .. } = &result[0].metadata else {
         panic!("expected Code metadata");
     };
     assert_eq!(visibility.as_deref(), Some("export"));
@@ -746,15 +758,11 @@ struct Foo;
 fn bar() {}
 ";
     let result = decompose("rs", source);
-    let frag = result
-        .fragments
-        .iter()
-        .find(|f| f.name == "bar")
-        .expect("should find bar");
-    let FragmentMetadata::Code { doc_comment_range, .. } = &frag.metadata else {
-        panic!("expected Code metadata");
-    };
-    let doc_range = doc_comment_range.as_ref().expect("should have doc comment range");
+    let frag = result.iter().find(|f| f.name == "bar").expect("should find bar");
+    let doc_child = frag
+        .child_of_kind(&FragmentKind::Docstring)
+        .expect("should have doc comment child");
+    let doc_range = &doc_child.byte_range;
     let raw_doc = &source[doc_range.clone()];
 
     let stripped = d.strip_doc_comment(raw_doc);
@@ -778,12 +786,10 @@ fn bar() {}
 fn typescript_decorator_on_class() {
     let source = "@Injectable()\nclass Service {}\n";
     let result = decompose("ts", source);
-    let FragmentMetadata::Code { decorator_range, .. } = &result.fragments[0].metadata else {
-        panic!("expected Code metadata");
-    };
-    assert!(decorator_range.is_some(), "TS decorator should be captured");
-    let range = decorator_range.as_ref().unwrap();
-    let text = &source[range.clone()];
+    let dec_child = result[0]
+        .child_of_kind(&FragmentKind::Decorator)
+        .expect("TS decorator should be captured");
+    let text = &source[dec_child.byte_range.clone()];
     assert!(
         text.contains("@Injectable"),
         "range should cover the decorator: got {text:?}"
@@ -804,7 +810,7 @@ fn kind_suffix_conflict_resolution() {
     let reg = registry();
     let d = reg.get("rs").unwrap();
     let mut result = decompose("rs", "struct Foo;\nfn Foo() {}\n");
-    d.map_to_fs(&mut result.fragments);
+    d.map_to_fs(&mut result);
 
     use super::fragment::{ConflictEntry, ConflictSet};
     let conflicts = vec![ConflictSet {
@@ -813,12 +819,12 @@ fn kind_suffix_conflict_resolution() {
             ConflictEntry {
                 index: 0,
                 fragment_name: "Foo".to_owned(),
-                fragment_kind: result.fragments[0].kind.clone(),
+                fragment_kind: result[0].kind.clone(),
             },
             ConflictEntry {
                 index: 1,
                 fragment_name: "Foo".to_owned(),
-                fragment_kind: result.fragments[1].kind.clone(),
+                fragment_kind: result[1].kind.clone(),
             },
         ],
     }];
@@ -833,13 +839,12 @@ fn numbered_conflict_resolution() {
     let reg = registry();
     let d = reg.get("md").unwrap();
     let mut result = decompose("md", "# Intro\n\n# Intro\n\n# Intro\n");
-    d.map_to_fs(&mut result.fragments);
+    d.map_to_fs(&mut result);
 
     use super::fragment::{ConflictEntry, ConflictSet};
     let conflicts = vec![ConflictSet {
-        name: result.fragments[0].fs_name.clone().unwrap(),
+        name: result[0].fs_name.clone().unwrap(),
         entries: result
-            .fragments
             .iter()
             .enumerate()
             .map(|(i, f)| ConflictEntry {
@@ -983,7 +988,7 @@ fn decomposer_for_compound_decomposes_j2_content(#[case] path_str: &str) {
     let source = "{% block content %}\nHello\n{% endblock %}";
     let (result, _tree) = decomposer.decompose(source, DEFAULT_MAX_DEPTH);
     assert!(
-        !result.fragments.is_empty(),
+        !result.is_empty(),
         "compound decomposer for {path_str} should produce fragments"
     );
 }
@@ -993,9 +998,9 @@ fn decomposer_for_compound_decomposes_j2_content(#[case] path_str: &str) {
 /// Source: `use std::io; / fn alpha() {} / fn beta() {}`
 /// Lines (0-based): 0=import, 1=blank, 2=alpha, 3=blank, 4=beta
 #[fixture]
-fn alpha_beta_fragments() -> Vec<Fragment> {
+fn alpha_beta_fragments() -> (Vec<Fragment>, String) {
     let src = "use std::io;\n\nfn alpha() {}\n\nfn beta() {}\n";
-    decompose_mapped("rs", src)
+    (decompose_mapped("rs", src), src.to_owned())
 }
 
 /// Source: `struct Foo {} / impl Foo { fn bar() {} } / impl Foo { fn baz() {} }`
@@ -1005,39 +1010,43 @@ fn alpha_beta_fragments() -> Vec<Fragment> {
 ///
 /// Lines (0-based): 0=struct, 2=impl#1, 3=bar, 6=impl#2, 7=baz
 #[fixture]
-fn nameless_impl_fragments() -> Vec<Fragment> {
-    let mut frags = decompose_mapped(
-        "rs",
-        "struct Foo {}\n\nimpl Foo {\n    fn bar() {}\n}\n\nimpl Foo {\n    fn baz() {}\n}\n",
-    );
+fn nameless_impl_fragments() -> (Vec<Fragment>, String) {
+    let src = "struct Foo {}\n\nimpl Foo {\n    fn bar() {}\n}\n\nimpl Foo {\n    fn baz() {}\n}\n";
+    let mut frags = decompose_mapped("rs", src);
     // Simulate conflict resolution hiding inherent impl blocks.
     for frag in &mut frags {
         if frag.kind == FragmentKind::Symbol(SymbolKind::Impl) && frag.name == "Foo" {
             frag.fs_name = None;
         }
     }
-    frags
+    (frags, src.to_owned())
 }
 
 #[rstest]
 #[case::exact_match(2, &["alpha"])]
-#[case::gap_before_first_symbol(0, &["alpha"])]
+#[case::gap_before_first_symbol(0, &["imports"])]
 #[case::gap_between_symbols(3, &["alpha"])]
-fn nearest_fragment_at_line(alpha_beta_fragments: Vec<Fragment>, #[case] line: usize, #[case] expected: &[&str]) {
-    let path = super::find_nearest_fragment_at_line(&alpha_beta_fragments, line);
+fn nearest_fragment_at_line(
+    alpha_beta_fragments: (Vec<Fragment>, String),
+    #[case] line: usize,
+    #[case] expected: &[&str],
+) {
+    let (frags, source) = alpha_beta_fragments;
+    let path = super::find_nearest_fragment_at_line(&frags, line, &source);
     let expected: Vec<String> = expected.iter().map(|s| (*s).to_owned()).collect();
     assert_eq!(path.as_deref(), Some(expected.as_slice()));
 }
 
 #[test]
 fn nearest_fragment_at_line_empty_fragments_returns_none() {
-    assert_eq!(super::find_nearest_fragment_at_line(&[], 5), None);
+    assert_eq!(super::find_nearest_fragment_at_line(&[], 5, ""), None);
 }
 
 #[rstest]
-fn fragment_at_line_inside_nameless_parent(nameless_impl_fragments: Vec<Fragment>) {
+fn fragment_at_line_inside_nameless_parent(nameless_impl_fragments: (Vec<Fragment>, String)) {
+    let (frags, source) = nameless_impl_fragments;
     // Line 3 is inside bar, child of a nameless impl — should find bar.
-    let path = super::find_fragment_at_line(&nameless_impl_fragments, 3);
+    let path = super::find_fragment_at_line(&frags, 3, &source);
     assert_eq!(path.as_deref(), Some(&["bar".to_owned()][..]));
 }
 
@@ -1045,11 +1054,12 @@ fn fragment_at_line_inside_nameless_parent(nameless_impl_fragments: Vec<Fragment
 #[case::exact_child(3, &["bar"])]
 #[case::gap_in_nameless_parent(2, &["bar"])]
 fn nearest_fragment_at_line_nameless_parent(
-    nameless_impl_fragments: Vec<Fragment>,
+    nameless_impl_fragments: (Vec<Fragment>, String),
     #[case] line: usize,
     #[case] expected: &[&str],
 ) {
-    let path = super::find_nearest_fragment_at_line(&nameless_impl_fragments, line);
+    let (frags, source) = nameless_impl_fragments;
+    let path = super::find_nearest_fragment_at_line(&frags, line, &source);
     let expected: Vec<String> = expected.iter().map(|s| (*s).to_owned()).collect();
     assert_eq!(path.as_deref(), Some(expected.as_slice()));
 }
@@ -1155,14 +1165,21 @@ mod proptest_invariants {
 
     /// Helper: recursively check invariants on a list of fragments.
     fn check_fragment_invariants(source: &str, fragments: &[Fragment]) {
-        // 1. Sibling full_span ranges must not overlap.
-        for pair in fragments.windows(2) {
+        // 1. Sibling full_span ranges must not overlap (for non-structural children).
+        //    Structural children (Docstring, Decorator) may not be in source order
+        //    relative to each other (e.g. Python docstrings are inside the body,
+        //    decorators before it).
+        let non_structural: Vec<_> = fragments
+            .iter()
+            .filter(|f| !matches!(f.kind, FragmentKind::Docstring | FragmentKind::Decorator))
+            .collect();
+        for pair in non_structural.windows(2) {
             assert!(
-                pair[0].full_span.end <= pair[1].full_span.start,
+                pair[0].full_span().end <= pair[1].full_span().start,
                 "sibling full_spans overlap: {:?} ({}) vs {:?} ({})",
-                pair[0].full_span,
+                pair[0].full_span(),
                 pair[0].name,
-                pair[1].full_span,
+                pair[1].full_span(),
                 pair[1].name,
             );
         }
@@ -1170,25 +1187,25 @@ mod proptest_invariants {
         for frag in fragments {
             // 2. full_span contains byte_range.
             assert!(
-                frag.full_span.start <= frag.byte_range.start && frag.byte_range.end <= frag.full_span.end,
+                frag.full_span().start <= frag.byte_range.start && frag.byte_range.end <= frag.full_span().end,
                 "full_span {:?} does not contain byte_range {:?} for {}",
-                frag.full_span,
+                frag.full_span(),
                 frag.byte_range,
                 frag.name,
             );
 
             // 3. Byte ranges are within source bounds.
             assert!(
-                frag.full_span.end <= source.len(),
+                frag.full_span().end <= source.len(),
                 "full_span.end {} exceeds source len {} for {}",
-                frag.full_span.end,
+                frag.full_span().end,
                 source.len(),
                 frag.name,
             );
 
             // 4. line_range ↔ byte_range consistency.
-            let from_line = SymbolLineRange::from_zero_based(&frag.line_range);
-            let from_bytes = SymbolLineRange::from_byte_range(source, &frag.full_span);
+            let from_line = SymbolLineRange::from_zero_based(&frag.line_range(source));
+            let from_bytes = SymbolLineRange::from_byte_range(source, &frag.full_span());
             assert_eq!(
                 from_line, from_bytes,
                 "line_range mismatch for {}: from_zero_based={from_line:?}, from_byte_range={from_bytes:?}",
@@ -1203,17 +1220,17 @@ mod proptest_invariants {
     proptest! {
         #[test]
         fn rust_decomposition_invariants(source in rust_functions_strategy()) {
-            check_fragment_invariants(&source, &decompose("rs", &source).fragments);
+            check_fragment_invariants(&source, &decompose("rs", &source));
         }
 
         #[test]
         fn python_decomposition_invariants(source in python_functions_strategy()) {
-            check_fragment_invariants(&source, &decompose("py", &source).fragments);
+            check_fragment_invariants(&source, &decompose("py", &source));
         }
 
         #[test]
         fn typescript_decomposition_invariants(source in typescript_functions_strategy()) {
-            check_fragment_invariants(&source, &decompose("ts", &source).fragments);
+            check_fragment_invariants(&source, &decompose("ts", &source));
         }
     }
 }
