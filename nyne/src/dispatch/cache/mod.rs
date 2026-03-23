@@ -120,6 +120,10 @@ pub(super) struct DirState {
     /// `file.rs@/symbols/`). When the source file's generation advances
     /// past this value, the directory is stale and must be re-resolved.
     source_generation: Option<(VfsPath, u64)>,
+    /// When `true`, this directory's contents depend on external state
+    /// and must be re-resolved on every access. Set during `lookup_name`
+    /// when the parent entry has `CachePolicy::Never`.
+    no_cache: bool,
 }
 
 impl Default for DirState {
@@ -134,6 +138,7 @@ impl DirState {
             passthrough: false,
             resolve_generation: 0,
             source_generation: None,
+            no_cache: false,
         }
     }
 
@@ -166,6 +171,12 @@ impl DirState {
         self.resolved = true;
         self.passthrough = true;
     }
+
+    /// Whether this directory must be re-resolved on every access.
+    pub(super) const fn is_no_cache(&self) -> bool { self.no_cache }
+
+    /// Mark this directory as no-cache — always re-resolved.
+    pub(super) const fn mark_no_cache(&mut self) { self.no_cache = true; }
 
     /// The current resolve generation counter.
     pub(super) const fn resolve_generation(&self) -> u64 { self.resolve_generation }

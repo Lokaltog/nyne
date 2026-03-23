@@ -6,12 +6,11 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 
 use super::{ResolvedInode, Router};
-use crate::dispatch::cache::{CachedNodeKind, DirHandle, DirState, L1Cache, NodeEntry, NodeSource};
+use crate::dispatch::cache::{CachedNodeKind, DirHandle, DirState, NodeEntry, NodeSource};
 use crate::dispatch::context::RequestContext;
 use crate::dispatch::resolve;
 use crate::node::CachePolicy;
 use crate::types::file_kind::FileKind;
-use crate::types::vfs_path::VfsPath;
 
 impl Router {
     /// Ensure a directory is resolved in the L1 cache.
@@ -26,10 +25,7 @@ impl Router {
         // Fast path: already resolved — unless source is stale or dir is no-cache.
         if let Some(handle) = self.cache.get(ctx.path) {
             let mut dir = handle.write();
-            if dir.is_resolved()
-                && !dir.is_source_stale(|sf| self.file_generations.get(sf))
-                && !is_no_cache_in_parent(&self.cache, ctx.path)
-            {
+            if dir.is_resolved() && !dir.is_source_stale(|sf| self.file_generations.get(sf)) && !dir.is_no_cache() {
                 return Ok(());
             }
             if dir.is_resolved() {
@@ -146,26 +142,39 @@ impl Router {
         }
 
         // Step 4: Not in resolve results — fall back to provider lookup.
-        // Only skip for actually skippable paths (gitignored / git-internal).
-        // Non-skippable passthrough dirs (no resolve results) still need
-        // provider lookup — companion dirs like `file.rs@/` are lookup-only.
-        if !self.path_filter.is_skippable(ctx.path) {
-            let result = resolve::lookup_name(self.registry.active_providers(), name, ctx)?;
-
-            if let Some(owned) = result {
-                let handle = self.cache.get_or_create(ctx.path);
-                let mut dir = handle.write();
-                let inode = self.insert_node(&mut dir, ctx.path, NodeEntry {
-                    name: name.to_owned(),
-                    kind: owned.into_cached_kind(),
-                    source: NodeSource::Lookup,
-                });
-                return Ok(Some(inode));
-            }
+        // Skippable paths (gitignored / git-internal) bypass providers entirely.
+        // Non-skippable passthrough dirs still need provider lookup — companion
+        // dirs like `file.rs@/` are lookup-only.
+        if self.path_filter.is_skippable(ctx.path) {
+            return self.lookup_real(name, ctx);
         }
 
-        // Step 5: Real filesystem fallback.
-        self.lookup_real(name, ctx)
+        let Some(owned) = resolve::lookup_name(self.registry.active_providers(), name, ctx)? else {
+            // Step 5: Real filesystem fallback.
+            return self.lookup_real(name, ctx);
+        };
+
+        // Check before into_cached_kind() consumes the node.
+        let is_no_cache_dir =
+            owned.node.kind().file_kind() == FileKind::Directory && owned.node.cache_policy() == CachePolicy::Never;
+
+        let inode = {
+            let handle = self.cache.get_or_create(ctx.path);
+            let mut dir = handle.write();
+            self.insert_node(&mut dir, ctx.path, NodeEntry {
+                name: name.to_owned(),
+                kind: owned.into_cached_kind(),
+                source: NodeSource::Lookup,
+            })
+        };
+
+        // Pre-mark the child DirState so ensure_resolved skips
+        // the resolved fast path — O(1) bool vs parent cache traversal.
+        if is_no_cache_dir && let Ok(child) = ctx.path.join(name) {
+            self.cache.get_or_create(&child).write().mark_no_cache();
+        }
+
+        Ok(Some(inode))
     }
 
     /// Look up a name considering only the real filesystem — no providers.
@@ -277,21 +286,6 @@ fn derive_from_plugins(dir: &DirState, name: &str, ctx: &RequestContext<'_>) -> 
         }
     }
     Ok(None)
-}
-
-/// Check whether a directory's parent cache entry has `CachePolicy::Never`.
-///
-/// No-cache directories are dynamic — their existence depends on external
-/// state (e.g., LSP queries). The dispatch layer must re-resolve their
-/// contents on every access instead of serving a stale cached result.
-fn is_no_cache_in_parent(cache: &L1Cache, path: &VfsPath) -> bool {
-    let Some(parent) = path.parent() else { return false };
-    let Some(name) = path.name() else { return false };
-    let Some(handle) = cache.get(&parent) else { return false };
-    let dir = handle.read();
-    let Some(entry) = dir.get(name) else { return false };
-    matches!(&entry.kind, CachedNodeKind::Virtual { node, .. }
-        if node.cache_policy() == CachePolicy::Never)
 }
 
 #[cfg(test)]
