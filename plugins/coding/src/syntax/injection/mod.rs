@@ -43,15 +43,10 @@ impl Decomposer for InjectionDecomposer {
             self.inner.decompose(&inner_content, max_depth)
         };
 
-        // 5. Remap all inner fragments' byte ranges from virtual → real offsets,
-        //    then recompute line_range from the original source.
+        // 5. Remap all inner fragments' byte ranges from virtual → real offsets.
         let remapped_fragments: Vec<Fragment> = inner_fragments
             .into_iter()
             .map(|f| span_map.remap_fragment(f))
-            .map(|mut f| {
-                recompute_byte_ranges_from_source(&mut f, source);
-                f
-            })
             .collect();
 
         // 6. Merge Jinja2 + remapped inner fragments, sorted by position.
@@ -102,20 +97,6 @@ impl Decomposer for InjectionDecomposer {
         // mode masks out everything outside the exact full_span.
         SpliceMode::Byte
     }
-}
-
-/// Recompute `line_range` for a fragment (and its children) from the original source.
-///
-/// After `SpanMap::remap_fragment` translates byte offsets from virtual to real
-/// coordinates, `line_range` is stale — it was computed from the concatenated
-/// content. This function recomputes it from `full_span` in the real source.
-///
-/// Uses [`line_of_byte`] — the SSOT for byte-offset → line-number conversion —
-/// matching the same formula used by [`Fragment::new`].
-const fn recompute_byte_ranges_from_source(_fragment: &mut Fragment, _source: &str) {
-    // After SpanMap::remap_fragment, byte_range is already in real coordinates.
-    // Children are remapped recursively by remap_fragment itself, so this
-    // function is now a no-op — kept as a hook for future post-remap fixups.
 }
 
 #[cfg(test)]
