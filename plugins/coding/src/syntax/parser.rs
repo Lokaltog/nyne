@@ -6,7 +6,7 @@ use std::str::from_utf8;
 use color_eyre::eyre::{Result, eyre};
 use parking_lot::Mutex;
 
-use super::fragment::{DecomposedFile, Fragment, FragmentKind, FragmentMetadata, ParseError, SymbolKind};
+use super::fragment::{DecomposedFile, Fragment, FragmentKind, ParseError, SymbolKind};
 
 /// Ergonomic wrapper around a [`tree_sitter::Node`] paired with its source
 /// bytes, eliminating the `(node, &[u8])` parameter pairs that dominate the
@@ -221,9 +221,8 @@ pub fn build_code_fragment(span_node: TsNode<'_>, spec: CodeFragmentSpec, parent
         FragmentKind::Symbol(spec.kind),
         span_node.byte_range(),
         Some(spec.signature),
-        FragmentMetadata::Code {
-            visibility: spec.visibility,
-        },
+        spec.visibility,
+        None,
         spec.name_byte_offset,
         spec.children,
         parent_name.map(String::from),

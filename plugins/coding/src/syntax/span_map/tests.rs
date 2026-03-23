@@ -10,7 +10,8 @@ fn code_fragment(byte_range: Range<usize>, name_byte_offset: usize, children: Ve
         FragmentKind::Symbol(SymbolKind::Function),
         byte_range,
         None,
-        FragmentMetadata::Code { visibility: None },
+        None,
+        None,
         name_byte_offset,
         children,
         None,
@@ -217,7 +218,8 @@ fn remap_fragment_section_metadata_unchanged() {
         FragmentKind::Section { level: 2 },
         0..20,
         None,
-        FragmentMetadata::Document { index: 3 },
+        None,
+        Some(FragmentMetadata::Document { index: 3 }),
         0,
         vec![],
         None,
@@ -226,7 +228,7 @@ fn remap_fragment_section_metadata_unchanged() {
     let remapped = map.remap_fragment(frag);
     assert_eq!(remapped.byte_range, 100..120);
     assert_eq!(remapped.full_span(), 100..120);
-    assert_eq!(remapped.metadata, FragmentMetadata::Document { index: 3 });
+    assert_eq!(remapped.metadata, Some(FragmentMetadata::Document { index: 3 }));
 }
 
 #[test]
@@ -240,7 +242,8 @@ fn remap_fragment_code_block_metadata_unchanged() {
         },
         5..15,
         None,
-        FragmentMetadata::CodeBlock { index: 1 },
+        None,
+        Some(FragmentMetadata::CodeBlock { index: 1 }),
         5,
         vec![],
         None,
@@ -248,7 +251,7 @@ fn remap_fragment_code_block_metadata_unchanged() {
 
     let remapped = map.remap_fragment(frag);
     assert_eq!(remapped.byte_range, 55..65);
-    assert_eq!(remapped.metadata, FragmentMetadata::CodeBlock { index: 1 });
+    assert_eq!(remapped.metadata, Some(FragmentMetadata::CodeBlock { index: 1 }));
     assert_eq!(remapped.kind, FragmentKind::CodeBlock {
         lang: Some("rust".to_owned())
     });

@@ -18,7 +18,7 @@
 
 use std::ops::Range;
 
-use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata, SymbolKind};
+use crate::syntax::fragment::{Fragment, FragmentKind, SymbolKind};
 use crate::syntax::parser::TreeSitterParser;
 
 /// Result of extracting template structure from a Jinja2 source file.
@@ -324,7 +324,8 @@ pub fn symbols_to_fragments(symbols: Vec<Jinja2Symbol>) -> Vec<Fragment> {
                 kind,
                 sym.full_span,
                 signature,
-                FragmentMetadata::Code { visibility: None },
+                None,
+                None,
                 sym.name_byte_offset,
                 Vec::new(),
                 None,

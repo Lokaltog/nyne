@@ -728,18 +728,14 @@ fn typescript_strip_jsdoc() {
 #[test]
 fn rust_visibility_extracted() {
     let result = decompose("rs", "pub(crate) fn internal() {}\n");
-    let FragmentMetadata::Code { visibility, .. } = &result[0].metadata else {
-        panic!("expected Code metadata");
-    };
+    let visibility = &result[0].visibility;
     assert_eq!(visibility.as_deref(), Some("pub(crate)"));
 }
 
 #[test]
 fn typescript_exported_visibility() {
     let result = decompose("ts", "export function greet() {}\n");
-    let FragmentMetadata::Code { visibility, .. } = &result[0].metadata else {
-        panic!("expected Code metadata");
-    };
+    let visibility = &result[0].visibility;
     assert_eq!(visibility.as_deref(), Some("export"));
 }
 

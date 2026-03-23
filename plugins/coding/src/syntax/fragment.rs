@@ -83,14 +83,13 @@ impl Display for FragmentKind {
     }
 }
 
-/// Language-specific metadata attached to a [`Fragment`].
+/// Document-specific metadata for non-code fragments (sections, code blocks).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FragmentMetadata {
-    /// Metadata for source-code fragments.
-    Code { visibility: Option<String> },
-    /// Metadata for document fragments (e.g. markdown sections).
+    /// A document section (e.g. markdown heading). `index` is the sequential
+    /// position among siblings for filesystem name disambiguation.
     Document { index: usize },
-    /// Metadata for fenced code blocks inside document sections.
+    /// A fenced code block inside a document section.
     CodeBlock { index: usize },
 }
 
@@ -106,7 +105,12 @@ pub struct Fragment {
     /// for the bounding box including children.
     pub byte_range: Range<usize>,
     pub signature: Option<String>,
-    pub metadata: FragmentMetadata,
+    /// Visibility qualifier (`pub`, `pub(crate)`, etc.). Only meaningful for
+    /// code symbols; `None` for all other fragment kinds.
+    pub visibility: Option<String>,
+    /// Document-specific metadata (section/code-block index). `None` for
+    /// code symbols and structural fragments.
+    pub metadata: Option<FragmentMetadata>,
     /// Byte offset of the name token in the source text.
     ///
     /// Used by LSP operations (rename, references, call hierarchy) to send
@@ -131,12 +135,13 @@ impl Fragment {
     /// construction sites (code symbols, document sections, code blocks)
     /// must use this constructor instead of struct literals.
     #[allow(clippy::too_many_arguments)]
-    pub const fn new(
+    pub fn new(
         name: String,
         kind: FragmentKind,
         byte_range: Range<usize>,
         signature: Option<String>,
-        metadata: FragmentMetadata,
+        visibility: Option<String>,
+        metadata: Option<FragmentMetadata>,
         name_byte_offset: usize,
         children: Vec<Self>,
         parent_name: Option<String>,
@@ -146,6 +151,7 @@ impl Fragment {
             kind,
             byte_range,
             signature,
+            visibility,
             metadata,
             name_byte_offset,
             children,
@@ -168,7 +174,8 @@ impl Fragment {
             kind,
             byte_range,
             None,
-            FragmentMetadata::Code { visibility: None },
+            None,
+            None,
             start,
             vec![],
             parent_name,

@@ -103,7 +103,7 @@ impl FragmentView {
             return self.shared.decomposer.clean_doc_comment(raw).unwrap_or_default();
         }
         match &self.frag.metadata {
-            FragmentMetadata::Document { .. } => {
+            Some(FragmentMetadata::Document { .. }) => {
                 let body = &self.shared.source[self.frag.byte_range.clone()];
                 section_first_line(body).unwrap_or_default()
             }
@@ -112,11 +112,9 @@ impl FragmentView {
     }
 
     fn visibility(&self) -> &str {
-        match &self.frag.metadata {
-            FragmentMetadata::Code {
-                visibility: Some(vis), ..
-            } => compact_visibility(vis),
-            _ => "",
+        match &self.frag.visibility {
+            Some(vis) => compact_visibility(vis),
+            None => "",
         }
     }
 }
