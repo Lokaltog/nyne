@@ -77,6 +77,25 @@ nyne mount &
 nyne attach --visibility all
 ```
 
+## CLI
+
+| Command | Purpose |
+|-|-|
+| `nyne mount [paths...]` | Start FUSE daemon for one or more directories |
+| `nyne attach [id] [-- cmd]` | Enter a mount's sandboxed namespace |
+| `nyne list [id]` | Show active sessions and attached processes |
+| `nyne exec <address>` | Run a registered script against a daemon |
+| `nyne ctl [request]` | Send a JSON control request to a daemon |
+| `nyne config` | Dump resolved configuration |
+
+```sh
+# Mount a project, then run an agent inside the namespace
+nyne mount &
+nyne attach -- claude
+```
+
+See **[Usage](USAGE.md)** for the full command reference and examples.
+
 ## Why
 
 If you've ever watched an agent refactor, you're familiar with the joy of watching context rot in real-time. 50K tokens in, re-reading files from three steps ago. Five files into a call graph, useful context is buried under thousands of irrelevant lines. nyne solves this at the filesystem level. When an agent asks for a function body, that's what it gets. Callers, diagnostics, git history are separate, scoped reads.
@@ -181,5 +200,6 @@ just doc   # build and open rustdoc
 
 ## Documentation
 
+- **[Usage](USAGE.md)** — full CLI command reference and examples
 - **[Workflows](WORKFLOWS.md)** — extended examples: pipes, sed, awk, find, xargs, batch operations, etc.
 - **[Roadmap](ROADMAP.md)** — planned features and design explorations
