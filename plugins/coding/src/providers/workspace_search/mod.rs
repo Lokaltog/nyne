@@ -40,6 +40,7 @@ impl WorkspaceSearchProvider {
             no_emit "@" {
                 "search" {
                     "symbols" {
+                        lookup(lookup_query),
                         "{query}" => children_results,
                     }
                 }
@@ -47,6 +48,12 @@ impl WorkspaceSearchProvider {
         });
 
         Self { ctx, routes }
+    }
+
+    /// Return a directory for any query string, if LSP is available.
+    fn lookup_query(&self, _ctx: &RouteCtx<'_>, name: &str) -> Option<VirtualNode> {
+        self.ctx.get::<Arc<LspManager>>()?;
+        Some(VirtualNode::directory(name).no_cache())
     }
 
     /// Build symlinks for workspace symbols matching the captured query.
