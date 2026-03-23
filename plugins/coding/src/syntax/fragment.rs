@@ -53,6 +53,10 @@ pub enum FragmentKind {
     Section { level: u8 },
     /// A fenced code block inside a document section.
     CodeBlock { lang: Option<String> },
+    /// Non-symbol content at the top of a file: frontmatter, bare config
+    /// keys, extends/import directives, etc. Collected as a single unit
+    /// rather than decomposed into individual fragments.
+    Preamble,
 }
 
 impl Display for FragmentKind {
@@ -62,6 +66,7 @@ impl Display for FragmentKind {
             Self::Section { level } => write!(f, "Section(h{level})"),
             Self::CodeBlock { lang: Some(lang) } => write!(f, "CodeBlock({lang})"),
             Self::CodeBlock { lang: None } => write!(f, "CodeBlock"),
+            Self::Preamble => write!(f, "Preamble"),
         }
     }
 }

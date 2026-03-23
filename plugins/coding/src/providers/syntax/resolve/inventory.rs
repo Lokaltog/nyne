@@ -77,7 +77,7 @@ impl SyntaxProvider {
             .iter()
             .filter_map(|f| match &f.kind {
                 FragmentKind::Symbol(k) => Some(k.directory_name()),
-                FragmentKind::Section { .. } | FragmentKind::CodeBlock { .. } => None,
+                FragmentKind::Section { .. } | FragmentKind::CodeBlock { .. } | FragmentKind::Preamble => None,
             })
             .collect();
         kinds.sort();
@@ -103,7 +103,7 @@ impl SyntaxProvider {
             .iter()
             .filter(|f| match &f.kind {
                 FragmentKind::Symbol(k) => k.directory_name() == kind_filter,
-                FragmentKind::Section { .. } | FragmentKind::CodeBlock { .. } => false,
+                FragmentKind::Section { .. } | FragmentKind::CodeBlock { .. } | FragmentKind::Preamble => false,
             })
             .filter_map(|f| {
                 let fs_name = f.fs_name.as_deref()?;

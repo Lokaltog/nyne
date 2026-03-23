@@ -149,6 +149,7 @@ fn format_kind(frag: &Fragment) -> String {
         FragmentKind::CodeBlock { lang } => lang
             .as_ref()
             .map_or_else(|| "CodeBlock".into(), |l| format!("CodeBlock({l})")),
+        FragmentKind::Preamble => "Preamble".into(),
     }
 }
 
