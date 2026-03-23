@@ -39,6 +39,38 @@ fn pid_override_shadows_name_rule() {
 }
 
 #[test]
+fn dynamic_name_rule_takes_precedence_over_static() {
+    let map = VisibilityMap::new([("test-proc".to_owned(), ProcessVisibility::None)]);
+    map.set_name_rule("test-proc".to_owned(), ProcessVisibility::All);
+
+    let rules = map.dynamic_name_rules();
+    assert_eq!(rules.len(), 1);
+    assert_eq!(rules[0], ("test-proc".to_owned(), ProcessVisibility::All));
+}
+
+#[test]
+fn dynamic_name_rule_truncates_long_names() {
+    let map = VisibilityMap::new([]);
+    let long_name = "a".repeat(20);
+    map.set_name_rule(long_name, ProcessVisibility::None);
+
+    let rules = map.dynamic_name_rules();
+    assert_eq!(rules[0].0.len(), COMM_MAX_LEN);
+}
+
+#[test]
+fn explicit_pid_entries_excludes_cached() {
+    let map = VisibilityMap::new([]);
+    map.set_pid(42, ProcessVisibility::All);
+    // resolve() on a non-existent PID caches Default — should not appear in explicit entries.
+    map.resolve(999);
+
+    let entries = map.explicit_pid_entries();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0], (42, ProcessVisibility::All));
+}
+
+#[test]
 fn child_inherits_parent_visibility() {
     // Our own PID's parent (the test runner) should be walkable.
     let our_pid = std::process::id();

@@ -51,8 +51,9 @@ impl VisibilityEntry {
 ///    auto-inherit their parent's cgroup and visibility is resolved via a single
 ///    `/proc/{pid}/cgroup` read. Falls back to ancestor walk when unavailable.
 /// 3. **Name-based rules** — process comm names mapped to a visibility level.
-///    Built at mount time from config (`passthrough_processes` → `None`) and
-///    plugin contributions. Immutable after construction.
+///    Static rules are built at mount time from config (`passthrough_processes`
+///    → `None`) and plugin contributions. Dynamic rules can be added at runtime
+///    via `SetVisibility` control requests with a `name` target.
 ///
 /// Resolution falls back to [`ProcessVisibility::Default`] when no layer
 /// matches. All resolution results are cached as [`VisibilityEntry::Cached`]
@@ -63,6 +64,10 @@ pub struct VisibilityMap {
     /// Process-name → visibility rules, immutable after construction.
     /// Names are pre-truncated to [`COMM_MAX_LEN`] to match kernel truncation.
     name_rules: HashMap<String, ProcessVisibility>,
+    /// Runtime name-based rules added via `SetVisibility` control requests.
+    /// Checked alongside `name_rules` in `resolve_by_comm`, with dynamic
+    /// rules taking precedence over static ones.
+    dynamic_name_rules: RwLock<HashMap<String, ProcessVisibility>>,
     /// Optional cgroups v2 tracker for child process visibility inheritance.
     /// `None` when cgroups v2 is unavailable — ancestor walk provides fallback.
     cgroup_tracker: Option<CgroupTracker>,
@@ -81,6 +86,7 @@ impl VisibilityMap {
                 .into_iter()
                 .map(|(name, vis)| (truncate_comm(name), vis))
                 .collect(),
+            dynamic_name_rules: RwLock::new(HashMap::new()),
             cgroup_tracker: None,
         }
     }
@@ -130,7 +136,7 @@ impl VisibilityMap {
 
         // Name-based rule via /proc/{pid}/comm — process identity takes
         // priority over ancestor inheritance.
-        if !self.name_rules.is_empty()
+        if (!self.name_rules.is_empty() || !self.dynamic_name_rules.read().is_empty())
             && let Some(vis) = self.resolve_by_comm(pid)
         {
             return self.cache_resolved(pid, vis);
@@ -167,6 +173,36 @@ impl VisibilityMap {
         }
     }
 
+    /// Set a dynamic name-based visibility rule.
+    ///
+    /// The name is truncated to [`COMM_MAX_LEN`] to match kernel behavior.
+    /// Dynamic rules take precedence over static (config-time) rules and
+    /// invalidate any cached resolutions that relied on name matching.
+    pub fn set_name_rule(&self, name: String, visibility: ProcessVisibility) {
+        self.dynamic_name_rules.write().insert(truncate_comm(name), visibility);
+    }
+
+    /// Return all explicit PID overrides (not cached resolutions).
+    pub fn explicit_pid_entries(&self) -> Vec<(u32, ProcessVisibility)> {
+        self.pid_entries
+            .read()
+            .iter()
+            .filter_map(|(&pid, &entry)| match entry {
+                VisibilityEntry::Explicit(vis) => Some((pid, vis)),
+                VisibilityEntry::Cached(_) => None,
+            })
+            .collect()
+    }
+
+    /// Return all dynamic name-based rules.
+    pub fn dynamic_name_rules(&self) -> Vec<(String, ProcessVisibility)> {
+        self.dynamic_name_rules
+            .read()
+            .iter()
+            .map(|(name, &vis)| (name.clone(), vis))
+            .collect()
+    }
+
     /// Cache a resolved visibility for fast-path hits on repeat requests.
     ///
     /// Cached entries are **not inheritable** — the ancestor walk skips them.
@@ -199,10 +235,17 @@ impl VisibilityMap {
     }
 
     /// Read `/proc/{pid}/comm` and check against name-based rules.
+    ///
+    /// Dynamic rules (set at runtime via control requests) take precedence
+    /// over static rules (from config).
     fn resolve_by_comm(&self, pid: u32) -> Option<ProcessVisibility> {
-        self.name_rules
-            .get(fs::read_to_string(format!("/proc/{pid}/comm")).ok()?.trim_end())
+        let comm = fs::read_to_string(format!("/proc/{pid}/comm")).ok()?;
+        let comm = comm.trim_end();
+        self.dynamic_name_rules
+            .read()
+            .get(comm)
             .copied()
+            .or_else(|| self.name_rules.get(comm).copied())
     }
 }
 

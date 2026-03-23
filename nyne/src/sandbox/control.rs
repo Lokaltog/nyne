@@ -33,10 +33,24 @@ pub const NYNE_CONTROL_SOCKET_ENV: &str = "NYNE_CONTROL_SOCKET";
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ControlRequest {
-    Exec { address: String, stdin: String },
-    Register { pid: i32, command: String },
-    Unregister { pid: i32 },
-    SetVisibility { pid: i32, visibility: ProcessVisibility },
+    Exec {
+        address: String,
+        stdin: String,
+    },
+    Register {
+        pid: i32,
+        command: String,
+    },
+    Unregister {
+        pid: i32,
+    },
+    SetVisibility {
+        #[serde(default)]
+        pid: Option<i32>,
+        #[serde(default)]
+        name: Option<String>,
+        visibility: ProcessVisibility,
+    },
     ListProcesses,
 }
 
@@ -50,7 +64,9 @@ pub enum ControlResponse {
     },
     Registered,
     Unregistered,
-    VisibilitySet,
+    Visibility {
+        rules: VisibilityRules,
+    },
     Processes {
         list: Vec<AttachedProcess>,
     },
@@ -64,6 +80,30 @@ pub struct AttachedProcess {
     pub pid: i32,
     pub command: String,
     pub start_time: SystemTime,
+}
+
+/// Current visibility rule state returned by `SetVisibility` responses.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VisibilityRules {
+    /// Per-PID explicit overrides (only registered processes).
+    pub pid_rules: Vec<PidVisibility>,
+    /// Dynamic name-based rules set at runtime.
+    pub name_rules: Vec<NameVisibility>,
+}
+
+/// Visibility override for a specific PID.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PidVisibility {
+    pub pid: i32,
+    pub command: String,
+    pub visibility: ProcessVisibility,
+}
+
+/// Visibility rule for a process comm name.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NameVisibility {
+    pub name: String,
+    pub visibility: ProcessVisibility,
 }
 
 /// Handle to a running control server. Removes the socket on drop.
@@ -168,7 +208,11 @@ fn dispatch(
         ControlRequest::Exec { address, stdin } => handle_exec(&address, &stdin, registry, activation),
         ControlRequest::Register { pid, command } => handle_register(pid, command, processes),
         ControlRequest::Unregister { pid } => handle_unregister(pid, processes),
-        ControlRequest::SetVisibility { pid, visibility: vis } => handle_set_visibility(pid, vis, visibility),
+        ControlRequest::SetVisibility {
+            pid,
+            name,
+            visibility: vis,
+        } => handle_set_visibility(pid, name, vis, processes, visibility),
         ControlRequest::ListProcesses => handle_list(processes),
     }
 }
@@ -231,10 +275,70 @@ fn handle_unregister(pid: i32, processes: &ProcessTable) -> ControlResponse {
     ControlResponse::Unregistered
 }
 
-fn handle_set_visibility(pid: i32, vis: ProcessVisibility, map: &VisibilityMap) -> ControlResponse {
-    map.set_pid(pid.cast_unsigned(), vis);
-    debug!(pid, %vis, "process visibility set");
-    ControlResponse::VisibilitySet
+#[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
+fn handle_set_visibility(
+    pid: Option<i32>,
+    name: Option<String>,
+    vis: ProcessVisibility,
+    processes: &ProcessTable,
+    map: &VisibilityMap,
+) -> ControlResponse {
+    match (pid, name) {
+        (Some(_), Some(_)) => {
+            return ControlResponse::Error {
+                message: "specify either 'pid' or 'name', not both".into(),
+            };
+        }
+        (Some(pid), None) => {
+            let table = processes.lock().expect("process table poisoned");
+            if !table.iter().any(|p| p.pid == pid) {
+                return ControlResponse::Error {
+                    message: format!(
+                        "PID {pid} is not a registered process (use ListProcesses to see registered PIDs)"
+                    ),
+                };
+            }
+            map.set_pid(pid.cast_unsigned(), vis);
+            debug!(pid, %vis, "process visibility set");
+        }
+        (None, Some(name)) => {
+            debug!(name = %name, %vis, "name visibility rule set");
+            map.set_name_rule(name, vis);
+        }
+        (None, None) => {
+            debug!("visibility rules queried");
+        }
+    }
+
+    ControlResponse::Visibility {
+        rules: build_visibility_rules(processes, map),
+    }
+}
+
+#[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
+fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> VisibilityRules {
+    let table = processes.lock().expect("process table poisoned");
+    let pid_entries = map.explicit_pid_entries();
+
+    let pid_rules = table
+        .iter()
+        .filter_map(|proc| {
+            let vis = pid_entries.iter().find(|(pid, _)| *pid == proc.pid.cast_unsigned())?.1;
+            Some(PidVisibility {
+                pid: proc.pid,
+                command: proc.command.clone(),
+                visibility: vis,
+            })
+        })
+        .collect();
+
+    let name_rules = map
+        .dynamic_name_rules()
+        .into_iter()
+        .map(|(name, visibility)| NameVisibility { name, visibility })
+        .collect();
+
+    VisibilityRules { pid_rules, name_rules }
 }
 
 #[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]

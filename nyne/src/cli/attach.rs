@@ -67,7 +67,8 @@ pub fn run(args: &AttachArgs) -> Result<i32> {
         // Set visibility if non-default — applies to this PID and its children.
         if args.visibility != ProcessVisibility::Default {
             let req = sandbox::control::ControlRequest::SetVisibility {
-                pid,
+                pid: Some(pid),
+                name: None,
                 visibility: args.visibility,
             };
             if let Err(e) = sandbox::control::send_request(socket, &req) {
