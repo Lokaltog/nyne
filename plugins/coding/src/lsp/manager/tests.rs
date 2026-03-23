@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use nyne::config::LspConfig;
 use nyne::process::Spawner;
 
+use crate::config::lsp::LspConfig;
 use crate::lsp::LspRegistry;
 use crate::lsp::manager::LspManager;
 use crate::syntax::SyntaxRegistry;

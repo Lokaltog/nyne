@@ -1,6 +1,5 @@
 ---
-source: src/config/tests.rs
-assertion_line: 93
+source: plugins/coding/src/config/tests.rs
 expression: config.lsp.custom
 ---
 [

@@ -29,15 +29,10 @@ impl Plugin for CodingPlugin {
         let syntax = SyntaxRegistry::global();
         ctx.insert(Arc::clone(&syntax));
 
-        let (coding_config, lsp_registry, lsp_config, sandbox_env) = {
-            let config = ctx.config();
-            (
-                CodingConfig::from_plugin_table(&config.plugin),
-                LspRegistry::build_with_config(&config.lsp),
-                config.lsp.clone(),
-                config.sandbox.env.clone(),
-            )
-        };
+        let coding_config = CodingConfig::from_plugin_table(&ctx.config().plugin);
+        let sandbox_env = ctx.config().sandbox.env.clone();
+        let lsp_registry = LspRegistry::build_with_config(&coding_config.lsp);
+        let lsp_config = coding_config.lsp.clone();
 
         // Contribute LSP server commands to the passthrough set so those
         // processes see only the real filesystem (not virtual content).

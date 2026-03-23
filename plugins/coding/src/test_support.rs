@@ -36,5 +36,7 @@ pub fn stub_activation_context() -> Arc<nyne::dispatch::activation::ActivationCo
     let mut ctx = ActivationContext::new(tmp.clone(), tmp.clone(), tmp, real_fs, &config, spawner);
     // Insert a SyntaxRegistry so providers can use it.
     ctx.insert(Arc::new(registry()));
+    // Insert default CodingConfig so analysis rules can access config.
+    ctx.insert(crate::config::CodingConfig::default());
     Arc::new(ctx)
 }

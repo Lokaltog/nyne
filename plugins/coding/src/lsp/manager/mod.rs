@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use color_eyre::eyre::Result;
 use lsp_types::SymbolInformation;
-use nyne::config::LspConfig;
 use nyne::process::Spawner;
 use parking_lot::{Mutex, RwLock};
 use tracing::{debug, warn};
@@ -14,6 +13,7 @@ use tracing::{debug, warn};
 use super::LspRegistry;
 use super::cache::LspCache;
 use super::client::LspClient;
+use crate::config::lsp::LspConfig;
 use crate::syntax::SyntaxRegistry;
 
 /// Tracked state for a document opened via `textDocument/didOpen`.

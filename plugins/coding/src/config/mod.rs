@@ -1,6 +1,12 @@
+pub mod lsp;
+pub mod todo;
+
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
+
+use self::lsp::LspConfig;
+use self::todo::TodoConfig;
 
 /// Top-level configuration for the coding plugin.
 ///
@@ -8,6 +14,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CodingConfig {
+    /// LSP configuration.
+    #[serde(default)]
+    pub lsp: LspConfig,
+
+    /// TODO/FIXME comment aggregation configuration.
+    #[serde(default)]
+    pub todo: TodoConfig,
+
     /// Code analysis configuration.
     #[serde(default)]
     pub analysis: AnalysisConfig,

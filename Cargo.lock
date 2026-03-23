@@ -1468,6 +1468,7 @@ dependencies = [
  "crossbeam-channel",
  "filetime",
  "git2",
+ "humantime-serde",
  "insta",
  "jiff",
  "linkme",

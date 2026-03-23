@@ -336,3 +336,90 @@ fn claude_config_from_fixture() {
     assert!(config.claude.hooks.post_tool_use);
     assert!(config.claude.hooks.session_start);
 }
+
+#[test]
+fn lsp_defaults_when_omitted() {
+    let config = load_fixture("lsp_empty_section.toml");
+    assert!(config.lsp.enabled);
+    assert_eq!(config.lsp.cache_ttl, std::time::Duration::from_secs(300));
+    assert_eq!(config.lsp.diagnostics_timeout, std::time::Duration::from_secs(2));
+}
+
+#[test]
+fn lsp_disabled() {
+    let config = load_fixture("lsp_disabled.toml");
+    assert!(!config.lsp.enabled);
+}
+
+#[test]
+fn lsp_custom_durations() {
+    let config = load_fixture("lsp_custom_durations.toml");
+    assert_eq!(config.lsp.cache_ttl, std::time::Duration::from_secs(600));
+    assert_eq!(config.lsp.diagnostics_timeout, std::time::Duration::from_secs(5));
+}
+
+#[test]
+fn lsp_server_override_args() {
+    let config = load_fixture("lsp_server_override_args.toml");
+    let ra = &config.lsp.servers["rust-analyzer"];
+    assert!(ra.enabled);
+    assert!(ra.command.is_none());
+    assert_eq!(
+        ra.args.as_deref(),
+        Some(&["--log-file".to_owned(), "/tmp/ra.log".to_owned()][..])
+    );
+}
+
+#[test]
+fn lsp_server_override_command() {
+    let config = load_fixture("lsp_server_override_command.toml");
+    let pyright = &config.lsp.servers["pyright"];
+    assert!(pyright.enabled);
+    assert_eq!(pyright.command.as_deref(), Some("basedpyright-langserver"));
+    assert!(pyright.args.is_none());
+}
+
+#[test]
+fn lsp_server_disable() {
+    let config = load_fixture("lsp_server_disable.toml");
+    assert!(!config.lsp.servers["basedpyright"].enabled);
+}
+
+#[test]
+fn lsp_custom_server() {
+    let config = load_fixture("lsp_custom_server.toml");
+    insta::assert_debug_snapshot!(config.lsp.custom);
+}
+
+#[test]
+fn lsp_multiple_custom_servers() {
+    let config = load_fixture("lsp_multiple_custom_servers.toml");
+    insta::assert_debug_snapshot!(config.lsp.custom);
+}
+
+#[test]
+fn lsp_custom_server_no_args() {
+    let config = load_fixture("lsp_custom_server_no_args.toml");
+    assert!(config.lsp.custom[0].args.is_empty());
+}
+
+#[test]
+fn lsp_full_config() {
+    let config = load_fixture("lsp_full.toml");
+    assert!(config.lsp.enabled);
+    assert_eq!(config.lsp.cache_ttl, std::time::Duration::from_secs(600));
+    assert_eq!(config.lsp.diagnostics_timeout, std::time::Duration::from_secs(3));
+    assert_eq!(config.lsp.servers.len(), 2);
+    assert!(!config.lsp.servers["basedpyright"].enabled);
+    assert_eq!(config.lsp.custom.len(), 1);
+}
+
+#[rstest]
+#[case::unknown_lsp("[lsp]\nbogus = true")]
+#[case::unknown_lsp_server_override("[lsp.servers.rust-analyzer]\nbogus = true")]
+#[case::unknown_lsp_custom("[[lsp.custom]]\nname = \"foo\"\ncommand = \"foo\"\nextensions = [\"bar\"]\nbogus = true")]
+#[case::unknown_todo("[todo]\nbogus = true")]
+fn reject_invalid_config(#[case] toml_input: &str) {
+    let result: std::result::Result<CodingConfig, _> = toml::from_str(toml_input);
+    assert!(result.is_err(), "invalid config should be rejected: {toml_input}");
+}

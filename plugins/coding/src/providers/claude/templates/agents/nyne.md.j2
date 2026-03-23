@@ -65,7 +65,7 @@ estimates, then read only what you need:
 - **< 100 tokens:** read the body directly
 - **> 100 tokens:** read `signature.{{ ext }}` first to confirm relevance
 - **Multiple symbols:** use Bash brace expansion: `cat file.{{ ext }}@/symbols/{A,B,C}@/body.{{ ext }}`
-- **Imports only:** `cat file.{{ ext }}@/symbols/imports.{{ ext }}` (~95% savings vs full file)
+- **Imports only:** `Read file.{{ ext }}@/symbols/imports.{{ ext }}` (~95% savings vs full file)
 
 ### 2. Blast-Radius Discipline
 
@@ -84,7 +84,7 @@ understanding who depends on it. One read each — they include inline code cont
 
 After every write to a symbol body or signature:
 
-1. `cat file.{{ ext }}@/DIAGNOSTICS.md` — check for errors instantly (no build needed)
+1. `Read file.{{ ext }}@/DIAGNOSTICS.md` — check for errors instantly (no build needed)
 2. If errors exist: `ls file.{{ ext }}@/symbols/Foo@/actions/` — check for LSP auto-fixes
 3. Apply fixes: `patch -p1 < file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff`
 
@@ -104,6 +104,10 @@ in that file. On `ENOENT`, re-discover the current name rather than guessing pat
 ---
 
 ## Reading & Exploration
+
+**Default to the Read tool** for all single-path `@/` reads. Use Bash `cat` only for batch
+reads (brace expansion) and shell pipelines. Line ranges (`@/lines:M-N`) are an escape hatch
+— prefer symbol-targeted reads.
 
 ### Start with OVERVIEW.md
 
@@ -144,7 +148,7 @@ cat file.{{ ext }}@/symbols/at-line/42         # follows symlink, reads the body
 
 ```sh
 cat file.{{ ext }}@/symbols/{Foo,Bar,Baz}@/body.{{ ext }}    # multiple symbols at once
-cat file.{{ ext }}@/lines:10-20                        # raw line range (when needed)
+cat file.{{ ext }}@/lines:10-20                        # escape hatch — prefer symbol-targeted reads
 ```
 
 ### Hover Documentation and Hints
@@ -273,19 +277,19 @@ mv file.{{ ext }}@/symbols/old_name@/ file.{{ ext }}@/symbols/new_name@/
 
 When changing a function signature (highest-value workflow):
 
-1. **Read callers** (mandatory): `cat file.{{ ext }}@/symbols/process@/CALLERS.md`
-2. **Read the function**: `cat file.{{ ext }}@/symbols/process.{{ ext }}`
+1. **Read callers** (mandatory): `Read file.{{ ext }}@/symbols/process@/CALLERS.md`
+2. **Read the function**: `Read file.{{ ext }}@/symbols/process.{{ ext }}`
 3. **Write new signature**: `echo '...' > file.{{ ext }}@/symbols/process@/signature.{{ ext }}`
 4. **Check for auto-fixes**: `ls file.{{ ext }}@/symbols/process@/actions/`
 5. **Apply fixes**: `cat file.{{ ext }}@/symbols/process@/actions/*.diff | patch -p1`
 6. **Fix remaining callers** via symlinks: `Edit file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}`
-7. **Check diagnostics**: `cat file.{{ ext }}@/DIAGNOSTICS.md`
+7. **Check diagnostics**: `Read file.{{ ext }}@/DIAGNOSTICS.md`
 
 **~7 tool calls vs ~24 without nyne. ~1000 tokens vs ~34,000.**
 
 ### Extract a Function
 
-1. Read source: `cat file.{{ ext }}@/symbols/process.{{ ext }}`
+1. Read source: `Read file.{{ ext }}@/symbols/process.{{ ext }}`
 2. Append new function: `cat <<'EOF' >>file.{{ ext }}@/symbols/process@/body.{{ ext }}`
 3. Replace extracted lines with call: `Edit file.{{ ext }}@/symbols/process@/body.{{ ext }}`
 
@@ -420,14 +424,15 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 |-|-|
 | `Read file.{{ ext }}` (raw file read) | `Read file.{{ ext }}@/symbols/OVERVIEW.md` then targeted symbol |
 | `Grep "fn process" src/` | `ls file.{{ ext }}@/symbols/by-kind/fn/` or `OVERVIEW.md` |
-| `Grep "process" src/` for callers | `cat file.{{ ext }}@/symbols/process@/CALLERS.md` |
-| Full file read for imports | `cat file.{{ ext }}@/symbols/imports.{{ ext }}` |
-| `cargo check` after edits | `cat file.{{ ext }}@/DIAGNOSTICS.md` (instant) |
+| `Grep "process" src/` for callers | `Read file.{{ ext }}@/symbols/process@/CALLERS.md` |
+| Full file read for imports | `Read file.{{ ext }}@/symbols/imports.{{ ext }}` |
+| `cargo check` after edits | `Read file.{{ ext }}@/DIAGNOSTICS.md` (instant) |
 | Editing raw source files | Edit `@/symbols/` bodies (tree-sitter validated) |
 | Grep + manual line math for symbol | `readlink file.{{ ext }}@/symbols/at-line/42` (instant) |
 | Reading N files for call sites | `CALLERS.md` has inline code context for all sites |
 | Modifying without checking callers | **Always** read `CALLERS.md` first |
 | Using symbol paths after a write without re-reading | Re-read `OVERVIEW.md` after writes — the symbol table may have changed |
+| `Bash(cat file@/OVERVIEW.md)` for single reads | Use the **Read tool** — it's the default for all single-path `@/` reads |
 | Guessing path variations on `ENOENT` | `ls symbols/` or `OVERVIEW.md` to find the current name |
 
 ---

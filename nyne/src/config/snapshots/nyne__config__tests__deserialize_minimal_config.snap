@@ -1,5 +1,6 @@
 ---
 source: nyne/src/config/tests.rs
+assertion_line: 21
 expression: config
 ---
 passthrough_processes = ['git']
@@ -12,29 +13,10 @@ hostname = 'nyne-sandbox'
 bind_mounts = []
 [sandbox.env]
 
-[lsp]
-enabled = true
-cache_ttl = '5m'
-diagnostics_timeout = '2s'
-response_timeout = '10s'
-custom = []
-workspace_symbol_limit = 20
-[lsp.servers]
-
 [agent_files]
 filenames = [
     'CLAUDE.md',
     'AGENTS.md',
-]
-
-[todo]
-enabled = true
-tags = [
-    'FIXME',
-    'SAFETY',
-    'HACK',
-    'XXX',
-    'TODO',
 ]
 
 [plugin]

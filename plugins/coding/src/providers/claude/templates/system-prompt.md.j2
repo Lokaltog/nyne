@@ -23,7 +23,7 @@ This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every sour
 
 ## Reading
 
-Use the **Read tool** for single paths, **Bash `cat`** for line ranges and multi-symbol batch reads.
+**Default to the Read tool** for all single-path `@/` reads. Use Bash `cat` only for batch reads (brace expansion) and shell pipelines.
 
 | What | Path |
 |-|-|
@@ -49,7 +49,7 @@ readlink file.{{ ext }}@/symbols/at-line/42
 # Write directly to the symbol at a known line
 sed -i 's/old/new/' file.{{ ext }}@/symbols/at-line/42
 
-# Raw line range — only when you genuinely need lines outside any symbol
+# Line range (escape hatch — prefer symbol-targeted reads)
 cat file.{{ ext }}@/lines:10-20
 ```
 

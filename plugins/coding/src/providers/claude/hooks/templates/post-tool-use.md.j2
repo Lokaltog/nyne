@@ -2,7 +2,7 @@
 {% if tool_name == "Bash" %}
 {% for rel in rel_paths %}
 {% if bin == "cat" %}
-Hint (nyne VFS): `cat` reads the entire file into context. Use `{{ rel }}@/symbols/{{ FILE_OVERVIEW }}` to see the file's structure with token estimates, then read only the symbol you need. This saves context for actual work.
+Hint (nyne VFS): Prefer the **Read tool** over `cat` for reading files. Use `Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}` to see the file's structure with token estimates, then `Read` only the symbol you need. Reserve `cat` for batch reads (brace expansion) and pipelines.
 {% elif bin in ["head", "tail"] %}
 Hint (nyne VFS): Line offsets are fragile — they shift when the file changes. Use `{{ rel }}@/symbols/{{ FILE_OVERVIEW }}` to find the symbol you're looking for, then read its body directly. Symbol paths are stable across edits.
 {% elif bin in ["grep", "rg"] %}

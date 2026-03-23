@@ -17,6 +17,7 @@ use serde::Serialize;
 
 use super::names::{self, DIR_TODO};
 use super::prelude::*;
+use crate::config::CodingConfig;
 use crate::syntax::SyntaxRegistry;
 
 /// Given text immediately after a tag keyword (e.g. the `": fix this"` in
@@ -63,8 +64,8 @@ struct TodoIndex {
 
 impl TodoProvider {
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
-        let config = &ctx.config().todo;
-        let tags = config.tags.clone();
+        let config = ctx.get::<CodingConfig>().expect("coding config");
+        let tags = config.todo.tags.clone();
         let scanner = TodoScanner::new(&tags);
 
         let mut b = names::handle_builder();
@@ -214,7 +215,7 @@ impl Provider for TodoProvider {
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
     fn should_activate(&self, ctx: &ActivationContext) -> bool {
-        if !ctx.config().todo.enabled {
+        if !ctx.get::<CodingConfig>().is_some_and(|c| c.todo.enabled) {
             return false;
         }
         #[cfg(feature = "git-symbols")]

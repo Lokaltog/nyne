@@ -19,8 +19,9 @@ mod languages;
 
 use std::collections::{HashMap, HashSet};
 
-use nyne::config::{CustomLspServer, LspConfig, LspServerOverride};
 use spec::{LspLanguageDef, LspServerDef};
+
+use crate::config::lsp::{CustomLspServer, LspConfig, LspServerOverride};
 
 /// Factory function that creates LSP language definitions for link-time
 /// auto-discovery via `linkme`.

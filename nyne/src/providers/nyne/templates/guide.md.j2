@@ -3,8 +3,8 @@
 > This directory is a **nyne** FUSE mount over `{{ source_dir }}`.
 > Languages: {{ languages }}
 
-**Use file tools** (`cat`, `read`, `write`, `grep`, `find`) on virtual files.
-All `@`-namespaced entries are regular files — your tools work on them like any other file.
+**Prefer the Read tool** for reading virtual files. Use Bash (`cat`, `echo >`, `sed -i`) for batch reads (brace expansion), writes, and shell pipelines.
+All `@`-namespaced entries are real files — Read tool, Edit tool, and Bash all work on them.
 
 ### Quick Start
 
@@ -27,7 +27,7 @@ echo 'new content' > file.{{ ext }}@/symbols/my_function@/body.{{ ext }}
 # 6. Read/edit the import block
 cat file.{{ ext }}@/symbols/imports.{{ ext }}
 
-# 7. Read specific lines
+# 7. Read specific lines (escape hatch — prefer symbol-targeted reads)
 cat file.{{ ext }}@/lines:10-20
 ```
 

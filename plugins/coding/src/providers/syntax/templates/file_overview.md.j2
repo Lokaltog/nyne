@@ -15,11 +15,11 @@
 | Action | Path |
 |-|-|
 | Edit symbol at line N | `{{ filename }}@/symbols/at-line/N` (symlink → body, preferred for edits) |
-| Read symbol body by name | `{{ filename }}@/symbols/<Symbol>@/body.{{ ext }}` |
-| Symbol callers/deps/refs | `{{ filename }}@/symbols/<Symbol>@/CALLERS.md` |
+| Read symbol body by name | `Read {{ filename }}@/symbols/<Symbol>@/body.{{ ext }}` |
+| Symbol callers/deps/refs | `Read {{ filename }}@/symbols/<Symbol>@/CALLERS.md` |
 | LSP rename/actions | `ls {{ filename }}@/symbols/<Symbol>@/` |
-| Diagnostics | `{{ filename }}@/DIAGNOSTICS.md` |
-| Read/splice/append lines | `cat {{ filename }}@/lines:M-N` (no prior read needed, not intercepted) |
+| Diagnostics | `Read {{ filename }}@/DIAGNOSTICS.md` |
+| Line range (escape hatch) | `cat {{ filename }}@/lines:M-N` (no prior read needed, not intercepted) |
 
 ## Symbols
 
