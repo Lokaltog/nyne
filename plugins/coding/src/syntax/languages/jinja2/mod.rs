@@ -71,6 +71,8 @@ pub fn extract_template(source: &str) -> TemplateExtraction {
     let mut regions = Vec::new();
     let mut symbols = Vec::new();
     let mut block_stack: Vec<PendingBlock> = Vec::new();
+    let mut preamble_start: Option<usize> = None;
+    let mut preamble_end: usize = 0;
 
     // The tree-sitter-jinja AST is flat: all nodes (content, control,
     // render_expression) are direct children of `source`.
@@ -83,11 +85,28 @@ pub fn extract_template(source: &str) -> TemplateExtraction {
                     regions.push(range);
                 }
             }
+            "control" if is_preamble_directive(child, source) => {
+                if preamble_start.is_none() {
+                    preamble_start = Some(child.start_byte());
+                }
+                preamble_end = child.end_byte();
+            }
             "control" => {
                 handle_control_node(child, source, &mut symbols, &mut block_stack);
             }
             _ => {}
         }
+    }
+
+    // Insert preamble (extends/import) as the first symbol.
+    if let Some(start) = preamble_start {
+        symbols.insert(0, Jinja2Symbol {
+            name: "preamble".to_owned(),
+            kind: SymbolKind::Decorator, // placeholder — converted to Preamble by symbols_to_fragments
+            signature: String::new(),
+            name_byte_offset: start,
+            full_span: start..preamble_end,
+        });
     }
 
     TemplateExtraction { regions, symbols }
@@ -234,6 +253,19 @@ fn is_end_tag_text(node: tree_sitter::Node<'_>, source: &str) -> bool {
     text.starts_with("{%") && text.contains("end")
 }
 
+/// Check if a control node is an extends or import directive.
+///
+/// These are preamble directives that should be collected into a single
+/// preamble fragment rather than decomposed individually.
+fn is_preamble_directive(node: tree_sitter::Node<'_>, source: &str) -> bool {
+    let text = source.get(node.byte_range()).unwrap_or_default().trim();
+    if !text.starts_with("{%") {
+        return false;
+    }
+    let inner = text.trim_start_matches("{%").trim_start_matches(['-', '+']).trim_start();
+    inner.starts_with("extends") || inner.starts_with("import") || inner.starts_with("from")
+}
+
 /// Extract the identifier name and byte offset from a statement node.
 ///
 /// The grammar nests identifiers differently per statement type:
@@ -274,13 +306,19 @@ pub fn symbols_to_fragments(symbols: Vec<Jinja2Symbol>, source: &str) -> Vec<Fra
     symbols
         .into_iter()
         .map(|sym| {
+            let kind = if sym.kind == SymbolKind::Decorator {
+                FragmentKind::Preamble
+            } else {
+                FragmentKind::Symbol(sym.kind)
+            };
+            let signature = if sym.signature.is_empty() { None } else { Some(sym.signature) };
             Fragment::new(
                 source,
                 sym.name,
-                FragmentKind::Symbol(sym.kind),
+                kind,
                 sym.full_span.clone(),
                 sym.full_span,
-                Some(sym.signature),
+                signature,
                 FragmentMetadata::Code {
                     visibility: None,
                     doc_comment_range: None,

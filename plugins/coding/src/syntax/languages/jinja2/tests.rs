@@ -246,13 +246,14 @@ fn complex_template_content_and_symbols() {
 "#;
     let t = extract_template(source);
 
-    // Should find: set (title) + block (content) — extends is not extracted.
+    // Should find: preamble (extends) + set (title) + block (content).
     let names: Vec<_> = t.symbols.iter().map(|s| s.name.as_str()).collect();
+    assert!(names.contains(&"preamble"), "should find preamble for extends");
     assert!(names.contains(&"title"), "should find set title");
     assert!(names.contains(&"content"), "should find block content");
 
     // for loop should NOT produce a symbol.
-    assert_eq!(t.symbols.len(), 2);
+    assert_eq!(t.symbols.len(), 3);
 
     // Content should include the markdown and list marker, but not the
     // template directives themselves.
@@ -316,7 +317,7 @@ fn fragment_name_byte_offset_extracts_name() {
     assert_eq!(extracted_name, "header");
 }
 
-// ── Granularity contract tests (fixture-based) ──────────────────────
+
 
 fn decompose_fixture(name: &str) -> Vec<super::Fragment> {
     let source = crate::test_support::load_fixture("syntax/languages/jinja2", name);
