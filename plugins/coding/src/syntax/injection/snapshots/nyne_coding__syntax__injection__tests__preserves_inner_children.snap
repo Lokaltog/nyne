@@ -1,5 +1,5 @@
 ---
-source: nyne-coding/src/syntax/injection/tests.rs
+source: plugins/coding/src/syntax/injection/tests.rs
 expression: file.fragments
 ---
 [
@@ -41,54 +41,7 @@ expression: file.fragments
             decorator_range: None,
         },
         name_byte_offset: 19,
-        children: [
-            Fragment {
-                name: "host",
-                kind: Symbol(
-                    Variable,
-                ),
-                byte_range: 28..46,
-                full_span: 28..46,
-                line_range: 2..3,
-                signature: Some(
-                    "host = \"localhost\"",
-                ),
-                metadata: Code {
-                    visibility: None,
-                    doc_comment_range: None,
-                    decorator_range: None,
-                },
-                name_byte_offset: 28,
-                children: [],
-                parent_name: Some(
-                    "server",
-                ),
-                fs_name: None,
-            },
-            Fragment {
-                name: "port",
-                kind: Symbol(
-                    Variable,
-                ),
-                byte_range: 47..58,
-                full_span: 47..58,
-                line_range: 3..4,
-                signature: Some(
-                    "port = 8080",
-                ),
-                metadata: Code {
-                    visibility: None,
-                    doc_comment_range: None,
-                    decorator_range: None,
-                },
-                name_byte_offset: 47,
-                children: [],
-                parent_name: Some(
-                    "server",
-                ),
-                fs_name: None,
-            },
-        ],
+        children: [],
         parent_name: None,
         fs_name: None,
     },

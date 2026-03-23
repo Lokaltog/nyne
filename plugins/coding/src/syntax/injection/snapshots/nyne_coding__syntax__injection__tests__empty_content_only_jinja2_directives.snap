@@ -1,5 +1,23 @@
 ---
-source: nyne-coding/src/syntax/injection/tests.rs
+source: plugins/coding/src/syntax/injection/tests.rs
 expression: file.fragments
 ---
-[]
+[
+    Fragment {
+        name: "preamble",
+        kind: Preamble,
+        byte_range: 0..57,
+        full_span: 0..57,
+        line_range: 0..2,
+        signature: None,
+        metadata: Code {
+            visibility: None,
+            doc_comment_range: None,
+            decorator_range: None,
+        },
+        name_byte_offset: 0,
+        children: [],
+        parent_name: None,
+        fs_name: None,
+    },
+]
