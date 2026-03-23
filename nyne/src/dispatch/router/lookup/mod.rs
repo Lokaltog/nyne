@@ -6,10 +6,11 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 
 use super::{ResolvedInode, Router};
-use crate::dispatch::cache::{CachedNodeKind, DirHandle, DirState, NodeEntry, NodeSource};
+use crate::dispatch::cache::{CachedNodeKind, DirHandle, DirState, L1Cache, NodeEntry, NodeSource};
 use crate::dispatch::context::RequestContext;
 use crate::dispatch::resolve;
 use crate::types::file_kind::FileKind;
+use crate::types::vfs_path::VfsPath;
 
 impl Router {
     /// Ensure a directory is resolved in the L1 cache.
@@ -21,13 +22,15 @@ impl Router {
     /// swept — these represent nodes a provider used to emit but no
     /// longer does.
     pub fn ensure_resolved(&self, ctx: &RequestContext<'_>) -> Result<()> {
-        // Fast path: already resolved — unless the source file is stale.
+        // Fast path: already resolved — unless source is stale or dir is volatile.
         if let Some(handle) = self.cache.get(ctx.path) {
             let mut dir = handle.write();
-            if dir.is_resolved() && !dir.is_source_stale(|sf| self.file_generations.get(sf)) {
-                return Ok(());
-            }
             if dir.is_resolved() {
+                if !dir.is_source_stale(|sf| self.file_generations.get(sf))
+                    && !is_volatile_in_parent(&self.cache, ctx.path)
+                {
+                    return Ok(());
+                }
                 dir.mark_unresolved();
             }
         }
@@ -272,6 +275,20 @@ fn derive_from_plugins(dir: &DirState, name: &str, ctx: &RequestContext<'_>) -> 
         }
     }
     Ok(None)
+}
+
+/// Check whether a directory's node in its parent cache is volatile.
+///
+/// Volatile directories are never considered "resolved" — their contents
+/// must be re-resolved on every access because they depend on external
+/// state (e.g., LSP workspace search results).
+fn is_volatile_in_parent(cache: &L1Cache, path: &VfsPath) -> bool {
+    let Some(parent) = path.parent() else { return false };
+    let Some(name) = path.name() else { return false };
+    let Some(handle) = cache.get(&parent) else { return false };
+    let dir = handle.read();
+    let Some(entry) = dir.get(name) else { return false };
+    matches!(&entry.kind, CachedNodeKind::Virtual { node, .. } if node.is_volatile())
 }
 
 #[cfg(test)]

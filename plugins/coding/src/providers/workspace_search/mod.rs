@@ -44,25 +44,40 @@ impl WorkspaceSearchProvider {
         Self { ctx, routes }
     }
 
-    /// Return a directory for any query string, if LSP is available.
+    /// Query the LSP for workspace symbols matching a string.
+    ///
+    /// Returns the raw LSP results, or an empty vec if no LSP is available.
+    /// Extracted as a dedicated method so callers can reuse it (and a cache
+    /// layer can be inserted here in the future without changing call sites).
+    fn query_symbols(&self, query: &str) -> Vec<SymbolInformation> {
+        let Some(lsp_manager) = self.ctx.get::<Arc<LspManager>>() else {
+            return Vec::new();
+        };
+        lsp_manager.workspace_symbols(query)
+    }
+
+    /// Return a directory for a query string, if LSP has matching symbols.
+    ///
+    /// Returns `None` (ENOENT) when no symbols match. The directory is
+    /// marked volatile so the dispatch layer re-resolves its contents on
+    /// every access — workspace search results depend on external LSP state.
     fn lookup_query(&self, _ctx: &RouteCtx<'_>, name: &str) -> Option<VirtualNode> {
-        self.ctx.get::<Arc<LspManager>>()?;
-        Some(VirtualNode::directory(name).no_cache())
+        if self.query_symbols(name).is_empty() {
+            return None;
+        }
+        Some(VirtualNode::directory(name).no_cache().volatile())
     }
 
     /// Build symlinks for workspace symbols matching the captured query.
     fn children_results(&self, ctx: &RouteCtx<'_>) -> Vec<VirtualNode> {
         let query = ctx.param("query");
-
-        let Some(lsp_manager) = self.ctx.get::<Arc<LspManager>>() else {
-            return Vec::new();
-        };
+        let symbols = self.query_symbols(query);
 
         let Ok(base) = VfsPath::new("@/search/symbols").and_then(|p| p.join(query)) else {
             return Vec::new();
         };
 
-        build_symlinks(&lsp_manager.workspace_symbols(query), self.ctx.overlay_root(), &base)
+        build_symlinks(&symbols, self.ctx.overlay_root(), &base)
     }
 }
 

@@ -105,3 +105,26 @@ fn same_name_different_files() {
     assert_eq!(nodes[0].name(), "a.rs::process");
     assert_eq!(nodes[1].name(), "b.rs::process");
 }
+
+#[test]
+fn symlinks_have_no_cache_policy() {
+    let nodes = build_symlinks(
+        &[sym_info("Config", "src/config.rs", 5)],
+        Path::new("/overlay"),
+        &base(),
+    );
+
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].cache_policy(), nyne::node::CachePolicy::Never);
+}
+
+#[test]
+fn query_symbols_returns_empty_without_lsp() {
+    use crate::test_support::stub_activation_context;
+
+    let ctx = stub_activation_context();
+    let provider = WorkspaceSearchProvider::new(ctx);
+
+    // No LspManager in stub context → returns empty (would cause ENOENT in lookup).
+    assert!(provider.query_symbols("anything").is_empty());
+}

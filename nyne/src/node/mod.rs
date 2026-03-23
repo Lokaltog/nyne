@@ -66,6 +66,12 @@ pub struct VirtualNode {
     /// cache is per-inode.
     shadows_real: bool,
 
+    /// When `true`, the dispatch layer never caches the resolved state
+    /// of this directory's contents. Every readdir triggers a fresh
+    /// provider resolve cycle. Used for dynamic directories whose
+    /// contents depend on external state (e.g., LSP workspace search).
+    volatile: bool,
+
     // Capabilities
     readable: Option<Box<dyn Readable>>,
     writable: Option<Box<dyn Writable>>,
@@ -122,6 +128,7 @@ impl VirtualNode {
             cache_policy: CachePolicy::default(),
             visibility: Visibility::default(),
             shadows_real: false,
+            volatile: false,
             readable: None,
             writable: None,
             renameable: None,
@@ -231,6 +238,17 @@ impl VirtualNode {
         self
     }
 
+    /// Mark this directory as volatile — the dispatch layer will never
+    /// cache its resolved contents. Every readdir triggers a fresh
+    /// provider resolve cycle.
+    ///
+    /// Use for directories whose contents depend on external state
+    /// (e.g., LSP queries) that can change between accesses.
+    pub const fn volatile(mut self) -> Self {
+        self.volatile = true;
+        self
+    }
+
     /// Mark this node as shadowing a real filesystem entry.
     ///
     /// Set by the conflict resolution system when a provider Force-wins
@@ -300,6 +318,9 @@ impl VirtualNode {
 
     /// Whether this node shadows a real filesystem entry.
     pub(crate) const fn shadows_real(&self) -> bool { self.shadows_real }
+
+    /// Whether this directory's contents should never be cached.
+    pub const fn is_volatile(&self) -> bool { self.volatile }
 
     /// Permissions: explicit override, or auto-derived from capabilities.
     pub fn permissions(&self) -> u16 {
@@ -389,4 +410,17 @@ mod tests {
         assert_eq!(node.visibility(), Visibility::Hidden);
         assert_eq!(node.name(), "symbols");
     }
+}
+
+#[test]
+fn volatile_defaults_to_false() {
+    let node = VirtualNode::directory("search");
+    assert!(!node.is_volatile());
+}
+
+#[test]
+fn volatile_builder_sets_flag() {
+    let node = VirtualNode::directory("query").no_cache().volatile();
+    assert!(node.is_volatile());
+    assert_eq!(node.cache_policy(), CachePolicy::Never);
 }
