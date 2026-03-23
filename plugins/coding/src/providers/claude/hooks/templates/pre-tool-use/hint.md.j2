@@ -1,7 +1,7 @@
 {% if tool_name == "Edit" and sym %}
 Hint (nyne VFS): instead of editing the raw file, target the symbol body:
-  Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← read first
-  Edit {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← then edit (same old_string/new_string)
+  Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← read
+  Edit {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← edit (same old_string/new_string)
 
 Or browse the symbol table first:
   Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
@@ -16,7 +16,7 @@ Hint (nyne VFS): instead of {{ tool_name | lower }}ing the raw file, try:
   Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}  →  then {{ tool_name | lower }} specific symbol bodies
 {% if total_lines %}
 
-Or use line ranges (no prior read needed, not intercepted):
+Or use line ranges (escape hatch only; no prior read needed, not intercepted):
   cat {{ rel }}@/lines:M-N ({{ total_lines }} lines, {{ total_bytes|tokens }} tokens total)
 {% endif %}
 {% if config.include_symbol_table %}

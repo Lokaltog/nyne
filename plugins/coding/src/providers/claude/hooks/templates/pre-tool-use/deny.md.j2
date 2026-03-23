@@ -4,22 +4,23 @@
 Read the symbol directly:
   Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
 
-Edit the symbol body (read first, then edit):
-  Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
+Edit the symbol body:
   Edit {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
 
 Or browse the symbol table first:
   Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
 {% else %}
-Read the symbol table, then read specific symbol bodies:
+Read the symbol table, then use targeted symbol files:
   Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
 
-Edit a symbol body (read first, then edit):
+Read a symbol directly:
   Read {{ rel }}@/symbols/<symbol>@/body.{{ ext }}
+
+Edit a symbol body:
   Edit {{ rel }}@/symbols/<symbol>@/body.{{ ext }}
 {% endif %}
 
-Read/splice/append lines (no prior read needed, not intercepted):
+Read/splice/append lines (escape hatch only; no prior read needed, not intercepted):
   cat {{ rel }}@/lines:M-N
 {% if config.include_symbol_table %}
 
