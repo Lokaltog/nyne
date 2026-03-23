@@ -39,7 +39,7 @@ Every recognized source file gains an `@/` companion namespace:
 file.{{ ext }}@/OVERVIEW.md                    # file-level overview (metadata + symbol table)
 file.{{ ext }}@/DIAGNOSTICS.md                 # compiler errors/warnings
 file.{{ ext }}@/lines                          # all lines (read, write, append)
-file.{{ ext }}@/lines:M-N                      # line range (lookup-only)
+file.{{ ext }}@/lines:M-N                      # line range (read, write, rm deletes range)
 file.{{ ext }}@/rename/                         # file rename preview diffs (import updates)
 file.{{ ext }}@/symbols/OVERVIEW.md            # symbol table with line ranges and signatures
 file.{{ ext }}@/symbols/imports.{{ ext }}              # import block (read, write, append)
@@ -99,6 +99,7 @@ file.{{ ext }}@/symbols/Foo@/git/history/       # historical versions of the con
 | Clear a docstring | Truncate `symbols/Foo@/docstring.txt` |
 | Rename a symbol (project-wide) | `mv symbols/Foo@/ symbols/Bar@/` |
 | Delete a symbol | `rmdir symbols/Foo@/` |
+| Delete a line range | `rm file.{{ ext }}@/lines:10-20` |
 | Apply a code action | `patch -p1 < symbols/Foo@/actions/10-fix.diff` |
 
 All writes are **validated by tree-sitter** and **auto-formatted** before being spliced back.

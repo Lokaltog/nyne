@@ -20,7 +20,7 @@ This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every sour
 6. **Use VFS analysis, not Grep**, for call-graph questions. `CALLERS.md` before modifying (blast radius), `DEPS.md` for tracing callees, `REFERENCES.md` before renaming/deleting. These replace grep-for-usage workflows.
 7. **Check `actions/`** before manual fixes — an LSP code action `.diff` may already exist.
 8. **Writes re-parse the file.** After any write to a `@/` path, symbol names may change (disambiguators added/removed, symbols deleted, nesting shifted). Re-read `OVERVIEW.md` or `ls symbols/` before accessing other symbols in the same file.
-9. **Use batch edit staging for multi-symbol changes.** When changing 2+ symbols in the same file or coordinating changes across files, stage via `edit/` and apply atomically with `rm @/edit/staged.diff`. Safer (tree-sitter validated before apply), cheaper (one atomic write), and previewable.
+9. **Use batch edit staging for multi-symbol changes.** When changing 2+ symbols in the same file or coordinating changes across files, stage via `edit/` and apply atomically with `rm @/edit/staged.diff`. Safer (tree-sitter validated), cheaper (one atomic write). Returns an error if validation fails.
 
 ## Reading
 
@@ -52,6 +52,9 @@ sed -i 's/old/new/' file.{{ ext }}@/symbols/at-line/42
 
 # Line range (escape hatch — prefer symbol-targeted reads)
 cat file.{{ ext }}@/lines:10-20
+
+# Delete a line range
+rm file.{{ ext }}@/lines:10-20
 ```
 
 ```sh
@@ -85,13 +88,14 @@ echo 'fn process(input: &str, opts: Options) -> Result<()>' \
     >file.{{ ext }}@/symbols/process@/signature.{{ ext }}
 echo '#[instrument]' >>file.{{ ext }}@/symbols/process@/decorators.{{ ext }}
 rmdir file.{{ ext }}@/symbols/old_helper@/
+rm file.{{ ext }}@/lines:10-20
 ```
 
 **For multi-symbol changes, use batch edit staging** (see next section).
 
 ## Batch Edit Staging
 
-The go-to for multi-step edits: stage changes across symbols, preview as a validated diff, then apply atomically. **Prefer this over sequential direct writes when changing 2+ symbols.**
+The go-to for multi-step edits: stage changes across symbols, then apply atomically. **Prefer this over sequential direct writes when changing 2+ symbols.** Apply returns an error if validation fails — no need to preview first.
 
 | Scenario | Approach |
 |-|-|
@@ -108,11 +112,7 @@ echo '/// docs' >file.{{ ext }}@/symbols/Baz@/edit/insert-before
 echo 1 >file.{{ ext }}@/symbols/Old@/edit/delete
 echo 'fn method(){}' >file.{{ ext }}@/symbols/MyImpl@/edit/append
 
-# 2. Preview (tree-sitter validated — shows errors before apply)
-cat file.{{ ext }}@/symbols/Foo@/edit/staged.diff   # per-symbol
-cat @/edit/staged.diff                               # all staged across all files
-
-# 3. Apply all staged edits atomically
+# 2. Apply all staged edits atomically (returns error if tree-sitter validation fails)
 rm @/edit/staged.diff
 
 # Or clear without applying (truncate)

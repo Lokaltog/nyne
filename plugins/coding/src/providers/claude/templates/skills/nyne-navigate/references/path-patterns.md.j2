@@ -12,8 +12,8 @@
 ```
 file.{{ ext }}@/OVERVIEW.md                  # symbol table with line ranges
 file.{{ ext }}@/lines                        # all lines: read, write (replaces), append (to EOF)
-file.{{ ext }}@/lines:M                      # line M: read, write (replaces), append (inserts after)
-file.{{ ext }}@/lines:M-N                    # range: read, write (replaces range), append (inserts after N)
+file.{{ ext }}@/lines:M                      # line M: read, write (replaces), rm (deletes line), append (inserts after)
+file.{{ ext }}@/lines:M-N                    # range: read, write (replaces range), rm (deletes range), append (inserts after N)
 ```
 
 Line ranges with `:M-N` are lookup-only — they don't appear in `readdir`.
@@ -92,6 +92,7 @@ file.{{ ext }}@/symbols/Foo@/git/BLAME.md       # per-line authorship scoped to 
 ```
 rmdir file.{{ ext }}@/symbols/Foo@/              # delete symbol from source
 rm file.{{ ext }}@/symbols/Foo.{{ ext }}          # shorthand — same effect
+rm file.{{ ext }}@/lines:10-20                   # delete a line range
 mv file.{{ ext }}@/symbols/old@/ file.{{ ext }}@/symbols/new@/   # LSP rename
 ```
 

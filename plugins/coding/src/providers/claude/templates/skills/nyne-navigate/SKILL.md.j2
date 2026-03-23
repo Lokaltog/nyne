@@ -108,8 +108,8 @@ These replace grep-based searches. One read each, with full code context at ever
 file.ext@/OVERVIEW.md              # symbol table with token estimates
 file.ext@/DIAGNOSTICS.md           # LSP diagnostics (instant, no build needed)
 file.ext@/lines                    # all lines (read, write replaces file, append to EOF)
-file.ext@/lines:M                  # single line M
-file.ext@/lines:M-N                # line range (lookup-only, not in readdir)
+file.ext@/lines:M                  # single line (read, write, rm deletes line)
+file.ext@/lines:M-N                # line range (read, write, rm deletes range)
 file.ext@/symbols/Foo@/edit/          # per-symbol batch edit staging area
 file.ext@/symbols/Foo@/edit/replace   # stage: replace symbol body (write content)
 file.ext@/symbols/Foo@/edit/delete    # stage: delete symbol (write any content)
@@ -146,7 +146,7 @@ file.ext@/symbols/Foo@/deps/            # symlinks to dependency symbol director
 file.ext@/symbols/Foo@/references/      # symlinks to reference symbol directories
 ```
 
-## Deleting Symbols
+## Deleting Symbols and Line Ranges
 
 Remove a symbol from its source file via `rmdir` on its scope container:
 
@@ -158,6 +158,12 @@ rm file.{{ ext }}@/symbols/Foo.{{ ext }}  # shorthand — same effect
 The symbol's source code (decorators + docstring + signature + body) is spliced
 out. Trailing blank lines are consumed. The real file is rewritten in place —
 inotify propagates the change automatically.
+
+**Delete a line range** (when symbol-level deletion isn't granular enough):
+
+```sh
+rm file.{{ ext }}@/lines:10-20          # splices out lines 10-20
+```
 
 **Inline deletions** (removing a specific aspect without deleting the whole symbol):
 

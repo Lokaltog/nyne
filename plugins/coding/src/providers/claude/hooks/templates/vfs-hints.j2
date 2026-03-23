@@ -16,9 +16,8 @@ SSOT/DRY check on {{ rel }}: does this change duplicate logic, constants, or pat
 {% endmacro %}
 
 {% macro batch_edit_hint() %}
-Hint: If you have more symbol edits to make in this file (or across files), use **batch edit staging** instead of sequential writes — it's atomic, validated, and previewable:
+Hint: If you have more symbol edits to make in this file (or across files), use **batch edit staging** instead of sequential writes — it's atomic and validated:
   echo 'new body' >file@/symbols/Foo@/edit/replace    # stage
   echo 1 >file@/symbols/Bar@/edit/delete               # stage
-  cat @/edit/staged.diff                                # preview all
-  rm @/edit/staged.diff                                 # apply atomically
+  rm @/edit/staged.diff                                 # apply atomically (returns error if validation fails)
 {% endmacro %}

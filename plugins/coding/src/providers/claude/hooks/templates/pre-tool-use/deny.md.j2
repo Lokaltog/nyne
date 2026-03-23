@@ -30,5 +30,6 @@ Edit a symbol body:
 
 If VFS decomposition is insufficient (e.g. only a preamble symbol), retry the same Read — there is a grace period that allows it through on the second attempt.
 
-Read/splice/append lines (escape hatch only, if all else fails; no prior read needed, not intercepted):
+Read/splice/append/delete lines (escape hatch only, if all else fails; no prior read needed, not intercepted):
   cat {{ rel }}@/lines:M-N
+  rm {{ rel }}@/lines:M-N

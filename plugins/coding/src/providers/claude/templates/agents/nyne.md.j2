@@ -149,6 +149,7 @@ cat file.{{ ext }}@/symbols/at-line/42         # follows symlink, reads the body
 ```sh
 cat file.{{ ext }}@/symbols/{Foo,Bar,Baz}@/body.{{ ext }}    # multiple symbols at once
 cat file.{{ ext }}@/lines:10-20                        # escape hatch — prefer symbol-targeted reads
+rm file.{{ ext }}@/lines:10-20                         # delete a line range
 ```
 
 ### Hover Documentation and Hints
@@ -224,11 +225,12 @@ echo 'fn process(input: &str, opts: Options) -> Result<()>' \
 echo '#[instrument]' >>file.{{ ext }}@/symbols/process@/decorators.{{ ext }}
 ```
 
-### Delete a Symbol
+### Delete a Symbol or Line Range
 
 ```sh
 rmdir file.{{ ext }}@/symbols/old_helper@/    # splices out from source
 rm file.{{ ext }}@/symbols/old_helper.{{ ext }}  # shorthand — same effect
+rm file.{{ ext }}@/lines:10-20                # delete a line range
 ```
 
 All writes are **tree-sitter validated** — invalid syntax returns an error, never a broken file.
@@ -239,8 +241,9 @@ All writes are **tree-sitter validated** — invalid syntax returns an error, ne
 
 ## Batch Edit Staging
 
-**The go-to for multi-step edits.** Stage changes across symbols, preview as a validated diff,
-then apply atomically. Prefer this over sequential direct writes when changing 2+ symbols.
+**The go-to for multi-step edits.** Stage changes across symbols, then apply atomically.
+Prefer this over sequential direct writes when changing 2+ symbols. Apply returns an error
+if validation fails — no need to preview first.
 
 ### Stage Edits
 
@@ -254,32 +257,26 @@ echo 1 >file.{{ ext }}@/symbols/Old@/edit/delete
 echo 'fn method() { ... }' >file.{{ ext }}@/symbols/MyImpl@/edit/append
 ```
 
-### Review Staged Actions
+### Apply or Clear
 
 ```sh
-ls file.{{ ext }}@/symbols/Foo@/edit/staged/               # list staged actions
-cat file.{{ ext }}@/symbols/Foo@/edit/staged/10-replace.diff  # preview one
-rm file.{{ ext }}@/symbols/Foo@/edit/staged/10-replace.diff   # remove without applying
-```
-
-### Preview and Apply
-
-```sh
-# Per-symbol preview
-cat file.{{ ext }}@/symbols/Foo@/edit/staged.diff
-
-# Global preview (all files)
-cat @/edit/staged.diff
-
-# Apply all staged edits atomically
+# Apply all staged edits atomically (returns error if tree-sitter validation fails)
 rm @/edit/staged.diff
 
 # Clear without applying
 > @/edit/staged.diff
 ```
 
-Cross-file batch edits: stage in multiple files, preview with `cat @/edit/staged.diff`,
-apply with `rm @/edit/staged.diff`.
+Cross-file batch edits: stage in multiple files, apply with `rm @/edit/staged.diff`.
+
+### Optional: Review Before Applying
+
+```sh
+ls file.{{ ext }}@/symbols/Foo@/edit/staged/               # list staged actions
+cat file.{{ ext }}@/symbols/Foo@/edit/staged/10-replace.diff  # preview one
+rm file.{{ ext }}@/symbols/Foo@/edit/staged/10-replace.diff   # remove one without applying
+cat @/edit/staged.diff                                       # global preview (all files)
+```
 
 ---
 
@@ -414,7 +411,7 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 | Using symbol paths after a write without re-reading | Re-read `OVERVIEW.md` after writes — the symbol table may have changed |
 | `Bash(cat file@/OVERVIEW.md)` for single reads | Use the **Read tool** — it's the default for all single-path `@/` reads |
 | Guessing path variations on `ENOENT` | `ls symbols/` or `OVERVIEW.md` to find the current name |
-| Sequential direct writes to 2+ symbols | Batch edit staging — atomic, validated, previewable |
+| Sequential direct writes to 2+ symbols | Batch edit staging — atomic, validated |
 
 ---
 

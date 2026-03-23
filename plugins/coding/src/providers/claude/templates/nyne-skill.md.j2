@@ -32,6 +32,7 @@ cat file.{{ ext }}@/lines:10-20
 | Edit imports | Write to `file.{{ ext }}@/symbols/imports.{{ ext }}` |
 | Append after a symbol | Append to `file.{{ ext }}@/symbols/Foo@/body.{{ ext }}` |
 | Change a signature | Write to `file.{{ ext }}@/symbols/Foo@/signature.{{ ext }}` |
+| Delete a line range | `rm file.{{ ext }}@/lines:10-20` |
 | Clear a docstring | Truncate `file.{{ ext }}@/symbols/Foo@/docstring.txt` |
 
 Writes are **validated by tree-sitter** and **auto-formatted** before splicing back.
