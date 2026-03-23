@@ -162,13 +162,13 @@ Each symbol's `edit/` directory contains write-only files for each edit kind:
 echo 'fn new_impl() { ... }' > file.{{ ext }}@/symbols/old_func@/edit/replace
 
 # Delete a symbol
-echo '' > file.{{ ext }}@/symbols/deprecated_func@/edit/delete
+echo 1 > file.{{ ext }}@/symbols/deprecated_func@/edit/delete
 
 # Insert after a symbol
-echo 'fn helper() { ... }' > file.{{ ext }}@/symbols/process@/edit/insert_after
+echo 'fn helper() { ... }' > file.{{ ext }}@/symbols/process@/edit/insert-after
 
 # Insert before a symbol
-echo '/// Module docs' > file.{{ ext }}@/symbols/MyStruct@/edit/insert_before
+echo '/// Module docs' > file.{{ ext }}@/symbols/MyStruct@/edit/insert-before
 
 # Append as last child of a scope (impl blocks, modules — not leaf functions)
 echo '    fn new_method(&self) { ... }' > file.{{ ext }}@/symbols/MyStruct~Impl@/edit/append

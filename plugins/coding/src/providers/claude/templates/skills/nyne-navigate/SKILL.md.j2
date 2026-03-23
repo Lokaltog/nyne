@@ -112,14 +112,13 @@ file.ext@/lines:M                  # single line M
 file.ext@/lines:M-N                # line range (lookup-only, not in readdir)
 file.ext@/symbols/Foo@/edit/          # per-symbol batch edit staging area
 file.ext@/symbols/Foo@/edit/replace   # stage: replace symbol body (write content)
-file.ext@/symbols/Foo@/edit/delete    # stage: delete symbol (write empty)
-file.ext@/symbols/Foo@/edit/insert_after  # stage: insert after symbol (write content)
-file.ext@/symbols/Foo@/edit/insert_before # stage: insert before symbol (write content)
+file.ext@/symbols/Foo@/edit/delete    # stage: delete symbol (write any content)
+file.ext@/symbols/Foo@/edit/insert-after  # stage: insert after symbol (write content)
+file.ext@/symbols/Foo@/edit/insert-before # stage: insert before symbol (write content)
 file.ext@/symbols/Foo@/edit/append    # stage: append as last child (scope symbols only)
 file.ext@/symbols/Foo@/edit/staged.diff   # preview staged edits (cat), apply (rm)
 file.ext@/symbols/Foo@/edit/staged/   # individual staged action diffs (rm to remove)
 ```
-
 ### Symbol-Level Virtual Files
 
 ```
