@@ -21,6 +21,10 @@ no_emit "@" => children_at_root,  // hidden -- lookup-only
 
 Captures (`{name}`), rest-captures (`{..path}`), and globs (`**`) never auto-emit.
 
+## routes! Macro Syntax
+
+Segments without handlers use bare blocks: `"name" { ... }`. The `=>` arrow is only for attaching a handler: `"name" => handler_fn { ... }`. Captures: `"{param}" => handler_fn,`.
+
 ## Source Staleness
 
 Companion nodes are **automatically stamped** with source file and generation by `companion_children()`/`companion_lookup()`. Providers never call `VirtualNode::with_source()` manually. Dispatch uses the stamp for transparent stale-node re-resolution.

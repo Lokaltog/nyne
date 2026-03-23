@@ -21,6 +21,21 @@ Plugin config: `[plugin.coding]` in `~/.config/nyne/config.toml`. LSP config: `[
 - `[plugin.coding.claude.hooks]`: per-hook toggles — `session_start`, `pre_tool_use`, `post_tool_use`, `stop`, `statusline` (all default true)
 - `DEFAULT_DISABLED_RULES` in `syntax/analysis/mod.rs` is the SSOT for default-excluded rules
 
+## routes! Macro Syntax
+
+- Segments without handlers: `"name" { ... }` (no `=>`)
+- Segments with children handler: `"name" => handler_fn { ... }` or `"name" => handler_fn,`
+- Captures: `"{param}" => handler_fn,` — no `children()` wrapper
+- `no_emit` prefix: `no_emit "name" { ... }` (suppresses auto-emit in parent readdir)
+- Import: `nyne::dispatch::routing::tree::RouteTree`
+- Param access: `ctx.param("name")` (not `ctx.params.get(...)`)
+
+## LSP URI ↔ Path
+
+- `lsp_types::Uri` has no `to_file_path()` — strip `file://` prefix: `PathBuf::from(uri.as_str().strip_prefix("file://").unwrap_or(uri.as_str()))`
+- Existing code in `providers/syntax/content/lsp/format.rs::uri_to_path_buf` (scoped `pub(super)`)
+- In tests: construct via `"file:///path".parse::<lsp_types::Uri>()`
+
 ## FragmentResolver
 
 `providers/fragment_resolver.rs` — lazy handle for accessing decomposed source files. All content readers and splice writers hold a clone. **Never capture `SymbolLineRange` or `Arc<DecomposedSource>` on a `Readable`/`TemplateView` type** — use `FragmentResolver` instead, which resolves at call time.
