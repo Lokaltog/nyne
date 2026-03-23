@@ -410,12 +410,11 @@ Code blocks are extracted as editable files with extensions from the fence langu
 | `symbols/my_function.{{ ext }}` | Top-level symbol (shorthand for body) |
 | `symbols/Foo~Struct.{{ ext }}` | Disambiguated by kind (when Foo~Impl also exists) |
 | `symbols/Trait_for_Type.{{ ext }}` | Trait/interface implementation |
-| `symbols/Foo~Impl@/symbols/new.{{ ext }}` | Nested method inside impl block |
+| `symbols/Foo~Impl@/new.{{ ext }}` | Nested method inside impl block (direct child, no `symbols/` subdir) |
 | `UPPERCASE.md` | Read-only metadata (generated on read) |
 | `lowercase.ext` | Read/writable source content |
 
 When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesystem entries.
-
 ---
 
 ## Anti-Patterns

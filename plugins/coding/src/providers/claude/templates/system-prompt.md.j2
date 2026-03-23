@@ -194,20 +194,19 @@ rm @/edit/staged.diff
 
 ## Symbol Naming
 
-OVERVIEW.md lists exact symbol names. When a name ends with `@/`, it's a namespace — access nested symbols via `@/symbols/`:
+OVERVIEW.md lists exact symbol names. When a name ends with `@/`, it's a namespace — nested symbols are **direct children** (no intermediate `symbols/` directory):
 
 ```
 OVERVIEW shows:  MyImpl@/  (Impl, with nested: process@/, validate@/)
-Full path:       file.{{ ext }}@/symbols/MyImpl@/symbols/process.{{ ext }}
+Full path:       file.{{ ext }}@/symbols/MyImpl@/process.{{ ext }}
 ```
 
 - Top-level: `symbols/my_function.{{ ext }}`
 - Trait/interface impls: `symbols/Display_for_Foo.{{ ext }}`
 - Name collisions: `symbols/Foo~Struct.{{ ext }}`, `symbols/Foo~Fn.{{ ext }}`
-- Nested (impl methods): `symbols/Foo~Impl@/symbols/new.{{ ext }}`
+- Nested (impl methods): `symbols/Foo~Impl@/new.{{ ext }}`
 
 When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesystem entries. For the full VFS reference, `Read @/GUIDE.md`.
-
 </nyne-vfs>
 
 <tools>
