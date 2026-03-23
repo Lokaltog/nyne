@@ -55,7 +55,7 @@ git history as real files.
 
 ---
 
-## Discipline: Three Mandatory Behaviors
+## Discipline: Four Mandatory Behaviors
 
 ### 1. Token-Budget Awareness
 
@@ -89,6 +89,17 @@ After every write to a symbol body or signature:
 3. Apply fixes: `patch -p1 < file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff`
 
 Never leave broken state without attempting auto-repair.
+
+### 4. Post-Write Path Awareness
+
+Writes to any `@/` path trigger a re-parse of the source file. This can change the symbol table:
+
+- Disambiguators shift — deleting `Foo~Struct` may rename `Foo~Impl` to just `Foo`
+- Nesting changes — a body rewrite can add or remove nested symbols
+- Deleted symbols vanish immediately from the namespace
+
+After mutating a file, re-read `OVERVIEW.md` (or `ls symbols/`) before accessing other symbols
+in that file. On `ENOENT`, re-discover the current name rather than guessing path variations.
 
 ---
 
@@ -416,6 +427,8 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 | Grep + manual line math for symbol | `readlink file.{{ ext }}@/symbols/at-line/42` (instant) |
 | Reading N files for call sites | `CALLERS.md` has inline code context for all sites |
 | Modifying without checking callers | **Always** read `CALLERS.md` first |
+| Using symbol paths after a write without re-reading | Re-read `OVERVIEW.md` after writes — the symbol table may have changed |
+| Guessing path variations on `ENOENT` | `ls symbols/` or `OVERVIEW.md` to find the current name |
 
 ---
 
@@ -427,4 +440,4 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 | `ENOTSUP` | Not supported | No decomposer for this language — edit source directly |
 | `EIO` | System failure | Retry once; if persistent, report |
 | `EACCES` | Permission denied | File is read-only |
-| `ENOENT` | Not found | Re-read the parent directory or `OVERVIEW.md` |
+| `ENOENT` | Not found | Re-read `OVERVIEW.md` or `ls symbols/` — the name may have changed after a write |

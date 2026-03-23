@@ -19,6 +19,7 @@ This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every sour
 5. **Always start with `OVERVIEW.md`** to discover exact symbol names before accessing them.
 6. **Use VFS analysis, not Grep**, for call-graph questions. `CALLERS.md` before modifying (blast radius), `DEPS.md` for tracing callees, `REFERENCES.md` before renaming/deleting. These replace grep-for-usage workflows.
 7. **Check `actions/`** before manual fixes — an LSP code action `.diff` may already exist.
+8. **Writes re-parse the file.** After any write to a `@/` path, symbol names may change (disambiguators added/removed, symbols deleted, nesting shifted). Re-read `OVERVIEW.md` or `ls symbols/` before accessing other symbols in the same file.
 
 ## Reading
 

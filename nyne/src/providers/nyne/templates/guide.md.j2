@@ -103,6 +103,9 @@ file.{{ ext }}@/symbols/Foo@/git/history/       # historical versions of the con
 
 All writes are **validated by tree-sitter** and **auto-formatted** before being spliced back.
 
+> Writes re-parse the file — symbol names may change afterward (disambiguators added/removed,
+> symbols deleted). Re-read `OVERVIEW.md` before accessing other symbols in the same file.
+
 ### Repository Level
 
 ```
@@ -121,4 +124,4 @@ All writes are **validated by tree-sitter** and **auto-formatted** before being 
 | `ENOTSUP` | Not supported | No decomposer for this language. Edit source directly |
 | `EIO` | System failure | Retry once; if persistent, report |
 | `EACCES` | Permission denied | File is read-only |
-| `ENOENT` | Not found | Re-read the parent directory |
+| `ENOENT` | Not found | Re-read `OVERVIEW.md` or `ls symbols/` — the name may have changed after a write |
