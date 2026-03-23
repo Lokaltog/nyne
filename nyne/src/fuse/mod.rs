@@ -75,8 +75,7 @@ use parking_lot::{Mutex, RwLock};
 
 use self::handles::HandleTable;
 use crate::dispatch::context::RequestContext;
-use crate::dispatch::write_mode::WriteMode;
-use crate::dispatch::{ReaddirEntry, ResolvedInode, Router};
+use crate::dispatch::{ReaddirEntry, ResolvedInode, Router, WriteMode};
 use crate::node::VirtualNode;
 use crate::provider::Provider;
 use crate::types::ProcessVisibility;

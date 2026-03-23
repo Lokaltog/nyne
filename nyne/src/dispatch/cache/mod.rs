@@ -5,8 +5,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use crate::node::VirtualNode;
-use crate::node::visibility::Visibility;
+use crate::node::{VirtualNode, Visibility};
 use crate::provider::ProviderId;
 use crate::types::ProcessVisibility;
 use crate::types::file_kind::FileKind;

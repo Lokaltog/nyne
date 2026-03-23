@@ -8,7 +8,7 @@ use parking_lot::RwLock;
 use slab::Slab;
 use tracing::warn;
 
-use crate::dispatch::write_mode::WriteMode;
+use crate::dispatch::WriteMode;
 
 #[cfg(test)]
 mod tests;

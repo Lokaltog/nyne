@@ -1,13 +1,9 @@
 //! VFS name constants used by core providers.
-//!
-//! Plugin-specific names live in their respective crates:
-//! - Git names → `nyne_git::names`
-//! - Coding names → `nyne_coding::providers::names`
 
 use crate::templates::{HandleBuilder, TemplateEngine};
 pub(super) use crate::types::path_conventions::COMPANION_SUFFIX;
 
-/// Subdirectory name inside companion directories for syntax fragments.
+/// Subdirectory name inside companion directories for sub-provider content.
 pub(super) const SUBDIR_SYMBOLS: &str = "symbols";
 
 /// Name of the overview file in companion directories.

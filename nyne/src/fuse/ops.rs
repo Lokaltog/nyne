@@ -16,8 +16,7 @@ use rustix::fs::statvfs;
 use tracing::{debug, info, trace, warn};
 
 use super::{NyneFs, extract_errno, file_kind_to_fuse};
-use crate::dispatch::ResolvedInode;
-use crate::dispatch::write_mode::WriteMode;
+use crate::dispatch::{ResolvedInode, WriteMode};
 use crate::node::NodeKind;
 use crate::types::ProcessVisibility;
 use crate::types::file_kind::FileKind;

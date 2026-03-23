@@ -64,8 +64,10 @@ struct TodoIndex {
 
 impl TodoProvider {
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
-        let config = ctx.get::<CodingConfig>().expect("coding config");
-        let tags = config.todo.tags.clone();
+        let tags = ctx
+            .get::<CodingConfig>()
+            .map(|c| c.todo.tags.clone())
+            .unwrap_or_default();
         let scanner = TodoScanner::new(&tags);
 
         let mut b = names::handle_builder();

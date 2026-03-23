@@ -2,8 +2,8 @@
 
 use color_eyre::eyre::Result;
 
+use crate::dispatch::WriteMode;
 use crate::dispatch::context::{PipelineContext, RequestContext};
-use crate::dispatch::write_mode::WriteMode;
 use crate::node::middleware::{PostWriteHook, ReadMiddleware, WriteMiddleware};
 use crate::node::{VirtualNode, WriteOutcome};
 use crate::provider::Provider;

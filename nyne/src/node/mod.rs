@@ -6,7 +6,6 @@ pub mod kind;
 pub(crate) mod line_slice;
 pub mod middleware;
 pub(crate) mod plugin;
-pub(crate) mod visibility;
 
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
@@ -16,7 +15,19 @@ pub use capabilities::{Lifecycle, Readable, Renameable, Unlinkable, Writable, Xa
 pub use kind::{NodeAttr, NodeKind, WriteOutcome};
 use middleware::{ReadMiddleware, WriteMiddleware};
 pub(crate) use plugin::NodePlugin;
-pub(crate) use visibility::Visibility;
+
+/// Controls whether a node appears in directory listings.
+///
+/// Providers set this at construction time. The dispatch layer
+/// checks it during readdir to filter entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Visibility {
+    /// Visible in readdir and accessible by name lookup (default).
+    #[default]
+    Readdir,
+    /// Accessible by name lookup only — hidden from readdir listings.
+    Hidden,
+}
 
 use crate::types::TypeMap;
 use crate::types::vfs_path::VfsPath;
@@ -242,7 +253,7 @@ impl VirtualNode {
     }
 
     /// Get this node's visibility setting.
-    pub const fn visibility(&self) -> Visibility { self.visibility }
+    pub(crate) const fn visibility(&self) -> Visibility { self.visibility }
 
     /// Attach a plugin to this node for parametric derivation.
     pub fn plugin(mut self, p: impl NodePlugin + 'static) -> Self {

@@ -3,8 +3,8 @@
 use color_eyre::eyre::Result;
 
 use super::Router;
+use crate::dispatch::WriteMode;
 use crate::dispatch::context::RequestContext;
-use crate::dispatch::write_mode::WriteMode;
 use crate::node::{CachePolicy, VirtualNode, WriteOutcome};
 use crate::provider::Provider;
 

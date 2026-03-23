@@ -4,7 +4,7 @@ use color_eyre::eyre::Result;
 
 use crate::dispatch::activation::ActivationContext;
 
-/// Namespace separator for script addresses (e.g., `provider.claude.my-script`).
+/// Namespace separator for script addresses (e.g., `provider.myplugin.my-script`).
 pub const SCRIPT_NS_SEPARATOR: char = '.';
 
 /// Namespace prefix for provider-registered scripts.
@@ -13,7 +13,7 @@ pub const SCRIPT_NS_PROVIDER: &str = "provider";
 /// Build a fully-qualified script address from namespace segments.
 ///
 /// ```ignore
-/// script_address("provider", "claude", "post-tool-use") => "provider.claude.post-tool-use"
+/// script_address("provider", "myplugin", "on-save") => "provider.myplugin.on-save"
 /// ```
 pub fn script_address(namespace: &str, scope: &str, name: &str) -> String {
     format!("{namespace}{SCRIPT_NS_SEPARATOR}{scope}{SCRIPT_NS_SEPARATOR}{name}")

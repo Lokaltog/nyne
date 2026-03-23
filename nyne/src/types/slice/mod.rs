@@ -1,6 +1,6 @@
 //! Slice specification parsing for list-like virtual files.
 //!
-//! Re-used by both `node::line_slice` (core) and `nyne-coding` providers.
+//! Re-used by `node::line_slice` (core) and plugin providers.
 
 use std::ops::Range;
 
