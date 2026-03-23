@@ -421,7 +421,9 @@ impl LspManager {
 
     /// Query all active LSP clients for workspace symbols matching a query.
     ///
-    /// Queries only already-running servers (does not eagerly spawn).
+    /// Queries already-running servers only — does not spawn on demand.
+    /// Servers are started eagerly at activation via [`Self::spawn_all_applicable`],
+    /// so they are typically available by the time this is called.
     /// Results are truncated to the configured `workspace_symbol_limit`.
     pub(crate) fn workspace_symbols(&self, query: &str) -> Vec<SymbolInformation> {
         let mut results: Vec<SymbolInformation> = self
@@ -432,6 +434,19 @@ impl LspManager {
             .collect();
         results.truncate(self.config.workspace_symbol_limit);
         results
+    }
+
+    /// Eagerly spawn LSP servers for all registered extensions.
+    ///
+    /// Iterates every extension in the registry and triggers the normal
+    /// spawn-if-applicable path. Idempotent — already-running servers are
+    /// skipped via the fast path in `get_or_spawn`. Intended to be called
+    /// from a background thread during activation so servers are warm by
+    /// the time workspace-wide queries arrive.
+    pub(crate) fn spawn_all_applicable(&self) {
+        for ext in self.registry.extensions() {
+            self.client_for_ext(ext);
+        }
     }
 
     fn get_or_spawn(&self, def: &super::spec::LspServerDef) -> Option<Arc<LspClient>> {

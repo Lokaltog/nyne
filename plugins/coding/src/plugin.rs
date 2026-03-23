@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::thread;
 
 use color_eyre::eyre::Result;
 use linkme::distributed_slice;
@@ -52,6 +53,15 @@ impl Plugin for CodingPlugin {
             sandbox_env,
             lsp_path_resolver,
         ));
+
+        // Eagerly spawn LSP servers in the background so they're warm
+        // by the time workspace-wide queries (e.g. symbol search) arrive.
+        let lsp_bg = Arc::clone(&lsp);
+        thread::Builder::new()
+            .name("lsp-eager-spawn".into())
+            .spawn(move || lsp_bg.spawn_all_applicable())
+            .ok();
+
         ctx.insert(lsp);
 
         let decomp_cache = DecompositionCache::new(Arc::clone(ctx.real_fs()), Arc::clone(&syntax));
