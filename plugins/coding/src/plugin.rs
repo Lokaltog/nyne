@@ -89,6 +89,7 @@ impl Plugin for CodingPlugin {
         use crate::providers::claude::ClaudeProvider;
         use crate::providers::syntax::SyntaxProvider;
         use crate::providers::todo::TodoProvider;
+        use crate::providers::workspace_search::WorkspaceSearchProvider;
 
         #[cfg_attr(not(feature = "git-symbols"), allow(unused_mut))]
         let mut providers: Vec<Arc<dyn Provider>> = vec![
@@ -96,6 +97,7 @@ impl Plugin for CodingPlugin {
             Arc::new(ClaudeProvider::new(Arc::clone(ctx))),
             Arc::new(TodoProvider::new(Arc::clone(ctx))),
             Arc::new(BatchEditProvider::new(Arc::clone(ctx))),
+            Arc::new(WorkspaceSearchProvider::new(Arc::clone(ctx))),
         ];
 
         // Symbol-scoped git features (per-symbol blame/history) — only

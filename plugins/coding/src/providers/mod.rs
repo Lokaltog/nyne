@@ -11,3 +11,4 @@ pub mod claude;
 pub(crate) mod git_symbols_companion;
 pub mod syntax;
 pub mod todo;
+pub mod workspace_search;

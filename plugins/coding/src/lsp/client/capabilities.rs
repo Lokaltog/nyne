@@ -5,7 +5,7 @@ use lsp_types::{
     CodeActionClientCapabilities, CodeActionKind, CodeActionKindLiteralSupport, CodeActionLiteralSupport,
     DiagnosticClientCapabilities, GotoCapability, InlayHintClientCapabilities, PublishDiagnosticsClientCapabilities,
     ReferenceClientCapabilities, RenameClientCapabilities, TextDocumentClientCapabilities,
-    TextDocumentSyncClientCapabilities, TypeHierarchyClientCapabilities,
+    TextDocumentSyncClientCapabilities, TypeHierarchyClientCapabilities, WorkspaceSymbolClientCapabilities,
 };
 
 /// Environment variables propagated from the parent process into LSP server
@@ -102,6 +102,10 @@ pub(super) fn client_capabilities() -> ClientCapabilities {
             file_operations: Some(lsp_types::WorkspaceFileOperationsClientCapabilities {
                 will_rename: Some(true),
                 did_rename: Some(true),
+                ..Default::default()
+            }),
+            symbol: Some(WorkspaceSymbolClientCapabilities {
+                dynamic_registration: Some(false),
                 ..Default::default()
             }),
             ..Default::default()

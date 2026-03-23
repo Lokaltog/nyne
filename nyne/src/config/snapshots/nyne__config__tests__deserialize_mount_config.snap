@@ -23,6 +23,7 @@ cache_ttl = '5m'
 diagnostics_timeout = '2s'
 response_timeout = '10s'
 custom = []
+workspace_symbol_limit = 20
 [lsp.servers]
 
 [agent_files]

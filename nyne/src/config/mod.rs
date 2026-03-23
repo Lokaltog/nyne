@@ -259,6 +259,11 @@ pub struct LspConfig {
     #[serde(default)]
     #[garde(skip)]
     pub custom: Vec<CustomLspServer>,
+
+    /// Maximum number of results returned by workspace symbol search.
+    #[serde(default = "default_workspace_symbol_limit")]
+    #[garde(skip)]
+    pub workspace_symbol_limit: usize,
 }
 
 impl Default for LspConfig {
@@ -270,6 +275,7 @@ impl Default for LspConfig {
             response_timeout: default_response_timeout(),
             servers: HashMap::new(),
             custom: Vec::new(),
+            workspace_symbol_limit: default_workspace_symbol_limit(),
         }
     }
 }
@@ -320,6 +326,9 @@ const fn default_diagnostics_timeout() -> Duration { Duration::from_secs(2) }
 
 /// Return the default response timeout.
 const fn default_response_timeout() -> Duration { Duration::from_secs(10) }
+
+/// Return the default workspace symbol search result limit.
+const fn default_workspace_symbol_limit() -> usize { 20 }
 
 /// Configuration for the FUSE virtual mount.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -416,7 +425,7 @@ impl NyneConfig {
 
         tracing::debug!(path = %path.display(), "loading config");
 
-        let contents = match fs::read_to_string(&path) {
+        let config: Self = toml::from_str(&match fs::read_to_string(&path) {
             Ok(c) => c,
             Err(e) if e.kind() == ErrorKind::NotFound => {
                 tracing::debug!(path = %path.display(), "config file not found, using defaults");
@@ -425,9 +434,8 @@ impl NyneConfig {
             Err(e) => {
                 return Err(e).wrap_err_with(|| format!("reading {}", path.display()));
             }
-        };
-
-        let config: Self = toml::from_str(&contents).wrap_err_with(|| format!("parsing {}", path.display()))?;
+        })
+        .wrap_err_with(|| format!("parsing {}", path.display()))?;
 
         config.validate().wrap_err("config validation failed")?;
 

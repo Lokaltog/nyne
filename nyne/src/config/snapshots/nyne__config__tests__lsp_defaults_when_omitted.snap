@@ -1,6 +1,5 @@
 ---
-source: src/config/tests.rs
-assertion_line: 39
+source: nyne/src/config/tests.rs
 expression: config.lsp
 ---
 enabled = true
@@ -8,5 +7,6 @@ cache_ttl = '5m'
 diagnostics_timeout = '2s'
 response_timeout = '10s'
 custom = []
+workspace_symbol_limit = 20
 
 [servers]

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
+use lsp_types::SymbolInformation;
 use nyne::config::LspConfig;
 use nyne::process::Spawner;
 use parking_lot::{Mutex, RwLock};
@@ -416,6 +417,21 @@ impl LspManager {
     /// Summary of active LSP clients (for status reporting).
     pub(crate) fn status(&self) -> Vec<(String, bool)> {
         self.clients.read().keys().map(|name| (name.clone(), true)).collect()
+    }
+
+    /// Query all active LSP clients for workspace symbols matching a query.
+    ///
+    /// Queries only already-running servers (does not eagerly spawn).
+    /// Results are truncated to the configured `workspace_symbol_limit`.
+    pub(crate) fn workspace_symbols(&self, query: &str) -> Vec<SymbolInformation> {
+        let mut results: Vec<SymbolInformation> = self
+            .clients
+            .read()
+            .values()
+            .flat_map(|client| client.workspace_symbol(query).unwrap_or_default())
+            .collect();
+        results.truncate(self.config.workspace_symbol_limit);
+        results
     }
 
     fn get_or_spawn(&self, def: &super::spec::LspServerDef) -> Option<Arc<LspClient>> {

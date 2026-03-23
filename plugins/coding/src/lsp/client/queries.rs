@@ -16,9 +16,9 @@ use lsp_types::{
     CodeActionParams, CodeActionResponse, Diagnostic, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
     DidOpenTextDocumentParams, DocumentDiagnosticParams, DocumentDiagnosticReport, DocumentDiagnosticReportResult,
     GotoDefinitionResponse, Hover, InlayHint, InlayHintParams, Location, PartialResultParams, Range, ReferenceContext,
-    ReferenceParams, RenameParams, TextDocumentContentChangeEvent, TextDocumentItem, TypeHierarchyItem,
-    TypeHierarchyPrepareParams, TypeHierarchySubtypesParams, TypeHierarchySupertypesParams, WorkDoneProgressParams,
-    WorkspaceEdit,
+    ReferenceParams, RenameParams, SymbolInformation, TextDocumentContentChangeEvent, TextDocumentItem,
+    TypeHierarchyItem, TypeHierarchyPrepareParams, TypeHierarchySubtypesParams, TypeHierarchySupertypesParams,
+    WorkDoneProgressParams, WorkspaceEdit, WorkspaceSymbolParams,
 };
 use tracing::debug;
 
@@ -441,6 +441,21 @@ impl LspClient {
         let result: Option<Vec<TypeHierarchyItem>> =
             self.send_request(lsp_req::TypeHierarchyPrepare::METHOD, params)?;
         Ok(result.and_then(|v| v.into_iter().next()))
+    }
+
+    /// Search for workspace symbols matching a query string.
+    ///
+    /// Returns all symbols across the workspace whose name matches `query`.
+    /// Results are in flat `SymbolInformation` format (no resolve step).
+    pub(crate) fn workspace_symbol(&self, query: &str) -> Result<Vec<SymbolInformation>> {
+        require_capability!(self, workspace_symbol_provider, "workspace/symbol");
+        let params = WorkspaceSymbolParams {
+            query: query.to_owned(),
+            ..Default::default()
+        };
+        let result: Option<Vec<SymbolInformation>> =
+            self.send_request(lsp_req::WorkspaceSymbolRequest::METHOD, params)?;
+        Ok(result.unwrap_or_default())
     }
 }
 
