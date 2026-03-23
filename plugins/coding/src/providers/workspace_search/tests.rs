@@ -25,14 +25,40 @@ fn sym_info(name: &str, path: &str, line: u32) -> SymbolInformation {
 fn base() -> VfsPath { VfsPath::new("@/search/symbols/query").unwrap() }
 
 #[rstest]
-#[case("process", "src/handlers.rs", 41, "handlers.rs::process")]
-#[case("Config", "src/config/mod.rs", 0, "mod.rs::Config")]
-#[case("main", "main.rs", 5, "main.rs::main")]
-fn link_name_uses_basename(#[case] name: &str, #[case] path: &str, #[case] line: u32, #[case] expected_name: &str) {
+#[case(
+    "process",
+    "src/handlers.rs",
+    41,
+    "handlers.rs::process",
+    "src/handlers.rs@/symbols/at-line/42"
+)]
+#[case(
+    "Config",
+    "src/config/mod.rs",
+    0,
+    "mod.rs::Config",
+    "src/config/mod.rs@/symbols/at-line/1"
+)]
+#[case("main", "main.rs", 5, "main.rs::main", "main.rs@/symbols/at-line/6")]
+fn symlink_name_and_target(
+    #[case] name: &str,
+    #[case] path: &str,
+    #[case] line: u32,
+    #[case] expected_name: &str,
+    #[case] expected_target: &str,
+) {
     let nodes = build_symlinks(&[sym_info(name, path, line)], Path::new("/overlay"), &base());
 
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0].name(), expected_name);
+    let nyne::node::kind::NodeKind::Symlink { target } = nodes[0].kind() else {
+        panic!("expected symlink node");
+    };
+    // Target is relative from @/search/symbols/query → project root.
+    assert!(
+        target.to_str().unwrap().ends_with(expected_target),
+        "target {target:?} should end with {expected_target:?}"
+    );
 }
 
 #[test]

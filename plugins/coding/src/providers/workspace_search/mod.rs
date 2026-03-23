@@ -11,17 +11,10 @@ use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::node::VirtualNode;
 use nyne::provider::{Node, Nodes, Provider, ProviderId};
-use nyne::types::path_conventions::COMPANION_SUFFIX;
 use nyne::types::vfs_path::VfsPath;
 
 use crate::lsp::manager::LspManager;
-use crate::providers::names::SUBDIR_AT_LINE;
-
-/// Directory name for the search root.
-const DIR_SEARCH: &str = "search";
-
-/// Directory name for symbol search results.
-const DIR_SYMBOLS: &str = "symbols";
+use crate::providers::names::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
 
 /// Workspace symbol search provider.
 ///
@@ -64,7 +57,7 @@ impl WorkspaceSearchProvider {
             return Vec::new();
         };
 
-        let Ok(base) = VfsPath::new(&format!("{COMPANION_SUFFIX}/{DIR_SEARCH}/{DIR_SYMBOLS}/{query}")) else {
+        let Ok(base) = VfsPath::new("@/search/symbols").and_then(|p| p.join(query)) else {
             return Vec::new();
         };
 
@@ -109,7 +102,7 @@ fn build_symlinks(symbols: &[SymbolInformation], overlay_root: &Path, base: &Vfs
         let line = sym.location.range.start.line + 1;
 
         // Target: <file>@/symbols/at-line/<line>
-        let Ok(target) = VfsPath::new(&format!("{rel_str}{COMPANION_SUFFIX}/{SUBDIR_AT_LINE}/{line}")) else {
+        let Ok(target) = VfsPath::new(&format!("{rel_str}@/{SUBDIR_SYMBOLS}/{SUBDIR_AT_LINE}/{line}")) else {
             continue;
         };
 
