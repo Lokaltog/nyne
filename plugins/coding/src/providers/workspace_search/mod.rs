@@ -59,13 +59,14 @@ impl WorkspaceSearchProvider {
     /// Return a directory for a query string, if LSP has matching symbols.
     ///
     /// Returns `None` (ENOENT) when no symbols match. The directory is
-    /// marked volatile so the dispatch layer re-resolves its contents on
-    /// every access — workspace search results depend on external LSP state.
+    /// marked `no_cache` so the kernel re-lookups every time and the
+    /// dispatch layer re-resolves its contents on every access —
+    /// workspace search results depend on external LSP state.
     fn lookup_query(&self, _ctx: &RouteCtx<'_>, name: &str) -> Option<VirtualNode> {
         if self.query_symbols(name).is_empty() {
             return None;
         }
-        Some(VirtualNode::directory(name).no_cache().volatile())
+        Some(VirtualNode::directory(name).no_cache())
     }
 
     /// Build symlinks for workspace symbols matching the captured query.

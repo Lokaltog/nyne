@@ -60,14 +60,14 @@ When any name should be a valid directory (e.g., `@/search/symbols/{query}`), co
 
 The lookup handler returns `Some(VirtualNode::directory(name))` for valid names (or `None` for ENOENT). The capture's children handler fires on subsequent readdir.
 
-**Volatile directories:** When a dynamic directory's contents depend on external state (e.g., LSP queries) that can change between accesses, mark it `.volatile()`. The dispatch layer will re-resolve its contents on every readdir instead of caching the first result:
+**Dynamic directories with `.no_cache()`:** When a directory's contents depend on external state (e.g., LSP queries), return `.no_cache()` from the lookup handler. The dispatch layer automatically re-resolves no-cache directories on every readdir instead of serving stale cached results:
 
 ```rust
 // In lookup handler:
-Some(VirtualNode::directory(name).no_cache().volatile())
+Some(VirtualNode::directory(name).no_cache())
 ```
 
-Without `.volatile()`, the L1 cache marks the directory as resolved after the first access and never re-queries — stale or empty results persist indefinitely.
+Without `.no_cache()`, the L1 cache marks the directory as resolved after the first access and never re-queries — stale or empty results persist indefinitely.
 
 **Pattern: known set of directories (todo tags)**
 
