@@ -5,6 +5,7 @@
 //! VFS path extraction, line counting) and passes them alongside the raw
 //! `tool_input` to the template.
 
+use std::ops::Range;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -20,7 +21,7 @@ use crate::providers::claude::hook_schema::{
 };
 use crate::providers::names::{self, FILE_OVERVIEW};
 use crate::syntax::analysis::{AnalysisContext, AnalysisEngine, HintView};
-use crate::syntax::decomposed::DecompositionCache;
+use crate::syntax::decomposed::{DecomposedSource, DecompositionCache};
 
 /// Minimum combined old+new line count to trigger SSOT reminder on Edit.
 const SSOT_LINE_THRESHOLD: usize = 10;
@@ -49,7 +50,7 @@ impl Script for PostToolUse {
         let tool_name = input.tool_name.as_deref().unwrap_or("");
         let root = ctx.activation().root_prefix();
 
-        let hints = run_analysis_for_tool(
+        let analysis = run_analysis_for_tool(
             ctx.activation()
                 .get::<Arc<AnalysisEngine>>()
                 .ok_or_else(|| color_eyre::eyre::eyre!("coding plugin not activated"))?,
@@ -58,7 +59,18 @@ impl Script for PostToolUse {
             tool_name,
             &root,
         );
-        let diagnostics = fetch_diagnostics_for_tool(ctx, &input, tool_name, &root);
+
+        // Narrow hints/diagnostics to the changed region for Edit calls.
+        let changed = analysis
+            .decomposed
+            .as_deref()
+            .and_then(|d| changed_line_range(&input, tool_name, d));
+        let hints = filter_hints(analysis.hints, changed.as_ref());
+        let diagnostics = filter_diagnostics(
+            fetch_diagnostics_for_tool(ctx, &input, tool_name, &root),
+            changed.as_ref(),
+        );
+
         let view = build_view(&input, tool_name, &root, &hints, &diagnostics);
         let rendered = self.engine.render(TMPL_POST, &view);
         let trimmed = rendered.trim();
@@ -235,23 +247,35 @@ fn source_rel_path(input: &HookInput, tool_name: &str, root: &str) -> Option<Str
 #[cfg(test)]
 mod tests;
 
+/// Analysis results: hints plus the decomposed source for change-range filtering.
+struct AnalysisResult {
+    hints: Vec<HintView>,
+    decomposed: Option<Arc<DecomposedSource>>,
+}
+
 /// Run syntax analysis on the file targeted by an Edit/Write tool call.
 ///
-/// Returns an empty vec for non-file tools or files without tree-sitter
-/// support. VFS paths are resolved to their underlying source file.
+/// Returns hints and the decomposed source (used by the caller to compute
+/// the changed line range for filtering). Returns empty hints for non-file
+/// tools or files without tree-sitter support.
 fn run_analysis_for_tool(
     engine: &AnalysisEngine,
     ctx: &ScriptContext<'_>,
     input: &HookInput,
     tool_name: &str,
     root: &str,
-) -> Vec<HintView> {
+) -> AnalysisResult {
+    let empty = AnalysisResult {
+        hints: Vec::new(),
+        decomposed: None,
+    };
+
     let Some(rel) = source_rel_path(input, tool_name, root) else {
-        return Vec::new();
+        return empty;
     };
 
     let Ok(vfs_path) = VfsPath::new(&rel) else {
-        return Vec::new();
+        return empty;
     };
 
     let activation = ctx.activation();
@@ -270,11 +294,14 @@ fn run_analysis_for_tool(
     cache.invalidate(&vfs_path);
 
     let Ok(decomposed) = cache.get(&vfs_path) else {
-        return Vec::new();
+        return empty;
     };
 
     let Some(tree) = &decomposed.tree else {
-        return Vec::new();
+        return AnalysisResult {
+            hints: Vec::new(),
+            decomposed: Some(decomposed),
+        };
     };
 
     let analysis_ctx = AnalysisContext {
@@ -282,7 +309,11 @@ fn run_analysis_for_tool(
         activation,
     };
 
-    engine.analyze(tree, &analysis_ctx).iter().map(HintView::from).collect()
+    let hints = engine.analyze(tree, &analysis_ctx).iter().map(HintView::from).collect();
+    AnalysisResult {
+        hints,
+        decomposed: Some(decomposed),
+    }
 }
 
 /// Fetch LSP diagnostics for the file targeted by an Edit/Write tool call.
@@ -328,4 +359,103 @@ fn fetch_diagnostics_for_tool(
 
     let diags = fq.diagnostics().unwrap_or_default();
     diagnostics_to_rows(&diags)
+}
+/// Compute the 1-based line range affected by an Edit tool call.
+///
+/// Finds `new_string` in the post-edit source and expands to the enclosing
+/// tree-sitter scope. Returns `None` for Write (entire file changed),
+/// `replace_all` edits, empty replacements, or when the edit location is
+/// ambiguous (multiple matches).
+fn changed_line_range(input: &HookInput, tool_name: &str, decomposed: &DecomposedSource) -> Option<Range<usize>> {
+    if tool_name != "Edit" {
+        return None;
+    }
+
+    let edit = input.tool_input_as::<EditToolInput>()?;
+    let new_string = edit.new_string.as_deref()?;
+
+    // Pure deletion — can't locate in post-edit source.
+    if new_string.is_empty() {
+        return None;
+    }
+
+    // replace_all scatters changes across the file.
+    if edit.replace_all == Some(true) {
+        return None;
+    }
+
+    // Require a unique match to avoid filtering to the wrong location.
+    let matches: Vec<usize> = decomposed
+        .source
+        .match_indices(new_string)
+        .map(|(idx, _)| idx)
+        .collect();
+    let &[byte_start] = matches.as_slice() else {
+        return None;
+    };
+    let byte_end = byte_start + new_string.len();
+
+    // 0-based line numbers.
+    let start_line = decomposed.source[..byte_start].bytes().filter(|&b| b == b'\n').count();
+    let end_line = decomposed.source[..byte_end].bytes().filter(|&b| b == b'\n').count();
+
+    // Expand to enclosing tree-sitter scope if a parse tree is available.
+    let (scope_start, scope_end) = decomposed
+        .tree
+        .as_ref()
+        .and_then(|tree| enclosing_scope_lines(tree, byte_start, byte_end))
+        .unwrap_or((start_line, end_line));
+
+    // Convert to 1-based to match HintView.line_start and DiagnosticRow.line.
+    Some((scope_start + 1)..(scope_end + 2))
+}
+
+/// Find the enclosing scope node's 0-based line range for a byte span.
+///
+/// Walks up from the deepest node containing the byte range, stopping at
+/// the first named ancestor with a meaningful span (≥ 5 lines or the change
+/// size). This naturally lands on function/method/class boundaries.
+fn enclosing_scope_lines(tree: &tree_sitter::Tree, byte_start: usize, byte_end: usize) -> Option<(usize, usize)> {
+    let root = tree.root_node();
+    let mut node = root.descendant_for_byte_range(byte_start, byte_end.saturating_sub(1))?;
+
+    let raw_lines = node.end_position().row - node.start_position().row + 1;
+    let min_scope = raw_lines.max(5);
+
+    loop {
+        let span = node.end_position().row - node.start_position().row + 1;
+
+        if node.id() == root.id() {
+            // Reached root — don't filter to the whole file.
+            return None;
+        }
+
+        if node.is_named() && span >= min_scope {
+            return Some((node.start_position().row, node.end_position().row));
+        }
+
+        node = node.parent()?;
+    }
+}
+
+/// Filter hints to those overlapping the changed line range.
+fn filter_hints(hints: Vec<HintView>, changed: Option<&Range<usize>>) -> Vec<HintView> {
+    let Some(range) = changed else {
+        return hints;
+    };
+    hints
+        .into_iter()
+        .filter(|h| h.line_start < range.end && h.line_end >= range.start)
+        .collect()
+}
+
+/// Filter diagnostics to those within the changed line range.
+fn filter_diagnostics(diagnostics: Vec<DiagnosticRow>, changed: Option<&Range<usize>>) -> Vec<DiagnosticRow> {
+    let Some(range) = changed else {
+        return diagnostics;
+    };
+    diagnostics
+        .into_iter()
+        .filter(|d| (d.line as usize) >= range.start && (d.line as usize) < range.end)
+        .collect()
 }
