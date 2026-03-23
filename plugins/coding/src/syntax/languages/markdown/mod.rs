@@ -20,7 +20,30 @@ impl LanguageSpec for MarkdownLanguage {
         let source = root.source_str();
         let headings = collect_headings(root, root.source());
         let code_blocks = collect_code_blocks(root, source);
-        Some(build_section_fragments(&headings, &code_blocks, source))
+
+        let mut fragments = Vec::new();
+
+        // Content before the first heading (frontmatter, intro text) → preamble.
+        let first_heading_byte = headings.first().map_or(source.len(), |h| h.start_byte);
+        let preamble_text = &source[..first_heading_byte];
+        if !preamble_text.trim().is_empty() {
+            let span = 0..first_heading_byte;
+            fragments.push(Fragment::new(
+                source,
+                "preamble".to_owned(),
+                FragmentKind::Preamble,
+                span.clone(),
+                span,
+                None,
+                FragmentMetadata::Document { index: 0 },
+                0,
+                Vec::new(),
+                None,
+            ));
+        }
+
+        fragments.extend(build_section_fragments(&headings, &code_blocks, source));
+        Some(fragments)
     }
 }
 
