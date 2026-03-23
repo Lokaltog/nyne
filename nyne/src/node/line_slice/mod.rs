@@ -3,7 +3,7 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 
 use super::plugin::NodePlugin;
-use super::{Readable, VirtualNode, Writable, WriteOutcome};
+use super::{Readable, Unlinkable, VirtualNode, Writable, WriteOutcome};
 use crate::dispatch::context::RequestContext;
 use crate::types::slice::{SliceSpec, parse_slice_suffix};
 
@@ -35,10 +35,15 @@ impl NodePlugin for LineSlice {
         .hidden();
 
         if base.writable().is_some() {
-            node = node.with_writable(SlicedWritable {
-                base: Arc::clone(base),
-                spec,
-            });
+            node = node
+                .with_writable(SlicedWritable {
+                    base: Arc::clone(base),
+                    spec,
+                })
+                .with_unlinkable(SlicedUnlinkable {
+                    base: Arc::clone(base),
+                    spec,
+                });
         }
 
         Ok(Some(node))
@@ -81,8 +86,27 @@ struct SlicedWritable {
 impl Writable for SlicedWritable {
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         let current = self.base.require_readable()?.read(ctx)?;
-        let spliced = splice_lines(&current, &self.spec, data);
-        self.base.require_writable()?.write(ctx, &spliced)
+        self.base
+            .require_writable()?
+            .write(ctx, &splice_lines(&current, &self.spec, data))
+    }
+}
+/// Removes a sliced line range by splicing empty data into the base node.
+///
+/// Semantically identical to writing empty content through [`SlicedWritable`],
+/// but triggered by `rm` (unlink) instead of truncate-then-close.
+struct SlicedUnlinkable {
+    base: Arc<VirtualNode>,
+    spec: SliceSpec,
+}
+
+impl Unlinkable for SlicedUnlinkable {
+    fn unlink(&self, ctx: &RequestContext<'_>) -> Result<()> {
+        let current = self.base.require_readable()?.read(ctx)?;
+        self.base
+            .require_writable()?
+            .write(ctx, &splice_lines(&current, &self.spec, b""))?;
+        Ok(())
     }
 }
 
@@ -90,12 +114,12 @@ impl Writable for SlicedWritable {
 ///
 /// Returns the full content with the targeted lines replaced.
 fn splice_lines(current: &[u8], spec: &SliceSpec, new_data: &[u8]) -> Vec<u8> {
-    let current_str = String::from_utf8_lossy(current);
-    let lines: Vec<&str> = current_str.lines().collect();
+    let existing = String::from_utf8_lossy(current);
+    let lines: Vec<&str> = existing.lines().collect();
     let range = spec.index_range(lines.len());
 
-    let new_str = String::from_utf8_lossy(new_data);
-    let new_lines: Vec<&str> = new_str.lines().collect();
+    let replacement = String::from_utf8_lossy(new_data);
+    let new_lines: Vec<&str> = replacement.lines().collect();
 
     let mut result: Vec<&str> = Vec::with_capacity(lines.len() - range.len() + new_lines.len());
     result.extend_from_slice(lines.get(..range.start).unwrap_or(&[]));

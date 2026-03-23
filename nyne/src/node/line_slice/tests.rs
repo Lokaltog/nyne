@@ -96,3 +96,33 @@ fn splice_lines_tail() {
     let result = splice_lines(current, &spec, b"NEW");
     assert_eq!(result, b"aaa\nbbb\nNEW\n");
 }
+#[test]
+fn derive_unlinkable_when_base_writable() {
+    struct StubWritable;
+    impl Writable for StubWritable {
+        fn write(&self, _ctx: &RequestContext<'_>, _data: &[u8]) -> Result<WriteOutcome> { Ok(WriteOutcome::Ignored) }
+    }
+
+    let base = Arc::new(VirtualNode::file("lines", StaticContent(b"a\nb\nc\n")).with_writable(StubWritable));
+    let plugin = LineSlice;
+    let b = stub_request_context_at("test");
+    let derived = plugin.derive(&base, "lines:2", &b.ctx()).unwrap().unwrap();
+    assert!(derived.unlinkable().is_some());
+}
+
+#[test]
+fn derive_not_unlinkable_when_base_readonly() {
+    let base = Arc::new(VirtualNode::file("BLAME.md", StaticContent(b"content")));
+    let plugin = LineSlice;
+    let b = stub_request_context_at("test");
+    let derived = plugin.derive(&base, "BLAME.md:1", &b.ctx()).unwrap().unwrap();
+    assert!(derived.unlinkable().is_none());
+}
+
+#[test]
+fn splice_lines_empty_data_deletes_range() {
+    let current = b"aaa\nbbb\nccc\nddd\n";
+    let spec = SliceSpec::Range(2, 3);
+    let result = splice_lines(current, &spec, b"");
+    assert_eq!(result, b"aaa\nddd\n");
+}
