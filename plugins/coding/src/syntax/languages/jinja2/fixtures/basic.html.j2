@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% import "macros.html" as macros %}
+
+{% set page_title = "Home" %}
+
+{% block head %}
+  <title>{{ page_title }}</title>
+{% endblock %}
+
+{% block content %}
+  <h1>Welcome</h1>
+  {% for item in items %}
+    <p>{{ item.name }}</p>
+  {% endfor %}
+{% endblock %}
+
+{% macro render_link(url, text) %}
+  <a href="{{ url }}">{{ text }}</a>
+{% endmacro %}
+
+{% block footer %}
+  <footer>{{ macros.copyright() }}</footer>
+{% endblock %}

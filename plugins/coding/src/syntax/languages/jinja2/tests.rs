@@ -315,3 +315,44 @@ fn fragment_name_byte_offset_extracts_name() {
     let extracted_name = &source[frag.name_byte_offset..frag.name_byte_offset + frag.name.len()];
     assert_eq!(extracted_name, "header");
 }
+
+// ── Granularity contract tests (fixture-based) ──────────────────────
+
+fn decompose_fixture(name: &str) -> Vec<super::Fragment> {
+    let source = crate::test_support::load_fixture("syntax/languages/jinja2", name);
+    let t = extract_template(&source);
+    symbols_to_fragments(t.symbols, &source)
+}
+
+/// Fixture has: extends, import, set, 3 blocks (head, content, footer), 1 macro.
+/// Expected: preamble (extends + import) + set + 3 blocks + 1 macro = 6 fragments.
+#[test]
+fn basic_fixture_fragment_count() {
+    let fragments = decompose_fixture("basic.html.j2");
+    assert_eq!(fragments.len(), 6);
+}
+
+#[test]
+fn basic_fixture_fragment_names() {
+    let fragments = decompose_fixture("basic.html.j2");
+    let names: Vec<_> = fragments.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, &["preamble", "page_title", "head", "content", "render_link", "footer"]);
+}
+
+/// Preamble fragment captures extends and import directives.
+#[test]
+fn basic_fixture_preamble() {
+    let fragments = decompose_fixture("basic.html.j2");
+    let first = &fragments[0];
+    assert_eq!(first.name, "preamble");
+    assert_eq!(first.kind, super::FragmentKind::Preamble);
+}
+
+/// Block and macro fragments have no children (flat structure).
+#[test]
+fn basic_fixture_no_children() {
+    let fragments = decompose_fixture("basic.html.j2");
+    for frag in &fragments {
+        assert!(frag.children.is_empty(), "fragment '{}' should have no children", frag.name);
+    }
+}

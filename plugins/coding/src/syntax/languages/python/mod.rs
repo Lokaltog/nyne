@@ -232,3 +232,6 @@ fn dedent_docstring(content: &str) -> String {
 }
 
 register_syntax!(PythonLanguage);
+
+#[cfg(test)]
+mod tests;

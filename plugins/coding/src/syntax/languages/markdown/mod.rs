@@ -252,3 +252,6 @@ fn build_code_block_fragments(
 }
 
 register_syntax!(MarkdownLanguage);
+
+#[cfg(test)]
+mod tests;

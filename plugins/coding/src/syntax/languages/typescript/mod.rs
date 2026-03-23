@@ -147,3 +147,6 @@ fn strip_jsdoc(raw: &str) -> String {
 }
 
 register_syntax!(TypeScriptLanguage);
+
+#[cfg(test)]
+mod tests;

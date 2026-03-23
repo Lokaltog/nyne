@@ -1,0 +1,84 @@
+use rstest::{fixture, rstest};
+
+use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, FragmentKind, SymbolKind};
+use crate::test_support::{load_fixture, registry};
+
+#[fixture]
+fn basic() -> DecomposedFile {
+    let source = load_fixture("syntax/languages/rust", "basic.rs");
+    let reg = registry();
+    let d = reg.get("rs").unwrap();
+    let (result, _tree) = d.decompose(&source, DEFAULT_MAX_DEPTH);
+    result
+}
+
+/// Top-level: const, 2 fns, struct, enum, trait, 2 impls = 8 fragments.
+#[rstest]
+fn fragment_count(basic: DecomposedFile) {
+    assert_eq!(basic.fragments.len(), 8);
+}
+
+#[rstest]
+fn fragment_names(basic: DecomposedFile) {
+    let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        names,
+        &["MAX_SIZE", "process", "helper", "Config", "Status", "Processor", "Processor_for_Config", "Config"]
+    );
+}
+
+#[rstest]
+fn fragment_kinds(basic: DecomposedFile) {
+    let kinds: Vec<_> = basic.fragments.iter().map(|f| &f.kind).collect();
+    assert_eq!(kinds, &[
+        &FragmentKind::Symbol(SymbolKind::Const),
+        &FragmentKind::Symbol(SymbolKind::Function),
+        &FragmentKind::Symbol(SymbolKind::Function),
+        &FragmentKind::Symbol(SymbolKind::Struct),
+        &FragmentKind::Symbol(SymbolKind::Enum),
+        &FragmentKind::Symbol(SymbolKind::Trait),
+        &FragmentKind::Symbol(SymbolKind::Impl),
+        &FragmentKind::Symbol(SymbolKind::Impl),
+    ]);
+}
+
+/// Imports are coalesced into a single ImportSpan.
+#[rstest]
+fn imports_extracted(basic: DecomposedFile) {
+    let imports = basic.imports.as_ref().expect("imports should be present");
+    assert!(imports.content.contains("use std::collections::HashMap;"));
+    assert!(imports.content.contains("use std::io;"));
+}
+
+/// Trait method signatures (`function_signature_item`) are not currently
+/// decomposed as children — only method definitions with bodies are.
+#[rstest]
+fn trait_has_no_children_for_signatures(basic: DecomposedFile) {
+    let processor_trait = basic.fragments.iter().find(|f| f.name == "Processor").unwrap();
+    assert!(processor_trait.children.is_empty());
+}
+
+/// `impl Processor for Config` has 2 methods as children.
+#[rstest]
+fn trait_impl_children(basic: DecomposedFile) {
+    let impl_frag = basic
+        .fragments
+        .iter()
+        .find(|f| f.name == "Processor_for_Config")
+        .unwrap();
+    let child_names: Vec<_> = impl_frag.children.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(child_names, &["run", "reset"]);
+}
+
+/// `impl Config` has 1 method child.
+#[rstest]
+fn inherent_impl_children(basic: DecomposedFile) {
+    let impl_frag = basic
+        .fragments
+        .iter()
+        .filter(|f| f.name == "Config")
+        .find(|f| f.kind == FragmentKind::Symbol(SymbolKind::Impl))
+        .unwrap();
+    let child_names: Vec<_> = impl_frag.children.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(child_names, &["new"]);
+}

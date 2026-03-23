@@ -127,3 +127,6 @@ fn build_pair_fragment(node: TsNode<'_>, _source: &str, parent_name: Option<&str
 }
 
 register_syntax!(TomlLanguage);
+
+#[cfg(test)]
+mod tests;

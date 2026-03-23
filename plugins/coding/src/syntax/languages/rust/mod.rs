@@ -103,3 +103,6 @@ fn impl_block_name(node: TsNode<'_>) -> String {
 fn flatten_type_text(raw: &str) -> String { raw.replace("::", "_").replace(['<', '>', ',', ' '], "") }
 
 register_syntax!(RustLanguage);
+
+#[cfg(test)]
+mod tests;

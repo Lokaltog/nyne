@@ -126,3 +126,6 @@ fn build_binding_fragment(node: TsNode<'_>, source: &str, parent_name: Option<&s
 }
 
 register_syntax!(NixLanguage);
+
+#[cfg(test)]
+mod tests;

@@ -159,3 +159,6 @@ fn build_fennel_fragment(node: TsNode<'_>, name: String, kind: SymbolKind, paren
 }
 
 register_syntax!(FennelLanguage);
+
+#[cfg(test)]
+mod tests;

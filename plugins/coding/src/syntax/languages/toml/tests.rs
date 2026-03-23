@@ -1,0 +1,49 @@
+use rstest::{fixture, rstest};
+
+use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, FragmentKind, SymbolKind};
+use crate::test_support::{load_fixture, registry};
+
+#[fixture]
+fn basic() -> DecomposedFile {
+    let source = load_fixture("syntax/languages/toml", "basic.toml");
+    let reg = registry();
+    let d = reg.get("toml").unwrap();
+    let (result, _tree) = d.decompose(&source, DEFAULT_MAX_DEPTH);
+    result
+}
+
+/// Top-level: preamble (bare keys) + [package] + [dependencies] +
+/// [dev-dependencies] + [[bin]] + [[bin]] = 6 fragments.
+#[rstest]
+fn fragment_count(basic: DecomposedFile) {
+    assert_eq!(basic.fragments.len(), 6);
+}
+
+#[rstest]
+fn fragment_names(basic: DecomposedFile) {
+    let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, &["preamble", "package", "dependencies", "dev-dependencies", "main", "helper"]);
+}
+
+/// First fragment is a preamble containing bare top-level key-value pairs.
+#[rstest]
+fn preamble_is_first(basic: DecomposedFile) {
+    let first = &basic.fragments[0];
+    assert_eq!(first.name, "preamble");
+    assert_eq!(first.kind, FragmentKind::Preamble);
+}
+
+/// Table sections are `Module` symbols (opaque, no children).
+#[rstest]
+fn table_sections_are_opaque(basic: DecomposedFile) {
+    for frag in &basic.fragments[1..] {
+        assert_eq!(frag.kind, FragmentKind::Symbol(SymbolKind::Module), "fragment '{}' should be Module", frag.name);
+        assert!(frag.children.is_empty(), "fragment '{}' should have no children", frag.name);
+    }
+}
+
+/// No imports in TOML.
+#[rstest]
+fn no_imports(basic: DecomposedFile) {
+    assert!(basic.imports.is_none());
+}
