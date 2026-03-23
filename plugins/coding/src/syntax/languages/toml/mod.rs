@@ -21,21 +21,51 @@ impl LanguageSpec for TomlLanguage {
         let mut fragments = Vec::new();
         let mut cursor = root.raw().walk();
 
-        // Collect top-level pairs (before any table header) as individual fragments.
-        // Then collect each table/table_array_element as a section fragment with
-        // its pairs as children.
+        // Coalesce bare top-level pairs (before any table header) into a
+        // single preamble fragment. Tables are opaque sections.
+        let mut preamble_start: Option<usize> = None;
+        let mut preamble_end: usize = 0;
+
         for child in root.raw().children(&mut cursor) {
             let node = TsNode::new(child, root.source());
             match child.kind() {
-                "table" | "table_array_element" => {
-                    fragments.push(build_table_fragment(node, source));
+                "pair" | "comment" => {
+                    if preamble_start.is_none() {
+                        preamble_start = Some(child.start_byte());
+                    }
+                    preamble_end = child.end_byte();
                 }
-                "pair" => {
-                    fragments.push(build_pair_fragment(node, source, None));
+                "table" | "table_array_element" => {
+                    fragments.push(build_table_fragment(node));
                 }
                 _ => {}
             }
         }
+
+        // Insert preamble at the front if any bare pairs were found.
+        if let Some(start) = preamble_start {
+            let span = start..preamble_end;
+            fragments.insert(
+                0,
+                Fragment::new(
+                    source,
+                    "preamble".to_owned(),
+                    FragmentKind::Preamble,
+                    span.clone(),
+                    span,
+                    None,
+                    FragmentMetadata::Code {
+                        visibility: None,
+                        doc_comment_range: None,
+                        decorator_range: None,
+                    },
+                    start,
+                    Vec::new(),
+                    None,
+                ),
+            );
+        }
+
         Some(fragments)
     }
 
@@ -64,21 +94,14 @@ fn extract_key_name(node: TsNode<'_>) -> String {
 /// Build a signature for a table node (e.g. `[package]` or `[[bin]]`).
 fn build_table_signature(node: TsNode<'_>) -> String { node.first_line().to_owned() }
 
-/// Build a fragment for a `table` or `table_array_element` node, with pairs as
-/// children.
-fn build_table_fragment(node: TsNode<'_>, source: &str) -> Fragment {
+/// Build an opaque fragment for a `table` or `table_array_element` node.
+///
+/// Tables are not decomposed further — individual key-value pairs inside a
+/// section are part of the section body, not separate symbols.
+fn build_table_fragment(node: TsNode<'_>) -> Fragment {
     let name = extract_key_name(node);
     let signature = build_table_signature(node);
     let doc_range = TomlLanguage::extract_doc_range(node);
-
-    let mut children = Vec::new();
-    let mut cursor = node.raw().walk();
-    for child in node.raw().children(&mut cursor) {
-        if child.kind() == "pair" {
-            let pair_node = TsNode::new(child, node.source());
-            children.push(build_pair_fragment(pair_node, source, Some(&name)));
-        }
-    }
 
     let node_range = node.byte_range();
     let full_span = TomlLanguage::full_symbol_range(&node_range, doc_range.as_ref(), None);
@@ -94,35 +117,9 @@ fn build_table_fragment(node: TsNode<'_>, source: &str) -> Fragment {
             doc_comment_range: doc_range,
             decorator_range: None,
             full_span,
-            children,
-        },
-        None,
-    )
-}
-
-/// Build a fragment for a key-value `pair` node.
-fn build_pair_fragment(node: TsNode<'_>, _source: &str, parent_name: Option<&str>) -> Fragment {
-    let name = extract_key_name(node);
-    let signature = node.first_line().to_owned();
-    let doc_range = TomlLanguage::extract_doc_range(node);
-
-    let node_range = node.byte_range();
-    let full_span = TomlLanguage::full_symbol_range(&node_range, doc_range.as_ref(), None);
-
-    build_code_fragment(
-        node,
-        CodeFragmentSpec {
-            name,
-            kind: SymbolKind::Variable,
-            signature,
-            name_byte_offset: node.start_byte(),
-            visibility: None,
-            doc_comment_range: doc_range,
-            decorator_range: None,
-            full_span,
             children: Vec::new(),
         },
-        parent_name,
+        None,
     )
 }
 

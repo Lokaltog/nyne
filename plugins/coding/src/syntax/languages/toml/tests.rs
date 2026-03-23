@@ -22,7 +22,7 @@ fn fragment_count(basic: DecomposedFile) {
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
     let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, &["preamble", "package", "dependencies", "dev-dependencies", "main", "helper"]);
+    assert_eq!(names, &["preamble", "package", "dependencies", "dev-dependencies", "bin", "bin"]);
 }
 
 /// First fragment is a preamble containing bare top-level key-value pairs.
