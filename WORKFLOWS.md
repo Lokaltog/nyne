@@ -60,6 +60,26 @@ cat file.rs@/DIAGNOSTICS.md
 cat file.rs@/symbols/process@/DOC.md
 ```
 
+## Workspace Symbol Search
+
+```sh
+# Find a symbol by name across the entire project
+ls @/search/symbols/EditOutcome
+# → edit.rs::EditOutcome -> ../../../../nyne/src/edit.rs@/symbols/at-line/14
+# → mod.rs::EditOutcome  -> ../../../../plugins/coding/src/edit/plan/mod.rs@/symbols/at-line/261
+
+# Results are symlinks — follow them to read, edit, or inspect
+cat @/search/symbols/EditOutcome/edit.rs::EditOutcome
+
+# Partial matches work (LSP workspace/symbol query under the hood)
+ls @/search/symbols/Provider
+
+# Pipe into other tools
+ls @/search/symbols/Cache | xargs -I{} readlink @/search/symbols/Cache/{}
+```
+
+Results are directories of symlinks pointing to `<file>@/symbols/at-line/<line>`, which resolve to the matching symbol's body. LSP servers are spawned eagerly at mount time, so searches work immediately.
+
 ## Editing
 
 ```sh
