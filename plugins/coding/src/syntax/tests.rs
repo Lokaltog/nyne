@@ -506,6 +506,21 @@ fn file_level_doc_extracted(#[case] ext: &str, #[case] source: &str, #[case] exp
     assert_eq!(cleaned, expected);
 }
 
+#[rstest]
+#[case::rust("rs", "//! Module-level doc.\n//! Second line.\n\nfn foo() {}\n")]
+#[case::python("py", "\"\"\"Module docstring.\nSecond line.\n\"\"\"\n\ndef foo():\n    pass\n")]
+fn file_level_doc_strip_wrap_roundtrip(#[case] ext: &str, #[case] source: &str) {
+    let result = decompose(ext, source);
+    let reg = registry();
+    let d = reg.get(ext).unwrap();
+    let doc_frag = super::fragment::find_fragment_of_kind(&result, &FragmentKind::Docstring)
+        .expect("should have file-level docstring fragment");
+    let raw = &source[doc_frag.byte_range.clone()];
+    let stripped = d.strip_doc_comment(raw);
+    let rewrapped = d.wrap_file_doc_comment(&stripped, "");
+    assert_eq!(rewrapped, raw, "strip → wrap_file_doc_comment should round-trip");
+}
+
 // Group 7: Disjoint doc+decorator ranges
 
 #[rstest]
@@ -802,6 +817,39 @@ fn identity_fs_mapping() {
 }
 
 #[test]
+fn structural_fragments_have_no_fs_name() {
+    let source = "//! Module doc.\nuse std::io;\n\n/// Documented.\n#[derive(Debug)]\npub struct Foo;\n";
+    let frags = decompose_mapped("rs", source);
+    for frag in &frags {
+        if frag.kind.is_structural() {
+            assert!(
+                frag.fs_name.is_none(),
+                "{:?} fragment {:?} should not have fs_name, got {:?}",
+                frag.kind,
+                frag.name,
+                frag.fs_name,
+            );
+        }
+    }
+    // Verify the structural fragments exist but are nameless.
+    let file_doc = super::fragment::find_fragment_of_kind(&frags, &FragmentKind::Docstring);
+    assert!(file_doc.is_some(), "should have file-level docstring fragment");
+    assert!(file_doc.unwrap().fs_name.is_none());
+
+    let imports = super::fragment::find_fragment_of_kind(&frags, &FragmentKind::Imports);
+    assert!(imports.is_some(), "should have imports fragment");
+    assert!(imports.unwrap().fs_name.is_none());
+
+    // Symbol's child docstring and decorator should also be nameless.
+    let foo = frags.iter().find(|f| f.name == "Foo").expect("Foo symbol");
+    assert!(foo.fs_name.is_some(), "symbol should have fs_name");
+    let doc_child = foo.child_of_kind(&FragmentKind::Docstring).unwrap();
+    assert!(doc_child.fs_name.is_none(), "docstring child should not have fs_name");
+    let dec_child = foo.child_of_kind(&FragmentKind::Decorator).unwrap();
+    assert!(dec_child.fs_name.is_none(), "decorator child should not have fs_name");
+}
+
+#[test]
 fn kind_suffix_conflict_resolution() {
     let reg = registry();
     let d = reg.get("rs").unwrap();
@@ -1020,7 +1068,7 @@ fn nameless_impl_fragments() -> (Vec<Fragment>, String) {
 
 #[rstest]
 #[case::exact_match(2, &["alpha"])]
-#[case::gap_before_first_symbol(0, &["imports"])]
+#[case::gap_before_first_symbol(0, &["alpha"])]
 #[case::gap_between_symbols(3, &["alpha"])]
 fn nearest_fragment_at_line(
     alpha_beta_fragments: (Vec<Fragment>, String),

@@ -53,7 +53,9 @@ pub fn apply_fs_mapping(fragments: &mut [Fragment], strategy: NamingStrategy) {
 
 fn apply_identity(fragments: &mut [Fragment]) {
     for frag in fragments {
-        frag.fs_name = Some(frag.name.clone());
+        if !frag.kind.is_structural() {
+            frag.fs_name = Some(frag.name.clone());
+        }
         apply_identity(&mut frag.children);
     }
 }
@@ -61,14 +63,17 @@ fn apply_identity(fragments: &mut [Fragment]) {
 fn apply_slugified(fragments: &mut [Fragment], indexed: bool) {
     let mut code_block_index = 0usize;
     for (i, frag) in fragments.iter_mut().enumerate() {
+        apply_slugified(&mut frag.children, indexed);
+        if frag.kind.is_structural() {
+            continue;
+        }
         if matches!(frag.kind, FragmentKind::CodeBlock { .. }) {
             code_block_index += 1;
-            frag.fs_name = Some(format!("{}", code_block_index * 10));
+            frag.fs_name = Some((code_block_index * 10).to_string());
         } else {
             let slug = slugify(&frag.name);
             frag.fs_name = Some(if indexed { format!("{i:02}-{slug}") } else { slug });
         }
-        apply_slugified(&mut frag.children, indexed);
     }
 }
 

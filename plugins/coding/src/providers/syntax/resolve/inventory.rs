@@ -5,8 +5,10 @@ use nyne::types::vfs_path::VfsPath;
 
 use super::{build_fragment_nodes, fragment_body_path};
 use crate::lsp::handle::LspHandle;
-use crate::providers::names::{FILE_IMPORTS, FILE_OVERVIEW, SUBDIR_BY_KIND, SUBDIR_SYMBOLS};
-use crate::providers::syntax::content::{MetaSplice, OverviewContent, SourceSlice, SpliceTarget};
+use crate::providers::names::{FILE_DOCSTRING, FILE_IMPORTS, FILE_OVERVIEW, SUBDIR_BY_KIND, SUBDIR_SYMBOLS};
+use crate::providers::syntax::content::{
+    FileDocstringContent, FileDocstringSplice, MetaSplice, OverviewContent, SourceSlice, SpliceTarget,
+};
 use crate::providers::syntax::{SyntaxProvider, newline};
 use crate::syntax::fragment::{FragmentKind, find_fragment_of_kind};
 
@@ -35,8 +37,22 @@ impl SyntaxProvider {
                 target: SpliceTarget::Imports,
             })
             .with_writable(MetaSplice {
-                resolver,
+                resolver: resolver.clone(),
                 target: SpliceTarget::Imports,
+            });
+            nodes.push(newline::with_newline_middlewares(node));
+        }
+
+        // File-level docstring (if present).
+        if find_fragment_of_kind(&dctx.shared.decomposed, &FragmentKind::Docstring).is_some() {
+            let node = VirtualNode::file(FILE_DOCSTRING, FileDocstringContent {
+                resolver: resolver.clone(),
+            })
+            .with_writable(FileDocstringSplice {
+                meta: MetaSplice {
+                    resolver,
+                    target: SpliceTarget::FileDoc,
+                },
             });
             nodes.push(newline::with_newline_middlewares(node));
         }
@@ -76,12 +92,7 @@ impl SyntaxProvider {
             .iter()
             .filter_map(|f| match &f.kind {
                 FragmentKind::Symbol(k) => Some(k.directory_name()),
-                FragmentKind::Section { .. }
-                | FragmentKind::CodeBlock { .. }
-                | FragmentKind::Preamble
-                | FragmentKind::Docstring
-                | FragmentKind::Imports
-                | FragmentKind::Decorator => None,
+                _ => None,
             })
             .collect();
         kinds.sort();
@@ -104,15 +115,7 @@ impl SyntaxProvider {
             .shared
             .decomposed
             .iter()
-            .filter(|f| match &f.kind {
-                FragmentKind::Symbol(k) => k.directory_name() == kind_filter,
-                FragmentKind::Section { .. }
-                | FragmentKind::CodeBlock { .. }
-                | FragmentKind::Preamble
-                | FragmentKind::Docstring
-                | FragmentKind::Imports
-                | FragmentKind::Decorator => false,
-            })
+            .filter(|f| matches!(&f.kind, FragmentKind::Symbol(k) if k.directory_name() == kind_filter))
             .filter_map(|f| {
                 let fs_name = f.fs_name.as_deref()?;
                 let link_name = format!("{fs_name}.{}", dctx.ext);

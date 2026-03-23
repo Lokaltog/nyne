@@ -55,7 +55,7 @@ impl Object for FragmentView {
                     .frag
                     .children
                     .iter()
-                    .filter(|c| !matches!(c.kind, FragmentKind::CodeBlock { .. }))
+                    .filter(|c| !matches!(c.kind, FragmentKind::CodeBlock { .. }) && !c.kind.is_structural())
                     .count();
                 Some(Value::from(count))
             }
@@ -119,12 +119,13 @@ impl FragmentView {
     }
 }
 
-/// Build a minijinja `Value` list of `FragmentView` objects, skipping code blocks.
+/// Build a minijinja `Value` list of `FragmentView` objects, skipping
+/// code blocks and structural fragments (docstrings, imports, decorators).
 pub fn fragment_list(fragments: &[Fragment], shared: &Arc<DecomposedSource>) -> Value {
     Value::from(
         fragments
             .iter()
-            .filter(|f| !matches!(f.kind, FragmentKind::CodeBlock { .. }))
+            .filter(|f| !matches!(f.kind, FragmentKind::CodeBlock { .. }) && !f.kind.is_structural())
             .map(|f| {
                 Value::from_object(FragmentView {
                     frag: f.clone(),

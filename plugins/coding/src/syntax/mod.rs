@@ -254,9 +254,13 @@ pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<
 /// Walks children recursively, returning the most specific match.
 /// Nameless fragments (e.g. inherent impl blocks hidden by conflict
 /// resolution) are transparent — the search looks through to their children.
+/// Structural fragments (docstrings, imports, decorators) are skipped entirely.
 /// Used by LSP symlink directories to reverse-map locations to symbols.
 pub fn find_fragment_at_line(fragments: &[fragment::Fragment], line: usize, source: &str) -> Option<Vec<String>> {
-    let frag = fragments.iter().find(|f| f.line_range(source).contains(&line))?;
+    let frag = fragments
+        .iter()
+        .filter(|f| !f.kind.is_structural())
+        .find(|f| f.line_range(source).contains(&line))?;
 
     let Some(fs_name) = frag.fs_name.as_ref() else {
         // Nameless container: look through to children.
@@ -283,9 +287,12 @@ pub fn find_nearest_fragment_at_line(
     line: usize,
     source: &str,
 ) -> Option<Vec<String>> {
-    // If line falls inside a nameless container, narrow search to its children.
+    // If line falls inside a nameless container (e.g. hidden impl block),
+    // narrow search to its children. Structural fragments (docstrings,
+    // imports, decorators) are skipped — they're metadata, not containers.
     if let Some(frag) = fragments
         .iter()
+        .filter(|f| !f.kind.is_structural())
         .find(|f| f.line_range(source).contains(&line) && f.fs_name.is_none())
     {
         return find_nearest_fragment_at_line(&frag.children, line, source);

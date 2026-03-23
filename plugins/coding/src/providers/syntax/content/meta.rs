@@ -38,6 +38,8 @@ pub(in crate::providers::syntax) enum SpliceTarget {
     FragmentDecorators(Vec<String>),
     /// Import span.
     Imports,
+    /// File-level doc comment (e.g. `//!` in Rust).
+    FileDoc,
     /// Code block body inside a document section, identified by parent
     /// fragment path and the code block's `fs_name`.
     CodeBlockBody { parent_path: Vec<String>, fs_name: String },
@@ -78,6 +80,21 @@ impl Readable for DocstringContent {
             .map(|c| &c.byte_range)
             .ok_or_else(|| eyre::eyre!("no doc comment on fragment {:?}", self.fragment_path))?;
         let comment = &shared.source[range.clone()];
+        Ok(shared.decomposer.strip_doc_comment(comment).into_bytes())
+    }
+}
+
+/// Readable content for the file-level docstring (stripped of comment markers).
+pub(in crate::providers::syntax) struct FileDocstringContent {
+    pub resolver: FragmentResolver,
+}
+
+impl Readable for FileDocstringContent {
+    fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
+        let shared = self.resolver.decompose()?;
+        let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)
+            .ok_or_else(|| eyre::eyre!("no file-level doc in {}", self.resolver.source_file()))?;
+        let comment = &shared.source[frag.byte_range.clone()];
         Ok(shared.decomposer.strip_doc_comment(comment).into_bytes())
     }
 }
@@ -146,6 +163,12 @@ impl MetaSplice {
                     .ok_or_else(|| eyre::eyre!("no import span in {}", self.resolver.source_file()))?;
                 let start = line_start_of(source, imports.byte_range.start);
                 start..imports.byte_range.end
+            }
+            SpliceTarget::FileDoc => {
+                let doc = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)
+                    .ok_or_else(|| eyre::eyre!("no file-level doc in {}", self.resolver.source_file()))?;
+                let start = line_start_of(source, doc.byte_range.start);
+                start..doc.byte_range.end
             }
             SpliceTarget::FragmentBody(path) => {
                 let frag = syntax::require_fragment(frags, path)?;
@@ -256,6 +279,34 @@ impl DocstringSplice {
 }
 
 impl Writable for DocstringSplice {
+    fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
+        self.wrap_and_splice(ctx, from_utf8(data)?)
+    }
+
+    fn truncate_write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
+        self.meta
+            .truncate_or(ctx, data, |plain| self.wrap_and_splice(ctx, plain))
+    }
+}
+
+/// Writable splice for the file-level docstring.
+///
+/// Accepts plain text, wraps with file-level doc comment syntax
+/// (e.g. `//!` in Rust), and splices into the source file.
+pub(in crate::providers::syntax) struct FileDocstringSplice {
+    pub meta: MetaSplice,
+}
+
+impl FileDocstringSplice {
+    fn wrap_and_splice(&self, ctx: &RequestContext<'_>, plain: &str) -> Result<WriteOutcome> {
+        let resolved = self.meta.resolve()?;
+        let indent = indent_at(&resolved.shared.source, resolved.byte_range.start);
+        let wrapped = resolved.shared.decomposer.wrap_file_doc_comment(plain, indent);
+        self.meta.splice_write(ctx, &wrapped)
+    }
+}
+
+impl Writable for FileDocstringSplice {
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         self.wrap_and_splice(ctx, from_utf8(data)?)
     }

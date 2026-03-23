@@ -68,6 +68,13 @@ pub enum FragmentKind {
     Preamble,
 }
 
+impl FragmentKind {
+    /// Structural fragments are metadata (docstrings, imports, decorators)
+    /// rather than navigable symbols. They should not receive `fs_name` or
+    /// appear as `@/` directories in the VFS.
+    pub const fn is_structural(&self) -> bool { matches!(self, Self::Docstring | Self::Imports | Self::Decorator) }
+}
+
 impl Display for FragmentKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
