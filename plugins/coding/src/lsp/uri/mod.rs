@@ -6,7 +6,7 @@
 // Position conversions delegate to `crop::Rope` with the `utf16-metric` feature
 // for O(log n) line/column lookups instead of O(n) character scanning.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::{Result, eyre};
 use crop::Rope;
@@ -27,6 +27,13 @@ pub fn file_path_to_uri_string(path: &Path) -> Result<String> {
     let url =
         url::Url::from_file_path(path).map_err(|()| eyre!("failed to convert path to file URI: {}", path.display()))?;
     Ok(url.to_string())
+}
+
+/// Extract a filesystem path from a `file://` URI.
+///
+/// SSOT for URI-to-path conversion — inverse of [`file_path_to_uri`].
+pub fn uri_to_file_path(uri: &Uri) -> PathBuf {
+    PathBuf::from(uri.as_str().strip_prefix("file://").unwrap_or(uri.as_str()))
 }
 
 /// Build a `TextDocumentIdentifier` from a filesystem path.

@@ -9,10 +9,11 @@ use nyne::templates::{TemplateEngine, TemplateView};
 use serde::Serialize;
 
 use super::feature::{LspFeature, LspTarget};
-use super::format::{extract_hover_content, extract_inlay_label, lsp_symbol_kind_label, uri_to_path_buf};
+use super::format::{extract_hover_content, extract_inlay_label, lsp_symbol_kind_label};
 use crate::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
 use crate::lsp::handle::{LspHandle, SymbolQuery};
 use crate::lsp::path::LspPathResolver;
+use crate::lsp::uri::uri_to_file_path;
 use crate::providers::fragment_resolver::FragmentResolver;
 
 /// Per-symbol LSP view — acquires a `FileQuery` at read time and
@@ -74,7 +75,7 @@ impl LocationsView {
                 .iter()
                 .map(|loc| LocationRow {
                     file: resolver
-                        .rewrite_to_fuse(&uri_to_path_buf(&loc.uri))
+                        .rewrite_to_fuse(&uri_to_file_path(&loc.uri))
                         .display()
                         .to_string(),
                     line: loc.range.start.line + 1,
@@ -124,7 +125,7 @@ pub(super) fn hierarchy_item(item: &CallHierarchyItem) -> HierarchyRow {
     HierarchyRow {
         name: item.name.clone(),
         kind: "",
-        file: uri_to_path_buf(&item.uri),
+        file: uri_to_file_path(&item.uri),
         line: item.selection_range.start.line + 1,
     }
 }
@@ -134,7 +135,7 @@ pub(super) fn type_hierarchy_item(item: &TypeHierarchyItem) -> HierarchyRow {
     HierarchyRow {
         name: item.name.clone(),
         kind: lsp_symbol_kind_label(item.kind),
-        file: uri_to_path_buf(&item.uri),
+        file: uri_to_file_path(&item.uri),
         line: item.selection_range.start.line + 1,
     }
 }
@@ -227,7 +228,7 @@ impl LspQueryResult {
             Self::Locations(locs) => locs
                 .iter()
                 .map(|loc| LspTarget {
-                    abs_path: resolver.rewrite_to_fuse(&uri_to_path_buf(&loc.uri)),
+                    abs_path: resolver.rewrite_to_fuse(&uri_to_file_path(&loc.uri)),
                     line: loc.range.start.line,
                     name: None,
                 })

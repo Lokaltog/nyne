@@ -25,13 +25,14 @@ Plugin config: `[plugin.coding]` in `~/.config/nyne/config.toml`. LSP config: `[
 
 Full reference in `nyne/src/providers/CLAUDE.md`. Coding-specific notes:
 
-- `WorkspaceSearchProvider` uses `lookup(handler)` + `"{query}"` capture pattern for dynamic query directories
+- `WorkspaceSearchProvider` uses `"{query}"` capture for `@/search/symbols/{query}` — workspace symbol search via LSP
 - `BatchEditProvider` keeps two separate route trees (`at_routes` for `@/edit/`, `companion_routes` for per-symbol `edit/`)
 
 ## LSP URI ↔ Path
 
-- `lsp_types::Uri` has no `to_file_path()` — strip `file://` prefix: `PathBuf::from(uri.as_str().strip_prefix("file://").unwrap_or(uri.as_str()))`
-- Existing code in `providers/syntax/content/lsp/format.rs::uri_to_path_buf` (scoped `pub(super)`)
+- **SSOT:** `lsp::uri::uri_to_file_path` — converts `lsp_types::Uri` → `PathBuf` (strips `file://` prefix)
+- **SSOT:** `lsp::uri::file_path_to_uri` — converts `Path` → `lsp_types::Uri` (inverse)
+- `lsp_types::Uri` has no `to_file_path()` method — always use the SSOT functions above
 - In tests: construct via `"file:///path".parse::<lsp_types::Uri>()`
 
 ## FragmentResolver

@@ -1,8 +1,6 @@
 // Pure label/extraction utilities for LSP result rendering.
 
-use std::path::PathBuf;
-
-use lsp_types::{HoverContents, InlayHintLabel, MarkedString, SymbolKind, Uri};
+use lsp_types::{HoverContents, InlayHintLabel, MarkedString, SymbolKind};
 
 /// Human-readable label for an LSP `SymbolKind`.
 pub(super) const fn lsp_symbol_kind_label(kind: SymbolKind) -> &'static str {
@@ -35,11 +33,6 @@ pub(super) const fn lsp_symbol_kind_label(kind: SymbolKind) -> &'static str {
         SymbolKind::TYPE_PARAMETER => "type_parameter",
         _ => "unknown",
     }
-}
-
-/// Extract a `PathBuf` from a `file://` URI.
-pub(super) fn uri_to_path_buf(uri: &Uri) -> PathBuf {
-    PathBuf::from(uri.as_str().strip_prefix("file://").unwrap_or(uri.as_str()))
 }
 
 pub(super) fn extract_hover_content(contents: &HoverContents) -> String {

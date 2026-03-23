@@ -1,7 +1,7 @@
 //! Workspace symbol search provider — exposes `@/search/symbols/{query}`.
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use lsp_types::SymbolInformation;
@@ -14,6 +14,7 @@ use nyne::provider::{Node, Nodes, Provider, ProviderId};
 use nyne::types::vfs_path::VfsPath;
 
 use crate::lsp::manager::LspManager;
+use crate::lsp::uri::uri_to_file_path;
 use crate::providers::names::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
 
 /// Workspace symbol search provider.
@@ -75,11 +76,6 @@ impl Provider for WorkspaceSearchProvider {
     fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node { self.routes.lookup(&self, ctx, name) }
 }
 
-/// Convert an LSP URI to a filesystem path by stripping the `file://` scheme.
-fn uri_to_path(uri: &lsp_types::Uri) -> PathBuf {
-    PathBuf::from(uri.as_str().strip_prefix("file://").unwrap_or(uri.as_str()))
-}
-
 /// Convert LSP symbol results into VFS symlinks.
 ///
 /// Each symlink targets `<file>@/symbols/at-line/<line>`, which the
@@ -90,7 +86,7 @@ fn build_symlinks(symbols: &[SymbolInformation], overlay_root: &Path, base: &Vfs
     let mut seen = HashSet::new();
 
     for sym in symbols {
-        let abs_path = uri_to_path(&sym.location.uri);
+        let abs_path = uri_to_file_path(&sym.location.uri);
         let Some(rel_path) = abs_path.strip_prefix(overlay_root).ok() else {
             continue;
         };
