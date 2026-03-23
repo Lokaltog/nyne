@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 102
 expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y: int\\n\")"
 ---
 [
@@ -12,9 +13,8 @@ expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y:
         signature: Some(
             "@dataclass",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 17,
         children: [
             Fragment {
@@ -22,9 +22,8 @@ expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y:
                 kind: Decorator,
                 byte_range: 0..10,
                 signature: None,
-                metadata: Code {
-                    visibility: None,
-                },
+                visibility: None,
+                metadata: None,
                 name_byte_offset: 0,
                 children: [],
                 parent_name: Some(
@@ -41,9 +40,8 @@ expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y:
                 signature: Some(
                     "x: int",
                 ),
-                metadata: Code {
-                    visibility: None,
-                },
+                visibility: None,
+                metadata: None,
                 name_byte_offset: 28,
                 children: [],
                 parent_name: Some(
@@ -60,9 +58,8 @@ expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y:
                 signature: Some(
                     "y: int",
                 ),
-                metadata: Code {
-                    visibility: None,
-                },
+                visibility: None,
+                metadata: None,
                 name_byte_offset: 39,
                 children: [],
                 parent_name: Some(

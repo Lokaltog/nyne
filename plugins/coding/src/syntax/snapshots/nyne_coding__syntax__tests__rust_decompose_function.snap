@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 42
 expression: "decompose(\"rs\", \"pub fn hello() {}\\n\")"
 ---
 [
@@ -12,11 +13,10 @@ expression: "decompose(\"rs\", \"pub fn hello() {}\\n\")"
         signature: Some(
             "pub fn hello()",
         ),
-        metadata: Code {
-            visibility: Some(
-                "pub",
-            ),
-        },
+        visibility: Some(
+            "pub",
+        ),
+        metadata: None,
         name_byte_offset: 7,
         children: [],
         parent_name: None,

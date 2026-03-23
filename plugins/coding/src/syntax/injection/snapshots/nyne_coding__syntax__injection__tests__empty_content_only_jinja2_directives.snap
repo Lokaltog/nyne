@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/injection/tests.rs
+assertion_line: 189
 expression: file
 ---
 [
@@ -8,9 +9,8 @@ expression: file
         kind: Preamble,
         byte_range: 0..57,
         signature: None,
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 0,
         children: [],
         parent_name: None,

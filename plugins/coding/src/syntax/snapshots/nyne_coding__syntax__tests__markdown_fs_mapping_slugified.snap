@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 156
 expression: frags
 ---
 [
@@ -10,9 +11,12 @@ expression: frags
         },
         byte_range: 0..48,
         signature: None,
-        metadata: Document {
-            index: 0,
-        },
+        visibility: None,
+        metadata: Some(
+            Document {
+                index: 0,
+            },
+        ),
         name_byte_offset: 0,
         children: [
             Fragment {
@@ -22,9 +26,12 @@ expression: frags
                 },
                 byte_range: 26..48,
                 signature: None,
-                metadata: Document {
-                    index: 0,
-                },
+                visibility: None,
+                metadata: Some(
+                    Document {
+                        index: 0,
+                    },
+                ),
                 name_byte_offset: 26,
                 children: [],
                 parent_name: None,

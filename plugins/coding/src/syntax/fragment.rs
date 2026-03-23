@@ -135,7 +135,7 @@ impl Fragment {
     /// construction sites (code symbols, document sections, code blocks)
     /// must use this constructor instead of struct literals.
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub const fn new(
         name: String,
         kind: FragmentKind,
         byte_range: Range<usize>,

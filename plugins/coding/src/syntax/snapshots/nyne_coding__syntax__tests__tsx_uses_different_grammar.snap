@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 112
 expression: "decompose(\"tsx\", \"export function App() {\\n    return <div>Hello</div>;\\n}\\n\")"
 ---
 [
@@ -12,11 +13,10 @@ expression: "decompose(\"tsx\", \"export function App() {\\n    return <div>Hell
         signature: Some(
             "export function App()",
         ),
-        metadata: Code {
-            visibility: Some(
-                "export",
-            ),
-        },
+        visibility: Some(
+            "export",
+        ),
+        metadata: None,
         name_byte_offset: 16,
         children: [],
         parent_name: None,

@@ -1,6 +1,6 @@
 use rstest::{fixture, rstest};
 
-use super::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, Fragment, FragmentKind, FragmentMetadata, SymbolKind};
+use super::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, Fragment, FragmentKind, SymbolKind};
 use super::fs_mapping::slugify;
 use crate::test_support::{registry, vfs};
 

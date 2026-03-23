@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 58
 expression: "decompose(\"rs\", source)"
 ---
 [
@@ -12,11 +13,10 @@ expression: "decompose(\"rs\", source)"
         signature: Some(
             "pub struct Foo",
         ),
-        metadata: Code {
-            visibility: Some(
-                "pub",
-            ),
-        },
+        visibility: Some(
+            "pub",
+        ),
+        metadata: None,
         name_byte_offset: 11,
         children: [],
         parent_name: None,
@@ -31,9 +31,8 @@ expression: "decompose(\"rs\", source)"
         signature: Some(
             "impl Foo",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 32,
         children: [
             Fragment {
@@ -45,11 +44,10 @@ expression: "decompose(\"rs\", source)"
                 signature: Some(
                     "pub fn new() -> Self",
                 ),
-                metadata: Code {
-                    visibility: Some(
-                        "pub",
-                    ),
-                },
+                visibility: Some(
+                    "pub",
+                ),
+                metadata: None,
                 name_byte_offset: 54,
                 children: [],
                 parent_name: Some(

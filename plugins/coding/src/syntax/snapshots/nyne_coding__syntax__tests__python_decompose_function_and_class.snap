@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 72
 expression: "decompose(\"py\", source)"
 ---
 [
@@ -12,9 +13,8 @@ expression: "decompose(\"py\", source)"
         signature: Some(
             "def greet(name):",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 4,
         children: [
             Fragment {
@@ -22,9 +22,8 @@ expression: "decompose(\"py\", source)"
                 kind: Docstring,
                 byte_range: 21..41,
                 signature: None,
-                metadata: Code {
-                    visibility: None,
-                },
+                visibility: None,
+                metadata: None,
                 name_byte_offset: 21,
                 children: [],
                 parent_name: Some(
@@ -45,9 +44,8 @@ expression: "decompose(\"py\", source)"
         signature: Some(
             "class Person:",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 78,
         children: [
             Fragment {
@@ -59,9 +57,8 @@ expression: "decompose(\"py\", source)"
                 signature: Some(
                     "def __init__(self, name):",
                 ),
-                metadata: Code {
-                    visibility: None,
-                },
+                visibility: None,
+                metadata: None,
                 name_byte_offset: 94,
                 children: [],
                 parent_name: Some(

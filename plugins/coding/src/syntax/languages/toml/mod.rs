@@ -29,7 +29,7 @@ impl LanguageSpec for TomlLanguage {
             let node = TsNode::new(child, root.source());
             match child.kind() {
                 "pair" | "comment" => {
-                    preamble_start.get_or_insert(child.start_byte());
+                    preamble_start.get_or_insert_with(|| child.start_byte());
                     preamble_end = child.end_byte();
                 }
                 "table" | "table_array_element" => {

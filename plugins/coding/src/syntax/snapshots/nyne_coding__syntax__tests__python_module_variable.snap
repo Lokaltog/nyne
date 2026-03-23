@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 97
 expression: "decompose(\"py\", \"MAX_SIZE = 100\\n\")"
 ---
 [
@@ -12,9 +13,8 @@ expression: "decompose(\"py\", \"MAX_SIZE = 100\\n\")"
         signature: Some(
             "MAX_SIZE = 100",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 0,
         children: [],
         parent_name: None,

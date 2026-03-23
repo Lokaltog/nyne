@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 107
 expression: "decompose(\"ts\", \"export const API_URL = 'https://example.com';\\n\")"
 ---
 [
@@ -12,11 +13,10 @@ expression: "decompose(\"ts\", \"export const API_URL = 'https://example.com';\\
         signature: Some(
             "export const API_URL = 'https://example.com'",
         ),
-        metadata: Code {
-            visibility: Some(
-                "export",
-            ),
-        },
+        visibility: Some(
+            "export",
+        ),
+        metadata: None,
         name_byte_offset: 0,
         children: [],
         parent_name: None,

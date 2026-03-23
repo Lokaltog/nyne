@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 87
 expression: "decompose(\"ts\", source)"
 ---
 [
@@ -12,11 +13,10 @@ expression: "decompose(\"ts\", source)"
         signature: Some(
             "export function greet(name: string): void",
         ),
-        metadata: Code {
-            visibility: Some(
-                "export",
-            ),
-        },
+        visibility: Some(
+            "export",
+        ),
+        metadata: None,
         name_byte_offset: 16,
         children: [],
         parent_name: None,
@@ -31,9 +31,8 @@ expression: "decompose(\"ts\", source)"
         signature: Some(
             "interface Config",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 93,
         children: [],
         parent_name: None,

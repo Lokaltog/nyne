@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 92
 expression: "decompose(\"py\", \"@app.route('/')\\ndef index():\\n    pass\\n\")"
 ---
 [
@@ -12,9 +13,8 @@ expression: "decompose(\"py\", \"@app.route('/')\\ndef index():\\n    pass\\n\")
         signature: Some(
             "@app.route('/')",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 20,
         children: [
             Fragment {
@@ -22,9 +22,8 @@ expression: "decompose(\"py\", \"@app.route('/')\\ndef index():\\n    pass\\n\")
                 kind: Decorator,
                 byte_range: 0..15,
                 signature: None,
-                metadata: Code {
-                    visibility: None,
-                },
+                visibility: None,
+                metadata: None,
                 name_byte_offset: 0,
                 children: [],
                 parent_name: Some(

@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/injection/tests.rs
+assertion_line: 24
 expression: file
 ---
 [
@@ -12,9 +13,8 @@ expression: file
         signature: Some(
             "{% block title %}",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 9,
         children: [],
         parent_name: None,
@@ -27,9 +27,12 @@ expression: file
         },
         byte_range: 18..32,
         signature: None,
-        metadata: Document {
-            index: 0,
-        },
+        visibility: None,
+        metadata: Some(
+            Document {
+                index: 0,
+            },
+        ),
         name_byte_offset: 18,
         children: [],
         parent_name: None,

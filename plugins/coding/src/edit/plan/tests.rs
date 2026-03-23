@@ -1,5 +1,5 @@
 use super::*;
-use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata, SymbolKind};
+use crate::syntax::fragment::{Fragment, FragmentKind, SymbolKind};
 
 /// Helper to build a code fragment with `fs_name` set.
 ///

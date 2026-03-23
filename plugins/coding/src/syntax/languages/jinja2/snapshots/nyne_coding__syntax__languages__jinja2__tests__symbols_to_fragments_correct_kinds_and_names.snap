@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/languages/jinja2/tests.rs
+assertion_line: 295
 expression: fragments
 ---
 [
@@ -12,9 +13,8 @@ expression: fragments
         signature: Some(
             "{% block title %}",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 9,
         children: [],
         parent_name: None,
@@ -29,9 +29,8 @@ expression: fragments
         signature: Some(
             "{% set x = 1 %}",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 44,
         children: [],
         parent_name: None,

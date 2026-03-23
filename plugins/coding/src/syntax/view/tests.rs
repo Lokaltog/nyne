@@ -4,7 +4,7 @@ use rstest::rstest;
 
 use super::*;
 use crate::syntax::decomposed::DecomposedSource;
-use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, FragmentKind, FragmentMetadata, SymbolKind};
+use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, FragmentKind, SymbolKind};
 use crate::syntax::{SyntaxRegistry, resolve_conflicts};
 use crate::test_support::registry;
 
@@ -48,17 +48,7 @@ fn find_view(shared: &Arc<DecomposedSource>, name: &str) -> FragmentView {
 fn format_kind_renders(#[case] kind: FragmentKind, #[case] expected: &str) {
     let source = "x";
     let _ = source;
-    let frag = crate::syntax::fragment::Fragment::new(
-        "test".into(),
-        kind,
-        0..1,
-        None,
-        None,
-        None,
-        0,
-        Vec::new(),
-        None,
-    );
+    let frag = crate::syntax::fragment::Fragment::new("test".into(), kind, 0..1, None, None, None, 0, Vec::new(), None);
     assert_eq!(format_kind(&frag), expected);
 }
 

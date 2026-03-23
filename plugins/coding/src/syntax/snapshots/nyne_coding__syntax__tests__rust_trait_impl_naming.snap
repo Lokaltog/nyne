@@ -1,5 +1,6 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
+assertion_line: 163
 expression: "decompose(\"rs\", source)"
 ---
 [
@@ -12,9 +13,8 @@ expression: "decompose(\"rs\", source)"
         signature: Some(
             "impl Display for Foo",
         ),
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 0,
         children: [
             Fragment {
@@ -26,9 +26,8 @@ expression: "decompose(\"rs\", source)"
                 signature: Some(
                     "fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result",
                 ),
-                metadata: Code {
-                    visibility: None,
-                },
+                visibility: None,
+                metadata: None,
                 name_byte_offset: 30,
                 children: [],
                 parent_name: Some(

@@ -1,6 +1,7 @@
 ---
 source: plugins/coding/src/syntax/tests.rs
-expression: "super::fragment::find_fragment_of_kind(&result, FragmentKind::Imports)"
+assertion_line: 169
+expression: "super::fragment::find_fragment_of_kind(&result, &FragmentKind::Imports)"
 ---
 Some(
     Fragment {
@@ -8,9 +9,8 @@ Some(
         kind: Imports,
         byte_range: 0..26,
         signature: None,
-        metadata: Code {
-            visibility: None,
-        },
+        visibility: None,
+        metadata: None,
         name_byte_offset: 0,
         children: [],
         parent_name: None,

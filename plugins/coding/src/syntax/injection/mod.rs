@@ -112,13 +112,10 @@ impl Decomposer for InjectionDecomposer {
 ///
 /// Uses [`line_of_byte`] — the SSOT for byte-offset → line-number conversion —
 /// matching the same formula used by [`Fragment::new`].
-fn recompute_byte_ranges_from_source(fragment: &mut Fragment, _source: &str) {
+const fn recompute_byte_ranges_from_source(_fragment: &mut Fragment, _source: &str) {
     // After SpanMap::remap_fragment, byte_range is already in real coordinates.
     // Children are remapped recursively by remap_fragment itself, so this
     // function is now a no-op — kept as a hook for future post-remap fixups.
-    for child in &mut fragment.children {
-        recompute_byte_ranges_from_source(child, _source);
-    }
 }
 
 #[cfg(test)]
