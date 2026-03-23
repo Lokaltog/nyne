@@ -1,6 +1,6 @@
 //! File system mutation operations: create, remove, rename, with provider delegation.
 
-use std::io::{Error as IoError, ErrorKind};
+use std::io::ErrorKind;
 use std::sync::Arc;
 
 use color_eyre::eyre::{Report, Result, ensure};
@@ -9,16 +9,10 @@ use super::cache::{CachedNodeKind, NodeEntry, NodeSource};
 use super::resolve::{self, OwnedNode};
 use super::router::{ResolvedInode, Router};
 use crate::dispatch::context::{RenameContext, RequestContext};
+use crate::err::io_err;
 use crate::provider::{MutationOp, MutationOutcome, Provider, ProviderId};
 use crate::types::file_kind::FileKind;
 use crate::types::vfs_path::VfsPath;
-
-/// Create an eyre error that embeds an [`io::Error`] for FUSE errno extraction.
-///
-/// The FUSE layer's [`extract_errno`](crate::fuse::extract_errno) walks the
-/// eyre chain to find an `io::Error` and maps its `ErrorKind` to a FUSE
-/// errno. Without this, all dispatch errors surface as `EIO`.
-pub(super) fn io_err(kind: ErrorKind, msg: impl Into<String>) -> Report { IoError::new(kind, msg.into()).into() }
 
 /// `AlreadyExists` — entry with `name` already present at `path`.
 fn entry_exists(name: &str, path: &VfsPath) -> Report {

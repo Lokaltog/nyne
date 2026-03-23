@@ -7,6 +7,7 @@ pub use color_eyre::eyre::Result;
 pub use crate::dispatch::activation::ActivationContext;
 pub use crate::dispatch::context::RequestContext;
 pub use crate::dispatch::invalidation::{EventSink, InvalidationEvent};
+pub use crate::err::io_err;
 pub use crate::node::builtins::StaticContent;
 pub use crate::node::{CachePolicy, VirtualNode};
 pub use crate::plugin::{PLUGINS, Plugin};

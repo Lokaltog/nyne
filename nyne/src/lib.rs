@@ -1,7 +1,7 @@
 //! Nyne — expose source code as a FUSE filesystem.
 extern crate self as nyne;
 
-pub(crate) mod err;
+pub mod err;
 
 pub mod cli;
 pub mod config;
