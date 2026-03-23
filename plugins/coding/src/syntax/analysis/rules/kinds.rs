@@ -171,6 +171,14 @@ pub(super) const GENERIC_TYPE_ARGS: &[&str] = &[
     "generic_argument", // Rust (turbofish)
 ];
 
+/// Type alias declaration kinds — the rule for deeply nested types should not
+/// fire when the type is already the RHS of a type alias.
+pub(super) const TYPE_ALIAS: &[&str] = &[
+    "type_item",              // Rust
+    "type_alias_declaration", // TypeScript
+    "type_alias_statement",   // Python
+];
+
 /// Struct/class field declaration node kinds.
 pub(super) const FIELD_DECLARATION: &[&str] = &[
     "field_declaration",       // Rust

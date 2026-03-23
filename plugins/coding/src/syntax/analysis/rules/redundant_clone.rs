@@ -21,12 +21,18 @@ impl AnalysisRule for RedundantClone {
         }
 
         // The receiver — what's being cloned.
-        let receiver = clone_receiver(raw)?;
-        let receiver_name = kinds::node_str(&receiver, source)?;
+        let receiver_name = kinds::node_str(&clone_receiver(raw)?, source)?;
 
         // Check if receiver is used again after this call expression.
         // Walk up to the containing statement, then check later siblings.
         let stmt = containing_statement(raw);
+
+        // If this is the last statement in a block, "not used after" is
+        // trivially true — there IS no "after." The clone is almost always
+        // borrowing-to-owned (MutexGuard, &self field, etc.) rather than a
+        // redundant copy, and we can't distinguish without type information.
+        stmt.next_named_sibling()?;
+
         let mut sibling = stmt.next_named_sibling();
         while let Some(s) = sibling {
             if kinds::count_identifier_uses(&s, receiver_name.as_bytes(), source) > 0 {
@@ -48,11 +54,10 @@ impl AnalysisRule for RedundantClone {
 }
 
 fn is_clone_call(node: tree_sitter::Node<'_>, source: &[u8]) -> bool {
-    let func = node
+    if let Some(f) = node
         .child_by_field_name("function")
-        .or_else(|| node.child_by_field_name("method"));
-
-    if let Some(f) = func {
+        .or_else(|| node.child_by_field_name("method"))
+    {
         // Rust: field_expression with field "clone"
         if let Some(field) = f.child_by_field_name("field") {
             return kinds::node_bytes(&field, source) == b"clone";

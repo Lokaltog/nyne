@@ -18,10 +18,13 @@ impl AnalysisRule for DeeplyNestedType {
         let raw = node.raw();
 
         // Only trigger on the outermost type — skip if parent is also a type.
+        // Also skip if already inside a type alias — suggesting "extract a type
+        // alias" for the RHS of an existing alias is nonsensical.
         if let Some(parent) = raw.parent()
             && (kinds::TYPE_ANNOTATION.contains(&parent.kind())
                 || kinds::GENERIC_TYPE.contains(&parent.kind())
-                || kinds::GENERIC_TYPE_ARGS.contains(&parent.kind()))
+                || kinds::GENERIC_TYPE_ARGS.contains(&parent.kind())
+                || kinds::TYPE_ALIAS.contains(&parent.kind()))
         {
             return None;
         }
@@ -31,15 +34,16 @@ impl AnalysisRule for DeeplyNestedType {
             return None;
         }
 
-        let source = node.source();
-        let type_text = kinds::node_str(&raw, source).unwrap_or("(complex type)");
         let line = raw.start_position().row;
 
         Some(Hint {
             rule_id: self.id(),
             severity: Severity::Info,
             line_range: line..line,
-            message: format!("Type `{type_text}` has {depth} levels of nesting",),
+            message: format!(
+                "Type `{}` has {depth} levels of nesting",
+                kinds::node_str(&raw, node.source()).unwrap_or("(complex type)")
+            ),
             suggestions: vec!["Extract a type alias".into()],
         })
     }
