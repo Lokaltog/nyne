@@ -22,6 +22,19 @@ FUSE virtual filesystem exposing agent-optimized access to decomposed source cod
 
 Plugin crates use `nyne-plugin-*` naming; root binary aliases them as `nyne-git`/`nyne-coding`.
 
+## CLI Commands
+
+| Command | Module | Purpose |
+|-|-|-|
+| `nyne mount` | `cli/mount.rs` | Start FUSE daemon(s) for directory(ies) |
+| `nyne attach` | `cli/attach.rs` | Enter namespace of running mount, exec command |
+| `nyne list` | `cli/list.rs` | Show sessions and attached processes |
+| `nyne exec` | `cli/exec.rs` | Pipe-oriented script execution (binary stdin/stdout) |
+| `nyne ctl` | `cli/ctl.rs` | Generic JSON control interface to a running daemon |
+| `nyne config` | `cli/config.rs` | Dump resolved configuration |
+
+`ctl` reads a `ControlRequest` JSON from arg or stdin, sends it to the daemon's control socket, and writes the `ControlResponse` as JSON to stdout. `ControlRequest` is the SSOT — no CLI-side type duplication.
+
 ## Plugin Architecture
 
 Two-phase lifecycle: `activate()` inserts services into `TypeMap`, then `providers()` creates provider instances reading from it. Registration via `#[linkme::distributed_slice(PLUGINS)]`, linkage via `use nyne_git as _;` in `main.rs`.
