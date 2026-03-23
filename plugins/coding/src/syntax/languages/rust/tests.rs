@@ -21,10 +21,16 @@ fn fragment_count(basic: DecomposedFile) {
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
     let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(
-        names,
-        &["MAX_SIZE", "process", "helper", "Config", "Status", "Processor", "Processor_for_Config", "Config"]
-    );
+    assert_eq!(names, &[
+        "MAX_SIZE",
+        "process",
+        "helper",
+        "Config",
+        "Status",
+        "Processor",
+        "Processor_for_Config",
+        "Config"
+    ]);
 }
 
 #[rstest]

@@ -22,7 +22,14 @@ fn fragment_count(basic: DecomposedFile) {
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
     let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, &["preamble", "package", "dependencies", "dev-dependencies", "bin", "bin"]);
+    assert_eq!(names, &[
+        "preamble",
+        "package",
+        "dependencies",
+        "dev-dependencies",
+        "bin",
+        "bin"
+    ]);
 }
 
 /// First fragment is a preamble containing bare top-level key-value pairs.
@@ -37,8 +44,17 @@ fn preamble_is_first(basic: DecomposedFile) {
 #[rstest]
 fn table_sections_are_opaque(basic: DecomposedFile) {
     for frag in &basic.fragments[1..] {
-        assert_eq!(frag.kind, FragmentKind::Symbol(SymbolKind::Module), "fragment '{}' should be Module", frag.name);
-        assert!(frag.children.is_empty(), "fragment '{}' should have no children", frag.name);
+        assert_eq!(
+            frag.kind,
+            FragmentKind::Symbol(SymbolKind::Module),
+            "fragment '{}' should be Module",
+            frag.name
+        );
+        assert!(
+            frag.children.is_empty(),
+            "fragment '{}' should have no children",
+            frag.name
+        );
     }
 }
 

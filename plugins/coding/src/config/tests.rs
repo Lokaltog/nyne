@@ -284,8 +284,6 @@ fn stop_unknown_field_falls_back_to_defaults() {
     assert_eq!(config.hooks.stop.min_files, 2);
 }
 
-// --- ClaudeConfig ---
-
 #[test]
 fn claude_defaults_all_enabled() {
     let config = CodingConfig::from_plugin_table(&HashMap::new());

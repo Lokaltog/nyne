@@ -317,8 +317,6 @@ fn fragment_name_byte_offset_extracts_name() {
     assert_eq!(extracted_name, "header");
 }
 
-
-
 fn decompose_fixture(name: &str) -> Vec<super::Fragment> {
     let source = crate::test_support::load_fixture("syntax/languages/jinja2", name);
     let t = extract_template(&source);
@@ -337,7 +335,14 @@ fn basic_fixture_fragment_count() {
 fn basic_fixture_fragment_names() {
     let fragments = decompose_fixture("basic.html.j2");
     let names: Vec<_> = fragments.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, &["preamble", "page_title", "head", "content", "render_link", "footer"]);
+    assert_eq!(names, &[
+        "preamble",
+        "page_title",
+        "head",
+        "content",
+        "render_link",
+        "footer"
+    ]);
 }
 
 /// Preamble fragment captures extends and import directives.
@@ -354,6 +359,10 @@ fn basic_fixture_preamble() {
 fn basic_fixture_no_children() {
     let fragments = decompose_fixture("basic.html.j2");
     for frag in &fragments {
-        assert!(frag.children.is_empty(), "fragment '{}' should have no children", frag.name);
+        assert!(
+            frag.children.is_empty(),
+            "fragment '{}' should have no children",
+            frag.name
+        );
     }
 }

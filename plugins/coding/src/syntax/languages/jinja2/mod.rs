@@ -262,7 +262,10 @@ fn is_preamble_directive(node: tree_sitter::Node<'_>, source: &str) -> bool {
     if !text.starts_with("{%") {
         return false;
     }
-    let inner = text.trim_start_matches("{%").trim_start_matches(['-', '+']).trim_start();
+    let inner = text
+        .trim_start_matches("{%")
+        .trim_start_matches(['-', '+'])
+        .trim_start();
     inner.starts_with("extends") || inner.starts_with("import") || inner.starts_with("from")
 }
 
@@ -311,7 +314,11 @@ pub fn symbols_to_fragments(symbols: Vec<Jinja2Symbol>, source: &str) -> Vec<Fra
             } else {
                 FragmentKind::Symbol(sym.kind)
             };
-            let signature = if sym.signature.is_empty() { None } else { Some(sym.signature) };
+            let signature = if sym.signature.is_empty() {
+                None
+            } else {
+                Some(sym.signature)
+            };
             Fragment::new(
                 source,
                 sym.name,

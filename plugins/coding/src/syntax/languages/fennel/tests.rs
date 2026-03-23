@@ -49,6 +49,10 @@ fn require_bindings_excluded(basic: DecomposedFile) {
 #[rstest]
 fn no_children(basic: DecomposedFile) {
     for frag in &basic.fragments {
-        assert!(frag.children.is_empty(), "fragment '{}' should have no children", frag.name);
+        assert!(
+            frag.children.is_empty(),
+            "fragment '{}' should have no children",
+            frag.name
+        );
     }
 }
