@@ -5,7 +5,7 @@ use color_eyre::eyre::Result;
 use super::plugin::NodePlugin;
 use super::{Readable, VirtualNode, Writable, WriteOutcome};
 use crate::dispatch::context::RequestContext;
-use crate::edit::slice::{SliceSpec, parse_slice_suffix};
+use crate::types::slice::{SliceSpec, parse_slice_suffix};
 
 /// Plugin that enables `:M-N` line slicing on any readable node.
 ///

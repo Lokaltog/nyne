@@ -158,7 +158,7 @@ impl SyntaxProvider {
     }
 }
 
-use nyne::helpers::{companion_children, companion_lookup, source_file};
+use nyne::{companion_children, companion_lookup, source_file};
 
 /// Route tree handler methods — thin wrappers that extract params and
 /// delegate to the existing resolve/lookup methods.

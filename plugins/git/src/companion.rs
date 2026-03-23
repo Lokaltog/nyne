@@ -6,11 +6,12 @@
 use std::sync::Arc;
 
 use color_eyre::eyre::{Result, eyre};
+use nyne::companion_dir;
 use nyne::dispatch::activation::ActivationContext;
 use nyne::dispatch::context::{RenameContext, RequestContext};
-use nyne::helpers::{companion_dir, strip_companion_suffix};
 use nyne::node::Renameable;
 use nyne::provider::{ConflictInfo, ConflictResolution, Node, Nodes, Provider, ProviderId};
+use nyne::types::path_conventions::strip_companion_suffix;
 use nyne::types::vfs_path::VfsPath;
 
 use crate::repo::GitRepo;

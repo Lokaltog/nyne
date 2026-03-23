@@ -608,20 +608,19 @@ fn import_span_line_range_matches_byte_range() {
 #[test]
 fn lines_suffix_roundtrips_through_parse() {
     use nyne::types::SymbolLineRange;
-
-    use crate::edit::slice::parse_slice_suffix;
+    use nyne::types::slice::parse_slice_suffix;
 
     let range = SymbolLineRange { start: 5, end: 10 };
     let suffix = range.as_lines_suffix();
     let (base, spec) = parse_slice_suffix(&suffix).expect("should parse");
     assert_eq!(base, "lines");
-    assert_eq!(spec, crate::edit::slice::SliceSpec::Range(5, 10));
+    assert_eq!(spec, nyne::types::slice::SliceSpec::Range(5, 10));
 
     let single = SymbolLineRange { start: 3, end: 3 };
     let suffix = single.as_lines_suffix();
     let (base, spec) = parse_slice_suffix(&suffix).expect("should parse");
     assert_eq!(base, "lines");
-    assert_eq!(spec, crate::edit::slice::SliceSpec::Single(3));
+    assert_eq!(spec, nyne::types::slice::SliceSpec::Single(3));
 }
 
 // full_span tests (unique assertions per test)

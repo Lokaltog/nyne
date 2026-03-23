@@ -14,13 +14,13 @@ use nyne::dispatch::context::RequestContext;
 use nyne::dispatch::invalidation::InvalidationEvent;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
-use nyne::helpers::{dispatch_children, dispatch_lookup, source_file};
 use nyne::node::{CachePolicy, Lifecycle, NodeAttr, VirtualNode};
 use nyne::provider::{MutationOp, MutationOutcome, Node, Nodes, Provider, ProviderId};
 use nyne::templates::TemplateHandle;
 use nyne::types::GitDirName;
 use nyne::types::real_fs::RealFs;
 use nyne::types::vfs_path::VfsPath;
+use nyne::{dispatch_children, dispatch_lookup, source_file};
 use nyne_macros::routes;
 
 use crate::names::{
@@ -248,7 +248,7 @@ impl GitProvider {
     }
 
     fn lookup_sliced_blame(&self, ctx: &RouteCtx<'_>) -> Node {
-        use nyne::edit::slice::parse_spec;
+        use nyne::types::slice::parse_spec;
         let Some(spec) = parse_spec(ctx.param("spec")) else {
             return Ok(None);
         };
@@ -263,7 +263,7 @@ impl GitProvider {
     }
 
     fn lookup_sliced_log(&self, ctx: &RouteCtx<'_>) -> Node {
-        use nyne::edit::slice::parse_spec;
+        use nyne::types::slice::parse_spec;
         let Some(spec) = parse_spec(ctx.param("spec")) else {
             return Ok(None);
         };

@@ -6,11 +6,11 @@
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::edit::slice::SliceSpec;
 use nyne::format;
 use nyne::node::VirtualNode;
 use nyne::templates::{TemplateEngine, TemplateView};
 use nyne::types::SymbolLineRange;
+use nyne::types::slice::SliceSpec;
 
 use super::blame::BlameView;
 use super::contributors::ContributorsView;

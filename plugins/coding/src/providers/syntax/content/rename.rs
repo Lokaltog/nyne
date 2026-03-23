@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use color_eyre::eyre::{Result, eyre};
 use nyne::dispatch::context::{RenameContext, RequestContext};
-use nyne::helpers::strip_companion_suffix;
 use nyne::node::capabilities::Renameable;
 use nyne::node::diff_action::DiffAction;
+use nyne::types::path_conventions::strip_companion_suffix;
 use nyne::types::vfs_path::VfsPath;
 
 use crate::edit::plan::{FileEditResult, apply_file_edits};

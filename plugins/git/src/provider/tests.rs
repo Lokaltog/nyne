@@ -182,8 +182,8 @@ mod history_filename_tests {
 mod sliced_content_tests {
     use std::sync::Arc;
 
-    use nyne::edit::slice::SliceSpec;
     use nyne::templates::{HandleBuilder, TemplateHandle};
+    use nyne::types::slice::SliceSpec;
 
     use super::*;
 

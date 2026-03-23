@@ -3,6 +3,7 @@
 pub mod file_kind;
 pub mod path_conventions;
 pub mod real_fs;
+pub mod slice;
 pub mod type_map;
 pub mod vfs_path;
 

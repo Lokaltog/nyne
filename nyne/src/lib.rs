@@ -22,7 +22,11 @@ pub mod config;
 pub mod dispatch;
 pub mod edit;
 pub mod format;
-pub mod helpers;
+// Re-export provider helpers for plugin crates.
+pub use providers::{
+    companion_children, companion_dir, companion_lookup, companion_symbol_path, dispatch_children, dispatch_lookup,
+    is_file_companion, source_file,
+};
 pub mod json;
 
 pub(crate) mod fuse;
