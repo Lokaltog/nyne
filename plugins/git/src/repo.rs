@@ -1,10 +1,12 @@
 //! Git repository wrapper — HEAD blob, diff, index ops, branch/tag listing.
 
 use std::collections::HashMap;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::str::from_utf8;
 
-use color_eyre::eyre::{Result, WrapErr};
+use color_eyre::eyre::{Result, WrapErr, eyre};
+use nyne::err::io_err;
 use nyne::types::vfs_path::VfsPath;
 use parking_lot::Mutex;
 use tracing::debug;
@@ -199,6 +201,51 @@ impl GitRepo {
             .rename(new_name, false)
             .wrap_err_with(|| format!("failed to rename branch {old_name} to {new_name}"))?;
         debug!(old = old_name, new = new_name, "branch renamed");
+        Ok(())
+    }
+
+    /// Delete a local branch, only if it is fully merged into HEAD.
+    ///
+    /// Refuses to delete the current HEAD branch or any branch whose tip
+    /// commit is not an ancestor of HEAD.
+    pub(crate) fn delete_branch(&self, name: &str) -> Result<()> {
+        let repo = self.lock();
+        let branch = repo
+            .find_branch(name, git2::BranchType::Local)
+            .wrap_err_with(|| format!("branch not found: {name}"))?;
+
+        if branch.is_head() {
+            return Err(io_err(
+                io::ErrorKind::PermissionDenied,
+                format!("refusing to delete the current branch: {name}"),
+            ));
+        }
+
+        let branch_oid = branch
+            .get()
+            .target()
+            .ok_or_else(|| eyre!("branch {name} has no target commit"))?;
+        let head_oid = repo
+            .head()
+            .wrap_err("failed to resolve HEAD")?
+            .target()
+            .ok_or_else(|| eyre!("HEAD has no target commit"))?;
+
+        if !repo
+            .graph_descendant_of(head_oid, branch_oid)
+            .wrap_err("merge-base check failed")?
+        {
+            return Err(io_err(
+                io::ErrorKind::PermissionDenied,
+                format!("branch {name} is not fully merged into HEAD"),
+            ));
+        }
+
+        let mut branch = branch;
+        branch
+            .delete()
+            .wrap_err_with(|| format!("failed to delete branch {name}"))?;
+        debug!(branch = name, "branch deleted (merged)");
         Ok(())
     }
 

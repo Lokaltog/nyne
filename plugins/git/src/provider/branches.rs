@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use nyne::dispatch::context::{RenameContext, RequestContext};
-use nyne::node::{Readable, Renameable, VirtualNode};
+use nyne::node::{Readable, Renameable, Unlinkable, VirtualNode};
 use nyne::provider::Nodes;
 
 use super::CommitMtime;
@@ -36,12 +36,26 @@ impl Renameable for BranchRename {
             })
     }
 }
+/// Unlinkable capability for branch directory nodes.
+///
+/// When the user removes a branch directory (e.g., `rmdir branches/old`),
+/// this deletes the branch via libgit2 — but only if the branch is fully
+/// merged into HEAD.
+pub(super) struct BranchRemove {
+    pub repo: Arc<GitRepo>,
+    pub branch_name: String,
+}
+
+impl Unlinkable for BranchRemove {
+    fn unlink(&self, _ctx: &RequestContext<'_>) -> Result<()> { self.repo.delete_branch(&self.branch_name) }
+}
 
 /// Compute the child nodes for a given branch namespace prefix.
 ///
 /// `prefix` is either empty (root level) or ends with `/` (e.g., `"feat/"`).
 /// Returns one directory node per unique next-level segment:
-/// - **Leaf** segments (prefix + segment = complete branch name) get [`BranchRename`].
+/// - **Leaf** segments (prefix + segment = complete branch name) get [`BranchRename`]
+///   and [`BranchRemove`] (rmdir deletes merged branches).
 /// - **Intermediate** segments (prefix + segment is only a prefix of deeper branches)
 ///   are plain directories.
 ///
@@ -80,9 +94,14 @@ pub(super) fn branch_segments_at_prefix(repo: &Arc<GitRepo>, prefix: &str) -> No
             .map(|segment| {
                 let node = VirtualNode::directory(segment).with_lifecycle(CommitMtime(head_mtime));
                 if let Some((_, full_name)) = leaf_branches.iter().find(|(s, _)| *s == segment) {
+                    let branch_name = (*full_name).to_owned();
                     node.with_renameable(BranchRename {
                         repo: Arc::clone(repo),
-                        branch_name: (*full_name).to_owned(),
+                        branch_name: branch_name.clone(),
+                    })
+                    .with_unlinkable(BranchRemove {
+                        repo: Arc::clone(repo),
+                        branch_name,
                     })
                 } else {
                     node
