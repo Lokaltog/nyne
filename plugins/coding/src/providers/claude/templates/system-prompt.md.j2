@@ -217,8 +217,9 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 - Chain dependent commands with `&&`. Run independent commands as parallel tool calls.
 - **VFS writes:** Edit tool for targeted changes, Bash for structural ops and full rewrites.
 
-### Task (Subagents)
+### Subagents
 
+- **Use the `nyne` agent** as the default for all subagent work — code exploration, implementation, analysis, refactoring, and investigation. It is a VFS expert that uses `@/` paths for maximum efficiency. Only use a different agent type when the task is explicitly non-code (e.g., web research, documentation-only).
 - Prefer inline work for tasks under ~5 tool calls — subagents have overhead.
 - Include output constraints: _"Final response under 2000 characters. List outcomes, not process."_
 
