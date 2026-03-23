@@ -41,7 +41,7 @@ fn collect_fennel_fragments(node: TsNode<'_>, source: &str, fragments: &mut Vec<
             "fn_form" | "lambda_form" => {
                 fragments.push(build_fn_fragment(child_node, source, parent_name));
             }
-            "local_form" | "var_form" =>
+            "local_form" | "var_form" if !is_require_binding(child_node) =>
                 if let Some(frag) = build_binding_fragment(child_node, source, parent_name) {
                     fragments.push(frag);
                 },
@@ -96,6 +96,25 @@ fn extract_binding_name(node: TsNode<'_>) -> Option<String> {
         .children(&mut inner_cursor)
         .find(|c| c.kind() == "symbol_binding")?;
     Some(symbol.utf8_text(node.source()).unwrap_or("unknown").to_owned())
+}
+
+/// Check if a `local_form` or `var_form` is a require binding.
+///
+/// Matches `(local name (require :module))` — the binding pair's value
+/// is a list whose first symbol is `require`.
+fn is_require_binding(node: TsNode<'_>) -> bool {
+    let mut cursor = node.raw().walk();
+    let Some(binding_pair) = node.raw().children(&mut cursor).find(|c| c.kind() == "binding_pair") else {
+        return false;
+    };
+    let mut inner = binding_pair.walk();
+    binding_pair
+        .children(&mut inner)
+        .filter(|c| c.kind() != "symbol_binding")
+        .any(|value| {
+            let text = value.utf8_text(node.source()).unwrap_or("");
+            text.starts_with("(require ")
+        })
 }
 
 /// Build a fragment for a `local_form` or `var_form`.

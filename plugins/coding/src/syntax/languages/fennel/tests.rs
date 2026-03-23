@@ -37,12 +37,12 @@ fn fragment_kinds(basic: DecomposedFile) {
     ]);
 }
 
-/// Require forms are coalesced into imports.
+/// Require bindings are excluded from fragments (not meaningful decomposition targets).
 #[rstest]
-fn imports_extracted(basic: DecomposedFile) {
-    let imports = basic.imports.as_ref().expect("imports should be present");
-    assert!(imports.content.contains("(require :lume)"));
-    assert!(imports.content.contains("(require :utils)"));
+fn require_bindings_excluded(basic: DecomposedFile) {
+    let names: Vec<_> = basic.fragments.iter().map(|f| f.name.as_str()).collect();
+    assert!(!names.contains(&"lume"), "require binding 'lume' should be excluded");
+    assert!(!names.contains(&"utils"), "require binding 'utils' should be excluded");
 }
 
 /// No nested children — Fennel forms are flat.
