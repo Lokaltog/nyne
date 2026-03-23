@@ -1,8 +1,10 @@
+{% from "hooks/vfs-hints" import batch_edit_hint %}
 {% if tool_name == "Edit" and sym %}
 Hint (nyne VFS): instead of editing the raw file, target the symbol body:
   Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← read
   Edit {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← edit (same old_string/new_string)
 
+{{ batch_edit_hint() }}
 Or browse the symbol table first:
   Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
 {% elif sym %}

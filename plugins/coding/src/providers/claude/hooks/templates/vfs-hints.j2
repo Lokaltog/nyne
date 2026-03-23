@@ -14,3 +14,11 @@
 {% macro ssot_reminder(rel) %}
 SSOT/DRY check on {{ rel }}: does this change duplicate logic, constants, or patterns that exist elsewhere in the codebase? If yes, stop and extract a shared abstraction before continuing.
 {% endmacro %}
+
+{% macro batch_edit_hint() %}
+Hint: If you have more symbol edits to make in this file (or across files), use **batch edit staging** instead of sequential writes — it's atomic, validated, and previewable:
+  echo 'new body' >file@/symbols/Foo@/edit/replace    # stage
+  echo 1 >file@/symbols/Bar@/edit/delete               # stage
+  cat @/edit/staged.diff                                # preview all
+  rm @/edit/staged.diff                                 # apply atomically
+{% endmacro %}

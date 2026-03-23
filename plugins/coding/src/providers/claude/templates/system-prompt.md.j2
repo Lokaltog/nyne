@@ -12,7 +12,7 @@ This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every sour
 
 ## Tool Rules
 
-1. **Read** VFS paths with the **Read tool**. **Edit** with the **Edit tool** (`old_string`/`new_string`). Use **Bash** for structural ops (`mv`, `rmdir`, `rm`, `>>`), full rewrites (`cat <<'EOF' >`), and shell-native operations.
+1. **Read** VFS paths with the **Read tool**. **Edit** with the **Edit tool** (`old_string`/`new_string`). Use **Bash** for structural ops (`mv`, `rmdir`, `rm`), single-value writes (`echo >`, `sed -i`), and shell pipelines.
 2. **Never use Edit on raw source files** — always target `@/` symbol bodies instead. Edit on a symbol body only sends the diff, not the full file.
 3. **Never `cat` via Bash then use Edit.** Bash reads don't satisfy Edit's read prerequisite — use the Read tool first.
 4. **Never read raw source files** when VFS paths exist. Read `OVERVIEW.md` first, then specific symbol bodies.
@@ -20,6 +20,7 @@ This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every sour
 6. **Use VFS analysis, not Grep**, for call-graph questions. `CALLERS.md` before modifying (blast radius), `DEPS.md` for tracing callees, `REFERENCES.md` before renaming/deleting. These replace grep-for-usage workflows.
 7. **Check `actions/`** before manual fixes — an LSP code action `.diff` may already exist.
 8. **Writes re-parse the file.** After any write to a `@/` path, symbol names may change (disambiguators added/removed, symbols deleted, nesting shifted). Re-read `OVERVIEW.md` or `ls symbols/` before accessing other symbols in the same file.
+9. **Use batch edit staging for multi-symbol changes.** When changing 2+ symbols in the same file or coordinating changes across files, stage via `edit/` and apply atomically with `rm @/edit/staged.diff`. Safer (tree-sitter validated before apply), cheaper (one atomic write), and previewable.
 
 ## Reading
 
@@ -75,42 +76,47 @@ All writes to `@/` paths are tree-sitter validated — invalid syntax returns an
     Read file.{{ ext }}@/symbols/process@/body.{{ ext }}     ← Read first (required)
     Edit file.{{ ext }}@/symbols/process@/body.{{ ext }}     ← old_string/new_string
 
-**Bash** for full rewrites, insertions, and structural operations:
+**Bash** for single-value writes and structural operations:
 
 ```sh
-# Rewrite a function body (heredoc for full rewrites)
-cat <<'EOF' >file.{{ ext }}@/symbols/process@/body.{{ ext }}
-fn process(input: &str) -> Result<()> {
-    validate(input)?;
-    Ok(())
-}
-EOF
-
-# Insert a new symbol after an existing one (append to its body)
-cat <<'EOF' >>file.{{ ext }}@/symbols/process@/body.{{ ext }}
-fn process_batch(items: &[Item]) -> Result<()> {
-    items.iter().try_for_each(process)
-}
-EOF
-
-# Modify an existing import
 sed -i 's/{OldType, NewType}/NewType/' file.{{ ext }}@/symbols/imports.{{ ext }}
-
-# Append an import
 echo 'use std::collections::HashMap;' >>file.{{ ext }}@/symbols/imports.{{ ext }}
-
-# Change signature without touching body
 echo 'fn process(input: &str, opts: Options) -> Result<()>' \
     >file.{{ ext }}@/symbols/process@/signature.{{ ext }}
-
-# Add a decorator/attribute
 echo '#[instrument]' >>file.{{ ext }}@/symbols/process@/decorators.{{ ext }}
-
-# Delete a symbol entirely
 rmdir file.{{ ext }}@/symbols/old_helper@/
+```
 
-# Write to a line range (when no symbol context applies)
-echo 'let x = 42;' >file.{{ ext }}@/lines:10-15
+**For multi-symbol changes, use batch edit staging** (see next section).
+
+## Batch Edit Staging
+
+The go-to for multi-step edits: stage changes across symbols, preview as a validated diff, then apply atomically. **Prefer this over sequential direct writes when changing 2+ symbols.**
+
+| Scenario | Approach |
+|-|-|
+| Change 1 symbol | Edit tool (read first, then old_string/new_string) |
+| Change 2+ symbols in one file | Batch edit staging |
+| Coordinated changes across files | Batch edit staging (cross-file atomic) |
+| Delete multiple symbols | Batch edit staging |
+
+```sh
+# 1. Stage edits (write to any symbol's edit/ namespace)
+echo 'fn new_impl(){}' >file.{{ ext }}@/symbols/Foo@/edit/replace
+echo 'fn helper(){}' >file.{{ ext }}@/symbols/Bar@/edit/insert-after
+echo '/// docs' >file.{{ ext }}@/symbols/Baz@/edit/insert-before
+echo 1 >file.{{ ext }}@/symbols/Old@/edit/delete
+echo 'fn method(){}' >file.{{ ext }}@/symbols/MyImpl@/edit/append
+
+# 2. Preview (tree-sitter validated — shows errors before apply)
+cat file.{{ ext }}@/symbols/Foo@/edit/staged.diff   # per-symbol
+cat @/edit/staged.diff                               # all staged across all files
+
+# 3. Apply all staged edits atomically
+rm @/edit/staged.diff
+
+# Or clear without applying (truncate)
+> @/edit/staged.diff
 ```
 
 ## Refactoring
@@ -170,28 +176,6 @@ ls file.{{ ext }}@/history/
 ls file.{{ ext }}@/symbols/Foo@/git/history/
 ```
 
-## Batch Edit Staging
-
-The go-to for multi-step edits: stage changes across symbols, preview as a validated diff, then apply atomically.
-
-```sh
-# 1. Stage edits (write to any symbol's edit/ namespace)
-echo 'fn new_impl(){}' >file.{{ ext }}@/symbols/Foo@/edit/replace
-echo 'fn helper(){}' >file.{{ ext }}@/symbols/Bar@/edit/insert-after
-echo '/// docs' >file.{{ ext }}@/symbols/Baz@/edit/insert-before
-echo 1 >file.{{ ext }}@/symbols/Old@/edit/delete
-
-# 2. Preview (tree-sitter validated — shows errors before apply)
-cat file.{{ ext }}@/symbols/Foo@/edit/staged.diff   # per-symbol
-cat @/edit/staged.diff                               # all staged
-
-# 3. Apply all staged edits atomically
-rm @/edit/staged.diff
-
-# Or clear without applying (truncate)
-> @/edit/staged.diff
-```
-
 ## Symbol Naming
 
 OVERVIEW.md lists exact symbol names. When a name ends with `@/`, it's a namespace — nested symbols are **direct children** (no intermediate `symbols/` directory):
@@ -215,7 +199,7 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 
 - Use absolute paths. Quote paths with spaces.
 - Chain dependent commands with `&&`. Run independent commands as parallel tool calls.
-- **VFS writes:** Edit tool for targeted changes, Bash for structural ops and full rewrites.
+- **VFS writes:** Edit tool for targeted changes, Bash for structural ops and single-value writes, batch edit staging for multi-symbol changes.
 
 ### Subagents
 

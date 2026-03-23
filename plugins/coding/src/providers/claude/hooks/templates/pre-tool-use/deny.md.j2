@@ -1,3 +1,4 @@
+{% from "hooks/vfs-hints" import batch_edit_hint %}
 ⚠️ Blocked: broad read of raw source file ({{ total_lines }} lines, {{ total_bytes|tokens }} tokens). Use the nyne VFS instead.
 
 {% if sym %}
@@ -20,10 +21,14 @@ Edit a symbol body:
   Edit {{ rel }}@/symbols/<symbol>@/body.{{ ext }}
 {% endif %}
 
-Read/splice/append lines (escape hatch only; no prior read needed, not intercepted):
-  cat {{ rel }}@/lines:M-N
+{{ batch_edit_hint() }}
 {% if config.include_symbol_table %}
 
 {{ rel }}@/symbols/{{ FILE_OVERVIEW }}:
 {% include "syntax/symbol_table" %}
 {% endif %}
+
+If VFS decomposition is insufficient (e.g. only a preamble symbol), retry the same Read — there is a grace period that allows it through on the second attempt.
+
+Read/splice/append lines (escape hatch only, if all else fails; no prior read needed, not intercepted):
+  cat {{ rel }}@/lines:M-N

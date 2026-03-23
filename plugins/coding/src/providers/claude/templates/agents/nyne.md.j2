@@ -196,7 +196,16 @@ cat file.{{ ext }}@/symbols/Foo@/callers/bar/deps/baz.{{ ext }}
 
 ## Editing
 
-### Targeted Edits (Edit Tool)
+### Choosing an Editing Approach
+
+| Scenario | Approach |
+|-|-|
+| Change 1 symbol | Edit tool (read first, then old_string/new_string) |
+| Change 2+ symbols in one file | Batch edit staging |
+| Coordinated changes across files | Batch edit staging (cross-file atomic) |
+| Delete multiple symbols | Batch edit staging |
+
+### Targeted Edits (Edit Tool — preferred for single-symbol changes)
 
 Read first, then edit — Edit only sends the diff:
 
@@ -205,39 +214,13 @@ Read file.{{ ext }}@/symbols/process@/body.{{ ext }}
 Edit file.{{ ext }}@/symbols/process@/body.{{ ext }}  (old_string/new_string)
 ```
 
-### Full Rewrites (Bash)
-
-```sh
-# Rewrite a function body
-cat <<'EOF' >file.{{ ext }}@/symbols/process@/body.{{ ext }}
-fn process(input: &str) -> Result<()> {
-    validate(input)?;
-    Ok(())
-}
-EOF
-
-# Insert a new symbol after an existing one
-cat <<'EOF' >>file.{{ ext }}@/symbols/process@/body.{{ ext }}
-fn process_batch(items: &[Item]) -> Result<()> {
-    items.iter().try_for_each(process)
-}
-EOF
-```
-
 ### Imports, Signatures, Decorators
 
 ```sh
-# Append an import
 echo 'use std::collections::HashMap;' >>file.{{ ext }}@/symbols/imports.{{ ext }}
-
-# Replace an import
 sed -i 's/{OldType, NewType}/NewType/' file.{{ ext }}@/symbols/imports.{{ ext }}
-
-# Change signature without touching body
 echo 'fn process(input: &str, opts: Options) -> Result<()>' \
     >file.{{ ext }}@/symbols/process@/signature.{{ ext }}
-
-# Add a decorator
 echo '#[instrument]' >>file.{{ ext }}@/symbols/process@/decorators.{{ ext }}
 ```
 
@@ -248,67 +231,16 @@ rmdir file.{{ ext }}@/symbols/old_helper@/    # splices out from source
 rm file.{{ ext }}@/symbols/old_helper.{{ ext }}  # shorthand — same effect
 ```
 
-### In-Body sed
-
-```sh
-sed -i 's/old_var/new_var/g' file.{{ ext }}@/symbols/process@/body.{{ ext }}
-```
-
 All writes are **tree-sitter validated** — invalid syntax returns an error, never a broken file.
 
----
-
-## Refactoring
-
-### Symbol Rename (LSP-Powered, Project-Wide)
-
-```sh
-# Preview first
-cat file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
-
-# Apply via diff
-patch -p1 < file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
-
-# Or direct filesystem rename
-mv file.{{ ext }}@/symbols/old_name@/ file.{{ ext }}@/symbols/new_name@/
-```
-
-### Interface Change Workflow
-
-When changing a function signature (highest-value workflow):
-
-1. **Read callers** (mandatory): `Read file.{{ ext }}@/symbols/process@/CALLERS.md`
-2. **Read the function**: `Read file.{{ ext }}@/symbols/process.{{ ext }}`
-3. **Write new signature**: `echo '...' > file.{{ ext }}@/symbols/process@/signature.{{ ext }}`
-4. **Check for auto-fixes**: `ls file.{{ ext }}@/symbols/process@/actions/`
-5. **Apply fixes**: `cat file.{{ ext }}@/symbols/process@/actions/*.diff | patch -p1`
-6. **Fix remaining callers** via symlinks: `Edit file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}`
-7. **Check diagnostics**: `Read file.{{ ext }}@/DIAGNOSTICS.md`
-
-**~7 tool calls vs ~24 without nyne. ~1000 tokens vs ~34,000.**
-
-### Extract a Function
-
-1. Read source: `Read file.{{ ext }}@/symbols/process.{{ ext }}`
-2. Append new function: `cat <<'EOF' >>file.{{ ext }}@/symbols/process@/body.{{ ext }}`
-3. Replace extracted lines with call: `Edit file.{{ ext }}@/symbols/process@/body.{{ ext }}`
-
-### Code Actions
-
-```sh
-ls file.{{ ext }}@/symbols/Foo@/actions/                    # list available fixes
-cat file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff        # preview
-patch -p1 < file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff   # apply
-
-# Apply all actions for a symbol
-cat file.{{ ext }}@/symbols/Foo@/actions/*.diff | patch -p1
-```
+**For multi-symbol changes, use batch edit staging** (see next section).
 
 ---
 
 ## Batch Edit Staging
 
-Stage multi-symbol edits, preview as a validated diff, apply atomically.
+**The go-to for multi-step edits.** Stage changes across symbols, preview as a validated diff,
+then apply atomically. Prefer this over sequential direct writes when changing 2+ symbols.
 
 ### Stage Edits
 
@@ -348,6 +280,55 @@ rm @/edit/staged.diff
 
 Cross-file batch edits: stage in multiple files, preview with `cat @/edit/staged.diff`,
 apply with `rm @/edit/staged.diff`.
+
+---
+
+## Refactoring
+
+### Symbol Rename (LSP-Powered, Project-Wide)
+
+```sh
+# Preview first
+cat file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
+
+# Apply via diff
+patch -p1 < file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
+
+# Or direct filesystem rename
+mv file.{{ ext }}@/symbols/old_name@/ file.{{ ext }}@/symbols/new_name@/
+```
+
+### Interface Change Workflow
+
+When changing a function signature (highest-value workflow):
+
+1. **Read callers** (mandatory): `Read file.{{ ext }}@/symbols/process@/CALLERS.md`
+2. **Read the function**: `Read file.{{ ext }}@/symbols/process.{{ ext }}`
+3. **Write new signature**: `echo '...' > file.{{ ext }}@/symbols/process@/signature.{{ ext }}`
+4. **Check for auto-fixes**: `ls file.{{ ext }}@/symbols/process@/actions/`
+5. **Apply fixes**: `cat file.{{ ext }}@/symbols/process@/actions/*.diff | patch -p1`
+6. **Fix remaining callers** via symlinks: `Edit file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}`
+7. **Check diagnostics**: `Read file.{{ ext }}@/DIAGNOSTICS.md`
+
+**~7 tool calls vs ~24 without nyne. ~1000 tokens vs ~34,000.**
+
+### Extract a Function
+
+1. Read source: `Read file.{{ ext }}@/symbols/process.{{ ext }}`
+2. Stage new function: `echo 'fn extracted() { ... }' >file.{{ ext }}@/symbols/process@/edit/insert-after`
+3. Stage call replacement: `echo 'fn process() { extracted() }' >file.{{ ext }}@/symbols/process@/edit/replace`
+4. Preview and apply: `cat @/edit/staged.diff` then `rm @/edit/staged.diff`
+
+### Code Actions
+
+```sh
+ls file.{{ ext }}@/symbols/Foo@/actions/                    # list available fixes
+cat file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff        # preview
+patch -p1 < file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff   # apply
+
+# Apply all actions for a symbol
+cat file.{{ ext }}@/symbols/Foo@/actions/*.diff | patch -p1
+```
 
 ---
 
@@ -433,6 +414,7 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 | Using symbol paths after a write without re-reading | Re-read `OVERVIEW.md` after writes — the symbol table may have changed |
 | `Bash(cat file@/OVERVIEW.md)` for single reads | Use the **Read tool** — it's the default for all single-path `@/` reads |
 | Guessing path variations on `ENOENT` | `ls symbols/` or `OVERVIEW.md` to find the current name |
+| Sequential direct writes to 2+ symbols | Batch edit staging — atomic, validated, previewable |
 
 ---
 
