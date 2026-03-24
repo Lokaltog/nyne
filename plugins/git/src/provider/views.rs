@@ -23,7 +23,7 @@ use crate::names;
 use crate::repo::GitRepo;
 
 /// Default cap on history entries listed in readdir.
-pub(super) const HISTORY_LIMIT: usize = 50;
+pub const HISTORY_LIMIT: usize = 50;
 
 impl GitProvider {
     /// Resolve the `file.rs@/git/` companion directory — blame, log, contributors, notes.

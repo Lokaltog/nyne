@@ -22,15 +22,13 @@ use nyne::{companion_children, companion_lookup, source_file};
 use nyne_git::names::{self, FILE_BLAME, FILE_LOG};
 use nyne_git::provider::CommitMtime;
 use nyne_git::provider::repo::FileViewCtx;
-use nyne_git::provider::views::{BLAME_TEMPLATE, LOG_TEMPLATE, history_filename, hunk_overlaps_range};
+use nyne_git::provider::views::{BLAME_TEMPLATE, HISTORY_LIMIT, LOG_TEMPLATE, history_filename, hunk_overlaps_range};
 use nyne_git::repo::GitRepo;
 use nyne_macros::routes;
 
 use crate::providers::fragment_resolver::FragmentResolver;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::decomposed::DecompositionCache;
-
-const HISTORY_LIMIT: usize = 50;
 
 /// Provider for symbol-scoped git features.
 ///
