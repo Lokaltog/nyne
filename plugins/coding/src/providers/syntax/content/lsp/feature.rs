@@ -18,10 +18,6 @@ use crate::providers::names;
 /// query dispatch, view construction, and symlink target generation —
 /// is derived from this enum. Adding a new feature means adding a
 /// variant here plus a template file.
-///
-/// Variant order is significant: `handle_index()` derives from the
-/// discriminant, and the template registration array in
-/// `SyntaxProvider::new()` must match.
 #[derive(Clone, Copy, strum::EnumIter, strum::EnumCount)]
 #[repr(u8)]
 pub(in crate::providers::syntax) enum LspFeature {
@@ -62,6 +58,48 @@ impl LspFeature {
     pub(super) const fn file_name(self) -> &'static str { self.metadata().0 }
 
     pub(super) const fn dir_name(self) -> Option<&'static str> { self.metadata().1 }
+
+    /// Template registration key and source for this feature.
+    ///
+    /// Centralises the variant → template mapping so that
+    /// `SyntaxProvider::new()` can build the handles array by
+    /// iterating `LspFeature::iter()` — no positional coupling.
+    pub(in crate::providers::syntax) const fn template(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Definition => (
+                "syntax/lsp/definition",
+                include_str!("../../templates/lsp/definition.md.j2"),
+            ),
+            Self::Declaration => (
+                "syntax/lsp/declaration",
+                include_str!("../../templates/lsp/declaration.md.j2"),
+            ),
+            Self::TypeDefinition => (
+                "syntax/lsp/type_definition",
+                include_str!("../../templates/lsp/type_definition.md.j2"),
+            ),
+            Self::References => (
+                "syntax/lsp/references",
+                include_str!("../../templates/lsp/references.md.j2"),
+            ),
+            Self::Implementation => (
+                "syntax/lsp/implementation",
+                include_str!("../../templates/lsp/implementation.md.j2"),
+            ),
+            Self::Callers => ("syntax/lsp/callers", include_str!("../../templates/lsp/callers.md.j2")),
+            Self::Deps => ("syntax/lsp/deps", include_str!("../../templates/lsp/deps.md.j2")),
+            Self::Supertypes => (
+                "syntax/lsp/supertypes",
+                include_str!("../../templates/lsp/supertypes.md.j2"),
+            ),
+            Self::Subtypes => (
+                "syntax/lsp/subtypes",
+                include_str!("../../templates/lsp/subtypes.md.j2"),
+            ),
+            Self::Doc => ("syntax/lsp/doc", include_str!("../../templates/lsp/doc.md.j2")),
+            Self::Hints => ("syntax/lsp/hints", include_str!("../../templates/lsp/hints.md.j2")),
+        }
+    }
 
     /// Index into a `LspHandles` array to get the handle for this feature.
     pub(in crate::providers::syntax) const fn handle_index(self) -> usize { self as usize }
