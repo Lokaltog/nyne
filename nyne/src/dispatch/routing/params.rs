@@ -9,6 +9,7 @@ pub struct RouteParams {
     rest: HashMap<&'static str, Vec<String>>,
 }
 
+/// Insert and retrieve captured route parameters.
 impl RouteParams {
     /// Insert a single-segment capture.
     pub fn insert_single(&mut self, name: &'static str, value: String) { self.singles.insert(name, value); }

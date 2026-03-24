@@ -21,12 +21,19 @@ macro_rules! syscall_try {
     };
 }
 
+/// Filesystem cloning strategies for overlay lowerdirs.
 mod clone;
+/// Control socket IPC between daemon and CLI commands.
 pub mod control;
+/// Mount syscall primitives for sandbox construction.
 pub mod mnt;
+/// Linux namespace creation and entry (user, mount, PID, UTS).
 mod namespace;
+/// Project storage and sandbox filesystem isolation via overlay and pivot_root.
 mod overlay;
+/// Well-known path constructors for sandbox operations.
 pub mod paths;
+/// Process primitives: fork, pipe, exec, and child lifecycle management.
 mod process;
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -65,6 +72,7 @@ pub struct MountConfig {
     pub mount: MountEntry,
 }
 
+/// Construction and validation for [`MountConfig`].
 impl MountConfig {
     /// Create a new mount configuration.
     ///
@@ -206,6 +214,7 @@ pub fn run_mounts(mounts: Vec<(MountConfig, session::SessionId, MountFn)>) -> Re
     wait_and_shutdown(sessions)
 }
 
+/// Attach to a running daemon and execute a command inside its namespace.
 pub fn run_attach(config: AttachConfig) -> Result<i32> {
     let daemon_pid =
         Pid::from_raw(config.daemon_pid).ok_or_else(|| eyre!("invalid daemon PID: {}", config.daemon_pid))?;
@@ -337,6 +346,7 @@ struct CommandPaths<'a> {
     control_socket: Option<&'a Path>,
 }
 
+/// Command child entry point: enter the daemon namespace, set up the sandbox, and fork init.
 fn command_main(
     ns: Namespace,
     paths: &CommandPaths<'_>,

@@ -69,6 +69,7 @@ use views::{SlicedBlameView, SlicedLogView};
 /// Lifecycle that reports a git commit timestamp as the node's mtime.
 pub struct CommitMtime(pub i64);
 
+/// [`Lifecycle`] implementation for [`CommitMtime`].
 impl Lifecycle for CommitMtime {
     fn getattr(&self, _ctx: &RequestContext<'_>) -> Option<NodeAttr> {
         Some(NodeAttr {
@@ -100,6 +101,7 @@ pub(crate) struct GitProvider {
     companion_routes: RouteTree<Self>,
 }
 
+/// Construction, route handlers, and helper methods for [`GitProvider`].
 impl GitProvider {
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("git");
 
@@ -315,6 +317,7 @@ impl GitProvider {
     }
 }
 
+/// [`Provider`] implementation for [`GitProvider`].
 impl Provider for GitProvider {
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 

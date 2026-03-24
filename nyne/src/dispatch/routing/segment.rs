@@ -35,6 +35,7 @@ pub(super) enum CaptureResult {
     Single(&'static str, String),
 }
 
+/// Matching and precedence logic for segment patterns.
 impl SegmentMatcher {
     /// Match a single path segment against this pattern.
     ///

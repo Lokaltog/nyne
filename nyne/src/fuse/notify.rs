@@ -18,11 +18,15 @@ pub struct FuseNotifier {
     inner: Notifier,
 }
 
+/// Construction for [`FuseNotifier`].
 impl FuseNotifier {
+    /// Wraps a `fuser::Notifier` for kernel cache invalidation.
     pub const fn new(notifier: Notifier) -> Self { Self { inner: notifier } }
 }
 
+/// [`KernelNotifier`] implementation backed by a `fuser::Notifier`.
 impl KernelNotifier for FuseNotifier {
+    /// Invalidates all cached data for the given inode.
     fn inval_inode(&self, inode: u64) {
         // offset=-1, len=0 → invalidate all cached data for this inode.
         if let Err(e) = self.inner.inval_inode(INodeNo(inode), -1, 0) {
@@ -30,6 +34,7 @@ impl KernelNotifier for FuseNotifier {
         }
     }
 
+    /// Enqueues a directory entry invalidation message.
     fn inval_entry(&self, parent_inode: u64, name: &str) {
         if let Err(e) = self.inner.inval_entry(INodeNo(parent_inode), OsStr::new(name)) {
             warn!(target: "nyne::fuse", parent_inode, name, error = %e, "kernel inval_entry failed");
@@ -57,6 +62,7 @@ pub struct AsyncNotifier {
     tx: mpsc::Sender<NotifyMsg>,
 }
 
+/// Construction for [`AsyncNotifier`].
 impl AsyncNotifier {
     /// Wrap a synchronous notifier in an async channel + drain thread.
     #[allow(clippy::expect_used)] // thread spawn failure = system resource exhaustion
@@ -79,7 +85,9 @@ impl AsyncNotifier {
     }
 }
 
+/// [`KernelNotifier`] implementation that enqueues notifications asynchronously.
 impl KernelNotifier for AsyncNotifier {
+    /// Enqueues an inode invalidation message.
     fn inval_inode(&self, inode: u64) { let _ = self.tx.send(NotifyMsg::InvalInode { inode }); }
 
     fn inval_entry(&self, parent_inode: u64, name: &str) {

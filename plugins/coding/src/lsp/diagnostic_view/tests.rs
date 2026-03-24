@@ -2,6 +2,7 @@ use lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, Position, Range}
 
 use super::{diagnostics_to_rows, severity_label};
 
+/// Tests that all severity levels map to the expected labels.
 #[test]
 fn severity_labels() {
     assert_eq!(severity_label(Some(DiagnosticSeverity::ERROR)), "error");
@@ -11,6 +12,7 @@ fn severity_labels() {
     assert_eq!(severity_label(None), "unknown");
 }
 
+/// Build a minimal diagnostic at the given position for testing.
 fn diag(line: u32, col: u32, severity: DiagnosticSeverity, message: &str) -> Diagnostic {
     Diagnostic {
         range: Range::new(Position::new(line, col), Position::new(line, col + 1)),
@@ -20,6 +22,7 @@ fn diag(line: u32, col: u32, severity: DiagnosticSeverity, message: &str) -> Dia
     }
 }
 
+/// Tests that row positions are 1-based (offset from 0-based LSP positions).
 #[test]
 fn rows_offset_by_one() {
     let diags = vec![diag(0, 0, DiagnosticSeverity::ERROR, "err")];
@@ -32,6 +35,7 @@ fn rows_offset_by_one() {
     assert_eq!(rows[0].message, "err");
 }
 
+/// Tests that string diagnostic codes and source are extracted into rows.
 #[test]
 fn code_extraction() {
     let mut d = diag(5, 10, DiagnosticSeverity::WARNING, "warn");
@@ -43,6 +47,7 @@ fn code_extraction() {
     assert_eq!(rows[0].source, "rust-analyzer");
 }
 
+/// Tests that numeric diagnostic codes are converted to strings.
 #[test]
 fn numeric_code() {
     let mut d = diag(0, 0, DiagnosticSeverity::HINT, "hint");
@@ -52,6 +57,7 @@ fn numeric_code() {
     assert_eq!(rows[0].code, "42");
 }
 
+/// Tests that missing code and source default to empty strings.
 #[test]
 fn missing_optional_fields() {
     let d = diag(0, 0, DiagnosticSeverity::ERROR, "bare");
@@ -60,6 +66,7 @@ fn missing_optional_fields() {
     assert_eq!(rows[0].source, "");
 }
 
+/// Tests that empty diagnostics input produces empty rows.
 #[test]
 fn empty_input() {
     assert!(diagnostics_to_rows(&[]).is_empty());

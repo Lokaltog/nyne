@@ -45,6 +45,7 @@ pub struct PathFilter {
     matchers: Vec<Gitignore>,
 }
 
+/// Construction and query methods for the gitignore-based path filter.
 impl PathFilter {
     /// Build a path filter by walking the project tree.
     ///

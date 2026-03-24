@@ -2,10 +2,12 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 
+/// Build a test resolver mapping `/code` to an overlay path.
 fn test_resolver() -> LspPathResolver {
     LspPathResolver::new("/code".into(), "/tmp/nyne-merged-123/home/user/project".into())
 }
 
+/// Tests that rewrite replaces the display root prefix with the overlay root.
 #[test]
 fn rewrite_replaces_display_root_prefix() {
     assert_eq!(
@@ -14,6 +16,7 @@ fn rewrite_replaces_display_root_prefix() {
     );
 }
 
+/// Tests that rewrite passes through paths outside the display root.
 #[test]
 fn rewrite_leaves_non_root_paths_unchanged() {
     assert_eq!(
@@ -22,6 +25,7 @@ fn rewrite_leaves_non_root_paths_unchanged() {
     );
 }
 
+/// Tests that rewrite handles the exact display root path.
 #[test]
 fn rewrite_handles_root_itself() {
     assert_eq!(
@@ -30,6 +34,7 @@ fn rewrite_handles_root_itself() {
     );
 }
 
+/// Tests that rewrite_to_fuse replaces the overlay prefix with the display root.
 #[test]
 fn rewrite_to_display_replaces_overlay_prefix() {
     assert_eq!(
@@ -38,6 +43,7 @@ fn rewrite_to_display_replaces_overlay_prefix() {
     );
 }
 
+/// Tests that rewrite_to_fuse passes through paths outside the overlay root.
 #[test]
 fn rewrite_to_display_leaves_non_overlay_paths_unchanged() {
     assert_eq!(
@@ -46,6 +52,7 @@ fn rewrite_to_display_leaves_non_overlay_paths_unchanged() {
     );
 }
 
+/// Tests that rewrite_to_fuse handles the exact overlay root path.
 #[test]
 fn rewrite_to_display_handles_overlay_root_itself() {
     assert_eq!(

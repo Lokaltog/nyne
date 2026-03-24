@@ -18,12 +18,14 @@ fn engine_with_fixture(name: &str) -> TemplateEngine {
     engine
 }
 
+/// Shared view model for template rendering tests.
 #[derive(Serialize)]
 struct TestView {
     name: String,
     items: Vec<String>,
 }
 
+/// Tests that a basic template renders with a simple view model.
 #[test]
 fn render_basic_template() {
     let engine = engine_with_fixture("basic.j2");
@@ -34,6 +36,7 @@ fn render_basic_template() {
     insta::assert_snapshot!(engine.render("test", &view));
 }
 
+/// Tests that trim_blocks and lstrip_blocks engine settings strip whitespace correctly.
 #[test]
 fn trim_blocks_and_lstrip() {
     let engine = engine_with_fixture("trim_blocks.j2");
@@ -44,6 +47,7 @@ fn trim_blocks_and_lstrip() {
     insta::assert_snapshot!(engine.render("test", &view));
 }
 
+/// Tests that the tokens filter formats values below 1k as plain numbers.
 #[test]
 fn tokens_filter_below_1k() {
     let engine = engine_with_fixture("tokens.j2");
@@ -57,6 +61,7 @@ fn tokens_filter_below_1k() {
     insta::assert_snapshot!(engine.render("test", &V { count: 3400 }));
 }
 
+/// Tests that the tokens filter formats values above 1k with decimal notation.
 #[test]
 fn tokens_filter_above_1k() {
     let engine = engine_with_fixture("tokens.j2");

@@ -38,6 +38,7 @@ pub struct ActivationContext {
     extensions: TypeMap,
 }
 
+/// Methods for building and querying the shared activation context.
 impl ActivationContext {
     /// Build a new activation context with core fields only.
     ///

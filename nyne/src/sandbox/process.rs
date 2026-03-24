@@ -29,6 +29,7 @@ pub(super) struct ReadyPipe {
     write_fd: OwnedFd,
 }
 
+/// Construction and consumption methods for cross-fork readiness signaling.
 impl ReadyPipe {
     /// Create a pipe for readiness signaling.
     pub(super) fn new() -> Result<Self> {
@@ -148,6 +149,7 @@ pub(super) fn wait_for_exit(pid: Pid) -> Result<i32> {
 /// between forking and reaching explicit cleanup.
 pub(super) struct ChildGuard(Option<Pid>);
 
+/// RAII lifecycle management for a child process.
 impl ChildGuard {
     /// Create a new guard for the given child pid.
     pub(super) const fn new(pid: Pid) -> Self { Self(Some(pid)) }
@@ -165,6 +167,7 @@ impl ChildGuard {
     }
 }
 
+/// Kills and reaps the child process if the guard was not defused.
 impl Drop for ChildGuard {
     fn drop(&mut self) {
         if let Some(pid) = self.0.take() {
@@ -197,6 +200,7 @@ fn kill_and_reap(pid: Pid) {
 /// spawned). This is guaranteed in the PID namespace init process.
 pub(super) fn set_env(key: &str, value: &str) { unsafe { env::set_var(key, value) }; }
 
+/// PID 1 init process: fork the command, forward signals, and reap orphans on exit.
 pub(super) fn run_init(command: &[OsString]) -> Result<i32> {
     let command_pid = fork_or_die(|| {
         if let Err(e) = exec(command) {

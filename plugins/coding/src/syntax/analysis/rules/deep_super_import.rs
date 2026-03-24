@@ -6,6 +6,7 @@
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects deep `super::` import chains.
 struct DeepSuperImport;
 
 /// Tree-sitter node kinds for `use` declarations across languages.
@@ -13,6 +14,7 @@ struct DeepSuperImport;
 /// Currently only Rust has this pattern, but the array is extensible.
 const USE_DECLARATION: &[&str] = &["use_declaration"];
 
+/// [`AnalysisRule`] implementation for `DeepSuperImport`.
 impl AnalysisRule for DeepSuperImport {
     fn id(&self) -> &'static str { "deep-super-import" }
 
@@ -62,6 +64,7 @@ fn super_depth(text: &str) -> usize {
 
 register_analysis_rule!(DeepSuperImport);
 
+/// Tests for deep super import detection.
 #[cfg(test)]
 mod tests {
     use super::*;

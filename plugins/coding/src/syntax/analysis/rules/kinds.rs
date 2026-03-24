@@ -211,6 +211,7 @@ pub(super) fn count_identifier_uses(node: &tree_sitter::Node<'_>, name: &[u8], s
     count
 }
 
+/// Recursively count occurrences of an identifier name in a subtree.
 fn count_identifier_recursive(cursor: &mut tree_sitter::TreeCursor<'_>, name: &[u8], source: &[u8], count: &mut usize) {
     let node = cursor.node();
     if node.kind() == IDENTIFIER && node_bytes(&node, source) == name {

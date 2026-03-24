@@ -19,8 +19,10 @@ const STRING_SAFE_PARENTS: &[&str] = &[
 /// Minimum string length to flag. Short strings ("", "x", ",") are rarely magic.
 const MIN_LENGTH: usize = 4;
 
+/// Analysis rule that detects magic strings.
 struct MagicString;
 
+/// [`AnalysisRule`] implementation for `MagicString`.
 impl AnalysisRule for MagicString {
     fn id(&self) -> &'static str { "magic-string" }
 

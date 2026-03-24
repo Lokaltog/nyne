@@ -4,8 +4,10 @@ use super::kinds;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects negated conditions with else branches.
 struct NegatedCondition;
 
+/// [`AnalysisRule`] implementation for `NegatedCondition`.
 impl AnalysisRule for NegatedCondition {
     fn id(&self) -> &'static str { "negated-condition" }
 

@@ -15,8 +15,10 @@ const PARAM_LIST_KINDS: &[&str] = &[
     "formal_parameters", // TypeScript, JavaScript
 ];
 
+/// Analysis rule that detects long parameter lists.
 struct LongParameterList;
 
+/// [`AnalysisRule`] implementation for `LongParameterList`.
 impl AnalysisRule for LongParameterList {
     fn id(&self) -> &'static str { "long-parameter-list" }
 

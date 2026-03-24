@@ -1,4 +1,7 @@
+/// LSP configuration types.
 pub mod lsp;
+
+/// TODO/FIXME comment aggregation configuration.
 pub mod todo;
 
 use std::collections::{HashMap, HashSet};
@@ -87,6 +90,7 @@ pub struct ClaudeConfig {
     pub hooks: ClaudeHooksToggle,
 }
 
+/// Default implementation for `ClaudeConfig`.
 impl Default for ClaudeConfig {
     fn default() -> Self {
         Self {
@@ -98,6 +102,10 @@ impl Default for ClaudeConfig {
 
 /// Per-hook toggles for the Claude Code integration.
 #[allow(clippy::struct_excessive_bools)] // each bool is an independent feature toggle
+/// Per-hook toggle switches for Claude Code integration.
+///
+/// All hooks default to enabled; set individual fields to `false`
+/// to disable specific hooks while keeping the rest active.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClaudeHooksToggle {
@@ -122,6 +130,7 @@ pub struct ClaudeHooksToggle {
     pub statusline: bool,
 }
 
+/// Default implementation for `ClaudeHooksToggle`.
 impl Default for ClaudeHooksToggle {
     fn default() -> Self {
         Self {
@@ -153,6 +162,7 @@ pub struct StopHookConfig {
     pub ignore_extensions: Vec<String>,
 }
 
+/// Default implementation for `StopHookConfig`.
 impl Default for StopHookConfig {
     fn default() -> Self {
         Self {
@@ -162,8 +172,10 @@ impl Default for StopHookConfig {
     }
 }
 
+/// Default minimum number of changed files to trigger the stop hook.
 const fn default_min_files() -> usize { 2 }
 
+/// Default file extensions to exclude from the stop hook changed-file count.
 fn default_ignore_extensions() -> Vec<String> {
     ["toml", "md", "json", "yaml", "yml", "lock", "txt"]
         .into_iter()
@@ -243,6 +255,7 @@ pub struct AnalysisConfig {
     pub rules: Option<HashSet<String>>,
 }
 
+/// Default implementation for `AnalysisConfig`.
 impl Default for AnalysisConfig {
     fn default() -> Self {
         Self {
@@ -252,8 +265,10 @@ impl Default for AnalysisConfig {
     }
 }
 
+/// Serde default function returning `true`.
 const fn default_true() -> bool { true }
 
+/// Deserialization and config loading methods.
 impl CodingConfig {
     /// Deserialize from the plugin config map, falling back to defaults.
     pub fn from_plugin_table(plugin_map: &HashMap<String, toml::Value>) -> Self {
@@ -265,6 +280,7 @@ impl CodingConfig {
     }
 }
 
+/// Policy resolution methods for the pre-tool-use hook.
 impl PreToolHookConfig {
     /// Resolve the effective policy for a given language.
     ///
@@ -283,6 +299,7 @@ impl PreToolHookConfig {
     }
 }
 
+/// Builtin defaults, merging, and resolved accessor methods.
 impl PreToolPolicy {
     /// Hardcoded builtin defaults per language category.
     ///
@@ -339,5 +356,6 @@ fn json_merge(base: serde_json::Value, over: serde_json::Value) -> serde_json::V
     }
 }
 
+/// Unit tests for coding plugin configuration.
 #[cfg(test)]
 mod tests;

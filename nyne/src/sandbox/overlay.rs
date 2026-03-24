@@ -46,6 +46,7 @@ use crate::config::{BindMount, StorageStrategy};
 /// Size limit for structural tmpfs mounts (newroot, /tmp).
 const TMPFS_SIZE: &str = "2G";
 
+/// Build the isolated sandbox root filesystem and mount FUSE at `/code`.
 pub(super) fn setup(fuse_path: &Path, bind_mounts: &[BindMount]) -> Result<()> {
     let base_dirs = BaseDirs::new();
 
@@ -155,6 +156,7 @@ pub fn prepare_project_storage(path: &Path, persist_root: Option<&Path>, strateg
 
     Ok(merged)
 }
+/// Populate the new root with bind-mounted host entries, isolated `/tmp`, and XDG dirs.
 fn build_newroot(newroot: &Path, base_dirs: Option<&BaseDirs>) -> Result<()> {
     dirs(&[newroot])?;
     mnt::tmpfs(newroot, TMPFS_SIZE)?;
@@ -285,6 +287,7 @@ fn bind_xdg_dirs(newroot: &Path, base_dirs: &BaseDirs) -> Result<()> {
     Ok(())
 }
 
+/// Apply user-configured bind mounts into the new root before pivot.
 fn apply_bind_mounts(newroot: &Path, bind_mounts: &[BindMount]) -> Result<()> {
     for bm in bind_mounts {
         let dst = newroot.join(paths::relative_to_root(&bm.target));
@@ -333,6 +336,7 @@ fn dirs(dir_paths: &[&Path]) -> Result<()> {
     Ok(())
 }
 
+/// Collect deduplicated XDG base directories that exist on disk.
 fn collect_xdg_dirs(base_dirs: &BaseDirs) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 

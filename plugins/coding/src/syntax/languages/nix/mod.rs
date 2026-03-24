@@ -2,8 +2,10 @@
 
 use super::prelude::*;
 
+/// Nix language specification for tree-sitter decomposition.
 struct NixLanguage;
 
+/// [`LanguageSpec`] implementation for Nix.
 impl LanguageSpec for NixLanguage {
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
@@ -131,5 +133,6 @@ fn build_binding_fragment(node: TsNode<'_>, source: &str, parent_name: Option<&s
 
 register_syntax!(NixLanguage);
 
+/// Tests for Nix decomposition.
 #[cfg(test)]
 mod tests;

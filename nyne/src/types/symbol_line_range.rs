@@ -22,6 +22,7 @@ pub struct SymbolLineRange {
     pub end: usize,
 }
 
+/// Construction and formatting for symbol line ranges.
 impl SymbolLineRange {
     /// Create from a 0-based exclusive `Range<usize>` (tree-sitter convention).
     pub const fn from_zero_based(range: &Range<usize>) -> Self {

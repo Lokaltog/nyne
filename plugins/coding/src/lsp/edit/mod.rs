@@ -165,6 +165,7 @@ fn apply_edits_to_rope(content: &str, edits: &mut [&TextEdit]) -> Result<String>
     Ok(rope.to_string())
 }
 
+/// A file's original and modified content after applying text edits.
 struct ResolvedFileEdit {
     path: String,
     original: String,

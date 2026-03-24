@@ -16,6 +16,7 @@ pub struct CommitInfo {
     pub epoch_secs: i64,
 }
 
+/// Extract [`CommitInfo`] from a `git2::Commit` for template rendering.
 pub fn commit_info(commit: &git2::Commit<'_>, oid: Oid) -> CommitInfo {
     let epoch_secs = commit.time().seconds();
     CommitInfo {
@@ -27,6 +28,7 @@ pub fn commit_info(commit: &git2::Commit<'_>, oid: Oid) -> CommitInfo {
     }
 }
 
+/// Create `DiffOptions` scoped to a single pathspec.
 pub fn diff_opts(pathspec: &str) -> git2::DiffOptions {
     let mut opts = git2::DiffOptions::new();
     opts.pathspec(pathspec);

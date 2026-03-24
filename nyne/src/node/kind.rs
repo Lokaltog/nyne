@@ -12,6 +12,7 @@ pub enum NodeKind {
     Symlink { target: PathBuf },
 }
 
+/// Methods for converting between node kind representations.
 impl NodeKind {
     /// Convert to the flat file-kind discriminant.
     ///

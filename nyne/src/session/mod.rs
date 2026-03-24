@@ -7,7 +7,9 @@
 //! - Control socket paths
 //! - Active session discovery (registry scan)
 
+/// Session identifier generation and validation.
 mod id;
+/// Process liveness checks and PID state queries.
 pub mod state;
 
 use std::path::{Path, PathBuf};
@@ -100,6 +102,7 @@ pub struct SessionRegistry {
     sessions: Vec<SessionInfo>,
 }
 
+/// Discovery, lookup, and resolution of active sessions.
 impl SessionRegistry {
     /// Scan the session directory and load all valid (live daemon) sessions.
     pub(crate) fn scan() -> Result<Self> {

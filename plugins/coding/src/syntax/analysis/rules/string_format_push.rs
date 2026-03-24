@@ -4,8 +4,10 @@ use super::kinds;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects format! used as `push_str` argument.
 struct StringFormatPush;
 
+/// [`AnalysisRule`] implementation for `StringFormatPush`.
 impl AnalysisRule for StringFormatPush {
     fn id(&self) -> &'static str { "string-format-push" }
 

@@ -34,6 +34,7 @@ pub const fn file_kind_to_fuse(ft: FileKind) -> FileType {
 }
 
 #[derive(Clone, Copy)]
+/// Timestamp triplet for file attribute construction.
 struct Timestamps {
     atime: SystemTime,
     mtime: SystemTime,
@@ -61,6 +62,7 @@ fn make_attr(ino: u64, size: u64, kind: FileType, perm: u16, ts: Timestamps, req
     }
 }
 
+/// Attribute construction methods for the FUSE filesystem.
 impl NyneFs {
     /// Build a `fuser::FileAttr` and TTL for a given inode.
     pub(super) fn build_attr(&self, ino: u64, req: &Request) -> Option<(fuser::FileAttr, Duration)> {

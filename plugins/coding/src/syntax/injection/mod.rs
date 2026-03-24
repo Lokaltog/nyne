@@ -21,10 +21,12 @@ pub(super) struct InjectionDecomposer {
     inner_ext: &'static str,
 }
 
+/// Constructor for `InjectionDecomposer`.
 impl InjectionDecomposer {
     pub(super) fn new(inner: Arc<dyn Decomposer>, inner_ext: &'static str) -> Self { Self { inner, inner_ext } }
 }
 
+/// [`Decomposer`] implementation for injection-based compound files.
 impl Decomposer for InjectionDecomposer {
     fn decompose(&self, source: &str, max_depth: usize) -> (DecomposedFile, Option<tree_sitter::Tree>) {
         // 1. Parse with Jinja2 grammar and extract content regions + structural symbols.
@@ -99,5 +101,6 @@ impl Decomposer for InjectionDecomposer {
     }
 }
 
+/// Tests for injection-based compound decomposition.
 #[cfg(test)]
 mod tests;

@@ -24,6 +24,7 @@ use crate::err::ErrnoExt;
 
 /// Mount a tmpfs at `target` with the given size limit.
 #[allow(clippy::expect_used)] // paths cannot contain NUL bytes
+/// Mount a tmpfs at the given path with the specified size limit.
 pub fn tmpfs(target: &Path, size: &str) -> Result<()> {
     let data = CString::new(format!("size={size}")).expect("mount data contains no NUL");
     syscall_try!(
@@ -48,6 +49,7 @@ pub fn proc(target: &Path) -> Result<()> {
 
 /// Mount an overlayfs at `target` with the given layer paths.
 #[allow(clippy::expect_used)] // paths cannot contain NUL bytes
+/// Mount an overlayfs at `target` with the given lower, upper, and work directories.
 pub fn overlay(target: &Path, lower: &Path, upper: &Path, work: &Path) -> Result<()> {
     let opts = format!(
         "lowerdir={},upperdir={},workdir={}",

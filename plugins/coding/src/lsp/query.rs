@@ -90,6 +90,7 @@ impl<'a> FileQuery<'a> {
         subtypes => type_hierarchy_subtypes, "subtypes" -> Vec<TypeHierarchyItem>
     }
 
+    /// Create a new file query handle for the given manager, client, and file.
     pub(crate) const fn new(manager: &'a LspManager, client: Arc<LspClient>, lsp_file: &'a Path) -> Self {
         Self {
             manager,
@@ -98,6 +99,7 @@ impl<'a> FileQuery<'a> {
         }
     }
 
+    /// Build a `FilePosition` at the given line and character in this file.
     const fn pos(&self, line: u32, character: u32) -> FilePosition<'a> {
         FilePosition {
             file: self.lsp_file,

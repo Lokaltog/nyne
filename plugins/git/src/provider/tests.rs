@@ -1,11 +1,13 @@
 use super::*;
 
+/// Tests that `hunk_overlaps_range` correctly detects overlap between blame hunks and line ranges.
 mod hunk_overlap_tests {
     use nyne::types::SymbolLineRange;
     use rstest::rstest;
 
     use super::*;
 
+    /// Build a test `BlameHunk` from a line spec like `"5"` or `"5-10"`.
     fn hunk(lines: &str) -> history::BlameHunk {
         let (start_line, end_line) = if let Some((s, e)) = lines.split_once('-') {
             (s.parse().unwrap(), e.parse().unwrap())
@@ -27,6 +29,7 @@ mod hunk_overlap_tests {
         }
     }
 
+    /// Verifies hunk overlap detection against a fixed 10-20 range with various hunk positions.
     #[rstest]
     #[case::single_line_inside("15", true)]
     #[case::range_fully_inside("12-18", true)]
@@ -49,9 +52,11 @@ mod hunk_overlap_tests {
     }
 }
 
+/// Tests for `SymbolLineRange` construction and formatting.
 mod symbol_line_range_tests {
     use nyne::types::SymbolLineRange;
 
+    /// Tests that `from_zero_based` converts a 0-based range to 1-based inclusive.
     #[test]
     fn from_zero_based() {
         let range = SymbolLineRange::from_zero_based(&(5..10));
@@ -59,6 +64,7 @@ mod symbol_line_range_tests {
         assert_eq!(range.end, 10);
     }
 
+    /// Tests that a single-element 0-based range converts to a single 1-based line.
     #[test]
     fn from_zero_based_single_line() {
         let range = SymbolLineRange::from_zero_based(&(0..1));
@@ -66,6 +72,7 @@ mod symbol_line_range_tests {
         assert_eq!(range.end, 1);
     }
 
+    /// Tests byte-range conversion for a single-line source file.
     #[test]
     fn from_byte_range_single_line_file() {
         let source = "fn foo() {}\n";
@@ -74,6 +81,7 @@ mod symbol_line_range_tests {
         assert_eq!(range, SymbolLineRange { start: 1, end: 1 });
     }
 
+    /// Tests byte-range conversion spanning multiple lines.
     #[test]
     fn from_byte_range_multi_line() {
         let source = "fn foo() {\n    42\n}\n";
@@ -82,6 +90,7 @@ mod symbol_line_range_tests {
         assert_eq!(range, SymbolLineRange { start: 1, end: 3 });
     }
 
+    /// Tests byte-range conversion when the span starts after preceding content.
     #[test]
     fn from_byte_range_with_preceding_content() {
         let source = "use std::io;\n\nfn bar() {\n    1\n}\n";
@@ -90,6 +99,7 @@ mod symbol_line_range_tests {
         assert_eq!(range, SymbolLineRange { start: 3, end: 5 });
     }
 
+    /// Tests byte-range conversion for a decorator-only span.
     #[test]
     fn from_byte_range_decorator_span() {
         // Decorator on line 1, function on lines 2-4.
@@ -99,12 +109,14 @@ mod symbol_line_range_tests {
         assert_eq!(range, SymbolLineRange { start: 1, end: 1 });
     }
 
+    /// Verifies `as_lines_suffix` produces `"lines:5-10"` for a multi-line range.
     #[test]
     fn as_lines_suffix_range() {
         let range = SymbolLineRange { start: 5, end: 10 };
         assert_eq!(range.as_lines_suffix(), "lines:5-10");
     }
 
+    /// Verifies `as_lines_suffix` produces `"lines:3"` for a single-line range.
     #[test]
     fn as_lines_suffix_single() {
         let range = SymbolLineRange { start: 3, end: 3 };
@@ -112,9 +124,11 @@ mod symbol_line_range_tests {
     }
 }
 
+/// Tests for `history_filename` formatting (sequence number, date, hash, kebab message).
 mod history_filename_tests {
     use super::*;
 
+    /// Build a test `HistoryEntry` with the given commit message.
     fn entry(message: &str) -> history::HistoryEntry {
         history::HistoryEntry {
             oid: git2::Oid::zero(),
@@ -128,6 +142,7 @@ mod history_filename_tests {
         }
     }
 
+    /// Verifies basic filename format with sequence, date, hash, and kebab message.
     #[test]
     fn basic() {
         let e = entry("fix the bug");
@@ -137,6 +152,7 @@ mod history_filename_tests {
         );
     }
 
+    /// Verifies that the sequence number is 1-based and zero-padded.
     #[test]
     fn sequence_number() {
         let e = entry("second commit");
@@ -146,6 +162,7 @@ mod history_filename_tests {
         );
     }
 
+    /// Verifies filename omits the trailing `.ext` when extension is empty.
     #[test]
     fn no_extension() {
         let e = entry("initial commit");
@@ -155,6 +172,7 @@ mod history_filename_tests {
         );
     }
 
+    /// Verifies that special characters in commit messages are sanitized to kebab-case.
     #[test]
     fn special_chars_in_message() {
         let e = entry("feat(scope): add thing!");
@@ -164,6 +182,7 @@ mod history_filename_tests {
         );
     }
 
+    /// Verifies that long commit messages are truncated to at most 50 characters.
     #[test]
     fn long_message_truncated() {
         let e = entry("this is a very long commit message that exceeds the fifty character limit");
@@ -179,6 +198,7 @@ mod history_filename_tests {
     }
 }
 
+/// Tests for sliced blame and log views with real git repos.
 mod sliced_content_tests {
     use std::sync::Arc;
 
@@ -187,6 +207,7 @@ mod sliced_content_tests {
 
     use super::*;
 
+    /// Template handles for blame and log used in sliced content tests.
     struct TestHandles {
         blame: TemplateHandle,
         log: TemplateHandle,
@@ -217,6 +238,7 @@ mod sliced_content_tests {
         (Arc::new(repo), dir)
     }
 
+    /// Build blame and log template handles for testing.
     fn git_handles() -> TestHandles {
         let mut b = HandleBuilder::new();
         let blame_key = b.register("git/blame", include_str!("templates/blame.md.j2"));
@@ -228,6 +250,7 @@ mod sliced_content_tests {
         }
     }
 
+    /// Verifies that a range slice selects only the matching blame rows.
     #[test]
     fn sliced_blame_range_selects_subset() {
         let (repo, _dir) = test_repo_with_file("hello.txt", "line1\nline2\nline3\nline4\n");
@@ -250,6 +273,7 @@ mod sliced_content_tests {
         assert!(row_count <= 2, "expected at most 2 blame rows, got {row_count}");
     }
 
+    /// Verifies that an out-of-range slice produces the empty-blame fallback.
     #[test]
     fn sliced_blame_empty_on_range_beyond_data() {
         let (repo, _dir) = test_repo_with_file("tiny.txt", "only line\n");
@@ -270,6 +294,7 @@ mod sliced_content_tests {
         );
     }
 
+    /// Verifies that a tail(1) slice yields exactly one blame row.
     #[test]
     fn sliced_blame_tail() {
         let (repo, _dir) = test_repo_with_file("four.txt", "a\nb\nc\nd\n");
@@ -287,6 +312,7 @@ mod sliced_content_tests {
         assert_eq!(row_count, 1, "tail(1) should yield exactly 1 blame row");
     }
 
+    /// Verifies that `Single(1)` returns exactly one log row.
     #[test]
     fn sliced_log_single_entry() {
         let (repo, _dir) = test_repo_with_file("hello.txt", "content\n");
@@ -306,6 +332,7 @@ mod sliced_content_tests {
         assert_eq!(row_count, 1, "expected exactly 1 log row");
     }
 
+    /// Verifies that tail(N) returns all entries when fewer than N exist.
     #[test]
     fn sliced_log_tail_with_fewer_entries() {
         let (repo, _dir) = test_repo_with_file("hello.txt", "content\n");
@@ -324,6 +351,7 @@ mod sliced_content_tests {
         assert_eq!(row_count, 1, "tail(100) with 1 commit should yield 1 row");
     }
 
+    /// Verifies that an out-of-range log slice produces the empty-log fallback.
     #[test]
     fn sliced_log_range_beyond_data() {
         let (repo, _dir) = test_repo_with_file("hello.txt", "content\n");
@@ -344,6 +372,7 @@ mod sliced_content_tests {
     }
 }
 
+/// Tests for `branch_segments_at_prefix` decomposition of slashed branch names.
 mod branch_segment_tests {
     use std::sync::Arc;
 
@@ -385,6 +414,7 @@ mod branch_segment_tests {
         result
     }
 
+    /// Verifies branch segment decomposition at various prefix depths.
     #[rstest]
     #[case::flat_at_root(&["alpha", "beta"], "", &[("alpha", true, true), ("beta", true, true)])]
     #[case::slashed_decomposes(&["feat/foo", "feat/bar", "fix/bug"], "", &[("feat", false, false), ("fix", false, false)])]
@@ -407,6 +437,7 @@ mod branch_segment_tests {
         }
     }
 }
+/// Tests for `GitRepo::delete_branch` merge-safety checks.
 mod delete_branch_tests {
     use std::sync::Arc;
 
@@ -434,6 +465,7 @@ mod delete_branch_tests {
         (Arc::new(repo), dir, commit_oid)
     }
 
+    /// Verifies that a fully-merged branch can be deleted.
     #[test]
     fn delete_merged_branch() {
         let (repo, _dir, _) = repo_with_branches(&["merged-feature"]);
@@ -444,6 +476,7 @@ mod delete_branch_tests {
         assert!(!branches.contains(&"merged-feature".to_owned()));
     }
 
+    /// Verifies that deleting the current HEAD branch is refused with `PermissionDenied`.
     #[test]
     fn delete_head_branch_refused() {
         let (repo, _dir, _) = repo_with_branches(&[]);
@@ -453,6 +486,7 @@ mod delete_branch_tests {
         assert_eq!(io_err.kind(), std::io::ErrorKind::PermissionDenied);
     }
 
+    /// Verifies that deleting an unmerged branch is refused with `PermissionDenied`.
     #[test]
     fn delete_unmerged_branch_refused() {
         let (repo, dir, _) = repo_with_branches(&["diverged"]);
@@ -476,6 +510,7 @@ mod delete_branch_tests {
     }
 }
 
+/// Tests for `branch_tree_nodes` file tree browsing on branches.
 mod branch_tree_tests {
     use std::sync::Arc;
 
@@ -527,6 +562,7 @@ mod branch_tree_tests {
         result
     }
 
+    /// Verifies tree listing at root and subtree levels on a branch.
     #[rstest]
     #[case::root_tree("dev", "", &[("README.md", true), ("src", false)])]
     #[case::subtree("dev", "src", &[("lib.rs", true), ("main.rs", true)])]
@@ -541,6 +577,7 @@ mod branch_tree_tests {
         assert_eq!(entries, expected);
     }
 
+    /// Verifies that blob content can be read from a branch's tree.
     #[test]
     fn blob_content_readable() {
         let (repo, _dir) = repo_with_files(&["dev"], &[("hello.txt", "world")]);

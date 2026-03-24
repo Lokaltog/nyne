@@ -11,6 +11,7 @@ pub struct FileViewCtx {
     pub rel_path: String,
 }
 
+/// Constructor for [`FileViewCtx`].
 impl FileViewCtx {
     pub fn new(repo: &Arc<GitRepo>, rel_path: String) -> Self {
         Self {

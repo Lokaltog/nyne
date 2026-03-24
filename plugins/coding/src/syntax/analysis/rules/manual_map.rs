@@ -4,8 +4,10 @@ use super::kinds;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects manual map patterns.
 struct ManualMap;
 
+/// [`AnalysisRule`] implementation for `ManualMap`.
 impl AnalysisRule for ManualMap {
     fn id(&self) -> &'static str { "manual-map" }
 
@@ -56,6 +58,7 @@ impl AnalysisRule for ManualMap {
     }
 }
 
+/// Check whether a match arm pattern matches Some.
 fn is_some_arm(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
     if let Some(pattern) = arm.child_by_field_name("pattern") {
         return kinds::node_bytes(&pattern, source).starts_with(b"Some(");
@@ -63,6 +66,7 @@ fn is_some_arm(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
     false
 }
 
+/// Check whether a match arm pattern matches None.
 fn is_none_arm(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
     if let Some(pattern) = arm.child_by_field_name("pattern") {
         return kinds::node_bytes(&pattern, source) == b"None";
@@ -70,6 +74,7 @@ fn is_none_arm(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
     false
 }
 
+/// Check whether a match arm body wraps a value in Some.
 fn arm_body_wraps_some(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
     if let Some(body) = arm
         .child_by_field_name("value")
@@ -80,6 +85,7 @@ fn arm_body_wraps_some(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
     false
 }
 
+/// Check whether a match arm body evaluates to None or null.
 fn arm_body_is_none(arm: &tree_sitter::Node<'_>, source: &[u8]) -> bool {
     if let Some(body) = arm
         .child_by_field_name("value")

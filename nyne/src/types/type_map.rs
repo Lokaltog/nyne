@@ -13,6 +13,7 @@ pub struct TypeMap {
     inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
 }
 
+/// Typed insertion and retrieval for the heterogeneous map.
 impl TypeMap {
     /// Create an empty map.
     pub fn new() -> Self { Self::default() }

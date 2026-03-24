@@ -81,6 +81,7 @@ impl LspHandle {
     /// Returns `None` if the server has become unavailable since resolve time.
     pub(crate) fn file_query(&self) -> Option<FileQuery<'_>> { self.manager.file_query(&self.lsp_file, &self.ext) }
 
+    /// The overlay-rooted file path used for LSP requests.
     pub(crate) fn lsp_file(&self) -> &Path { &self.lsp_file }
 
     /// The LSP client for this file's language server.
@@ -105,8 +106,10 @@ impl SymbolQuery {
     /// Acquire a `FileQuery` for cached LSP operations.
     pub(crate) fn file_query(&self) -> Option<FileQuery<'_>> { self.handle.file_query() }
 
+    /// The LSP position this query is bound to.
     pub(crate) const fn position(&self) -> Position { self.position }
 
+    /// The overlay-rooted file path used for LSP requests.
     pub(crate) fn lsp_file(&self) -> &Path { self.handle.lsp_file() }
 
     /// Path resolver for rewriting LSP URIs from FUSE paths to overlay paths.

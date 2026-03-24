@@ -1,9 +1,16 @@
+/// CLI handler for `nyne attach` -- enter namespace of a running mount.
 pub mod attach;
+/// CLI handler for `nyne config` -- dump resolved configuration.
 pub mod config;
+/// CLI handler for `nyne ctl` -- generic JSON control interface to a running daemon.
 pub mod ctl;
+/// CLI handler for `nyne exec` -- pipe-oriented script execution.
 pub mod exec;
+/// CLI handler for `nyne list` -- show sessions and attached processes.
 pub mod list;
+/// CLI handler for `nyne mount` -- start FUSE daemon(s) for directory(ies).
 pub mod mount;
+/// Terminal output utilities -- single source of truth for CLI terminal access.
 pub mod output;
 
 use std::env;
@@ -33,6 +40,7 @@ pub struct Cli {
     pub command: Command,
 }
 
+/// Top-level CLI subcommands dispatched by the binary entry point.
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Mount one or more directories as FUSE filesystems.

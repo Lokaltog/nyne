@@ -30,6 +30,7 @@ pub(super) struct CompanionProvider {
     routes: RouteTree<Self>,
 }
 
+/// Construction and companion node building.
 impl CompanionProvider {
     pub(super) fn new(_ctx: Arc<ActivationContext>) -> Self {
         let routes = routes!(Self, {
@@ -93,15 +94,21 @@ impl CompanionProvider {
     }
 }
 
+/// Provider implementation for companion directories.
 impl Provider for CompanionProvider {
+    /// Returns the companion provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// Dispatches children resolution through the route tree.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes { self.routes.children(&self, ctx) }
 
+    /// Dispatches lookup resolution through the route tree.
     fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node { self.routes.lookup(&self, ctx, name) }
 }
 
+/// Provider identifier constant.
 impl CompanionProvider {
+    /// The provider identifier for the companion provider.
     pub(super) const PROVIDER_ID: ProviderId = ProviderId::new("at-companion");
 }
 
@@ -114,7 +121,9 @@ struct FileRename {
     source_file: VfsPath,
 }
 
+/// Rename implementation that renames the underlying real file.
 impl Renameable for FileRename {
+    /// Renames the real file, stripping the companion suffix from the target name.
     fn rename(&self, ctx: &RenameContext<'_>) -> Result<()> {
         let new_name = super::strip_companion_suffix(ctx.target_name)
             .ok_or_else(|| eyre!("rename target must end with companion suffix (@)"))?;

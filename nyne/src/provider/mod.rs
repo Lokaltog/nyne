@@ -35,6 +35,7 @@ pub enum MutationOp<'a> {
     /// Directory creation (FUSE `mkdir`).
     Mkdir { path: &'a VfsPath },
 }
+/// Execution methods for filesystem mutation operations.
 impl MutationOp<'_> {
     /// Execute this mutation against a real filesystem.
     ///
@@ -54,6 +55,7 @@ impl MutationOp<'_> {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ProviderId(&'static str);
 
+/// Construction and access for provider identifiers.
 impl ProviderId {
     /// Create a new provider identifier.
     pub const fn new(id: &'static str) -> Self { Self(id) }
@@ -62,7 +64,9 @@ impl ProviderId {
     pub const fn as_str(&self) -> &'static str { self.0 }
 }
 
+/// Display implementation for [`ProviderId`].
 impl fmt::Display for ProviderId {
+    /// Writes the provider identifier string.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(self.0) }
 }
 
@@ -110,6 +114,7 @@ pub type Nodes = Result<Option<Vec<VirtualNode>>>;
 /// Return type for [`Provider::lookup`], [`Provider::create`], [`Provider::mkdir`] — one node or nothing.
 pub type Node = Result<Option<VirtualNode>>;
 
+/// Trait for FUSE content providers.
 pub trait Provider: Send + Sync {
     /// Unique identifier for this provider.
     fn id(&self) -> ProviderId;

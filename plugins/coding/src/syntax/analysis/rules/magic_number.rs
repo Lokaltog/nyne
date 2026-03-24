@@ -27,8 +27,10 @@ const NUMERIC_SAFE_PARENTS: &[&str] = &[
     "prefix_expression",
 ];
 
+/// Analysis rule that detects magic numbers.
 struct MagicNumber;
 
+/// [`AnalysisRule`] implementation for `MagicNumber`.
 impl AnalysisRule for MagicNumber {
     fn id(&self) -> &'static str { "magic-number" }
 

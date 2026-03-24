@@ -11,8 +11,11 @@
 //! - `invalidation` (sibling) — cache invalidation + event processing + watcher integration
 //! - `resolver` (sibling) — `Resolver` trait definition + implementation + recursion guard
 
+/// Content I/O operations (read/write through L2 cache).
 mod content;
+/// Resolution, name lookup, and inode resolution operations.
 mod lookup;
+/// Directory listing and parent inode navigation.
 mod readdir;
 
 use std::sync::atomic::AtomicBool;
@@ -74,6 +77,7 @@ pub struct Router {
     pub(super) in_fs_change_notify: AtomicBool,
 }
 
+/// Core router construction, node insertion, and service accessors.
 impl Router {
     /// The root inode number (matches `FUSE_ROOT_INODE`).
     pub const ROOT_INODE: u64 = InodeMap::ROOT_INODE;
@@ -206,7 +210,9 @@ pub struct ReaddirEntry {
     pub(crate) name: String,
 }
 
+/// Factory methods for constructing readdir entries.
 impl ReaddirEntry {
+    /// Create the `.` (self) directory entry.
     fn dot(inode: u64) -> Self {
         Self {
             inode,
@@ -215,6 +221,7 @@ impl ReaddirEntry {
         }
     }
 
+    /// Create the `..` (parent) directory entry.
     fn dotdot(inode: u64) -> Self {
         Self {
             inode,
@@ -223,6 +230,7 @@ impl ReaddirEntry {
         }
     }
 
+    /// Create a real filesystem entry.
     const fn real(inode: u64, kind: FileKind, name: String) -> Self { Self { inode, kind, name } }
 }
 
@@ -239,6 +247,7 @@ pub enum ResolvedInode {
     },
 }
 
+/// Accessors for resolved inode snapshots.
 impl ResolvedInode {
     /// The VFS path as a string reference, for logging.
     pub fn path_str(&self) -> &str {

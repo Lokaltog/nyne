@@ -64,6 +64,7 @@ pub fn parse_spec(s: &str) -> Option<SliceSpec> {
     (m > 0).then_some(SliceSpec::Single(m))
 }
 
+/// Index computation and application for slice specifications.
 impl SliceSpec {
     /// Compute the 0-based half-open index range for a collection of `total` items.
     ///

@@ -12,7 +12,9 @@ pub struct RouteCtx<'a> {
     params: RouteParams,
 }
 
+/// Construction and capture accessors for route handler contexts.
 impl<'a> RouteCtx<'a> {
+    /// Create a route context from a request context and captured parameters.
     pub const fn new(request: &'a RequestContext<'a>, params: RouteParams) -> Self { Self { request, params } }
 
     /// Get a single-segment capture by name.
@@ -34,8 +36,11 @@ impl<'a> RouteCtx<'a> {
     pub const fn request(&self) -> &RequestContext<'a> { self.request }
 }
 
+/// Derefs to the underlying [`RequestContext`] for transparent access.
 impl<'a> Deref for RouteCtx<'a> {
+    /// The deref target type.
     type Target = RequestContext<'a>;
 
+    /// Returns a reference to the inner `RequestContext`.
     fn deref(&self) -> &Self::Target { self.request }
 }

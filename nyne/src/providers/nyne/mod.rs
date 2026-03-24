@@ -23,7 +23,9 @@ pub(super) struct NyneProvider {
     routes: RouteTree<Self>,
 }
 
+/// Construction and route handlers for the nyne meta provider.
 impl NyneProvider {
+    /// Creates a new nyne provider with guide and status templates.
     pub(super) fn new(ctx: &Arc<ActivationContext>) -> Self {
         let source_dir = ctx.root().display().to_string();
         let empty = ExtensionCounts::default();
@@ -100,11 +102,15 @@ impl NyneProvider {
     }
 }
 
+/// Provider implementation for root-level nyne meta files.
 impl Provider for NyneProvider {
+    /// Returns the nyne provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// Dispatches children resolution through the route tree.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes { self.routes.children(&self, ctx) }
 
+    /// Dispatches lookup resolution through the route tree.
     fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node { self.routes.lookup(&self, ctx, name) }
 }
 
@@ -126,7 +132,9 @@ struct StatusView {
     start_time: Instant,
 }
 
+/// Renders the mount status template with live runtime data.
 impl TemplateView for StatusView {
+    /// Renders uptime, active providers, and project info into the status template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let uptime = humantime::format_duration(self.start_time.elapsed()).to_string();
         let providers: Vec<&str> = PLUGINS
@@ -151,5 +159,6 @@ impl TemplateView for StatusView {
 }
 
 impl NyneProvider {
+    /// The provider identifier for the nyne meta provider.
     const PROVIDER_ID: ProviderId = ProviderId::new("nyne");
 }

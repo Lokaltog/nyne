@@ -44,6 +44,7 @@ fn workspace_edit(entries: Vec<(lsp_types::Uri, Vec<TextEdit>)>) -> WorkspaceEdi
     }
 }
 
+/// Tests applying a single replacement to one file.
 #[test]
 fn single_file_single_edit() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -57,6 +58,7 @@ fn single_file_single_edit() {
     assert_eq!(std::fs::read_to_string(path).unwrap(), "goodbye world");
 }
 
+/// Tests applying multiple replacements to the same file.
 #[test]
 fn single_file_multiple_edits() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -74,6 +76,7 @@ fn single_file_multiple_edits() {
     assert_eq!(std::fs::read_to_string(path).unwrap(), "xxx bbb zzz");
 }
 
+/// Tests applying edits across multiple files simultaneously.
 #[test]
 fn multiple_files() {
     let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
@@ -96,6 +99,7 @@ fn multiple_files() {
     assert_eq!(std::fs::read_to_string(&path2).unwrap(), "file TWO");
 }
 
+/// Tests applying edits on different lines of the same file.
 #[test]
 fn multiline_edits() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -113,6 +117,7 @@ fn multiline_edits() {
     assert_eq!(std::fs::read_to_string(path).unwrap(), "line one\nline TWO\nline THREE");
 }
 
+/// Tests inserting text at a position using an empty range.
 #[test]
 fn insert_at_position() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -127,6 +132,7 @@ fn insert_at_position() {
     assert_eq!(std::fs::read_to_string(path).unwrap(), "aXb");
 }
 
+/// Tests deleting a range by replacing it with empty text.
 #[test]
 fn delete_range() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -141,6 +147,7 @@ fn delete_range() {
     assert_eq!(std::fs::read_to_string(path).unwrap(), "hello");
 }
 
+/// Tests that an empty workspace edit succeeds without error.
 #[test]
 fn empty_edit_warns_but_succeeds() {
     let edit = WorkspaceEdit {
@@ -153,6 +160,7 @@ fn empty_edit_warns_but_succeeds() {
     apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
 }
 
+/// Tests that edits handle UTF-16 surrogate positions correctly.
 #[test]
 fn utf16_surrogate_positions() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -168,6 +176,7 @@ fn utf16_surrogate_positions() {
     assert_eq!(std::fs::read_to_string(path).unwrap(), "a\u{1F600}Z");
 }
 
+/// Tests that a single rope replacement applies correctly.
 #[test]
 fn rope_single_replacement() {
     let content = "hello world";
@@ -177,6 +186,7 @@ fn rope_single_replacement() {
     assert_eq!(result, "goodbye world");
 }
 
+/// Tests that multiple rope edits are applied in reverse order correctly.
 #[test]
 fn rope_multiple_edits_reverse_order() {
     let content = "aaa bbb ccc";
@@ -187,6 +197,7 @@ fn rope_multiple_edits_reverse_order() {
     assert_eq!(result, "xxx bbb zzz");
 }
 
+/// Tests rope insertion at a zero-width range.
 #[test]
 fn rope_insertion() {
     let content = "ab";
@@ -196,6 +207,7 @@ fn rope_insertion() {
     assert_eq!(result, "aXb");
 }
 
+/// Tests rope deletion with empty replacement text.
 #[test]
 fn rope_deletion() {
     let content = "hello world";
@@ -205,6 +217,7 @@ fn rope_deletion() {
     assert_eq!(result, "hello");
 }
 
+/// Tests rope edits spanning multiple lines.
 #[test]
 fn rope_multiline() {
     let content = "line one\nline two\nline three";
@@ -215,6 +228,7 @@ fn rope_multiline() {
     assert_eq!(result, "line one\nline TWO\nline THREE");
 }
 
+/// Tests that an out-of-range rope edit returns an error.
 #[test]
 fn rope_out_of_range_returns_error() {
     let content = "short";
@@ -223,6 +237,7 @@ fn rope_out_of_range_returns_error() {
     assert!(apply_edits_to_rope(content, &mut edits).is_err());
 }
 
+/// Tests that a single-file edit produces a valid unified diff.
 #[test]
 fn diff_single_file_single_edit() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -239,6 +254,7 @@ fn diff_single_file_single_edit() {
     assert!(diff.contains("+goodbye world"));
 }
 
+/// Tests that multiple edits in one file produce a combined diff.
 #[test]
 fn diff_multi_edit_single_file() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -256,6 +272,7 @@ fn diff_multi_edit_single_file() {
     assert!(diff.contains("+xxx bbb zzz"));
 }
 
+/// Tests that edits across multiple files produce per-file diff sections.
 #[test]
 fn diff_multiple_files() {
     let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
@@ -281,6 +298,7 @@ fn diff_multiple_files() {
     assert!(diff.contains("+file TWO"));
 }
 
+/// Tests that a pure insertion produces a diff with added lines.
 #[test]
 fn diff_insertion_only() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -295,6 +313,7 @@ fn diff_insertion_only() {
     assert!(diff.contains("+inserted"));
 }
 
+/// Tests that a pure deletion produces a diff with removed lines.
 #[test]
 fn diff_deletion_only() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
@@ -309,6 +328,7 @@ fn diff_deletion_only() {
     assert!(diff.contains("-remove"));
 }
 
+/// Tests that an empty workspace edit produces an empty diff string.
 #[test]
 fn diff_empty_edit_returns_empty_string() {
     let edit = WorkspaceEdit {
@@ -321,6 +341,7 @@ fn diff_empty_edit_returns_empty_string() {
     assert!(diff.is_empty());
 }
 
+/// Tests that replacing text with identical content produces an empty diff.
 #[test]
 fn diff_no_change_returns_empty_diff() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();

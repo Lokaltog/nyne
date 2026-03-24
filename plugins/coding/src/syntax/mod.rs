@@ -7,18 +7,29 @@
 //! registered at compile time via the `register_syntax!` macro and indexed
 //! by file extension in [`SyntaxRegistry`].
 
+/// Code analysis engine and rules for detecting code smells.
 pub mod analysis;
+/// Shared decomposition cache and source file decomposition results.
 pub mod decomposed;
+/// Standard fragment extraction pipeline for trait-based language decomposers.
 mod extract;
+/// Fragment types representing decomposed pieces of a source file.
 pub mod fragment;
+/// Filesystem naming strategies and conflict resolution for fragments.
 pub mod fs_mapping;
+/// Injection-based compound decomposition for template languages.
 mod injection;
+/// Tree-sitter parsing utilities and code fragment construction.
 pub mod parser;
+/// Byte-range remapping for injection-based compound decomposition.
 pub mod span_map;
 
+/// Language specification trait and generic decomposer.
 pub mod spec;
+/// Minijinja template wrappers for decomposed source and fragments.
 pub mod view;
 
+/// Built-in language decomposers (Rust, Python, TypeScript, etc.).
 pub mod languages;
 
 use std::collections::HashMap;
@@ -32,6 +43,7 @@ use spec::Decomposer;
 /// auto-discovery via `linkme`.
 pub type SyntaxFactory = fn() -> Vec<(&'static str, Box<dyn Decomposer>)>;
 
+/// Distributed slice collecting all registered syntax decomposer factories.
 #[linkme::distributed_slice]
 pub static SYNTAX_FACTORIES: [SyntaxFactory];
 
@@ -100,6 +112,7 @@ pub struct SyntaxRegistry {
     compound: HashMap<&'static str, HashMap<&'static str, Arc<dyn Decomposer>>>,
 }
 
+/// Lookup, construction, and symbol extraction methods for the registry.
 impl SyntaxRegistry {
     /// Outer template extensions that support injection-based decomposition.
     const INJECTION_OUTERS: &[&'static str] = &["j2"];
@@ -352,5 +365,6 @@ pub fn require_fragment<'a>(fragments: &'a [fragment::Fragment], path: &[String]
     find_fragment(fragments, path).ok_or_else(|| eyre!("fragment not found: {}", path.join("/")))
 }
 
+/// Tests for syntax decomposition.
 #[cfg(test)]
 mod tests;

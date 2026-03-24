@@ -29,6 +29,7 @@ pub enum SymbolKind {
     Decorator,
 }
 
+/// Display and classification methods for `SymbolKind`.
 impl SymbolKind {
     /// Filesystem directory name for this symbol kind (lowercased display form).
     pub fn directory_name(self) -> String { self.to_string().to_lowercase() }
@@ -68,6 +69,7 @@ pub enum FragmentKind {
     Preamble,
 }
 
+/// Query methods for `FragmentKind`.
 impl FragmentKind {
     /// Structural fragments are metadata (docstrings, imports, decorators)
     /// rather than navigable symbols. They should not receive `fs_name` or
@@ -75,6 +77,7 @@ impl FragmentKind {
     pub const fn is_structural(&self) -> bool { matches!(self, Self::Docstring | Self::Imports | Self::Decorator) }
 }
 
+/// Display implementation for `FragmentKind`.
 impl Display for FragmentKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -135,6 +138,7 @@ pub struct Fragment {
     pub fs_name: Option<String>,
 }
 
+/// Construction and span computation methods for fragments.
 impl Fragment {
     /// Construct a fragment.
     ///

@@ -8,8 +8,10 @@ use super::prelude::*;
 /// syntax and LSP language registration.
 pub const EXTENSIONS: &[&str] = &["py"];
 
+/// Python language specification for tree-sitter decomposition.
 struct PythonLanguage;
 
+/// Constants for Python tree-sitter node kinds.
 impl PythonLanguage {
     /// Tree-sitter node kind for comments.
     const COMMENT: &str = "comment";
@@ -21,6 +23,7 @@ impl PythonLanguage {
     const STRING: &str = "string";
 }
 
+/// [`LanguageSpec`] implementation for Python.
 impl LanguageSpec for PythonLanguage {
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
     const IMPORT_KINDS: &'static [&'static str] = &["import_statement", "import_from_statement"];
@@ -162,11 +165,13 @@ fn skip_string_prefix(s: &str) -> &str {
     &s[prefix_len..]
 }
 
+/// Check whether a string starts with triple quotes.
 fn is_triple_quoted(text: &str) -> bool {
     let after = skip_string_prefix(text);
     after.starts_with("\"\"\"") || after.starts_with("'''")
 }
 
+/// Strip triple-quote delimiters from a docstring.
 fn strip_triple_quotes(s: &str) -> (&str, &str) {
     let after_prefix = skip_string_prefix(s);
     for quote in &["\"\"\"", "'''"] {
@@ -222,5 +227,6 @@ fn dedent_docstring(content: &str) -> String {
 
 register_syntax!(PythonLanguage);
 
+/// Tests for Python decomposition.
 #[cfg(test)]
 mod tests;

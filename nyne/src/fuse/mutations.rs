@@ -7,7 +7,9 @@ use tracing::debug;
 
 use super::{GENERATION, NyneFs, extract_errno};
 
+/// FUSE mutation handlers for create, mkdir, remove, and rename.
 impl NyneFs {
+    /// Handles file creation in a parent directory.
     pub(super) fn do_create(&self, req: &Request, parent: INodeNo, name: &OsStr, flags: i32, reply: ReplyCreate) {
         with_parent_ctx!(self, parent, name, reply, "create", |parent_ino, name_str, ctx| {
             let result = fuse_try!(reply, self.router.create_node(&name_str, &ctx),
@@ -27,6 +29,7 @@ impl NyneFs {
         });
     }
 
+    /// Handles directory creation in a parent directory.
     pub(super) fn do_mkdir(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
         with_parent_ctx!(self, parent, name, reply, "mkdir", |parent_ino, name_str, ctx| {
             let result = fuse_try!(reply, self.router.mkdir_node(&name_str, &ctx),
@@ -40,6 +43,7 @@ impl NyneFs {
         });
     }
 
+    /// Handles file or directory removal.
     pub(super) fn do_remove(&self, parent: INodeNo, name: &OsStr, is_dir: bool, reply: ReplyEmpty) {
         let label = if is_dir { "rmdir" } else { "unlink" };
         with_parent_ctx!(self, parent, name, reply, "remove", |parent_ino, name_str, ctx| {
@@ -49,6 +53,7 @@ impl NyneFs {
         });
     }
 
+    /// Handles rename/move of a file or directory.
     pub(super) fn do_rename(
         &self,
         parent: INodeNo,

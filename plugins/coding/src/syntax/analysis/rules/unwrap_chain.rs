@@ -7,8 +7,10 @@ use crate::syntax::parser::TsNode;
 /// Minimum `.unwrap()` calls to trigger (in a single statement or consecutive).
 const MIN_UNWRAPS: usize = 2;
 
+/// Analysis rule that detects chained unwrap calls.
 struct UnwrapChain;
 
+/// [`AnalysisRule`] implementation for `UnwrapChain`.
 impl AnalysisRule for UnwrapChain {
     fn id(&self) -> &'static str { "unwrap-chain" }
 
@@ -36,6 +38,7 @@ impl AnalysisRule for UnwrapChain {
     }
 }
 
+/// Count the number of .`unwrap()` calls within a node subtree.
 fn count_unwrap_calls(node: tree_sitter::Node<'_>, source: &[u8]) -> usize {
     let mut count = 0;
     let mut cursor = node.walk();
@@ -43,6 +46,7 @@ fn count_unwrap_calls(node: tree_sitter::Node<'_>, source: &[u8]) -> usize {
     count
 }
 
+/// Recursively walk a subtree counting .`unwrap()` call nodes.
 fn count_unwraps_recursive(cursor: &mut tree_sitter::TreeCursor<'_>, source: &[u8], count: &mut usize) {
     let node = cursor.node();
     if kinds::CALL.contains(&node.kind())

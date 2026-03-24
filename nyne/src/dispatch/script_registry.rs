@@ -16,6 +16,7 @@ pub struct ScriptRegistry {
     scripts: HashMap<String, Arc<dyn Script>>,
 }
 
+/// Script discovery, registration, and execution.
 impl ScriptRegistry {
     /// Build the registry from all plugin-provided scripts.
     pub(crate) fn new(ctx: &Arc<ActivationContext>) -> Self {

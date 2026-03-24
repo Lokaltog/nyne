@@ -27,6 +27,7 @@ pub(super) struct BranchRename {
     pub branch_name: String,
 }
 
+/// [`Renameable`] implementation for [`BranchRename`].
 impl Renameable for BranchRename {
     fn rename(&self, ctx: &RenameContext<'_>) -> Result<()> {
         self.repo
@@ -46,6 +47,7 @@ pub(super) struct BranchRemove {
     pub branch_name: String,
 }
 
+/// [`Unlinkable`] implementation for [`BranchRemove`].
 impl Unlinkable for BranchRemove {
     fn unlink(&self, _ctx: &RequestContext<'_>) -> Result<()> { self.repo.delete_branch(&self.branch_name) }
 }
@@ -118,6 +120,7 @@ pub(super) struct BranchBlobContent {
     pub path: String,
 }
 
+/// [`Readable`] implementation for [`BranchBlobContent`].
 impl Readable for BranchBlobContent {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.repo.blob_at_ref(&self.branch, &self.path) }
 }

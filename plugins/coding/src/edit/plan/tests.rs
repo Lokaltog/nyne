@@ -40,6 +40,7 @@ fn code_fragment(
 
 // Issue 3: Replace must use full_span (matching body.rs read range)
 
+/// Verifies that replacing a symbol body includes the full span with doc comments.
 #[test]
 fn replace_body_uses_full_span_including_doc_comment() {
     // Source with a doc comment preceding a function.
@@ -72,6 +73,7 @@ fn replace_body_uses_full_span_including_doc_comment() {
     assert_eq!(modified, "/// New doc\nfn foo() {\n    99\n}\n");
 }
 
+/// Verifies that replacing a body with identical content is a no-op.
 #[test]
 fn replace_body_round_trip_is_noop() {
     // Round-trip: reading the body (full_span) and writing it back via
@@ -101,6 +103,7 @@ fn replace_body_round_trip_is_noop() {
 
 // Issue 4: Append into empty scopes
 
+/// Verifies that appending into an empty impl block inserts correctly.
 #[test]
 fn append_into_empty_impl_block() {
     let source = "impl Foo {}\n";
@@ -128,6 +131,7 @@ fn append_into_empty_impl_block() {
     assert!(modified.ends_with("}\n"), "closing brace preserved");
 }
 
+/// Verifies that appending into an impl block with existing children works.
 #[test]
 fn append_into_scope_with_children_still_works() {
     let source = "impl Foo {\n    fn existing() {}\n}\n";

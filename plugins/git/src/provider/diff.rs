@@ -26,6 +26,7 @@ pub(super) struct DiffContent {
     pub target: DiffTarget,
 }
 
+/// [`Readable`] implementation for [`DiffContent`].
 impl Readable for DiffContent {
     fn read(&self, ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let text = match &self.target {

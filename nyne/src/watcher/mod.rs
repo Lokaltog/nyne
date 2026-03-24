@@ -63,6 +63,7 @@ pub struct FsWatcher {
     _event_thread: thread::JoinHandle<()>,
 }
 
+/// Construction and lifecycle for the filesystem watcher.
 impl FsWatcher {
     /// Create a new filesystem watcher rooted at `watch_root`.
     ///

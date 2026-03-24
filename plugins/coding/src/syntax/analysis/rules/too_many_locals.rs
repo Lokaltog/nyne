@@ -7,8 +7,10 @@ use crate::syntax::parser::TsNode;
 /// Maximum local variable bindings before triggering.
 const MAX_LOCALS: usize = 10;
 
+/// Analysis rule that detects functions with too many local variables.
 struct TooManyLocals;
 
+/// [`AnalysisRule`] implementation for `TooManyLocals`.
 impl AnalysisRule for TooManyLocals {
     fn id(&self) -> &'static str { "too-many-locals" }
 

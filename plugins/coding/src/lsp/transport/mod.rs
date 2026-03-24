@@ -28,6 +28,7 @@ impl JsonRpcError {
     /// JSON-RPC standard error code for "method not found".
     pub const METHOD_NOT_FOUND: i64 = -32601;
 
+    /// Whether this error indicates the method is not supported by the server.
     pub const fn is_method_not_found(&self) -> bool { self.code == Self::METHOD_NOT_FOUND }
 }
 

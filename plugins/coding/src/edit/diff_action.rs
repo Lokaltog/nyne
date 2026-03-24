@@ -58,6 +58,7 @@ pub struct DiffActionNode<T> {
     name: String,
 }
 
+/// Inherent methods for `DiffActionNode`.
 impl<T> DiffActionNode<T> {
     /// Wrap an action with the node's filename for path-aware headers.
     pub fn new(name: impl Into<String>, action: T) -> Self {
@@ -76,6 +77,7 @@ impl<T: DiffAction + Clone + 'static> DiffActionNode<T> {
     }
 }
 
+/// `Readable` implementation that renders computed edits as a unified diff preview.
 impl<T: DiffAction> Readable for DiffActionNode<T> {
     fn read(&self, ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let edits = self.action.compute_edits(ctx)?;
@@ -106,6 +108,7 @@ impl<T: DiffAction> Readable for DiffActionNode<T> {
     }
 }
 
+/// `Unlinkable` implementation that applies computed edits to disk on delete.
 impl<T: DiffAction> Unlinkable for DiffActionNode<T> {
     fn unlink(&self, ctx: &RequestContext<'_>) -> Result<()> {
         let edits = self.action.compute_edits(ctx)?;

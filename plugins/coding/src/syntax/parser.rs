@@ -17,15 +17,21 @@ pub struct TsNode<'a> {
     source: &'a [u8],
 }
 
+/// Methods for navigating and extracting data from tree-sitter nodes.
 impl<'a> TsNode<'a> {
+    /// Create a new `TsNode` wrapping a raw tree-sitter node and its source bytes.
     pub const fn new(node: tree_sitter::Node<'a>, source: &'a [u8]) -> Self { Self { node, source } }
 
+    /// The tree-sitter node kind string (e.g. `"function_item"`, `"class_definition"`).
     pub fn kind(&self) -> &str { self.node.kind() }
 
+    /// The UTF-8 text of this node, or empty string if invalid.
     pub fn text(&self) -> &'a str { self.node.utf8_text(self.source).unwrap_or("") }
 
+    /// Byte range `start..end` of this node in the source.
     pub fn byte_range(&self) -> Range<usize> { self.node.byte_range() }
 
+    /// Start byte offset of this node in the source.
     pub fn start_byte(&self) -> usize { self.node.start_byte() }
 
     /// Access a named field child (e.g. `"name"`, `"body"`, `"type"`).
@@ -53,6 +59,7 @@ impl<'a> TsNode<'a> {
     /// First line of this node's text, trimmed.
     pub fn first_line(&self) -> &'a str { self.text().lines().next().unwrap_or("").trim() }
 
+    /// Build a type signature string like `"pub struct Foo"` from keyword and visibility.
     pub fn type_signature(&self, keyword: &str, visibility: Option<&str>) -> String {
         let name = self.field_text("name").unwrap_or("?");
         match visibility {
@@ -94,6 +101,9 @@ impl<'a> TsNode<'a> {
     pub fn source_str(&self) -> &'a str { from_utf8(self.source).unwrap_or("") }
 }
 
+/// Merge byte ranges of preceding siblings matched by `collect_fn` into a single span.
+///
+/// Walks backwards from `node`, trimming trailing newlines from the result.
 pub fn merge_preceding_sibling_ranges(
     node: TsNode<'_>,
     mut collect_fn: impl FnMut(TsNode<'_>) -> Option<bool>,
@@ -168,6 +178,7 @@ pub fn collect_parse_errors(tree: &tree_sitter::Tree, source: &[u8]) -> Vec<Pars
     errors
 }
 
+/// Recursively walk the tree-sitter tree collecting ERROR and MISSING nodes.
 fn collect_errors_recursive(cursor: &mut tree_sitter::TreeCursor<'_>, source: &[u8], errors: &mut Vec<ParseError>) {
     let node = cursor.node();
     if node.is_error() || node.is_missing() {
@@ -238,6 +249,7 @@ pub struct TreeSitterParser {
     parser: Mutex<tree_sitter::Parser>,
 }
 
+/// Core parsing and decomposition methods for `TreeSitterParser`.
 impl TreeSitterParser {
     /// Create a new parser for the given tree-sitter language.
     ///
@@ -262,6 +274,7 @@ impl TreeSitterParser {
         parser.parse(source, None)
     }
 
+    /// Validate that `source` parses without syntax errors.
     pub fn validate(&self, source: &str, lang_name: &str) -> Result<()> {
         let tree = self
             .parse(source)

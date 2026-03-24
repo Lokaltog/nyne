@@ -2,6 +2,7 @@ use super::*;
 use crate::node::builtins::StaticContent;
 use crate::test_support::*;
 
+/// Tests that derive produces a sliced node for a valid slice suffix.
 #[test]
 fn derive_matches_valid_slice() {
     let base = Arc::new(VirtualNode::file("BLAME.md", StaticContent(b"line1\nline2\nline3\n")));
@@ -12,6 +13,7 @@ fn derive_matches_valid_slice() {
     assert_eq!(result.unwrap().name(), "BLAME.md:1-2");
 }
 
+/// Tests that derive returns None when the base name does not match.
 #[test]
 fn derive_declines_non_matching_name() {
     let base = Arc::new(VirtualNode::file("LOG.md", StaticContent(b"content")));
@@ -21,6 +23,7 @@ fn derive_declines_non_matching_name() {
     assert!(result.is_none());
 }
 
+/// Tests that derive returns None when no slice suffix is present.
 #[test]
 fn derive_declines_no_slice_suffix() {
     let base = Arc::new(VirtualNode::file("BLAME.md", StaticContent(b"content")));
@@ -30,6 +33,7 @@ fn derive_declines_no_slice_suffix() {
     assert!(result.is_none());
 }
 
+/// Tests that sliced content correctly extracts the specified line range.
 #[test]
 fn sliced_content_extracts_lines() {
     let base = Arc::new(VirtualNode::file("TEST.md", StaticContent(b"aaa\nbbb\nccc\nddd")));
@@ -40,6 +44,7 @@ fn sliced_content_extracts_lines() {
     assert_eq!(content, b"bbb\nccc");
 }
 
+/// Verifies that derived sliced nodes are hidden from readdir.
 #[test]
 fn derived_node_is_hidden() {
     use crate::node::Visibility;
@@ -50,6 +55,7 @@ fn derived_node_is_hidden() {
     assert_eq!(derived.visibility(), Visibility::Hidden);
 }
 
+/// Tests that the derived node is writable when the base node is writable.
 #[test]
 fn derive_writable_when_base_writable() {
     struct StubWritable;
@@ -64,6 +70,7 @@ fn derive_writable_when_base_writable() {
     assert!(derived.writable().is_some());
 }
 
+/// Tests that the derived node is not writable when the base is read-only.
 #[test]
 fn derive_not_writable_when_base_readonly() {
     let base = Arc::new(VirtualNode::file("BLAME.md", StaticContent(b"content")));
@@ -73,6 +80,7 @@ fn derive_not_writable_when_base_readonly() {
     assert!(derived.writable().is_none());
 }
 
+/// Tests that splice_lines replaces a line range correctly.
 #[test]
 fn splice_lines_replaces_range() {
     let current = b"aaa\nbbb\nccc\nddd\n";
@@ -81,6 +89,7 @@ fn splice_lines_replaces_range() {
     assert_eq!(result, b"aaa\nXXX\nYYY\nddd\n");
 }
 
+/// Tests that splice_lines replaces a single line.
 #[test]
 fn splice_lines_single() {
     let current = b"aaa\nbbb\nccc\n";
@@ -89,6 +98,7 @@ fn splice_lines_single() {
     assert_eq!(result, b"aaa\nZZZ\nccc\n");
 }
 
+/// Tests that splice_lines replaces trailing lines.
 #[test]
 fn splice_lines_tail() {
     let current = b"aaa\nbbb\nccc\n";
@@ -96,6 +106,7 @@ fn splice_lines_tail() {
     let result = splice_lines(current, &spec, b"NEW");
     assert_eq!(result, b"aaa\nbbb\nNEW\n");
 }
+/// Tests that the derived node is unlinkable when the base is writable.
 #[test]
 fn derive_unlinkable_when_base_writable() {
     struct StubWritable;
@@ -110,6 +121,7 @@ fn derive_unlinkable_when_base_writable() {
     assert!(derived.unlinkable().is_some());
 }
 
+/// Tests that the derived node is not unlinkable when the base is read-only.
 #[test]
 fn derive_not_unlinkable_when_base_readonly() {
     let base = Arc::new(VirtualNode::file("BLAME.md", StaticContent(b"content")));
@@ -119,6 +131,7 @@ fn derive_not_unlinkable_when_base_readonly() {
     assert!(derived.unlinkable().is_none());
 }
 
+/// Tests that splicing empty data deletes the targeted line range.
 #[test]
 fn splice_lines_empty_data_deletes_range() {
     let current = b"aaa\nbbb\nccc\nddd\n";

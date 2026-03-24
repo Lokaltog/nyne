@@ -55,6 +55,7 @@ pub struct LspConfig {
     pub workspace_symbol_limit: usize,
 }
 
+/// Default implementation for `LspConfig`.
 impl Default for LspConfig {
     fn default() -> Self {
         Self {
@@ -102,12 +103,16 @@ pub struct CustomLspServer {
     pub extensions: Vec<String>,
 }
 
+/// Default cache TTL for LSP query results (5 minutes).
 const fn default_lsp_cache_ttl() -> Duration {
     Duration::from_secs(300) // 5 minutes
 }
 
+/// Default timeout for waiting on LSP diagnostics after a write (2 seconds).
 const fn default_diagnostics_timeout() -> Duration { Duration::from_secs(2) }
 
+/// Default timeout for individual LSP request-response cycles (10 seconds).
 const fn default_response_timeout() -> Duration { Duration::from_secs(10) }
 
+/// Default maximum number of results for workspace symbol search.
 const fn default_workspace_symbol_limit() -> usize { 20 }

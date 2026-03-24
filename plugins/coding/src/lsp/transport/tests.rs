@@ -10,6 +10,7 @@ fn frame(msg: &serde_json::Value) -> Vec<u8> {
     format!("Content-Length: {}\r\n\r\n{payload}", payload.len()).into_bytes()
 }
 
+/// Tests that `send_request` produces valid Content-Length framed JSON-RPC.
 #[test]
 fn send_request_framing() {
     let mut buf = Vec::new();
@@ -33,6 +34,7 @@ fn send_request_framing() {
     assert_eq!(declared_len, parts[1].len());
 }
 
+/// Tests that `send_notification` omits the `id` field.
 #[test]
 fn send_notification_has_no_id() {
     let mut buf = Vec::new();
@@ -47,6 +49,7 @@ fn send_notification_has_no_id() {
     assert!(body.get("id").is_none());
 }
 
+/// Tests that extra headers beyond Content-Length are ignored.
 #[test]
 fn read_headers_ignores_extra_headers() {
     let raw = "Content-Length: 42\r\nContent-Type: application/json\r\n\r\n";
@@ -55,6 +58,7 @@ fn read_headers_ignores_extra_headers() {
     assert_eq!(len, 42);
 }
 
+/// Tests that `read_message` parses a Content-Length framed JSON value.
 #[test]
 fn read_message_parses_framed_json() {
     let msg = json!({"jsonrpc": "2.0", "id": 1, "result": {"ok": true}});
@@ -63,6 +67,7 @@ fn read_message_parses_framed_json() {
     assert_eq!(parsed, msg);
 }
 
+/// Tests that `read_message` reads two consecutive messages from a stream.
 #[test]
 fn read_message_reads_sequential_messages() {
     let msg1 = json!({"jsonrpc": "2.0", "method": "progress", "params": {}});
@@ -75,6 +80,7 @@ fn read_message_reads_sequential_messages() {
     assert_eq!(read_message(&mut cursor).unwrap(), msg2);
 }
 
+/// Tests that `parse_response_result` extracts the `result` field.
 #[test]
 fn parse_response_result_extracts_result() {
     let msg = json!({"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {}}});
@@ -82,6 +88,7 @@ fn parse_response_result_extracts_result() {
     assert_eq!(result, json!({"capabilities": {}}));
 }
 
+/// Tests that a missing `result` field returns `Null` rather than an error.
 #[test]
 fn parse_response_result_returns_null_when_result_missing() {
     let msg = json!({"jsonrpc": "2.0", "id": 1});
@@ -89,6 +96,7 @@ fn parse_response_result_returns_null_when_result_missing() {
     assert_eq!(result, serde_json::Value::Null);
 }
 
+/// Tests that an `error` field is returned as a `JsonRpcError`.
 #[test]
 fn parse_response_result_returns_json_rpc_error() {
     let msg = json!({
@@ -102,6 +110,7 @@ fn parse_response_result_returns_json_rpc_error() {
     assert!(rpc_err.message.contains("Invalid Request"));
 }
 
+/// Tests that error code -32601 is recognized as method-not-found.
 #[test]
 fn parse_response_result_method_not_found() {
     let msg = json!({
@@ -114,6 +123,7 @@ fn parse_response_result_method_not_found() {
     assert!(rpc_err.is_method_not_found());
 }
 
+/// Verifies that `write_message` output can be read back by `read_message`.
 #[test]
 fn write_message_roundtrips_through_read_message() {
     let msg = json!({"jsonrpc": "2.0", "id": 42, "method": "test", "params": {}});

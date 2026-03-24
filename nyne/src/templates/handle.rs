@@ -33,6 +33,7 @@ pub struct TemplateHandle {
     key: &'static str,
 }
 
+/// Construction and rendering for pre-bound template handles.
 impl TemplateHandle {
     /// Create a handle from a shared engine and a registered template key.
     pub fn new(engine: &Arc<TemplateEngine>, key: &'static str) -> Self {
@@ -62,10 +63,12 @@ pub struct HandleBuilder {
     engine: TemplateEngine,
 }
 
+/// Default implementation for `HandleBuilder`.
 impl Default for HandleBuilder {
     fn default() -> Self { Self::new() }
 }
 
+/// Template registration and engine construction.
 impl HandleBuilder {
     pub fn new() -> Self {
         Self {

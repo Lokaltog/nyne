@@ -2,6 +2,7 @@ use rstest::rstest;
 
 use super::*;
 
+/// Verifies that sanitize produces valid kebab-case session ID components.
 #[rstest]
 #[case("nyne", "nyne")]
 #[case("My_Project", "my-project")]
@@ -16,6 +17,7 @@ fn sanitize_cases(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(sanitize(input), expected);
 }
 
+/// Verifies that SessionId::new accepts valid IDs and rejects invalid ones.
 #[rstest]
 #[case("valid-id", true)]
 #[case("123", true)]

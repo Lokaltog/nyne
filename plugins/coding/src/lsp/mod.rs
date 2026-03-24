@@ -2,19 +2,32 @@
 // in the next phase. All dead-code warnings are from not-yet-wired consumers.
 #![allow(dead_code)]
 
+/// TTL-based cache for LSP query results.
 pub mod cache;
+/// LSP client for communicating with language server subprocesses.
 pub mod client;
+/// Storage for push diagnostics received from LSP servers.
 pub mod diagnostic_store;
+/// Template-ready rendering of LSP diagnostics.
 pub mod diagnostic_view;
+/// Application of LSP workspace edits to files on disk.
 pub mod edit;
+/// Per-file and per-symbol LSP query handles.
 pub mod handle;
+/// LSP server lifecycle management and cached queries.
 pub mod manager;
+/// Path rewriting between FUSE display root and overlay storage root.
 pub mod path;
+/// Scoped LSP query handles for file-level operations.
 pub mod query;
+/// LSP server definition traits and types.
 pub mod spec;
+/// JSON-RPC transport layer for LSP communication.
 pub mod transport;
+/// Conversions between filesystem paths and LSP URIs.
 pub mod uri;
 
+/// Per-language LSP server configurations registered via `register_lsp!`.
 mod languages;
 
 use std::collections::{HashMap, HashSet};
@@ -66,6 +79,7 @@ pub struct LspRegistry {
 }
 
 impl LspRegistry {
+    /// Build the registry from all link-time registered LSP language definitions.
     pub(crate) fn build() -> Self {
         let syntax = SyntaxRegistry::global();
         let mut servers: HashMap<String, Vec<LspServerDef>> = HashMap::new();
@@ -164,6 +178,7 @@ impl LspRegistry {
     }
 }
 
+/// Register a single file extension's LSP servers into the registry maps.
 fn register_ext(
     syntax: &SyntaxRegistry,
     ext: &str,
@@ -191,6 +206,7 @@ fn register_ext(
     language_ids.insert(ext.to_owned(), lang_def.language_id);
 }
 
+/// Emit a warning when multiple LSP specs register the same file extension.
 fn warn_duplicate_lsp_ext(ext: &str, existing: &[LspServerDef], lang_def: &LspLanguageDef) {
     tracing::warn!(
         target: "nyne::lsp",

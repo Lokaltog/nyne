@@ -9,6 +9,7 @@
 //!    template key to a shared engine.
 //! 2. Call [`TemplateHandle::node`] at resolve time to produce `VirtualNode`s.
 
+/// Pre-bound template handles for producing virtual file nodes.
 mod handle;
 
 use std::borrow::Cow;
@@ -28,10 +29,12 @@ pub struct TemplateEngine {
     env: Environment<'static>,
 }
 
+/// Default implementation for `TemplateEngine`.
 impl Default for TemplateEngine {
     fn default() -> Self { Self::new() }
 }
 
+/// Template registration, rendering, and global variable management.
 impl TemplateEngine {
     /// Create a new engine with shared settings and filters.
     pub fn new() -> Self {
@@ -106,6 +109,7 @@ pub trait TemplateView: Send + Sync {
 /// Adapts any [`Serialize`] value into a [`TemplateView`].
 struct SerializeView<T>(T);
 
+/// Renders by serializing the inner value directly into the template engine.
 impl<T: Serialize + Send + Sync> TemplateView for SerializeView<T> {
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         Ok(engine.render_bytes(template, &self.0))
@@ -134,6 +138,7 @@ pub struct TemplateContent {
     view: Box<dyn TemplateView>,
 }
 
+/// Construction for template-backed readable nodes.
 impl TemplateContent {
     /// Create a new template-backed readable.
     ///
@@ -148,6 +153,7 @@ impl TemplateContent {
     }
 }
 
+/// Delegates reads to the inner [`TemplateView`] for on-demand rendering.
 impl Readable for TemplateContent {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.view.render(&self.engine, self.template) }
 }

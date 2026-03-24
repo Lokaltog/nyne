@@ -118,7 +118,9 @@ pub struct NyneFs {
     visibility: Arc<VisibilityMap>,
 }
 
+/// Core FUSE handler methods for inode resolution and content I/O.
 impl NyneFs {
+    /// Creates a new FUSE filesystem handler.
     pub fn new(router: Arc<Router>, visibility: Arc<VisibilityMap>) -> Self {
         Self {
             router,
@@ -131,6 +133,7 @@ impl NyneFs {
         }
     }
 
+    /// Dispatches inode operations to real or virtual handlers.
     fn with_inode_io<T>(
         &self,
         ino: u64,

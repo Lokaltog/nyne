@@ -33,6 +33,7 @@ pub struct CompanionSplit {
     pub rest: Vec<String>,
 }
 
+/// Route dispatch helpers for companion path splits.
 impl CompanionSplit {
     /// Convert to route dispatch parameters: rest segments as `&str` slices
     /// and a `RouteParams` with the `"source"` capture pre-populated.

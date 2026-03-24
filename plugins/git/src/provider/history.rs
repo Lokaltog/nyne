@@ -60,10 +60,12 @@ pub struct HistoryVersionContent {
     pub oid: Oid,
 }
 
+/// [`Readable`] implementation for [`HistoryVersionContent`].
 impl Readable for HistoryVersionContent {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.repo.blob_at(&self.rel_path, self.oid) }
 }
 
+/// History-related methods on [`GitRepo`] — blame, file history, contributors, and notes.
 impl GitRepo {
     /// Collect blame hunks for a file, including uncommitted changes.
     ///
@@ -89,6 +91,7 @@ impl GitRepo {
         walk_file_commits(&repo, rel_path, limit, commit_entry)
     }
 
+    /// Commits that touched `rel_path` within the given line range, newest first.
     pub fn file_history_in_range(
         &self,
         rel_path: &str,
@@ -197,6 +200,7 @@ impl GitRepo {
     }
 }
 
+/// Convert a `git2::BlameHunk` into a [`BlameHunk`] with commit metadata.
 fn blame_hunk(repo: &git2::Repository, hunk: &git2::BlameHunk<'_>) -> Result<BlameHunk> {
     let oid = hunk.orig_commit_id();
     let start = hunk.final_start_line();
@@ -229,6 +233,7 @@ fn blame_hunk(repo: &git2::Repository, hunk: &git2::BlameHunk<'_>) -> Result<Bla
     })
 }
 
+/// Convert a `git2::Commit` into a [`HistoryEntry`].
 fn commit_entry(commit: &git2::Commit<'_>, oid: Oid) -> HistoryEntry {
     HistoryEntry {
         oid,
@@ -273,6 +278,7 @@ fn first_file_commit(repo: &git2::Repository, rel_path: &str) -> Result<Oid> {
         .ok_or_else(|| color_eyre::eyre::eyre!("no commits found touching {rel_path}"))
 }
 
+/// Check whether a commit's diff touches the given path.
 fn commit_touches_path(repo: &git2::Repository, commit: &git2::Commit<'_>, rel_path: &str) -> Result<bool> {
     let commit_tree = commit.tree()?;
     let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());

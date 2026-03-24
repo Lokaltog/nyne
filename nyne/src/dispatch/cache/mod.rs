@@ -24,6 +24,7 @@ pub(super) enum NodeSource {
     Mutated,
 }
 
+/// Query methods for [`NodeSource`] lifecycle semantics.
 impl NodeSource {
     /// Whether this source participates in the resolve generation lifecycle.
     ///
@@ -44,7 +45,9 @@ pub(super) enum CachedNodeKind {
     Real { file_type: FileKind },
 }
 
+/// Conversions and queries on cached node kinds.
 impl CachedNodeKind {
+    /// Map this cached node kind to the underlying [`FileKind`].
     pub(super) fn file_kind(&self) -> FileKind {
         match self {
             Self::Real { file_type } => *file_type,
@@ -62,6 +65,7 @@ pub(super) struct NodeEntry {
     pub source: NodeSource,
 }
 
+/// A single node stored in the L1 directory cache.
 pub(super) struct CachedNode {
     pub(super) inode: u64,
     pub(super) kind: CachedNodeKind,
@@ -74,6 +78,7 @@ pub(super) struct CachedNode {
     pub(super) generation: u64,
 }
 
+/// Visibility and ownership queries for cached nodes.
 impl CachedNode {
     /// Whether this node is visible in readdir.
     ///
@@ -98,6 +103,7 @@ impl CachedNode {
     }
 }
 
+/// Per-directory cache state: nodes, resolve status, and generation tracking.
 pub(super) struct DirState {
     /// Nodes keyed by name. O(1) lookup, no duplicate names possible.
     nodes: HashMap<String, CachedNode>,
@@ -125,11 +131,15 @@ pub(super) struct DirState {
     no_cache: bool,
 }
 
+/// Default implementation for `DirState`.
 impl Default for DirState {
+    /// Delegates to [`DirState::new`].
     fn default() -> Self { Self::new() }
 }
 
+/// Directory state management: resolution, entries, generation sweeps.
 impl DirState {
+    /// Create an empty, unresolved directory state.
     pub(super) fn new() -> Self {
         Self {
             nodes: HashMap::new(),
@@ -321,11 +331,15 @@ pub(super) struct L1Cache {
     dirs: RwLock<BTreeMap<VfsPath, DirHandle>>,
 }
 
+/// Default implementation for `L1Cache`.
 impl Default for L1Cache {
+    /// Delegates to [`L1Cache::new`].
     fn default() -> Self { Self::new() }
 }
 
+/// L1 directory cache operations: lookup, invalidation, prefix scanning.
 impl L1Cache {
+    /// Create an empty L1 cache.
     pub(super) const fn new() -> Self {
         Self {
             dirs: RwLock::new(BTreeMap::new()),
@@ -503,5 +517,6 @@ impl L1Cache {
     }
 }
 
+/// Unit tests for the L1 directory cache.
 #[cfg(test)]
 mod tests;

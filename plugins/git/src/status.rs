@@ -33,6 +33,7 @@ pub struct StatusEntry {
     pub label: &'static str,
 }
 
+/// Status-related methods on [`GitRepo`].
 impl GitRepo {
     /// Snapshot the full repository status.
     pub(crate) fn status(&self) -> Result<RepoStatus> {
@@ -95,12 +96,14 @@ impl GitRepo {
     }
 }
 
+/// Return the first matching label from `table` for a given git status.
 fn classify_status(s: git2::Status, table: &[(git2::Status, &'static str)]) -> Option<&'static str> {
     table
         .iter()
         .find_map(|&(flag, label)| s.contains(flag).then_some(label))
 }
 
+/// Status flag to label mapping for staged (index) changes.
 const INDEX_LABELS: &[(git2::Status, &str)] = &[
     (git2::Status::INDEX_NEW, "new file"),
     (git2::Status::INDEX_MODIFIED, "modified"),
@@ -109,6 +112,7 @@ const INDEX_LABELS: &[(git2::Status, &str)] = &[
     (git2::Status::INDEX_TYPECHANGE, "typechange"),
 ];
 
+/// Status flag to label mapping for unstaged (working directory) changes.
 const WORKDIR_LABELS: &[(git2::Status, &str)] = &[
     (git2::Status::WT_MODIFIED, "modified"),
     (git2::Status::WT_DELETED, "deleted"),

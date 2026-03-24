@@ -1,3 +1,4 @@
+/// Route tree macro internals: parsing, validation, and code generation.
 mod routes;
 
 use proc_macro::TokenStream;

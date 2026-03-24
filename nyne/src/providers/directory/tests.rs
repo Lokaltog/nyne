@@ -3,6 +3,7 @@ use rstest::rstest;
 use super::*;
 use crate::templates::{HandleBuilder, TemplateHandle, serialize_view};
 
+/// Creates a template handle for directory overview tests.
 fn overview_handle() -> TemplateHandle {
     let mut b = HandleBuilder::new();
     let key = b.register(TMPL_OVERVIEW, include_str!("templates/overview.md.j2"));
@@ -31,6 +32,7 @@ fn overview_handle() -> TemplateHandle {
     Vec::new(),
     vec!["bin".into(), "src".into()],
 )]
+/// Tests that directory overview templates render correctly for various inputs.
 #[case::empty_dir("empty", Vec::new(), Vec::new())]
 fn overview_rendering(#[case] dir_name: &str, #[case] files: Vec<FileEntry>, #[case] subdirs: Vec<String>) {
     let h = overview_handle();

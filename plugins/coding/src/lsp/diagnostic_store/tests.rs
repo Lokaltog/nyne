@@ -17,6 +17,7 @@ fn dummy_diagnostic(message: &str, severity: DiagnosticSeverity) -> Diagnostic {
 }
 
 // SC-1: Clean reads are non-blocking.
+/// Tests that a clean (non-dirty) file returns diagnostics without blocking.
 #[test]
 fn clean_file_returns_immediately() {
     let store = DiagnosticStore::new();
@@ -33,6 +34,7 @@ fn clean_file_returns_immediately() {
 }
 
 // SC-1 supplement: Unknown file returns empty immediately.
+/// Tests that an unknown file returns empty diagnostics without blocking.
 #[test]
 fn unknown_file_returns_empty_immediately() {
     let store = DiagnosticStore::new();
@@ -43,6 +45,7 @@ fn unknown_file_returns_empty_immediately() {
 }
 
 // SC-2: Dirty file blocks until publish.
+/// Tests that a dirty file blocks readers until diagnostics are published.
 #[test]
 fn dirty_file_blocks_until_publish() {
     let store = Arc::new(DiagnosticStore::new());
@@ -72,6 +75,7 @@ fn dirty_file_blocks_until_publish() {
 }
 
 // SC-3: Dirty file times out.
+/// Tests that a dirty file returns stale diagnostics after the timeout.
 #[test]
 fn dirty_file_times_out() {
     let store = DiagnosticStore::new();
@@ -94,6 +98,7 @@ fn dirty_file_times_out() {
 }
 
 // SC-4: Multiple waiters all wake on publish.
+/// Tests that multiple waiters on the same file all wake on publish.
 #[test]
 fn multiple_waiters_all_wake() {
     let store = Arc::new(DiagnosticStore::new());
@@ -126,6 +131,7 @@ fn multiple_waiters_all_wake() {
 }
 
 // SC-5: Publish for file X doesn't wake waiter for file Y.
+/// Tests that publishing diagnostics for file B does not unblock a waiter on file A.
 #[test]
 fn publish_for_other_file_does_not_unblock() {
     let store = Arc::new(DiagnosticStore::new());
@@ -155,6 +161,7 @@ fn publish_for_other_file_does_not_unblock() {
     assert!(result.is_empty());
 }
 
+/// Tests that removing a file clears its diagnostics.
 #[test]
 fn remove_clears_entry() {
     let store = DiagnosticStore::new();
@@ -167,6 +174,7 @@ fn remove_clears_entry() {
     assert!(store.get_or_wait(path, Duration::ZERO).is_empty());
 }
 
+/// Tests that a mark-dirty then publish cycle updates diagnostics correctly.
 #[test]
 fn mark_dirty_then_publish_cycle() {
     let store = DiagnosticStore::new();

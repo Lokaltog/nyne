@@ -24,12 +24,14 @@ pub struct GitCompanionProvider {
     ctx: Arc<ActivationContext>,
 }
 
+/// Associated constants and constructor for [`GitCompanionProvider`].
 impl GitCompanionProvider {
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("git-companion");
 
     pub(crate) const fn new(ctx: Arc<ActivationContext>) -> Self { Self { ctx } }
 }
 
+/// [`Provider`] implementation for [`GitCompanionProvider`].
 impl Provider for GitCompanionProvider {
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
@@ -70,6 +72,7 @@ struct GitFileRename {
     source_file: VfsPath,
 }
 
+/// [`Renameable`] implementation for [`GitFileRename`].
 impl Renameable for GitFileRename {
     fn rename(&self, ctx: &RenameContext<'_>) -> Result<()> {
         let new_name = strip_companion_suffix(ctx.target_name)

@@ -12,6 +12,7 @@ pub struct RouteTreeBuilder<P> {
     root: RouteNodeBuilder<P>,
 }
 
+/// Builder for constructing a single route node with handlers and sub-routes.
 pub struct RouteNodeBuilder<P> {
     segment: SegmentMatcher,
     children_handler: Option<ChildrenHandler<P>>,
@@ -21,11 +22,15 @@ pub struct RouteNodeBuilder<P> {
     emit: bool,
 }
 
+/// Default implementation for `RouteTreeBuilder`.
 impl<P: Send + Sync + 'static> Default for RouteTreeBuilder<P> {
+    /// Delegates to [`RouteTreeBuilder::new`].
     fn default() -> Self { Self::new() }
 }
 
+/// Root-level builder methods for constructing a route tree.
 impl<P: Send + Sync + 'static> RouteTreeBuilder<P> {
+    /// Create an empty route tree builder with a root node.
     pub fn new() -> Self {
         Self {
             root: RouteNodeBuilder::new(SegmentMatcher::Root),
@@ -57,7 +62,9 @@ impl<P: Send + Sync + 'static> RouteTreeBuilder<P> {
     pub fn build(self) -> RouteTree<P> { RouteTree::from_root(self.root.build()) }
 }
 
+/// Node-level builder methods: segment matching, handlers, static files, sub-routes.
 impl<P: Send + Sync + 'static> RouteNodeBuilder<P> {
+    /// Create a route node builder for the given segment matcher.
     pub fn new(segment: SegmentMatcher) -> Self {
         let emit = matches!(segment, SegmentMatcher::Exact(_));
         Self {

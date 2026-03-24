@@ -7,8 +7,10 @@ use crate::syntax::parser::TsNode;
 /// Maximum methods in an impl/class block before triggering.
 const MAX_METHODS: usize = 15;
 
+/// Analysis rule that detects impl blocks with too many methods.
 struct TooManyMethods;
 
+/// [`AnalysisRule`] implementation for `TooManyMethods`.
 impl AnalysisRule for TooManyMethods {
     fn id(&self) -> &'static str { "too-many-methods" }
 
@@ -45,6 +47,7 @@ impl AnalysisRule for TooManyMethods {
     }
 }
 
+/// Extract the type name from an impl or class block node.
 fn impl_name<'a>(node: tree_sitter::Node<'_>, source: &'a [u8]) -> Option<&'a str> {
     let type_node = node
         .child_by_field_name("type")

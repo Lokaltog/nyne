@@ -63,10 +63,13 @@ impl LspServerDef {
         self
     }
 
+    /// Server identifier name.
     pub(crate) fn name(&self) -> &str { &self.name }
 
+    /// Executable command to spawn this server.
     pub(crate) fn command_str(&self) -> &str { &self.command }
 
+    /// Command-line arguments passed to the server on spawn.
     pub(crate) fn args_slice(&self) -> &[String] { &self.args }
 
     /// Override the command on an existing definition (used by config overrides).
@@ -75,6 +78,7 @@ impl LspServerDef {
     /// Override the arguments on an existing definition (used by config overrides).
     pub(crate) fn set_args(&mut self, args: Vec<String>) { self.args = args; }
 
+    /// Check whether this server is applicable for the given project root.
     pub(crate) fn is_applicable(&self, root: &Path) -> bool {
         let Some(f) = self.detect else {
             return true;
@@ -132,6 +136,7 @@ pub struct LspLanguageDef {
 }
 
 impl LspLanguageDef {
+    /// Build a runtime language definition from a compile-time `LspSpec`.
     pub(crate) fn from_spec<S: LspSpec>() -> Self {
         Self {
             extensions: S::EXTENSIONS,

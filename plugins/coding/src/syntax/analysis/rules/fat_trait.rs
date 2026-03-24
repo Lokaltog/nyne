@@ -23,8 +23,10 @@ const REQUIRED_METHOD: &[&str] = &[
     "method_signature",        // TypeScript interface methods
 ];
 
+/// Analysis rule that detects traits with too many required methods.
 struct FatTrait;
 
+/// [`AnalysisRule`] implementation for `FatTrait`.
 impl AnalysisRule for FatTrait {
     fn id(&self) -> &'static str { "fat-trait" }
 
@@ -64,6 +66,7 @@ impl AnalysisRule for FatTrait {
     }
 }
 
+/// Extract the name of a trait from its tree-sitter node.
 fn trait_name<'a>(node: tree_sitter::Node<'_>, source: &'a [u8]) -> Option<&'a str> {
     let name_node = node.child_by_field_name("name")?;
     kinds::node_str(&name_node, source)

@@ -14,14 +14,18 @@ use crate::templates::{TemplateHandle, serialize_view};
 use crate::types::file_kind::FileKind;
 use crate::types::path_conventions::split_companion_path;
 
+/// Template key for the directory overview.
 const TMPL_OVERVIEW: &str = "directory/overview";
 
+/// Provider that generates OVERVIEW.md for directory companions.
 pub(super) struct DirectoryProvider {
     overview: TemplateHandle,
     routes: RouteTree<Self>,
 }
 
+/// Construction and route handlers for the directory provider.
 impl DirectoryProvider {
+    /// Creates a new directory provider with the overview template.
     pub(super) fn new(_ctx: Arc<ActivationContext>) -> Self {
         let mut b = names::handle_builder();
         let overview_key = b.register(TMPL_OVERVIEW, include_str!("templates/overview.md.j2"));
@@ -35,6 +39,7 @@ impl DirectoryProvider {
         Self { overview, routes }
     }
 
+    /// Generates OVERVIEW.md content for a directory companion.
     fn children_companion_root(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let source = VfsPath::new(ctx.param("source"))?;
 
@@ -102,9 +107,12 @@ struct DirOverviewView {
     subdirs: Vec<String>,
 }
 
+/// Provider implementation for directory overview generation.
 impl Provider for DirectoryProvider {
+    /// Returns the directory provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// Dispatches children through companion routing.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes {
         let Some(split) = split_companion_path(ctx.path) else {
             return Ok(None);
@@ -112,6 +120,7 @@ impl Provider for DirectoryProvider {
         super::companion_children(&self.routes, &self, ctx, &split)
     }
 
+    /// Invalidates companion subtrees when real directory contents change.
     fn on_fs_change(&self, changed: &[VfsPath]) -> Vec<InvalidationEvent> {
         changed
             .iter()
@@ -128,6 +137,7 @@ impl Provider for DirectoryProvider {
 }
 
 impl DirectoryProvider {
+    /// The provider identifier for the directory provider.
     pub(super) const PROVIDER_ID: ProviderId = ProviderId::new("directory");
 }
 

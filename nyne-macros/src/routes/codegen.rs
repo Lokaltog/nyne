@@ -6,6 +6,7 @@ use super::parse::{
     FileEntry, FileModifier, LookupEntry, ParsedPattern, RouteEntry, RoutesInput, SegmentRoute, parse_pattern,
 };
 
+/// Generate the complete `RouteTree` token stream from parsed and validated route input.
 pub fn generate(input: &RoutesInput) -> Result<TokenStream> {
     let ty = &input.provider_ty;
     let route_calls = generate_entries(&input.entries, ty)?;
@@ -25,6 +26,7 @@ pub fn generate(input: &RoutesInput) -> Result<TokenStream> {
     })
 }
 
+/// Generate builder method calls for a list of route entries.
 fn generate_entries(entries: &[RouteEntry], ty: &syn::Type) -> Result<Vec<TokenStream>> {
     let mut calls = Vec::new();
     for entry in entries {
@@ -41,6 +43,7 @@ fn generate_entries(entries: &[RouteEntry], ty: &syn::Type) -> Result<Vec<TokenS
     Ok(calls)
 }
 
+/// Generate a `.route(...)` builder call for a single segment, including its children, lookups, and files.
 fn generate_segment(seg: &SegmentRoute, ty: &syn::Type) -> Result<TokenStream> {
     let pattern = parse_pattern(&seg.pattern)?;
     let builder_ctor = pattern_to_builder(&pattern);
@@ -79,6 +82,7 @@ fn generate_segment(seg: &SegmentRoute, ty: &syn::Type) -> Result<TokenStream> {
     })
 }
 
+/// Convert a parsed segment pattern into its `RouteNodeBuilder` constructor call.
 fn pattern_to_builder(pattern: &ParsedPattern) -> TokenStream {
     match pattern {
         ParsedPattern::Exact(s) => quote! { RouteNodeBuilder::exact(#s) },
@@ -95,6 +99,7 @@ fn pattern_to_builder(pattern: &ParsedPattern) -> TokenStream {
     }
 }
 
+/// Generate the `.lookup(...)` closure for a segment's lookup entries, combining pattern arms and an optional catch-all.
 fn generate_lookup_closure(lookups: &[LookupEntry], ty: &syn::Type) -> Result<Option<TokenStream>> {
     if lookups.is_empty() {
         return Ok(None);
@@ -140,6 +145,7 @@ fn generate_lookup_closure(lookups: &[LookupEntry], ty: &syn::Type) -> Result<Op
     }))
 }
 
+/// Generate an `if let` arm that strips a prefix/suffix from the lookup name and dispatches to the handler.
 fn generate_lookup_pattern_arm(pattern: &syn::LitStr, handler: &syn::Ident) -> Result<TokenStream> {
     let parsed = parse_pattern(pattern)?;
     let ParsedPattern::Capture { name, prefix, suffix } = parsed else {
@@ -212,6 +218,7 @@ fn generate_root_lookup(lookup: &LookupEntry, ty: &syn::Type) -> Result<TokenStr
     }
 }
 
+/// Generate a `.file(...)` builder call for a static file entry with its modifiers.
 fn generate_file(file: &FileEntry) -> TokenStream {
     let name = &file.name;
     let content = &file.content;

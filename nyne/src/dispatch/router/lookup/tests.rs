@@ -9,7 +9,9 @@ use crate::test_support::stub_request_context_at;
 /// Mock plugin that derives a node when the name has a `:echo` suffix.
 struct EchoPlugin;
 
+/// [`NodePlugin`] implementation that derives nodes when the name has a `:echo` suffix.
 impl NodePlugin for EchoPlugin {
+    /// Derive a node if the name ends with `:echo`, stripping the suffix.
     fn derive(
         &self,
         _base: &Arc<VirtualNode>,
@@ -24,6 +26,7 @@ impl NodePlugin for EchoPlugin {
     }
 }
 
+/// Insert a virtual node into a `DirState` for testing.
 fn insert_virtual(dir: &mut DirState, name: &str, node: VirtualNode) {
     dir.insert(name.to_owned(), CachedNode {
         inode: 1,
@@ -36,6 +39,7 @@ fn insert_virtual(dir: &mut DirState, name: &str, node: VirtualNode) {
     });
 }
 
+/// Tests that `derive_from_plugins` returns a derived node when a plugin matches.
 #[test]
 fn derive_from_plugins_returns_match() {
     let mut dir = DirState::new();
@@ -54,6 +58,7 @@ fn derive_from_plugins_returns_match() {
     assert!(matches!(entry.source, NodeSource::Derived));
 }
 
+/// Tests that `derive_from_plugins` returns `None` when no plugin matches.
 #[test]
 fn derive_from_plugins_returns_none_on_no_match() {
     let mut dir = DirState::new();
@@ -69,6 +74,7 @@ fn derive_from_plugins_returns_none_on_no_match() {
     assert!(result.is_none());
 }
 
+/// Tests that nodes without plugins are skipped during derivation.
 #[test]
 fn derive_from_plugins_skips_non_plugin_nodes() {
     let mut dir = DirState::new();
@@ -81,6 +87,7 @@ fn derive_from_plugins_skips_non_plugin_nodes() {
     assert!(result.is_none());
 }
 
+/// Tests that real filesystem entries are skipped during plugin derivation.
 #[test]
 fn derive_from_plugins_skips_real_entries() {
     let mut dir = DirState::new();

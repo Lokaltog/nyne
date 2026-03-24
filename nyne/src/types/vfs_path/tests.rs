@@ -3,6 +3,7 @@ use rstest::rstest;
 use super::*;
 use crate::test_support::vfs;
 
+/// Tests that extension extracts the part after the last dot.
 #[rstest]
 #[case::rust_file("src/main.rs", Some("rs"))]
 #[case::no_extension("Makefile", None)]
@@ -11,11 +12,13 @@ fn extension(#[case] path: &str, #[case] expected: Option<&str>) {
     assert_eq!(vfs(path).extension(), expected);
 }
 
+/// Verifies that the root path has no extension.
 #[test]
 fn root_path_has_no_extension() {
     assert_eq!(VfsPath::root().extension(), None);
 }
 
+/// Tests that compound_extension extracts the two rightmost extension segments.
 #[rstest]
 #[case::two_dots("template.md.j2", Some(("md", "j2")))]
 #[case::toml_j2("config.toml.j2", Some(("toml", "j2")))]
@@ -27,11 +30,13 @@ fn compound_extension(#[case] path: &str, #[case] expected: Option<(&str, &str)>
     assert_eq!(vfs(path).compound_extension(), expected);
 }
 
+/// Verifies that the root path has no compound extension.
 #[test]
 fn root_path_has_no_compound_extension() {
     assert_eq!(VfsPath::root().compound_extension(), None);
 }
 
+/// Tests that relative_to computes correct relative paths between two VfsPaths.
 #[rstest]
 #[case::same_parent("symbols/Foo@/body.rs", "symbols", "Foo@/body.rs")]
 #[case::one_level_up("symbols/Foo@/body.rs", "symbols/at-line", "../Foo@/body.rs")]

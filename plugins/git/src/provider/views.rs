@@ -25,6 +25,7 @@ use crate::repo::GitRepo;
 /// Default cap on history entries listed in readdir.
 pub const HISTORY_LIMIT: usize = 50;
 
+/// View-related methods on [`GitProvider`].
 impl GitProvider {
     /// Resolve the `file.rs@/git/` companion directory — blame, log, contributors, notes.
     pub(super) fn resolve_companion_git(&self, repo: &Arc<GitRepo>, rel: String) -> Vec<VirtualNode> {
@@ -73,6 +74,7 @@ pub(super) struct SlicedBlameView {
     pub spec: SliceSpec,
 }
 
+/// [`TemplateView`] implementation for [`SlicedBlameView`].
 impl TemplateView for SlicedBlameView {
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let hunks = self.ctx.repo.blame(&self.ctx.rel_path)?;
@@ -87,6 +89,7 @@ pub(super) struct SlicedLogView {
     pub spec: SliceSpec,
 }
 
+/// [`TemplateView`] implementation for [`SlicedLogView`].
 impl TemplateView for SlicedLogView {
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let entries = self.ctx.repo.file_history(&self.ctx.rel_path, super::log::LOG_LIMIT)?;

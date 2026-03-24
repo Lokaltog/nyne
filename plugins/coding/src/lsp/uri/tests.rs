@@ -3,18 +3,21 @@ use lsp_types::Position;
 
 use super::*;
 
+/// Tests that an absolute path converts to a URI preserving the path.
 #[test]
 fn file_path_to_uri_absolute() {
     let uri = file_path_to_uri(Path::new("/tmp/src/main.rs")).unwrap();
     assert_eq!(uri.path().as_str(), "/tmp/src/main.rs");
 }
 
+/// Tests that `text_document_id` builds a valid identifier from a path.
 #[test]
 fn text_document_id_from_path() {
     let td = text_document_id(Path::new("/tmp/lib.rs")).unwrap();
     assert_eq!(td.uri.path().as_str(), "/tmp/lib.rs");
 }
 
+/// Tests that `versioned_text_document_id` includes path and version.
 #[test]
 fn versioned_text_document_id_from_path() {
     let vtd = versioned_text_document_id(Path::new("/tmp/lib.rs"), 3).unwrap();
@@ -22,6 +25,7 @@ fn versioned_text_document_id_from_path() {
     assert_eq!(vtd.version, 3);
 }
 
+/// Tests basic byte offset to LSP position conversion on a single line.
 #[test]
 fn byte_offset_to_position_basic() {
     let text = "hello world";
@@ -30,6 +34,7 @@ fn byte_offset_to_position_basic() {
     assert_eq!(byte_offset_to_position(&rope, 0), Position { line: 0, character: 0 });
 }
 
+/// Tests byte offset to position conversion across multiple lines.
 #[test]
 fn byte_offset_to_position_multiline() {
     let text = "line one\nline two\nline three";
@@ -40,6 +45,7 @@ fn byte_offset_to_position_multiline() {
     assert_eq!(byte_offset_to_position(&rope, 23), Position { line: 2, character: 5 });
 }
 
+/// Tests byte offset to position with UTF-16 surrogate pairs (emoji).
 #[test]
 fn byte_offset_to_position_utf16_surrogate() {
     // Emoji (U+1F600) is 4 bytes in UTF-8 and 2 code units in UTF-16.
@@ -53,6 +59,7 @@ fn byte_offset_to_position_utf16_surrogate() {
     assert_eq!(byte_offset_to_position(&rope, 5), Position { line: 0, character: 3 });
 }
 
+/// Tests basic LSP position to byte offset conversion on a single line.
 #[test]
 fn position_to_byte_offset_basic() {
     let text = "hello world";
@@ -67,6 +74,7 @@ fn position_to_byte_offset_basic() {
     );
 }
 
+/// Tests that a position beyond the last line returns `None`.
 #[test]
 fn position_to_byte_offset_out_of_range() {
     let text = "one line";
@@ -74,6 +82,7 @@ fn position_to_byte_offset_out_of_range() {
     assert_eq!(position_to_byte_offset(&rope, Position { line: 5, character: 0 }), None);
 }
 
+/// Verifies that byte offset and position conversions roundtrip correctly.
 #[test]
 fn position_byte_offset_roundtrip() {
     let text = "first line\nsecond line\nthird line";
@@ -91,6 +100,7 @@ fn position_byte_offset_roundtrip() {
     }
 }
 
+/// Tests position to byte offset with UTF-16 surrogate pairs (emoji).
 #[test]
 fn position_to_byte_offset_utf16_surrogate() {
     // Verify roundtrip with multi-byte UTF-16 characters.
@@ -108,6 +118,7 @@ fn position_to_byte_offset_utf16_surrogate() {
     );
 }
 
+/// Tests that a column past end-of-line clamps to the line's byte length.
 #[test]
 fn position_to_byte_offset_clamps_past_eol() {
     let text = "short\nline";

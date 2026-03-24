@@ -8,8 +8,10 @@ use super::prelude::*;
 /// syntax and LSP language registration.
 pub const EXTENSIONS: &[&str] = &["rs"];
 
+/// Rust language specification for tree-sitter decomposition.
 struct RustLanguage;
 
+/// Constants for Rust tree-sitter node kinds.
 impl RustLanguage {
     /// Tree-sitter node kind for attribute annotations (`#[...]`).
     const ATTRIBUTE: &str = "attribute_item";
@@ -17,6 +19,7 @@ impl RustLanguage {
     const LINE_COMMENT: &str = "line_comment";
 }
 
+/// [`LanguageSpec`] implementation for Rust.
 impl LanguageSpec for RustLanguage {
     const DOC_COMMENT_KIND: Option<&'static str> = Some(Self::LINE_COMMENT);
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &["///"];
@@ -112,5 +115,6 @@ fn flatten_type_text(raw: &str) -> String { raw.replace("::", "_").replace(['<',
 
 register_syntax!(RustLanguage);
 
+/// Tests for Rust decomposition.
 #[cfg(test)]
 mod tests;

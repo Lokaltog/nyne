@@ -4,6 +4,7 @@ use crate::syntax::languages::python::EXTENSIONS;
 /// Python LSP server configuration.
 struct PythonLsp;
 
+/// LSP spec for Python: basedpyright with pyproject.toml detection.
 impl LspSpec for PythonLsp {
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
     const LANGUAGE_ID: &'static str = "python";

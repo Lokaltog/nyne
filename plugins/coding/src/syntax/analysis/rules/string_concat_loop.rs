@@ -4,8 +4,10 @@ use super::kinds;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects string concatenation in loops.
 struct StringConcatLoop;
 
+/// [`AnalysisRule`] implementation for `StringConcatLoop`.
 impl AnalysisRule for StringConcatLoop {
     fn id(&self) -> &'static str { "string-concat-loop" }
 
@@ -119,6 +121,7 @@ fn subtree_has_string(node: tree_sitter::Node<'_>, source: &[u8]) -> bool {
     node.named_children(&mut cursor).any(|c| subtree_has_string(c, source))
 }
 
+/// Extract the UTF-8 text of a tree-sitter node from source bytes.
 fn node_text<'a>(node: &tree_sitter::Node<'_>, source: &'a [u8]) -> &'a str {
     use std::str::from_utf8;
     source

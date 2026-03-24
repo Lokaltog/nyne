@@ -1,15 +1,19 @@
+/// Code generation: transforms validated route AST into token streams.
 mod codegen;
+/// Parsing: converts `routes!` token input into a typed AST.
 pub mod parse;
 
 use parse::{ParsedPattern, RouteEntry, RoutesInput, SegmentRoute, parse_pattern};
 use proc_macro2::TokenStream;
 use syn::Result;
 
+/// Validate and expand parsed route input into a `RouteTree` token stream.
 pub fn expand(input: &RoutesInput) -> Result<TokenStream> {
     validate_entries(&input.entries)?;
     codegen::generate(input)
 }
 
+/// Validate a list of route entries for duplicate segments and ambiguous patterns at each level.
 fn validate_entries(entries: &[RouteEntry]) -> Result<()> {
     let mut exact_names: Vec<(String, proc_macro2::Span)> = Vec::new();
     let mut capture_count: usize = 0;
@@ -31,6 +35,7 @@ fn validate_entries(entries: &[RouteEntry]) -> Result<()> {
     Ok(())
 }
 
+/// Validate a single segment route: reject duplicate exact names, multiple captures/globs, and invalid lookup patterns.
 fn validate_segment(
     seg: &SegmentRoute,
     exact_names: &mut Vec<(String, proc_macro2::Span)>,

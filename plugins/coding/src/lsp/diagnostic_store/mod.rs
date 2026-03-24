@@ -37,6 +37,7 @@ pub(crate) struct DiagnosticStore {
 }
 
 impl DiagnosticStore {
+    /// Create a new empty diagnostic store.
     pub(crate) fn new() -> Self {
         Self {
             files: Mutex::new(HashMap::new()),

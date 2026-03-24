@@ -46,10 +46,13 @@ pub(super) struct InodeMap {
     inner: RwLock<Slab<InodeEntry>>,
 }
 
+/// Default implementation for `InodeMap`.
 impl Default for InodeMap {
+    /// Delegates to [`InodeMap::new`].
     fn default() -> Self { Self::new() }
 }
 
+/// Inode allocation, lookup, and update operations.
 impl InodeMap {
     /// Offset added to slab indices to produce inode numbers.
     /// Reserves 0 (unused by FUSE) and 1 (root directory).

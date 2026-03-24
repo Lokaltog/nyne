@@ -7,8 +7,10 @@ use crate::syntax::parser::TsNode;
 /// Minimum consecutive sibling statements sharing the same field-access prefix.
 const MIN_REPETITIONS: usize = 3;
 
+/// Analysis rule that detects repeated field access chains.
 struct RepeatedFieldAccess;
 
+/// [`AnalysisRule`] implementation for `RepeatedFieldAccess`.
 impl AnalysisRule for RepeatedFieldAccess {
     fn id(&self) -> &'static str { "repeated-field-access" }
 

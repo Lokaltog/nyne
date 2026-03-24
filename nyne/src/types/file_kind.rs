@@ -5,6 +5,7 @@
 /// [`NodeKind::file_kind()`](crate::node::NodeKind::file_kind).
 use std::fs::FileType;
 
+/// Filesystem entry kind: file, directory, or symlink.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {
@@ -13,6 +14,7 @@ pub enum FileKind {
     Symlink,
 }
 
+/// Conversion from standard library filesystem types.
 impl FileKind {
     /// Convert from `std::fs::FileType`.
     pub fn from_std(ft: FileType) -> Self {

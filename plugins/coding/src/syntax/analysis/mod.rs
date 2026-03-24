@@ -3,8 +3,10 @@
 //! Analysis rules are registered at compile time and dispatched by node kind
 //! for O(1) lookup. Rules produce [`Hint`]s that suggest code improvements.
 
+/// Analysis rules for detecting code smells and potential improvements.
 mod rules;
 
+/// Tests for the analysis engine.
 #[cfg(test)]
 mod tests;
 
@@ -44,6 +46,7 @@ pub(crate) const DEFAULT_DISABLED_RULES: &[&str] = &[
 /// Factory function that creates analysis rule instances at startup.
 pub type AnalysisRuleFactory = fn() -> Vec<Box<dyn AnalysisRule>>;
 
+/// Distributed slice collecting all registered analysis rule factories.
 #[linkme::distributed_slice]
 pub(crate) static ANALYSIS_RULE_FACTORIES: [AnalysisRuleFactory];
 
@@ -102,6 +105,7 @@ pub struct HintView {
     pub suggestions: Vec<String>,
 }
 
+/// Converts a [`Hint`] to its serializable [`HintView`] representation.
 impl From<&Hint> for HintView {
     fn from(hint: &Hint) -> Self {
         Self {
@@ -140,7 +144,9 @@ pub trait AnalysisRule: Send + Sync {
     fn check(&self, node: TsNode<'_>, context: &AnalysisContext<'_>) -> Option<Hint>;
 }
 
+/// Collection of analysis rules sharing ownership via `Arc`.
 type RuleVec = Vec<Arc<dyn AnalysisRule>>;
+/// Node-kind to rules mapping for O(1) dispatch during tree walks.
 type DispatchMap = HashMap<&'static str, RuleVec>;
 
 /// Collected analysis rules, indexed by node kind for O(1) dispatch.
@@ -151,6 +157,7 @@ pub struct AnalysisEngine {
     catch_all: RuleVec,
 }
 
+/// Construction, filtering, and tree-walking methods for the analysis engine.
 impl AnalysisEngine {
     /// Build the engine from all registered rule factories.
     ///

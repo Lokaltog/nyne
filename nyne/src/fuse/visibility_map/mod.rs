@@ -33,7 +33,9 @@ enum VisibilityEntry {
     Cached(ProcessVisibility),
 }
 
+/// Methods for extracting the visibility level from an entry.
 impl VisibilityEntry {
+    /// Extracts the visibility level from the entry.
     const fn visibility(self) -> ProcessVisibility {
         match self {
             Self::Explicit(v) | Self::Cached(v) => v,
@@ -73,6 +75,7 @@ pub struct VisibilityMap {
     cgroup_tracker: Option<CgroupTracker>,
 }
 
+/// Visibility resolution and PID management.
 impl VisibilityMap {
     /// Build a new visibility map from name-based rules.
     ///

@@ -15,6 +15,7 @@ git_template_view!(
     |repo, path| repo.file_notes(path, NOTES_LIMIT)
 );
 
+/// [`Writable`] implementation for `NotesView` — sets or removes a git note.
 impl Writable for NotesView {
     fn write(&self, _ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         let message = from_utf8(data).wrap_err("note content must be valid UTF-8")?;

@@ -7,8 +7,10 @@ use crate::syntax::parser::TsNode;
 /// Maximum fields before triggering.
 const MAX_FIELDS: usize = 10;
 
+/// Analysis rule that detects structs with too many fields.
 struct GodStruct;
 
+/// [`AnalysisRule`] implementation for `GodStruct`.
 impl AnalysisRule for GodStruct {
     fn id(&self) -> &'static str { "god-struct" }
 
@@ -39,6 +41,7 @@ impl AnalysisRule for GodStruct {
     }
 }
 
+/// Count the number of fields in a struct or class body.
 fn count_fields(node: tree_sitter::Node<'_>) -> usize {
     let body = node.child_by_field_name("body").unwrap_or(node);
 

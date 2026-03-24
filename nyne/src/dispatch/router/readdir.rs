@@ -4,6 +4,7 @@ use super::{ReaddirEntry, Router};
 use crate::types::ProcessVisibility;
 use crate::types::vfs_path::VfsPath;
 
+/// Directory listing operations for the router.
 impl Router {
     /// Collect readdir entries for a resolved directory.
     ///

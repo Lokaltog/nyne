@@ -14,8 +14,10 @@ const MIN_HEADER_RUN: usize = 2;
 /// Characters that form ASCII art separator lines.
 const SEPARATOR_CHARS: &[char] = &['-', '=', '─', '═', '━', '~', '*'];
 
+/// Analysis rule that detects ASCII art separator lines in comments.
 struct AsciiSeparator;
 
+/// [`AnalysisRule`] implementation for `AsciiSeparator`.
 impl AnalysisRule for AsciiSeparator {
     fn id(&self) -> &'static str { "ascii-separator" }
 

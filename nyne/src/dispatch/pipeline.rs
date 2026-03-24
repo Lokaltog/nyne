@@ -18,6 +18,7 @@ pub(super) struct Pipeline {
     post_write_hooks: Vec<Box<dyn PostWriteHook>>,
 }
 
+/// Pipeline construction and execution for read/write request chains.
 impl Pipeline {
     /// Create an empty pipeline with no middlewares or hooks.
     pub(super) fn new() -> Self {
@@ -99,6 +100,8 @@ impl Pipeline {
     }
 }
 
+/// Default implementation for `Pipeline`.
 impl Default for Pipeline {
+    /// Delegates to [`Pipeline::new`].
     fn default() -> Self { Self::new() }
 }

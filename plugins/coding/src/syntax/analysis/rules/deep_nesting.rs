@@ -29,8 +29,10 @@ const NESTING_KINDS: &[&str] = &[
     "try_statement",
 ];
 
+/// Analysis rule that detects excessive code nesting depth.
 struct DeepNesting;
 
+/// [`AnalysisRule`] implementation for `DeepNesting`.
 impl AnalysisRule for DeepNesting {
     fn id(&self) -> &'static str { "deep-nesting" }
 

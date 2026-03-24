@@ -9,6 +9,7 @@ use crate::node::builtins::StaticContent;
 use crate::provider::Nodes;
 use crate::test_support::*;
 
+/// Tests that exact segment matching is case-sensitive and requires full equality.
 #[rstest]
 #[case("foo", "foo", true)]
 #[case("foo", "bar", false)]
@@ -20,6 +21,7 @@ fn exact_matching(#[case] pattern: &str, #[case] input: &str, #[case] expected: 
     assert_eq!(m.matches(input).is_some(), expected);
 }
 
+/// Tests single-segment capture matching with optional prefix and suffix.
 #[rstest]
 #[case("x", None, None, "hello", Some("hello"))]
 #[case("x", None, Some("@"), "hello@", Some("hello"))]
@@ -50,6 +52,7 @@ fn capture_matching(
     }
 }
 
+/// Verifies that Glob, Root, and RestCapture are not handled by `matches()`.
 #[test]
 fn glob_root_rest_not_matched_by_matches() {
     // These are handled by the tree walk, not by matches()
@@ -65,6 +68,7 @@ fn glob_root_rest_not_matched_by_matches() {
     );
 }
 
+/// Tests that segment matcher precedence values follow the expected ordering.
 #[rstest]
 #[case(SegmentMatcher::Exact("x"), 1)]
 #[case(SegmentMatcher::Capture { name: "x", prefix: Some("p:"), suffix: None }, 2)]
@@ -76,6 +80,7 @@ fn precedence_ordering(#[case] matcher: SegmentMatcher, #[case] expected: u8) {
     assert_eq!(matcher.precedence(), expected);
 }
 
+/// Tests that a single-segment capture can be retrieved by name.
 #[test]
 fn param_returns_captured_value() {
     let mut params = RouteParams::default();
@@ -83,6 +88,7 @@ fn param_returns_captured_value() {
     assert_eq!(params.get("source"), "file.rs");
 }
 
+/// Verifies that accessing a missing single capture panics.
 #[test]
 #[should_panic(expected = "no capture named 'missing'")]
 fn param_panics_on_missing_name() {
@@ -90,6 +96,7 @@ fn param_panics_on_missing_name() {
     params.get("missing");
 }
 
+/// Tests that a rest capture returns all captured segments.
 #[test]
 fn rest_param_returns_captured_segments() {
     let mut params = RouteParams::default();
@@ -97,6 +104,7 @@ fn rest_param_returns_captured_segments() {
     assert_eq!(params.get_rest("path"), &["a", "b"]);
 }
 
+/// Verifies that accessing a missing rest capture panics.
 #[test]
 #[should_panic(expected = "no rest capture named 'missing'")]
 fn rest_param_panics_on_missing_name() {
@@ -104,13 +112,17 @@ fn rest_param_panics_on_missing_name() {
     params.get_rest("missing");
 }
 
+/// Stub provider used to test route tree dispatch.
 struct TestProvider;
 
+/// Handler methods for testing route tree dispatch.
 impl TestProvider {
+    /// Return a single `root.txt` file node.
     fn handle_root(&self, _ctx: &RouteCtx<'_>) -> Nodes {
         Ok(Some(vec![VirtualNode::file("root.txt", StaticContent(b"root"))]))
     }
 
+    /// Return a file node named after the captured `x` parameter.
     fn handle_items(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let x = ctx.param("x");
         Ok(Some(vec![VirtualNode::file(
@@ -119,6 +131,7 @@ impl TestProvider {
         )]))
     }
 
+    /// Return a file node named after the joined rest-capture `xs` segments.
     fn handle_nested(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let xs = ctx.params("xs");
         Ok(Some(vec![VirtualNode::file(
@@ -128,6 +141,7 @@ impl TestProvider {
     }
 }
 
+/// Tests that the tree dispatches children for an exact root-level match.
 #[test]
 fn tree_matches_exact_root() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -139,6 +153,7 @@ fn tree_matches_exact_root() {
     assert!(result.is_some());
 }
 
+/// Tests that the tree returns `None` for paths that don't match any route.
 #[test]
 fn tree_returns_none_for_unmatched_path() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -150,6 +165,7 @@ fn tree_returns_none_for_unmatched_path() {
     assert!(result.is_none());
 }
 
+/// Tests that captures from parent segments propagate to child route handlers.
 #[test]
 fn tree_captures_propagate_to_children() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -164,6 +180,7 @@ fn tree_captures_propagate_to_children() {
     assert_eq!(result.first().unwrap().name(), "hello.txt");
 }
 
+/// Tests that exact matches take precedence over capture matches.
 #[test]
 fn precedence_exact_before_capture() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -182,6 +199,7 @@ fn precedence_exact_before_capture() {
     assert_eq!(result.first().unwrap().name(), "exact.txt");
 }
 
+/// Tests that rest-capture with suffix strips it from all captured segments.
 #[test]
 fn rest_capture_rightmost_suffix() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -197,6 +215,7 @@ fn rest_capture_rightmost_suffix() {
     assert_eq!(result.first().unwrap().name(), "A/mid/B.txt");
 }
 
+/// Verifies that all segments in a rest-capture have the suffix stripped.
 #[test]
 fn rest_capture_suffix_stripped_from_all_segments() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -209,6 +228,7 @@ fn rest_capture_suffix_stripped_from_all_segments() {
     assert_eq!(result.first().unwrap().name(), "sec-a/sec-b/sec-c.txt");
 }
 
+/// Tests that a rest-capture without suffix consumes all remaining segments.
 #[test]
 fn rest_capture_no_suffix_consumes_all() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -220,6 +240,7 @@ fn rest_capture_no_suffix_consumes_all() {
     assert_eq!(result.first().unwrap().name(), "a/b/c.txt");
 }
 
+/// Tests that static files declared via `.file()` appear in children results.
 #[test]
 fn static_files_appear_in_children() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -234,6 +255,7 @@ fn static_files_appear_in_children() {
     assert_eq!(result.first().unwrap().name(), "README.md");
 }
 
+/// Tests that static files are discoverable via lookup.
 #[test]
 fn static_files_found_by_lookup() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -249,6 +271,7 @@ fn static_files_found_by_lookup() {
     assert_eq!(result.unwrap().name(), "README.md");
 }
 
+/// Tests that a lookup handler is invoked and returns matches or `None`.
 #[test]
 fn lookup_handler_dispatches() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -266,6 +289,7 @@ fn lookup_handler_dispatches() {
     assert!(tree.lookup(&TestProvider, &b.ctx(), "missing").unwrap().is_none());
 }
 
+/// Tests that a glob route's lookup handler acts as a catch-all fallback.
 #[test]
 fn glob_lookup_fallback() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -281,6 +305,7 @@ fn glob_lookup_fallback() {
     assert_eq!(result.unwrap().name(), "test");
 }
 
+/// Tests that `rebuild_node` can re-invoke handlers to find a specific node by name.
 #[test]
 fn rebuild_node_finds_by_name() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -298,6 +323,7 @@ fn rebuild_node_finds_by_name() {
     assert_eq!(result.unwrap().name(), "b.txt");
 }
 
+/// Tests that exact sub-routes auto-emit directory entries but captures do not.
 #[test]
 fn exact_sub_routes_auto_emit_directories() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -317,6 +343,7 @@ fn exact_sub_routes_auto_emit_directories() {
     assert_eq!(names, ["README.md", "child-a", "child-b"]);
 }
 
+/// Tests that `no_emit` hides a directory from parent readdir while its children remain accessible.
 #[test]
 fn no_emit_hides_root_companion_but_contents_visible() {
     // Simulates a provider with "@" at root (like claude/nyne/git).
@@ -344,6 +371,7 @@ fn no_emit_hides_root_companion_but_contents_visible() {
     assert_eq!(at_names, ["agents"]);
 }
 
+/// Tests that `no_emit` suppresses auto-directory emission for a sub-route.
 #[test]
 fn no_emit_suppresses_auto_directory() {
     let tree = RouteTreeBuilder::<TestProvider>::new()
@@ -360,6 +388,7 @@ fn no_emit_suppresses_auto_directory() {
     assert_eq!(names, ["visible"]);
 }
 
+/// Tests that a root-level children handler is invoked for the empty path.
 #[test]
 fn root_children_handler() {
     let tree = RouteTreeBuilder::<TestProvider>::new()

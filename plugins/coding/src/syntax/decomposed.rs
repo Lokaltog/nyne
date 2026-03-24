@@ -34,6 +34,7 @@ pub struct DecomposedSource {
     pub tree: Option<tree_sitter::Tree>,
 }
 
+/// Debug implementation for `DecomposedSource`, showing only the decomposed fragments.
 impl fmt::Debug for DecomposedSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DecomposedSource")
@@ -80,12 +81,14 @@ pub struct DecompositionCache {
     inner: Arc<DecompositionCacheInner>,
 }
 
+/// Inner state of the decomposition cache behind `Arc`.
 struct DecompositionCacheInner {
     real_fs: Arc<dyn RealFs>,
     syntax: Arc<SyntaxRegistry>,
     cache: RwLock<HashMap<VfsPath, Arc<DecomposedSource>>>,
 }
 
+/// Cache management: creation, lookup, and invalidation.
 impl DecompositionCache {
     /// Create a new empty cache.
     pub(crate) fn new(real_fs: Arc<dyn RealFs>, syntax: Arc<SyntaxRegistry>) -> Self {

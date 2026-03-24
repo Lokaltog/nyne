@@ -83,6 +83,7 @@ pub struct OsFs {
     source_dir: PathBuf,
 }
 
+/// Construction and path resolution helpers for the OS filesystem backend.
 impl OsFs {
     pub const fn new(source_dir: PathBuf) -> Self { Self { source_dir } }
 
@@ -103,6 +104,7 @@ impl OsFs {
     }
 }
 
+/// [`RealFs`] implementation backed by `std::fs` operations.
 impl RealFs for OsFs {
     fn source_dir(&self) -> &Path { &self.source_dir }
 

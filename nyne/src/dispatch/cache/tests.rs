@@ -1,6 +1,7 @@
 use super::*;
 use crate::test_support::vfs as vpath;
 
+/// Tests that `invalidate_subtree` marks both direct and nested directories as unresolved.
 #[test]
 fn invalidate_subtree_marks_nested_dirs_unresolved() {
     let cache = L1Cache::new();
@@ -30,6 +31,7 @@ fn invalidate_subtree_marks_nested_dirs_unresolved() {
     );
 }
 
+/// Create a virtual `CachedNode` for testing with the given parameters.
 fn make_node(name: &str, inode: u64, resolve_gen: u64, source: NodeSource) -> (String, CachedNode) {
     let pid = ProviderId::new("test");
     (name.to_owned(), CachedNode {
@@ -43,6 +45,7 @@ fn make_node(name: &str, inode: u64, resolve_gen: u64, source: NodeSource) -> (S
     })
 }
 
+/// Verifies that after subtree invalidation, re-resolution can insert new entries.
 #[test]
 fn invalidate_subtree_allows_re_resolve_with_new_entries() {
     let cache = L1Cache::new();
@@ -90,6 +93,7 @@ fn invalidate_subtree_allows_re_resolve_with_new_entries() {
     );
 }
 
+/// Tests that `collect_dir_inodes_under` finds nested directories but not unrelated paths.
 #[test]
 fn collect_dir_inodes_under_finds_nested_dirs() {
     let cache = L1Cache::new();
@@ -111,6 +115,7 @@ fn collect_dir_inodes_under_finds_nested_dirs() {
     assert!(inodes.contains(&(staged.as_str().len() as u64)));
 }
 
+/// Create a real filesystem `CachedNode` for testing.
 fn make_real_node(name: &str, source: NodeSource, inode: u64) -> (String, CachedNode) {
     (name.to_owned(), CachedNode {
         inode,
@@ -122,12 +127,14 @@ fn make_real_node(name: &str, source: NodeSource, inode: u64) -> (String, Cached
     })
 }
 
+/// Tests that virtual nodes with default `Readdir` visibility are visible.
 #[test]
 fn is_visible_virtual_readdir() {
     let (_, cn) = make_node("a.rs", 1, 1, NodeSource::Children);
     assert!(cn.is_visible(), "default Visibility::Readdir should be visible");
 }
 
+/// Tests that virtual nodes with `Hidden` visibility are not visible.
 #[test]
 fn is_visible_virtual_hidden() {
     let pid = ProviderId::new("test");
@@ -143,6 +150,7 @@ fn is_visible_virtual_hidden() {
     assert!(!cn.is_visible(), "Visibility::Hidden should not be visible");
 }
 
+/// Verifies that derived nodes respect their visibility setting.
 #[test]
 fn is_visible_derived_respects_visibility() {
     let (_, cn) = make_node("derived.rs", 1, 1, NodeSource::Derived);
@@ -161,18 +169,21 @@ fn is_visible_derived_respects_visibility() {
     assert!(!cn.is_visible(), "derived node with Hidden should not be visible");
 }
 
+/// Tests that mutated (user-created) nodes are always visible regardless of settings.
 #[test]
 fn is_visible_mutated_always_visible() {
     let (_, cn) = make_node("mutated", 1, 0, NodeSource::Mutated);
     assert!(cn.is_visible(), "mutated nodes are always visible");
 }
 
+/// Tests that real filesystem nodes are always visible.
 #[test]
 fn is_visible_real_always_visible() {
     let (_, cn) = make_real_node("real.txt", NodeSource::Lookup, 1);
     assert!(cn.is_visible(), "real nodes are always visible");
 }
 
+/// Tests that stale children and derived entries are swept while lookup entries survive.
 #[test]
 fn sweep_stale_resolve_sweeps_derived_entries() {
     let mut dir = DirState::new();
@@ -198,12 +209,14 @@ fn sweep_stale_resolve_sweeps_derived_entries() {
     assert!(dir.get("lookup.rs").is_some(), "lookup entries survive sweep");
 }
 
+/// Verifies that directories without a source file are never considered stale.
 #[test]
 fn is_source_stale_false_when_no_source() {
     let dir = DirState::new();
     assert!(!dir.is_source_stale(|_| 99), "no source → never stale");
 }
 
+/// Verifies that a directory is not stale when its generation matches the source.
 #[test]
 fn is_source_stale_false_when_generation_matches() {
     let mut dir = DirState::new();
@@ -211,6 +224,7 @@ fn is_source_stale_false_when_generation_matches() {
     assert!(!dir.is_source_stale(|_| 5));
 }
 
+/// Verifies that a directory is stale when the source generation has advanced.
 #[test]
 fn is_source_stale_true_when_generation_advanced() {
     let mut dir = DirState::new();

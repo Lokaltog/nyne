@@ -4,8 +4,10 @@ use super::kinds;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects redundant clone calls.
 struct RedundantClone;
 
+/// [`AnalysisRule`] implementation for `RedundantClone`.
 impl AnalysisRule for RedundantClone {
     fn id(&self) -> &'static str { "redundant-clone" }
 
@@ -53,6 +55,7 @@ impl AnalysisRule for RedundantClone {
     }
 }
 
+/// Check whether a call node is a .`clone()` or .`to_string()` invocation.
 fn is_clone_call(node: tree_sitter::Node<'_>, source: &[u8]) -> bool {
     if let Some(f) = node
         .child_by_field_name("function")
@@ -76,6 +79,7 @@ fn is_clone_call(node: tree_sitter::Node<'_>, source: &[u8]) -> bool {
     false
 }
 
+/// Extract the receiver expression of a clone method call.
 fn clone_receiver(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
     let func = node.child_by_field_name("function")?;
     // The receiver is the `object`/`value` of the field expression.
@@ -83,6 +87,7 @@ fn clone_receiver(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> 
         .or_else(|| func.child_by_field_name("value"))
 }
 
+/// Walk up the tree to find the enclosing statement or declaration.
 fn containing_statement(mut node: tree_sitter::Node<'_>) -> tree_sitter::Node<'_> {
     while let Some(parent) = node.parent() {
         if parent.kind().ends_with("_statement")

@@ -17,6 +17,7 @@ pub struct ProviderRegistry {
     active: Vec<Arc<dyn Provider>>,
 }
 
+/// Provider discovery, activation, and lookup.
 impl ProviderRegistry {
     /// Return only the providers that passed activation.
     pub fn active_providers(&self) -> &[Arc<dyn Provider>] { &self.active }

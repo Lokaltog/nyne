@@ -4,8 +4,10 @@ use std::ops::Range;
 
 use super::prelude::*;
 
+/// Markdown language specification for tree-sitter decomposition.
 struct MarkdownLanguage;
 
+/// [`LanguageSpec`] implementation for Markdown.
 impl LanguageSpec for MarkdownLanguage {
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
     const EXTENSIONS: &'static [&'static str] = &["md", "mdx"];
@@ -70,6 +72,7 @@ fn collect_headings(root: TsNode<'_>, source: &[u8]) -> Vec<Heading> {
     headings
 }
 
+/// Recursively collect ATX heading nodes from the tree.
 fn collect_headings_recursive(node: TsNode<'_>, source: &[u8], headings: &mut Vec<Heading>) {
     if node.kind() == "atx_heading" {
         headings.push(parse_atx_heading(node, source));
@@ -79,6 +82,7 @@ fn collect_headings_recursive(node: TsNode<'_>, source: &[u8], headings: &mut Ve
     }
 }
 
+/// Parse an ATX heading node into a Heading struct.
 fn parse_atx_heading(node: TsNode<'_>, source: &[u8]) -> Heading {
     let mut level = 0u8;
     let mut name = None;
@@ -105,6 +109,7 @@ fn collect_code_blocks(root: TsNode<'_>, source: &str) -> Vec<CodeBlock> {
     blocks
 }
 
+/// Recursively collect fenced code block nodes from the tree.
 fn collect_code_blocks_recursive(node: TsNode<'_>, source: &str, blocks: &mut Vec<CodeBlock>) {
     if node.kind() == "fenced_code_block" {
         blocks.push(parse_fenced_code_block(node, source));
@@ -114,6 +119,7 @@ fn collect_code_blocks_recursive(node: TsNode<'_>, source: &str, blocks: &mut Ve
     }
 }
 
+/// Parse a fenced code block node into a `CodeBlock` struct.
 fn parse_fenced_code_block(node: TsNode<'_>, source: &str) -> CodeBlock {
     let mut lang = None;
     let mut content_range = None;
@@ -160,6 +166,7 @@ fn build_section_fragments(headings: &[Heading], code_blocks: &[CodeBlock], sour
     build_sections_at_level(headings, code_blocks, source_len, 0)
 }
 
+/// Recursively build nested section fragments from a heading level.
 fn build_sections_at_level(
     headings: &[Heading],
     code_blocks: &[CodeBlock],
@@ -270,5 +277,6 @@ fn build_code_block_fragments(
 
 register_syntax!(MarkdownLanguage);
 
+/// Tests for Markdown decomposition.
 #[cfg(test)]
 mod tests;

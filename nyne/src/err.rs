@@ -6,11 +6,14 @@ use std::io::{Error as IoError, ErrorKind};
 use color_eyre::eyre::{self, Report};
 use rustix::io::Errno;
 
+/// Extension trait for converting `Result<T, Errno>` into `eyre::Result<T>`.
 pub trait ErrnoExt<T> {
     fn into_eyre(self) -> eyre::Result<T>;
 }
 
+/// Blanket implementation of [`ErrnoExt`] for `Result<T, Errno>`.
 impl<T> ErrnoExt<T> for Result<T, Errno> {
+    /// Convert an `Errno` error into an `eyre::Report`.
     fn into_eyre(self) -> eyre::Result<T> { self.map_err(|e| eyre::eyre!(e)) }
 }
 

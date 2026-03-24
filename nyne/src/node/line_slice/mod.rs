@@ -18,7 +18,9 @@ use crate::types::slice::{SliceSpec, parse_slice_suffix};
 /// the full result through the base node's writable.
 pub struct LineSlice;
 
+/// Plugin derivation for line-sliced nodes.
 impl NodePlugin for LineSlice {
+    /// Derives a sliced node if the name matches `base:M-N` syntax.
     fn derive(&self, base: &Arc<VirtualNode>, name: &str, _ctx: &RequestContext<'_>) -> Result<Option<VirtualNode>> {
         let Some((base_name, spec)) = parse_slice_suffix(name) else {
             return Ok(None);
@@ -56,7 +58,9 @@ struct SlicedReadable {
     spec: SliceSpec,
 }
 
+/// Readable implementation for line-sliced content.
 impl Readable for SlicedReadable {
+    /// Reads the base content and extracts the specified line range.
     fn read(&self, ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let content = self.base.require_readable()?.read(ctx)?;
         let lines: Vec<&[u8]> = content.split(|&b| b == b'\n').collect();
@@ -83,7 +87,9 @@ struct SlicedWritable {
     spec: SliceSpec,
 }
 
+/// Writable implementation for line-sliced content.
 impl Writable for SlicedWritable {
+    /// Splices new data into the base content at the specified line range.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         let current = self.base.require_readable()?.read(ctx)?;
         self.base
@@ -100,7 +106,9 @@ struct SlicedUnlinkable {
     spec: SliceSpec,
 }
 
+/// Unlinkable implementation that deletes a line range.
 impl Unlinkable for SlicedUnlinkable {
+    /// Removes the specified line range from the base content.
     fn unlink(&self, ctx: &RequestContext<'_>) -> Result<()> {
         let current = self.base.require_readable()?.read(ctx)?;
         self.base

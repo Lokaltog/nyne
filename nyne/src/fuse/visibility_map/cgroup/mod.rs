@@ -35,6 +35,7 @@ pub(super) struct CgroupTracker {
     sessions: RwLock<HashMap<String, ProcessVisibility>>,
 }
 
+/// Cgroup-based process tracking for visibility inheritance.
 impl CgroupTracker {
     /// Attempt to set up cgroups v2 tracking.
     ///
@@ -130,7 +131,9 @@ impl CgroupTracker {
     }
 }
 
+/// Cleans up all session cgroups and the base directory on drop.
 impl Drop for CgroupTracker {
+    /// Removes all session cgroups and the base directory.
     fn drop(&mut self) {
         // Best-effort cleanup of all session cgroups and the base dir.
         let sessions = self.sessions.read();

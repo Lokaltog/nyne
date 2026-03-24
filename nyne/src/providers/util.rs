@@ -1,5 +1,6 @@
 //! Utilities for companion directory path manipulation.
 
+/// Fallback file extension when no dominant language is detected.
 const FALLBACK_EXT: &str = "ext";
 
 /// Format detected languages as a comma-separated string (by frequency).

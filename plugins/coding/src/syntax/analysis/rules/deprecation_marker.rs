@@ -49,8 +49,10 @@ const DEPRECATION_PATTERNS: &[(&str, &str)] = &[
     ("next version", "future work deferral"),
 ];
 
+/// Analysis rule that detects deprecation markers in comments.
 struct DeprecationMarker;
 
+/// [`AnalysisRule`] implementation for `DeprecationMarker`.
 impl AnalysisRule for DeprecationMarker {
     fn id(&self) -> &'static str { "deprecation-marker" }
 

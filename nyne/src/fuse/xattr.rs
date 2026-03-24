@@ -29,7 +29,9 @@ fn reply_xattr_data(reply: ReplyXattr, size: u32, data: &[u8]) {
 /// flush. Enables `PostToolUse` hooks to surface validation errors.
 const XATTR_ERROR: &str = "user.error";
 
+/// Extended attribute handlers for the FUSE filesystem.
 impl NyneFs {
+    /// Handles getxattr, returning error messages or provider-defined attributes.
     pub(super) fn do_getxattr(&self, ino: INodeNo, name: &OsStr, size: u32, reply: ReplyXattr) {
         let ino = u64::from(ino);
         let name_str = name.to_string_lossy();
@@ -62,6 +64,7 @@ impl NyneFs {
         }
     }
 
+    /// Handles listxattr, enumerating available extended attributes.
     pub(super) fn do_listxattr(&self, ino: INodeNo, size: u32, reply: ReplyXattr) {
         let ino = u64::from(ino);
         trace!(target: "nyne::fuse", ino, "listxattr");
@@ -97,6 +100,7 @@ impl NyneFs {
         reply_xattr_data(reply, size, &buf);
     }
 
+    /// Handles setxattr, delegating to the node's xattr capability.
     pub(super) fn do_setxattr(&self, ino: INodeNo, name: &OsStr, value: &[u8], reply: ReplyEmpty) {
         let ino = u64::from(ino);
         let name_str = name.to_string_lossy();

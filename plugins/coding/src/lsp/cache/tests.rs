@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use super::*;
 
+/// Build a `CacheKey` from string components for testing.
 fn key<'a>(path: &'a str, method: &'a str, line: u32, param: u32) -> CacheKey<'a> {
     CacheKey {
         path: Path::new(path),
@@ -13,6 +14,7 @@ fn key<'a>(path: &'a str, method: &'a str, line: u32, param: u32) -> CacheKey<'a
     }
 }
 
+/// Tests that inserting a value and retrieving it returns the same value.
 #[test]
 fn insert_and_get() {
     let cache = LspCache::new(Duration::from_secs(60));
@@ -24,6 +26,7 @@ fn insert_and_get() {
     assert_eq!(result, Some(values));
 }
 
+/// Tests that querying an empty cache returns `None`.
 #[test]
 fn miss_on_empty() {
     let cache = LspCache::new(Duration::from_secs(60));
@@ -32,6 +35,7 @@ fn miss_on_empty() {
     assert_eq!(result, None);
 }
 
+/// Tests that entries expire after the configured TTL.
 #[test]
 fn ttl_expiry() {
     let cache = LspCache::new(Duration::from_millis(1));
@@ -44,6 +48,7 @@ fn ttl_expiry() {
     assert_eq!(result, None);
 }
 
+/// Tests that invalidating a file clears only that file's entries.
 #[test]
 fn invalidate_file() {
     let cache = LspCache::new(Duration::from_secs(60));
@@ -60,6 +65,7 @@ fn invalidate_file() {
     assert_eq!(lib_result, Some("lib_ref".to_owned()));
 }
 
+/// Tests that clearing the cache removes all entries.
 #[test]
 fn clear() {
     let cache = LspCache::new(Duration::from_secs(60));
@@ -76,6 +82,7 @@ fn clear() {
     assert_eq!(b, None);
 }
 
+/// Tests that `len` and `is_empty` reflect the number of cached entries.
 #[test]
 fn len_and_is_empty() {
     let cache = LspCache::new(Duration::from_secs(60));
@@ -92,6 +99,7 @@ fn len_and_is_empty() {
     assert_eq!(cache.len(), 2);
 }
 
+/// Tests that requesting a cached value as a different type returns `None`.
 #[test]
 fn type_mismatch_returns_none() {
     let cache = LspCache::new(Duration::from_secs(60));
@@ -103,6 +111,7 @@ fn type_mismatch_returns_none() {
     assert_eq!(result, None);
 }
 
+/// Tests that `get_with_age` returns the cached value along with its age.
 #[test]
 fn get_with_age_returns_age() {
     let cache = LspCache::new(Duration::from_secs(60));

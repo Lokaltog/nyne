@@ -1,5 +1,6 @@
 use super::*;
 
+/// Tests that resolve returns Default when no rules or overrides exist.
 #[test]
 fn resolve_returns_default_when_empty() {
     let map = VisibilityMap::new(std::iter::empty());
@@ -7,6 +8,7 @@ fn resolve_returns_default_when_empty() {
     assert_eq!(map.resolve(1), ProcessVisibility::Default);
 }
 
+/// Tests that an explicit PID override takes precedence over other rules.
 #[test]
 fn pid_override_takes_precedence() {
     let map = VisibilityMap::new(std::iter::empty());
@@ -14,6 +16,7 @@ fn pid_override_takes_precedence() {
     assert_eq!(map.resolve(99999), ProcessVisibility::All);
 }
 
+/// Tests that removing a PID override restores Default visibility.
 #[test]
 fn remove_pid_restores_default() {
     let map = VisibilityMap::new(std::iter::empty());
@@ -22,6 +25,7 @@ fn remove_pid_restores_default() {
     assert_eq!(map.resolve(99999), ProcessVisibility::Default);
 }
 
+/// Tests that name rules are truncated to match kernel comm length.
 #[test]
 fn name_rule_truncation_matches_kernel() {
     // Names longer than 15 chars are truncated to match /proc/pid/comm.
@@ -30,6 +34,7 @@ fn name_rule_truncation_matches_kernel() {
     assert!(map.name_rules.contains_key("typescript-lang"));
 }
 
+/// Tests that a PID override shadows a matching name rule.
 #[test]
 fn pid_override_shadows_name_rule() {
     // Even if a name rule would match, a PID override wins.
@@ -38,6 +43,7 @@ fn pid_override_shadows_name_rule() {
     assert_eq!(map.resolve(1), ProcessVisibility::All);
 }
 
+/// Tests that dynamic name rules take precedence over static ones.
 #[test]
 fn dynamic_name_rule_takes_precedence_over_static() {
     let map = VisibilityMap::new([("test-proc".to_owned(), ProcessVisibility::None)]);
@@ -48,6 +54,7 @@ fn dynamic_name_rule_takes_precedence_over_static() {
     assert_eq!(rules[0], ("test-proc".to_owned(), ProcessVisibility::All));
 }
 
+/// Tests that dynamic name rules truncate long names to COMM_MAX_LEN.
 #[test]
 fn dynamic_name_rule_truncates_long_names() {
     let map = VisibilityMap::new([]);
@@ -58,6 +65,7 @@ fn dynamic_name_rule_truncates_long_names() {
     assert_eq!(rules[0].0.len(), COMM_MAX_LEN);
 }
 
+/// Tests that explicit_pid_entries excludes cached resolution entries.
 #[test]
 fn explicit_pid_entries_excludes_cached() {
     let map = VisibilityMap::new([]);
@@ -70,6 +78,7 @@ fn explicit_pid_entries_excludes_cached() {
     assert_eq!(entries[0], (42, ProcessVisibility::All));
 }
 
+/// Tests that a child process inherits its parent's explicit visibility.
 #[test]
 fn child_inherits_parent_visibility() {
     // Our own PID's parent (the test runner) should be walkable.
@@ -89,6 +98,7 @@ fn child_inherits_parent_visibility() {
     );
 }
 
+/// Tests that cached entries do not propagate to child processes.
 #[test]
 fn cached_entry_does_not_propagate_to_children() {
     // A cached Default on a parent must NOT be inherited by children.
@@ -117,6 +127,7 @@ fn cached_entry_does_not_propagate_to_children() {
     );
 }
 
+/// Tests that the ancestor walk stops at PID 1 (init).
 #[test]
 fn ancestor_walk_stops_at_init() {
     // PID 1 (init) has no override — should not inherit anything.
@@ -124,12 +135,14 @@ fn ancestor_walk_stops_at_init() {
     assert_eq!(map.resolve(1), ProcessVisibility::Default);
 }
 
+/// Verifies that read_ppid returns a valid parent PID for the current process.
 #[test]
 fn read_ppid_returns_valid_parent() {
     // Sanity: our own parent PID should be > 0.
     assert!(read_ppid(std::process::id()).is_some_and(|p| p > 0));
 }
 
+/// Verifies that read_ppid returns None for a nonexistent PID.
 #[test]
 fn read_ppid_returns_none_for_nonexistent() {
     assert_eq!(read_ppid(u32::MAX), None);

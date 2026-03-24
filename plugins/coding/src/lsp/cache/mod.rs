@@ -20,6 +20,7 @@ pub struct CacheKey<'a> {
     pub param: u32,
 }
 
+/// Display a cache key as `path:method:line:param`.
 impl fmt::Display for CacheKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -49,6 +50,7 @@ pub struct LspCache {
 }
 
 impl LspCache {
+    /// Create a new cache with the given time-to-live for entries.
     pub(crate) fn new(ttl: Duration) -> Self {
         Self {
             entries: RwLock::new(HashMap::new()),

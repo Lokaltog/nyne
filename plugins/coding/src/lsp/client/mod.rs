@@ -7,9 +7,13 @@
 //   threads.rs      — background reader/writer thread loops, pending response map
 //   capabilities.rs — static client capabilities and propagated env vars
 
+/// Server capability detection and feature checks.
 mod capabilities;
+/// Timeout-aware I/O for LSP server stdio.
 mod io;
+/// LSP request/response query helpers.
 mod queries;
+/// Background threads for reading LSP server output.
 mod threads;
 
 use std::collections::HashMap;
@@ -52,6 +56,7 @@ pub struct FilePosition<'a> {
 }
 
 impl FilePosition<'_> {
+    /// Convert to LSP `TextDocumentPositionParams` for requests.
     fn to_params(&self) -> Result<TextDocumentPositionParams> {
         Ok(TextDocumentPositionParams {
             text_document: uri::text_document_id(self.file)?,
@@ -346,6 +351,7 @@ impl LspClient {
     }
 }
 
+/// Gracefully shuts down the language server on drop.
 impl Drop for LspClient {
     fn drop(&mut self) {
         if let Err(e) = self.shutdown() {

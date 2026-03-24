@@ -7,8 +7,10 @@ use crate::syntax::parser::TsNode;
 /// Minimum else-if branches to trigger (3 = if + 3 else-ifs = 4 total).
 const MIN_ELSE_IFS: usize = 3;
 
+/// Analysis rule that detects long else-if chains.
 struct ElseIfChain;
 
+/// [`AnalysisRule`] implementation for `ElseIfChain`.
 impl AnalysisRule for ElseIfChain {
     fn id(&self) -> &'static str { "else-if-chain" }
 

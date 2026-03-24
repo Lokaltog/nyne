@@ -17,6 +17,7 @@ pub struct RequestContext<'a> {
     pub(crate) file_generations: &'a FileGenerations,
 }
 
+/// Helper methods for querying request-scoped state.
 impl RequestContext<'_> {
     /// Current generation for a source file — used by providers to stamp
     /// companion nodes via [`VirtualNode::with_source`].
@@ -50,6 +51,7 @@ pub struct PipelineContext<'a> {
     extensions: TypeMap,
 }
 
+/// Construction and typed extension access for pipeline contexts.
 impl<'a> PipelineContext<'a> {
     /// Create a pipeline context from a request context.
     pub fn new(request: &'a RequestContext<'a>) -> Self {

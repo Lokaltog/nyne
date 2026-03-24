@@ -21,6 +21,7 @@ use color_eyre::eyre::{Result, bail};
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VfsPath(String);
 
+/// Path construction, traversal, and query methods.
 impl VfsPath {
     /// The root path.
     pub const fn root() -> Self { Self(String::new()) }
@@ -207,6 +208,7 @@ impl VfsPath {
     }
 }
 
+/// Displays root as `"/"` and all other paths as their inner string.
 impl fmt::Display for VfsPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.0.is_empty() {
@@ -217,10 +219,12 @@ impl fmt::Display for VfsPath {
     }
 }
 
+/// Debug-formats as `VfsPath("inner/path")`.
 impl fmt::Debug for VfsPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "VfsPath({:?})", self.0) }
 }
 
+/// Borrows the inner string representation.
 impl AsRef<str> for VfsPath {
     fn as_ref(&self) -> &str { &self.0 }
 }

@@ -30,6 +30,7 @@ impl OpenDocument {
     /// of truth — `LspClient::open_document` receives this value.
     const INITIAL_VERSION: i32 = 0;
 
+    /// Create a new document tracker with initial version.
     const fn new(ext: String) -> Self {
         Self {
             ext,
@@ -68,6 +69,7 @@ pub struct LspManager {
 }
 
 impl LspManager {
+    /// Create a new manager with the given registry, config, and process spawner.
     pub(crate) fn new(
         registry: LspRegistry,
         syntax: Arc<SyntaxRegistry>,
@@ -449,6 +451,7 @@ impl LspManager {
         }
     }
 
+    /// Return an existing client for the given server definition, or spawn one.
     fn get_or_spawn(&self, def: &super::spec::LspServerDef) -> Option<Arc<LspClient>> {
         // Fast path: already running.
         if let Some(client) = self.clients.read().get(def.name()) {

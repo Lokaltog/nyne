@@ -16,8 +16,10 @@ const CLOSURE: &[&str] = &[
     "lambda",             // Python
 ];
 
+/// Analysis rule that detects closures with large bodies.
 struct LargeClosure;
 
+/// [`AnalysisRule`] implementation for `LargeClosure`.
 impl AnalysisRule for LargeClosure {
     fn id(&self) -> &'static str { "large-closure" }
 

@@ -20,8 +20,10 @@ use crate::syntax::SyntaxRegistry;
 use crate::syntax::analysis::AnalysisEngine;
 use crate::syntax::decomposed::DecompositionCache;
 
+/// The coding plugin entry point.
 pub struct CodingPlugin;
 
+/// Plugin trait implementation for the coding plugin.
 impl Plugin for CodingPlugin {
     fn id(&self) -> &'static str { "coding" }
 
@@ -117,6 +119,7 @@ impl Plugin for CodingPlugin {
     }
 }
 
+/// Factory registration for the coding plugin via distributed slice.
 #[allow(unsafe_code)]
 #[distributed_slice(PLUGINS)]
 static CODING_PLUGIN: PluginFactory = || Box::new(CodingPlugin);

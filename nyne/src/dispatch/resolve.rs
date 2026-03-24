@@ -57,6 +57,7 @@ pub(super) struct OwnedNode {
     pub(super) provider_id: ProviderId,
 }
 
+/// Conversion and conflict detection for provider-owned nodes.
 impl OwnedNode {
     /// Convert into a `CachedNodeKind::Virtual`, wrapping the node in `Arc`.
     pub(super) fn into_cached_kind(self) -> CachedNodeKind {
@@ -205,6 +206,7 @@ fn resolve_conflict(
     }
 }
 
+/// Resolve a directory by collecting nodes from all providers and negotiating conflicts.
 pub(super) fn resolve_directory(providers: &[Arc<dyn Provider>], ctx: &RequestContext<'_>) -> Result<Vec<OwnedNode>> {
     let mut all_nodes: Vec<OwnedNode> = Vec::new();
     let mut any_success = false;
@@ -416,6 +418,9 @@ pub(super) fn mkdir_in_directory(
     single_claim_dispatch(providers, "mkdir", name, ctx, Provider::mkdir)
 }
 
+/// Resolve conflicts between virtual nodes and real filesystem entries.
+///
+/// Returns the surviving virtual nodes and the set of real names shadowed by forced wins.
 pub(super) fn resolve_real_conflicts(
     providers: &[Arc<dyn Provider>],
     virtual_nodes: Vec<OwnedNode>,

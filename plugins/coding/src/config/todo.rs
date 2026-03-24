@@ -20,6 +20,7 @@ pub struct TodoConfig {
     pub tags: Vec<String>,
 }
 
+/// Default implementation for `TodoConfig`.
 impl Default for TodoConfig {
     fn default() -> Self {
         Self {
@@ -29,6 +30,7 @@ impl Default for TodoConfig {
     }
 }
 
+/// Default set of TODO tags ordered by priority.
 fn default_todo_tags() -> Vec<String> {
     ["FIXME", "SAFETY", "HACK", "XXX", "TODO"]
         .into_iter()

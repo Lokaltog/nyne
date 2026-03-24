@@ -40,7 +40,9 @@ thread_local! {
 /// and decrements it on drop.
 struct ResolverDepthGuard;
 
+/// RAII depth guard construction.
 impl ResolverDepthGuard {
+    /// Increment the thread-local depth counter, failing if the limit is exceeded.
     fn enter() -> Result<Self> {
         RESOLVER_DEPTH.with(|d| {
             let current = d.get();
@@ -53,11 +55,15 @@ impl ResolverDepthGuard {
     }
 }
 
+/// Decrements the thread-local depth counter on drop.
 impl Drop for ResolverDepthGuard {
+    /// Decrement the resolver recursion depth.
     fn drop(&mut self) { RESOLVER_DEPTH.with(|d| d.set(d.get() - 1)); }
 }
 
+/// [`Resolver`] implementation for [`Router`] with recursion depth guarding.
 impl Resolver for Router {
+    /// Resolve all visible virtual nodes in a directory.
     fn resolve(&self, path: &VfsPath) -> Result<Vec<Arc<VirtualNode>>> {
         let _guard = ResolverDepthGuard::enter()?;
         let ctx = self.make_request_context(path);
@@ -78,6 +84,7 @@ impl Resolver for Router {
             .unwrap_or_default())
     }
 
+    /// Look up a single virtual node by its full path.
     fn lookup(&self, path: &VfsPath) -> Result<Option<Arc<VirtualNode>>> {
         let _guard = ResolverDepthGuard::enter()?;
         let Some(parent) = path.parent() else {

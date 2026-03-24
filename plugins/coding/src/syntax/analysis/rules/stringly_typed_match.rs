@@ -10,8 +10,10 @@ use crate::syntax::parser::TsNode;
 /// Minimum string-literal arms before triggering.
 const MIN_STRING_ARMS: usize = 3;
 
+/// Analysis rule that detects string-literal match dispatching.
 struct StringlyTypedMatch;
 
+/// [`AnalysisRule`] implementation for `StringlyTypedMatch`.
 impl AnalysisRule for StringlyTypedMatch {
     fn id(&self) -> &'static str { "stringly-typed-match" }
 

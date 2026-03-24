@@ -2,8 +2,10 @@
 
 use super::prelude::*;
 
+/// Fennel language specification for tree-sitter decomposition.
 struct FennelLanguage;
 
+/// [`LanguageSpec`] implementation for Fennel.
 impl LanguageSpec for FennelLanguage {
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
@@ -186,5 +188,6 @@ fn build_fennel_fragment(node: TsNode<'_>, name: String, kind: SymbolKind, paren
 
 register_syntax!(FennelLanguage);
 
+/// Tests for Fennel decomposition.
 #[cfg(test)]
 mod tests;

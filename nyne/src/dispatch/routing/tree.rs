@@ -55,15 +55,21 @@ pub trait IntoNodes {
     fn into_nodes(self) -> Nodes;
 }
 
+/// Identity conversion for `Nodes`.
 impl IntoNodes for Nodes {
+    /// Pass through unchanged.
     fn into_nodes(self) -> Nodes { self }
 }
 
+/// Wraps a `Vec<VirtualNode>` into `Ok(Some(...))`.
 impl IntoNodes for Vec<VirtualNode> {
+    /// Wrap into `Ok(Some(self))`.
     fn into_nodes(self) -> Nodes { Ok(Some(self)) }
 }
 
+/// Wraps an `Option<Vec<VirtualNode>>` into `Ok(...)`.
 impl IntoNodes for Option<Vec<VirtualNode>> {
+    /// Wrap into `Ok(self)`.
     fn into_nodes(self) -> Nodes { Ok(self) }
 }
 
@@ -72,14 +78,19 @@ pub trait IntoNode {
     fn into_node(self) -> Node;
 }
 
+/// Identity conversion for `Node`.
 impl IntoNode for Node {
+    /// Pass through unchanged.
     fn into_node(self) -> Node { self }
 }
 
+/// Wraps an `Option<VirtualNode>` into `Ok(...)`.
 impl IntoNode for Option<VirtualNode> {
+    /// Wrap into `Ok(self)`.
     fn into_node(self) -> Node { Ok(self) }
 }
 
+/// Public dispatch API for route trees: children, lookup, and rebuild.
 impl<P> RouteTree<P> {
     /// Create a route tree from a root node.
     pub(super) const fn from_root(root: RouteNode<P>) -> Self { Self { root } }
@@ -229,6 +240,7 @@ fn try_match_lookup<P>(
     Ok(ControlFlow::Continue(()))
 }
 
+/// Internal dispatch and handler invocation for route nodes.
 impl<P> RouteNode<P> {
     /// Dispatch children request — recursive tree walk.
     fn dispatch_children(

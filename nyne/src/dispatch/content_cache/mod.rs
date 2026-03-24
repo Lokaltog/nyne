@@ -21,7 +21,9 @@ pub struct FileGenerations {
     generations: RwLock<HashMap<VfsPath, u64>>,
 }
 
+/// Construction, bumping, and querying of per-file generation counters.
 impl FileGenerations {
+    /// Create an empty generation counter map.
     pub(crate) fn new() -> Self {
         Self {
             generations: RwLock::new(HashMap::new()),
@@ -40,7 +42,9 @@ impl FileGenerations {
     pub(crate) fn get(&self, path: &VfsPath) -> u64 { self.generations.read().get(path).copied().unwrap_or(0) }
 }
 
+/// Default implementation for `FileGenerations`.
 impl Default for FileGenerations {
+    /// Delegates to [`FileGenerations::new`].
     fn default() -> Self { Self::new() }
 }
 
@@ -63,7 +67,9 @@ pub(super) struct ContentCache {
     file_generations: Arc<FileGenerations>,
 }
 
+/// L2 content cache operations: get, insert, invalidate, staleness checks.
 impl ContentCache {
+    /// Create an empty content cache backed by the given generation tracker.
     pub(super) fn new(file_generations: Arc<FileGenerations>) -> Self {
         Self {
             entries: RwLock::new(HashMap::new()),
@@ -140,5 +146,6 @@ impl ContentCache {
     }
 }
 
+/// Unit tests for the L2 content cache and file generations.
 #[cfg(test)]
 mod tests;

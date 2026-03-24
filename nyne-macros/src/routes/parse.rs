@@ -75,7 +75,9 @@ pub enum ParsedPattern {
     RestCapture { name: String, suffix: Option<String> },
 }
 
+/// Parse `routes!(ProviderType, { ... })` input into a [`RoutesInput`] AST.
 impl Parse for RoutesInput {
+    /// Parse the provider type, comma, and braced route entries from the token stream.
     fn parse(input: ParseStream<'_>) -> Result<Self> {
         let provider_ty: Type = input.parse()?;
         input.parse::<Token![,]>()?;
@@ -86,6 +88,7 @@ impl Parse for RoutesInput {
     }
 }
 
+/// Parse the contents of a `{ ... }` block into a list of route entries, separated by optional commas.
 fn parse_entries(input: ParseStream<'_>) -> Result<Vec<RouteEntry>> {
     let mut entries = Vec::new();
     while !input.is_empty() {
@@ -96,6 +99,7 @@ fn parse_entries(input: ParseStream<'_>) -> Result<Vec<RouteEntry>> {
     Ok(entries)
 }
 
+/// Parse a single route entry by lookahead: `lookup`, `file`, `children`, or a segment string literal.
 fn parse_entry(input: ParseStream<'_>) -> Result<RouteEntry> {
     // Lookahead: `lookup`, `file`, `children`, or string literal
     if input.peek(Ident) {
@@ -119,6 +123,7 @@ fn parse_entry(input: ParseStream<'_>) -> Result<RouteEntry> {
     Ok(RouteEntry::Segment(parse_segment_route(input)?))
 }
 
+/// Parse a segment route: optional `no_emit`, a pattern string, optional `=> handler`, and optional `{ ... }` children.
 fn parse_segment_route(input: ParseStream<'_>) -> Result<SegmentRoute> {
     // Optional `no_emit` keyword — suppresses directory auto-emission.
     let no_emit = if input.peek(Ident) && input.peek2(LitStr) {
@@ -197,6 +202,7 @@ fn parse_segment_route(input: ParseStream<'_>) -> Result<SegmentRoute> {
     })
 }
 
+/// Parse a lookup entry: either `lookup(handler)` (catch-all) or `lookup "pattern" => handler` (pattern-based).
 fn parse_lookup(input: ParseStream<'_>) -> Result<LookupEntry> {
     let _: Ident = input.parse()?; // consume "lookup"
 
@@ -215,6 +221,7 @@ fn parse_lookup(input: ParseStream<'_>) -> Result<LookupEntry> {
     }
 }
 
+/// Parse a `file("name", expr)` declaration with optional chained modifiers.
 fn parse_file(input: ParseStream<'_>) -> Result<FileEntry> {
     let _: Ident = input.parse()?; // consume "file"
     let content;
@@ -230,6 +237,7 @@ fn parse_file(input: ParseStream<'_>) -> Result<FileEntry> {
     })
 }
 
+/// Parse chained `.no_cache()`, `.hidden()`, and `.sliceable()` modifiers after a `file(...)` declaration.
 fn parse_file_modifiers(input: ParseStream<'_>) -> Result<Vec<FileModifier>> {
     let mut modifiers = Vec::new();
     while input.peek(Token![.]) {
@@ -313,6 +321,7 @@ pub fn parse_pattern(lit: &LitStr) -> Result<ParsedPattern> {
     }
 }
 
+/// Validate that a capture name is a valid Rust identifier (ASCII alphanumeric or underscore, starting with a letter or underscore).
 fn validate_capture_name(name: &str, lit: &LitStr) -> Result<()> {
     if !name.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_') {
         return Err(syn::Error::new(

@@ -4,8 +4,10 @@ use super::kinds;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects empty catch blocks.
 struct EmptyCatch;
 
+/// [`AnalysisRule`] implementation for `EmptyCatch`.
 impl AnalysisRule for EmptyCatch {
     fn id(&self) -> &'static str { "empty-catch" }
 

@@ -30,6 +30,7 @@ use crate::types::ProcessVisibility;
 /// Environment variable set inside the sandbox pointing to the control socket.
 pub const NYNE_CONTROL_SOCKET_ENV: &str = "NYNE_CONTROL_SOCKET";
 
+/// Inbound message types for the control socket.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ControlRequest {
@@ -54,6 +55,7 @@ pub enum ControlRequest {
     ListProcesses,
 }
 
+/// Outbound message types from the control socket.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ControlResponse {
@@ -75,6 +77,7 @@ pub enum ControlResponse {
     },
 }
 
+/// A process currently attached to the sandbox via `nyne attach`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttachedProcess {
     pub pid: i32,
@@ -111,6 +114,7 @@ pub struct ControlServer {
     socket_path: PathBuf,
 }
 
+/// Removes the Unix domain socket file on drop.
 impl Drop for ControlServer {
     fn drop(&mut self) {
         if let Err(e) = fs::remove_file(&self.socket_path)
@@ -154,6 +158,7 @@ pub fn start_server(
     })
 }
 
+/// Accept connections on the Unix listener and dispatch each request.
 fn server_loop(
     path: &Path,
     listener: &UnixListener,
@@ -176,6 +181,7 @@ fn server_loop(
     }
 }
 
+/// Read a single JSON request from a stream, dispatch it, and write the response.
 fn handle_connection(
     stream: UnixStream,
     registry: &ScriptRegistry,
@@ -197,6 +203,7 @@ fn handle_connection(
     Ok(())
 }
 
+/// Route a control request to the appropriate handler.
 fn dispatch(
     req: ControlRequest,
     registry: &ScriptRegistry,
@@ -217,6 +224,7 @@ fn dispatch(
     }
 }
 
+/// Decode base64 stdin, execute the addressed script, and return the result.
 fn handle_exec(
     address: &str,
     stdin_b64: &str,
@@ -258,6 +266,7 @@ fn handle_exec(
     }
 }
 
+/// Register a process in the attached process table, replacing any prior entry for the same PID.
 #[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn handle_register(pid: i32, command: String, processes: &ProcessTable) -> ControlResponse {
     let mut table = processes.lock().expect("process table poisoned");
@@ -272,6 +281,7 @@ fn handle_register(pid: i32, command: String, processes: &ProcessTable) -> Contr
     ControlResponse::Registered
 }
 
+/// Remove a process from the attached process table.
 #[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn handle_unregister(pid: i32, processes: &ProcessTable) -> ControlResponse {
     let mut table = processes.lock().expect("process table poisoned");
@@ -280,6 +290,7 @@ fn handle_unregister(pid: i32, processes: &ProcessTable) -> ControlResponse {
     ControlResponse::Unregistered
 }
 
+/// Set or query visibility rules for a PID or process name.
 #[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn handle_set_visibility(
     pid: Option<i32>,
@@ -320,6 +331,7 @@ fn handle_set_visibility(
     }
 }
 
+/// Snapshot all active visibility rules (per-PID and per-name) into a response struct.
 #[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> VisibilityRules {
     let table = processes.lock().expect("process table poisoned");
@@ -346,6 +358,7 @@ fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> Visi
     VisibilityRules { pid_rules, name_rules }
 }
 
+/// Return all attached processes, pruning dead PIDs in the process.
 #[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn handle_list(processes: &ProcessTable) -> ControlResponse {
     let mut table = processes.lock().expect("process table poisoned");

@@ -31,10 +31,12 @@ pub struct FragmentView {
     shared: Arc<DecomposedSource>,
 }
 
+/// Display implementation for `FragmentView`, showing the fragment name.
 impl fmt::Display for FragmentView {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.frag.name) }
 }
 
+/// Minijinja [`Object`] implementation exposing fragment properties to templates.
 impl Object for FragmentView {
     fn repr(self: &Arc<Self>) -> ObjectRepr { ObjectRepr::Map }
 
@@ -95,6 +97,7 @@ impl Object for FragmentView {
     }
 }
 
+/// Helper methods for extracting display data from a fragment.
 impl FragmentView {
     /// Extract the description: doc comment first line, or first content line for sections.
     fn description(&self) -> String {
@@ -192,5 +195,6 @@ fn section_first_line(body: &str) -> Option<String> {
         .map(String::from)
 }
 
+/// Tests for fragment view template rendering.
 #[cfg(test)]
 mod tests;

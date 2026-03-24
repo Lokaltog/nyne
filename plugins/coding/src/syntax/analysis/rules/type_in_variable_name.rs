@@ -12,8 +12,10 @@ const TYPE_FRAGMENTS: &[&str] = &[
     "f32_", "f64_", "usize_", "isize_",
 ];
 
+/// Analysis rule that detects type names in variable names.
 struct TypeInVariableName;
 
+/// [`AnalysisRule`] implementation for `TypeInVariableName`.
 impl AnalysisRule for TypeInVariableName {
     fn id(&self) -> &'static str { "type-in-variable-name" }
 

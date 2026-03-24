@@ -29,6 +29,7 @@ pub struct ScriptContext<'a> {
     pub activation: &'a ActivationContext,
 }
 
+/// Construction and accessors for the script execution context.
 impl<'a> ScriptContext<'a> {
     /// Create a new script context.
     pub(crate) const fn new(activation: &'a ActivationContext) -> Self { Self { activation } }

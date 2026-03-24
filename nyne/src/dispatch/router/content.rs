@@ -8,6 +8,7 @@ use crate::dispatch::context::RequestContext;
 use crate::node::{CachePolicy, VirtualNode, WriteOutcome};
 use crate::provider::Provider;
 
+/// Content I/O operations: read/write through the L2 cache and pipeline.
 impl Router {
     /// Read content for a virtual inode through the L2 cache.
     ///

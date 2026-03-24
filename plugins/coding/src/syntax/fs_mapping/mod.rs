@@ -51,6 +51,7 @@ pub fn apply_fs_mapping(fragments: &mut [Fragment], strategy: NamingStrategy) {
     }
 }
 
+/// Assign `fs_name` as the fragment's name verbatim (identity strategy).
 fn apply_identity(fragments: &mut [Fragment]) {
     for frag in fragments {
         if !frag.kind.is_structural() {
@@ -60,6 +61,7 @@ fn apply_identity(fragments: &mut [Fragment]) {
     }
 }
 
+/// Assign `fs_name` as a kebab-case slug, optionally with a numeric prefix.
 fn apply_slugified(fragments: &mut [Fragment], indexed: bool) {
     let mut code_block_index = 0usize;
     for (i, frag) in fragments.iter_mut().enumerate() {
@@ -85,6 +87,7 @@ pub fn resolve_conflicts(conflicts: &[ConflictSet], strategy: ConflictStrategy) 
     }
 }
 
+/// Resolve name collisions by appending `~Kind` suffixes (e.g. `Foo~Struct`, `Foo~Impl`).
 fn resolve_kind_suffix(conflicts: &[ConflictSet]) -> Vec<Resolution> {
     let sep = DISAMBIGUATOR_SEP;
 
@@ -122,6 +125,7 @@ fn resolve_kind_suffix(conflicts: &[ConflictSet]) -> Vec<Resolution> {
     resolutions
 }
 
+/// Resolve name collisions by appending numeric suffixes (e.g. `foo`, `foo-2`, `foo-3`).
 fn resolve_numbered(conflicts: &[ConflictSet]) -> Vec<Resolution> {
     conflicts
         .iter()
@@ -146,5 +150,6 @@ fn resolve_numbered(conflicts: &[ConflictSet]) -> Vec<Resolution> {
 /// Delegates to [`nyne::format::to_kebab`] with no length limit.
 pub fn slugify(s: &str) -> String { to_kebab(s, usize::MAX) }
 
+/// Tests for filesystem naming and conflict resolution.
 #[cfg(test)]
 mod tests;

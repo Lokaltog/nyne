@@ -30,6 +30,7 @@ fn test_manager(enabled: bool) -> LspManager {
     test_manager_with_config(config)
 }
 
+/// Tests that a disabled manager returns no clients for any extension.
 #[test]
 fn disabled_returns_none() {
     let mgr = test_manager(false);
@@ -38,6 +39,7 @@ fn disabled_returns_none() {
     assert!(mgr.all_clients_for_ext("rs").is_empty());
 }
 
+/// Tests that an unregistered extension returns no clients.
 #[test]
 fn unknown_extension_returns_none() {
     let mgr = test_manager(true);
@@ -46,6 +48,7 @@ fn unknown_extension_returns_none() {
     assert!(mgr.all_clients_for_ext("xyz").is_empty());
 }
 
+/// Tests that detection prevents spawning when the project root is missing.
 #[test]
 fn detection_gate_prevents_spawn_on_missing_root() {
     let mgr = test_manager(true);
@@ -56,6 +59,7 @@ fn detection_gate_prevents_spawn_on_missing_root() {
     assert!(mgr.all_clients_for_ext("rs").is_empty());
 }
 
+/// Tests that `has_lsp_support` requires both enabled config and syntax registration.
 #[test]
 fn has_lsp_support_requires_enabled_and_syntax() {
     let enabled = test_manager(true);
@@ -71,12 +75,14 @@ fn has_lsp_support_requires_enabled_and_syntax() {
     assert!(!enabled.has_lsp_support("xyz"));
 }
 
+/// Verifies that the cache is accessible and starts empty.
 #[test]
 fn cache_is_wired() {
     let mgr = test_manager(true);
     assert!(mgr.cache().is_empty());
 }
 
+/// Tests that invalidating a file on an empty cache is a no-op.
 #[test]
 fn invalidate_file_delegates_to_cache() {
     let mgr = test_manager(true);
@@ -85,18 +91,21 @@ fn invalidate_file_delegates_to_cache() {
     assert!(mgr.cache().is_empty());
 }
 
+/// Verifies that status is empty when no LSP clients are running.
 #[test]
 fn status_empty_when_no_clients() {
     let mgr = test_manager(true);
     assert!(mgr.status().is_empty());
 }
 
+/// Tests that the diagnostics timeout comes from config defaults.
 #[test]
 fn diagnostics_timeout_from_config() {
     let mgr = test_manager(true);
     assert_eq!(mgr.diagnostics_timeout(), std::time::Duration::from_secs(2));
 }
 
+/// Tests that closing a non-tracked document does not panic.
 #[test]
 fn close_document_noop_when_not_open() {
     let mgr = test_manager(true);

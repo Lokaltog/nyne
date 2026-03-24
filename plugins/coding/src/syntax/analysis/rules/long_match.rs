@@ -7,8 +7,10 @@ use crate::syntax::parser::TsNode;
 /// Maximum match arms/cases before triggering.
 const MAX_ARMS: usize = 8;
 
+/// Analysis rule that detects match expressions with too many arms.
 struct LongMatch;
 
+/// [`AnalysisRule`] implementation for `LongMatch`.
 impl AnalysisRule for LongMatch {
     fn id(&self) -> &'static str { "long-match" }
 

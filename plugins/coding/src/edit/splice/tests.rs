@@ -3,6 +3,7 @@ use nyne::types::vfs_path::VfsPath;
 
 use super::*;
 
+/// Creates a temp file with the given content and returns the test context.
 fn setup(content: &str) -> (tempfile::TempDir, OsFs, VfsPath) {
     let dir = tempfile::tempdir().unwrap();
     let file_path = dir.path().join("test.rs");
@@ -12,8 +13,10 @@ fn setup(content: &str) -> (tempfile::TempDir, OsFs, VfsPath) {
     (dir, fs, vfs_path)
 }
 
+/// Validation function that always succeeds.
 fn always_ok(_: &str) -> Result<(), String> { Ok(()) }
 
+/// Validation function that rejects source containing "SYNTAX_ERROR".
 fn reject_if_contains_error(source: &str) -> Result<(), String> {
     if source.contains("SYNTAX_ERROR") {
         Err("source contains SYNTAX_ERROR".to_owned())
@@ -22,6 +25,7 @@ fn reject_if_contains_error(source: &str) -> Result<(), String> {
     }
 }
 
+/// Tests that splicing valid content into a valid file succeeds.
 #[test]
 fn splice_valid_to_valid_succeeds() {
     let (_dir, fs, path) = setup("fn hello() {}");
@@ -31,6 +35,7 @@ fn splice_valid_to_valid_succeeds() {
     assert_eq!(std::str::from_utf8(&written).unwrap(), "fn world() {}");
 }
 
+/// Tests that splicing invalid content into a valid file is rejected.
 #[test]
 fn splice_valid_to_invalid_is_rejected() {
     let (_dir, fs, path) = setup("fn hello() {}");
@@ -41,6 +46,7 @@ fn splice_valid_to_invalid_is_rejected() {
     assert_eq!(std::str::from_utf8(&written).unwrap(), "fn hello() {}");
 }
 
+/// Tests that splicing into an already-invalid file skips validation.
 #[test]
 fn splice_already_invalid_file_allows_write() {
     let (_dir, fs, path) = setup("fn SYNTAX_ERROR() {}");
@@ -53,6 +59,7 @@ fn splice_already_invalid_file_allows_write() {
     assert_eq!(std::str::from_utf8(&written).unwrap(), "fn still_broken() {}");
 }
 
+/// Tests that an out-of-bounds splice range is rejected.
 #[test]
 fn splice_out_of_bounds_is_rejected() {
     let (_dir, fs, path) = setup("short");

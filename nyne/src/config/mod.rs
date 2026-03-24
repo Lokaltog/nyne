@@ -9,6 +9,7 @@ use garde::Validate;
 use rustix::mount::MountFlags;
 use serde::{Deserialize, Serialize};
 
+/// Top-level nyne configuration, deserialized from `~/.config/nyne/config.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct NyneConfig {
@@ -54,7 +55,9 @@ pub struct NyneConfig {
     pub plugin: HashMap<String, toml::Value>,
 }
 
+/// Default implementation for `NyneConfig`.
 impl Default for NyneConfig {
+    /// Return a config with no mount, default repository/sandbox/agent settings, and no plugins.
     fn default() -> Self {
         Self {
             mount: None,
@@ -79,6 +82,7 @@ pub struct RepositoryConfig {
     pub storage_strategy: StorageStrategy,
 }
 
+/// Namespace isolation settings for sandboxed subprocesses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SandboxConfig {
@@ -103,7 +107,9 @@ pub struct SandboxConfig {
     pub env: HashMap<String, String>,
 }
 
+/// Default implementation for `SandboxConfig`.
 impl Default for SandboxConfig {
+    /// Return sandbox config with default hostname, no bind mounts, and no extra env vars.
     fn default() -> Self {
         Self {
             hostname: default_sandbox_hostname(),
@@ -130,7 +136,9 @@ pub enum BindMountFlag {
     Nodev,
 }
 
+/// Conversion from config-level bind mount flags to kernel mount flags.
 impl BindMountFlag {
+    /// Convert this config-level flag to the corresponding `rustix` kernel mount flag.
     const fn to_mount_flag(self) -> MountFlags {
         use rustix::mount::MountFlags;
 
@@ -143,6 +151,7 @@ impl BindMountFlag {
     }
 }
 
+/// A user-configured bind mount mapping a host path into the sandbox.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BindMount {
@@ -157,7 +166,9 @@ pub struct BindMount {
     pub flags: Vec<BindMountFlag>,
 }
 
+/// Methods for computing kernel mount flags from config-level flags.
 impl BindMount {
+    /// Combine all configured flags into a single `MountFlags` bitset, or `None` if no flags are set.
     pub fn mount_flags(&self) -> Option<MountFlags> {
         use rustix::mount::MountFlags;
 
@@ -235,7 +246,9 @@ pub(crate) fn default_agent_filenames() -> Vec<String> { vec!["CLAUDE.md".to_own
 /// Return the default passthrough process list.
 fn default_passthrough_processes() -> Vec<String> { vec!["git".to_owned()] }
 
+/// Default implementation for `AgentFilesConfig`.
 impl Default for AgentFilesConfig {
+    /// Return agent files config with the default filename list.
     fn default() -> Self {
         Self {
             filenames: default_agent_filenames(),
@@ -250,7 +263,9 @@ fn config_path() -> Option<PathBuf> {
     ProjectDirs::from("", "", "nyne").map(|dirs| dirs.config_dir().join("config.toml"))
 }
 
+/// Loading and validation of the nyne configuration file.
 impl NyneConfig {
+    /// Load configuration from the XDG config file, falling back to defaults if the file is absent.
     pub fn load() -> Result<Self> {
         let Some(path) = config_path() else {
             tracing::debug!("no XDG config directory found, using defaults");
@@ -277,5 +292,6 @@ impl NyneConfig {
     }
 }
 
+/// Unit tests for configuration deserialization and validation.
 #[cfg(test)]
 mod tests;

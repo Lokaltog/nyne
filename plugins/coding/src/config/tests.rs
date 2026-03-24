@@ -4,17 +4,20 @@ use rstest::rstest;
 
 use super::*;
 
+/// Parses a TOML string into a `CodingConfig` for testing.
 fn parse_coding_config(toml_str: &str) -> CodingConfig {
     let toml: toml::Value = toml::from_str(toml_str).unwrap();
     CodingConfig::from_plugin_table(&HashMap::from([("coding".into(), toml)]))
 }
 
+/// Loads a `CodingConfig` from a named test fixture file.
 fn load_fixture(name: &str) -> CodingConfig {
     let path = format!("{}/src/config/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
     let content = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read fixture {name}: {e}"));
     parse_coding_config(&content)
 }
 
+/// Verifies that AnalysisConfig defaults have no rules override.
 #[test]
 fn default_has_no_rules_override() {
     let config = AnalysisConfig::default();
@@ -22,6 +25,7 @@ fn default_has_no_rules_override() {
     assert!(config.rules.is_none());
 }
 
+/// Verifies that a missing plugin section returns default config.
 #[test]
 fn missing_plugin_section_returns_defaults() {
     let config = CodingConfig::from_plugin_table(&HashMap::new());
@@ -29,6 +33,7 @@ fn missing_plugin_section_returns_defaults() {
     assert!(config.analysis.rules.is_none());
 }
 
+/// Verifies that absent rules key deserializes as None.
 #[test]
 fn absent_rules_key_is_none() {
     let config = parse_coding_config(
@@ -40,6 +45,7 @@ fn absent_rules_key_is_none() {
     assert!(config.analysis.rules.is_none());
 }
 
+/// Verifies that an explicit empty rules array deserializes as Some(empty).
 #[test]
 fn explicit_empty_rules_is_some_empty() {
     let config = parse_coding_config(
@@ -51,6 +57,7 @@ fn explicit_empty_rules_is_some_empty() {
     assert_eq!(config.analysis.rules, Some(HashSet::new()));
 }
 
+/// Verifies that specific analysis rules are parsed correctly.
 #[test]
 fn parses_analysis_rules() {
     let config = parse_coding_config(
@@ -65,6 +72,7 @@ fn parses_analysis_rules() {
     assert!(rules.contains("magic-number"));
 }
 
+/// Verifies that disabled analysis is parsed correctly.
 #[test]
 fn parses_disabled_analysis() {
     let config = parse_coding_config(
@@ -76,6 +84,7 @@ fn parses_disabled_analysis() {
     assert!(!config.analysis.enabled);
 }
 
+/// Verifies that unknown analysis fields trigger fallback to defaults.
 #[test]
 fn rejects_unknown_analysis_fields() {
     let config = parse_coding_config(
@@ -88,6 +97,7 @@ fn rejects_unknown_analysis_fields() {
     assert!(config.analysis.enabled);
 }
 
+/// Verifies builtin deny_lines_threshold per language category.
 #[rstest]
 #[case("Rust", 60)]
 #[case("Python", 60)]
@@ -99,6 +109,7 @@ fn builtin_deny_threshold(#[case] lang: &str, #[case] expected: i64) {
     assert_eq!(config.resolve(lang).deny_lines_threshold(), expected);
 }
 
+/// Verifies builtin narrow_read_limit across languages.
 #[rstest]
 #[case("Rust")]
 #[case("Markdown")]
@@ -107,6 +118,7 @@ fn builtin_narrow_read_limit(#[case] lang: &str) {
     assert_eq!(config.resolve(lang).narrow_read_limit(), 80);
 }
 
+/// Verifies that builtin defaults disable symbol table inclusion.
 #[rstest]
 #[case("Rust")]
 #[case("Markdown")]
@@ -115,6 +127,7 @@ fn builtin_no_symbol_table(#[case] lang: &str) {
     assert!(!config.resolve(lang).include_symbol_table.unwrap());
 }
 
+/// Verifies that builtin language matching is case-insensitive.
 #[test]
 fn builtin_defaults_case_insensitive() {
     let config = PreToolHookConfig::default();
@@ -124,6 +137,7 @@ fn builtin_defaults_case_insensitive() {
     assert_eq!(config.resolve("Markdown").deny_lines_threshold(), -1);
 }
 
+/// Verifies that merging a null overlay preserves base values.
 #[test]
 fn merge_null_preserves_base() {
     let base = PreToolPolicy {
@@ -137,6 +151,7 @@ fn merge_null_preserves_base() {
     assert_eq!(merged.include_symbol_table, Some(true));
 }
 
+/// Verifies that non-null overlay values overwrite base values.
 #[test]
 fn merge_overwrites_non_null() {
     let base = PreToolPolicy {
@@ -155,6 +170,7 @@ fn merge_overwrites_non_null() {
     assert_eq!(merged.include_symbol_table, Some(true));
 }
 
+/// Verifies that user default policy overrides builtin defaults.
 #[test]
 fn user_default_overrides_builtin() {
     let config = PreToolHookConfig {
@@ -169,6 +185,7 @@ fn user_default_overrides_builtin() {
     assert_eq!(config.resolve("Markdown").deny_lines_threshold(), 100);
 }
 
+/// Verifies that filetype policy overrides user default policy.
 #[test]
 fn filetype_overrides_user_default() {
     let config = PreToolHookConfig {
@@ -185,6 +202,7 @@ fn filetype_overrides_user_default() {
     assert_eq!(config.resolve("Rust").deny_lines_threshold(), 100);
 }
 
+/// Verifies that partial filetype config inherits unset fields from base.
 #[test]
 fn partial_filetype_inherits_unset_fields() {
     let config = PreToolHookConfig {
@@ -201,6 +219,7 @@ fn partial_filetype_inherits_unset_fields() {
     assert_eq!(policy.narrow_read_limit(), 80);
 }
 
+/// Verifies full config resolution from a fixture with multiple overrides.
 #[test]
 fn config_from_fixture() {
     let config = load_fixture("pre_tool_overrides.toml");
@@ -230,6 +249,7 @@ fn config_from_fixture() {
     assert!(!rs_resolved.include_symbol_table.unwrap());
 }
 
+/// Verifies that absent hooks section uses default policy values.
 #[test]
 fn absent_hooks_uses_defaults() {
     let config = CodingConfig::from_plugin_table(&HashMap::new());
@@ -237,6 +257,7 @@ fn absent_hooks_uses_defaults() {
     assert_eq!(config.hooks.pre_tool.resolve("Markdown").deny_lines_threshold(), -1);
 }
 
+/// Verifies that invalid config sections fall back to defaults.
 #[rstest]
 #[case("[hooks]\nbogus = true", "unknown field in hooks section")]
 #[case("[hooks.pre_tool]\nbogus = true", "unknown field in pre_tool section")]
@@ -248,6 +269,7 @@ fn invalid_config_falls_back_to_defaults(#[case] toml_str: &str, #[case] _desc: 
     assert_eq!(config.hooks.pre_tool.resolve("Rust").deny_lines_threshold(), 60);
 }
 
+/// Verifies that wrong-typed config values fall back to defaults.
 #[test]
 fn wrong_type_falls_back_to_defaults() {
     // deny_lines_threshold should be i64, not string.
@@ -261,6 +283,7 @@ fn wrong_type_falls_back_to_defaults() {
     assert_eq!(config.hooks.pre_tool.resolve("Rust").deny_lines_threshold(), 60);
 }
 
+/// Verifies stop hook default values.
 #[test]
 fn stop_defaults() {
     let config = CodingConfig::from_plugin_table(&HashMap::new());
@@ -271,6 +294,7 @@ fn stop_defaults() {
     assert!(!config.hooks.stop.ignore_extensions.contains(&"rs".to_owned()));
 }
 
+/// Verifies stop hook config loaded from a fixture.
 #[test]
 fn stop_config_from_fixture() {
     let config = load_fixture("stop_overrides.toml");
@@ -278,12 +302,14 @@ fn stop_config_from_fixture() {
     assert_eq!(config.hooks.stop.ignore_extensions, vec!["toml", "md"]);
 }
 
+/// Verifies that unknown stop hook fields fall back to defaults.
 #[test]
 fn stop_unknown_field_falls_back_to_defaults() {
     let config = parse_coding_config("[hooks.stop]\nbogus = true");
     assert_eq!(config.hooks.stop.min_files, 2);
 }
 
+/// Verifies that all Claude hooks default to enabled.
 #[test]
 fn claude_defaults_all_enabled() {
     let config = CodingConfig::from_plugin_table(&HashMap::new());
@@ -295,6 +321,7 @@ fn claude_defaults_all_enabled() {
     assert!(config.claude.hooks.statusline);
 }
 
+/// Verifies that setting claude enabled=false disables the master toggle.
 #[test]
 fn claude_disabled() {
     let config = parse_coding_config("[claude]\nenabled = false");
@@ -303,6 +330,7 @@ fn claude_disabled() {
     assert!(config.claude.hooks.session_start);
 }
 
+/// Verifies that individual Claude hooks can be disabled independently.
 #[test]
 fn claude_individual_hooks_disabled() {
     let config = parse_coding_config("[claude.hooks]\nstatusline = false\nstop = false");
@@ -314,18 +342,21 @@ fn claude_individual_hooks_disabled() {
     assert!(!config.claude.hooks.statusline);
 }
 
+/// Verifies that unknown Claude config fields fall back to defaults.
 #[test]
 fn claude_unknown_field_falls_back_to_defaults() {
     let config = parse_coding_config("[claude]\nbogus = true");
     assert!(config.claude.enabled);
 }
 
+/// Verifies that unknown Claude hooks fields fall back to defaults.
 #[test]
 fn claude_hooks_unknown_field_falls_back_to_defaults() {
     let config = parse_coding_config("[claude.hooks]\nbogus = true");
     assert!(config.claude.hooks.session_start);
 }
 
+/// Verifies Claude config loaded from a fixture with partial overrides.
 #[test]
 fn claude_config_from_fixture() {
     let config = load_fixture("claude_overrides.toml");
@@ -337,6 +368,7 @@ fn claude_config_from_fixture() {
     assert!(config.claude.hooks.session_start);
 }
 
+/// Verifies LSP defaults when the section is omitted.
 #[test]
 fn lsp_defaults_when_omitted() {
     let config = load_fixture("lsp_empty_section.toml");
@@ -345,12 +377,14 @@ fn lsp_defaults_when_omitted() {
     assert_eq!(config.lsp.diagnostics_timeout, std::time::Duration::from_secs(2));
 }
 
+/// Verifies that LSP can be explicitly disabled.
 #[test]
 fn lsp_disabled() {
     let config = load_fixture("lsp_disabled.toml");
     assert!(!config.lsp.enabled);
 }
 
+/// Verifies custom LSP duration overrides.
 #[test]
 fn lsp_custom_durations() {
     let config = load_fixture("lsp_custom_durations.toml");
@@ -358,6 +392,7 @@ fn lsp_custom_durations() {
     assert_eq!(config.lsp.diagnostics_timeout, std::time::Duration::from_secs(5));
 }
 
+/// Verifies LSP server argument overrides.
 #[test]
 fn lsp_server_override_args() {
     let config = load_fixture("lsp_server_override_args.toml");
@@ -370,6 +405,7 @@ fn lsp_server_override_args() {
     );
 }
 
+/// Verifies LSP server command overrides.
 #[test]
 fn lsp_server_override_command() {
     let config = load_fixture("lsp_server_override_command.toml");
@@ -379,30 +415,35 @@ fn lsp_server_override_command() {
     assert!(pyright.args.is_none());
 }
 
+/// Verifies that an LSP server can be disabled via override.
 #[test]
 fn lsp_server_disable() {
     let config = load_fixture("lsp_server_disable.toml");
     assert!(!config.lsp.servers["basedpyright"].enabled);
 }
 
+/// Verifies custom LSP server configuration.
 #[test]
 fn lsp_custom_server() {
     let config = load_fixture("lsp_custom_server.toml");
     insta::assert_debug_snapshot!(config.lsp.custom);
 }
 
+/// Verifies configuration of multiple custom LSP servers.
 #[test]
 fn lsp_multiple_custom_servers() {
     let config = load_fixture("lsp_multiple_custom_servers.toml");
     insta::assert_debug_snapshot!(config.lsp.custom);
 }
 
+/// Verifies that custom LSP servers work without args.
 #[test]
 fn lsp_custom_server_no_args() {
     let config = load_fixture("lsp_custom_server_no_args.toml");
     assert!(config.lsp.custom[0].args.is_empty());
 }
 
+/// Verifies a complete LSP configuration with all fields populated.
 #[test]
 fn lsp_full_config() {
     let config = load_fixture("lsp_full.toml");
@@ -414,6 +455,7 @@ fn lsp_full_config() {
     assert_eq!(config.lsp.custom.len(), 1);
 }
 
+/// Verifies that invalid config sections are rejected by serde.
 #[rstest]
 #[case::unknown_lsp("[lsp]\nbogus = true")]
 #[case::unknown_lsp_server_override("[lsp.servers.rust-analyzer]\nbogus = true")]

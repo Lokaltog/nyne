@@ -9,6 +9,7 @@ fn temp_file(content: &[u8]) -> File {
     f
 }
 
+/// Tests that writing to a buffered handle at offset zero replaces content.
 #[test]
 fn write_to_buffered_handle_at_offset_zero() {
     let table = HandleTable::new();
@@ -21,6 +22,7 @@ fn write_to_buffered_handle_at_offset_zero() {
     assert_eq!(data, b"HELLO");
 }
 
+/// Tests that appending to a buffered handle preserves original content.
 #[test]
 fn append_to_buffered_handle_preserves_original() {
     let table = HandleTable::new();
@@ -33,6 +35,7 @@ fn append_to_buffered_handle_preserves_original() {
     assert_eq!(data, b"hello world");
 }
 
+/// Tests that writing to a direct handle lazily populates the buffer from the fd.
 #[test]
 fn write_to_direct_handle_populates_buffer_from_fd() {
     let table = HandleTable::new();
@@ -53,6 +56,7 @@ fn write_to_direct_handle_populates_buffer_from_fd() {
     assert_eq!(data, b"original content appended");
 }
 
+/// Tests that overwriting part of a direct handle preserves surrounding bytes.
 #[test]
 fn overwrite_in_direct_handle_preserves_surrounding_content() {
     let table = HandleTable::new();
@@ -67,6 +71,7 @@ fn overwrite_in_direct_handle_preserves_surrounding_content() {
     assert_eq!(data, b"hello WORLD");
 }
 
+/// Tests that writing at offset zero on an empty direct handle works correctly.
 #[test]
 fn direct_handle_write_at_zero_on_empty_file() {
     let table = HandleTable::new();
@@ -79,6 +84,7 @@ fn direct_handle_write_at_zero_on_empty_file() {
     assert_eq!(data, b"new content");
 }
 
+/// Tests that a direct handle is marked dirty after a write.
 #[test]
 fn direct_handle_marks_dirty_after_write() {
     let table = HandleTable::new();
@@ -95,6 +101,7 @@ fn direct_handle_marks_dirty_after_write() {
     assert_eq!(gen_id, 1);
 }
 
+/// Tests that O_APPEND clamps stale kernel offsets to the buffer length.
 #[test]
 fn append_clamps_offset_to_buffer_len() {
     let table = HandleTable::new();
@@ -110,6 +117,7 @@ fn append_clamps_offset_to_buffer_len() {
     assert_eq!(data, b"line1\nline2\nline3\n");
 }
 
+/// Tests that O_APPEND on a direct handle clamps stale offsets correctly.
 #[test]
 fn append_direct_handle_with_stale_offset() {
     let table = HandleTable::new();
@@ -124,6 +132,7 @@ fn append_direct_handle_with_stale_offset() {
     assert_eq!(data, b"hello world");
 }
 
+/// Tests that writing beyond the buffer without O_APPEND zero-fills the gap.
 #[test]
 fn non_append_write_at_offset_beyond_buffer_zero_fills() {
     let table = HandleTable::new();

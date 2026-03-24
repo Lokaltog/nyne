@@ -1,15 +1,18 @@
 use super::*;
 
+/// Verifies that the current process PID is reported as alive.
 #[test]
 fn current_process_is_alive() {
     assert!(state::is_pid_alive(std::process::id() as i32));
 }
 
+/// Verifies that an invalid PID is reported as not alive.
 #[test]
 fn bogus_pid_is_not_alive() {
     assert!(!state::is_pid_alive(i32::MAX));
 }
 
+/// Verifies that SessionInfo survives JSON serialization and deserialization.
 #[test]
 fn session_info_roundtrip() {
     let info = SessionInfo {
@@ -24,6 +27,7 @@ fn session_info_roundtrip() {
     assert_eq!(parsed.mount_path, PathBuf::from("/tmp/test"));
 }
 
+/// Verifies that resolve fails when the registry has no sessions.
 #[test]
 fn registry_resolve_empty() {
     let registry = SessionRegistry { sessions: vec![] };
@@ -31,6 +35,7 @@ fn registry_resolve_empty() {
     assert!(registry.resolve(Some("nonexistent")).is_err());
 }
 
+/// Verifies that resolve returns the only active session without requiring an explicit ID.
 #[test]
 fn registry_resolve_single_session() {
     let registry = SessionRegistry {
@@ -50,6 +55,7 @@ fn registry_resolve_single_session() {
     assert!(registry.resolve(Some("bar")).is_err());
 }
 
+/// Verifies that resolve requires an explicit ID when multiple sessions are active.
 #[test]
 fn registry_resolve_multiple_sessions_requires_id() {
     let registry = SessionRegistry {
@@ -72,6 +78,7 @@ fn registry_resolve_multiple_sessions_requires_id() {
     assert_eq!(registry.resolve(Some("b")).unwrap().id, "b");
 }
 
+/// Verifies that is_active returns true for known sessions and false for unknown ones.
 #[test]
 fn registry_is_active() {
     let registry = SessionRegistry {

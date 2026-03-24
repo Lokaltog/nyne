@@ -1,13 +1,21 @@
 //! Shared value types and context structs.
 
+/// Filesystem entry kind enum (file, directory, symlink).
 pub mod file_kind;
+/// VFS path naming conventions: companion suffix, companion split, fragment parsing.
 pub mod path_conventions;
+/// Abstraction over real filesystem operations for FUSE passthrough.
 pub mod real_fs;
+/// Slice specification parsing for list-like virtual files (`:M`, `:M-N`, `:-N`).
 pub mod slice;
+/// `TypeId`-keyed heterogeneous map for typed property storage.
 pub mod type_map;
+/// Virtual filesystem relative paths with validation and normalization.
 pub mod vfs_path;
 
+/// Per-process visibility levels controlling VFS content filtering.
 mod process_visibility;
+/// Line range metadata for symbol directory nodes.
 mod symbol_line_range;
 
 pub use file_kind::FileKind;

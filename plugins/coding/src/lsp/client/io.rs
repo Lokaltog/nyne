@@ -51,6 +51,7 @@ impl TimeoutReader {
     }
 }
 
+/// `Read` impl that polls for readability before delegating to the inner buffer.
 impl Read for TimeoutReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // Only poll when the BufReader's internal buffer is empty.
@@ -62,6 +63,7 @@ impl Read for TimeoutReader {
     }
 }
 
+/// `BufRead` impl that polls for readability before filling the buffer.
 impl io::BufRead for TimeoutReader {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         if self.inner.buffer().is_empty() {
@@ -73,6 +75,7 @@ impl io::BufRead for TimeoutReader {
     fn consume(&mut self, amt: usize) { self.inner.consume(amt); }
 }
 
+/// Read and log all lines from the server's stderr until EOF.
 pub(super) fn drain_stderr(stderr_file: File, server_name: &str) {
     use std::io::BufRead;
     let reader = BufReader::new(stderr_file);

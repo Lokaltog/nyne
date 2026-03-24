@@ -12,6 +12,7 @@ use crate::dispatch::resolve;
 use crate::node::CachePolicy;
 use crate::types::file_kind::FileKind;
 
+/// Resolution and name lookup operations for the router.
 impl Router {
     /// Ensure a directory is resolved in the L1 cache.
     ///
@@ -288,5 +289,6 @@ fn derive_from_plugins(dir: &DirState, name: &str, ctx: &RequestContext<'_>) -> 
     Ok(None)
 }
 
+/// Unit tests for plugin derivation in lookup.
 #[cfg(test)]
 mod tests;

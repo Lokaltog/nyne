@@ -15,6 +15,7 @@ use crate::format::to_kebab_raw;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SessionId(String);
 
+/// Construction and validation for session identifiers.
 impl SessionId {
     /// Create a `SessionId` from a pre-validated string.
     fn new(s: String) -> Result<Self> {
@@ -80,6 +81,7 @@ impl SessionId {
     pub(crate) fn as_str(&self) -> &str { &self.0 }
 }
 
+/// Displays the session ID as its inner string.
 impl fmt::Display for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.0) }
 }

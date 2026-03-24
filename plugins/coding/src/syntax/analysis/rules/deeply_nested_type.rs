@@ -7,8 +7,10 @@ use crate::syntax::parser::TsNode;
 /// Maximum nesting depth for generic type parameters.
 const MAX_TYPE_DEPTH: usize = 3;
 
+/// Analysis rule that detects deeply nested generic types.
 struct DeeplyNestedType;
 
+/// [`AnalysisRule`] implementation for `DeeplyNestedType`.
 impl AnalysisRule for DeeplyNestedType {
     fn id(&self) -> &'static str { "deeply-nested-type" }
 

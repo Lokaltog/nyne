@@ -153,5 +153,6 @@ pub fn extend_delete_range(source: &str, span: &Range<usize>) -> Range<usize> {
     span.start..span.end + extra
 }
 
+/// Unit tests for content splicing operations.
 #[cfg(test)]
 mod tests;

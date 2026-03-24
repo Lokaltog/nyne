@@ -4,8 +4,10 @@ use super::kinds;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects unnecessary else blocks.
 struct UnnecessaryElse;
 
+/// [`AnalysisRule`] implementation for `UnnecessaryElse`.
 impl AnalysisRule for UnnecessaryElse {
     fn id(&self) -> &'static str { "unnecessary-else" }
 

@@ -4,8 +4,10 @@ use super::kinds;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects array indexing inside loops.
 struct IndexInLoop;
 
+/// [`AnalysisRule`] implementation for `IndexInLoop`.
 impl AnalysisRule for IndexInLoop {
     fn id(&self) -> &'static str { "index-in-loop" }
 

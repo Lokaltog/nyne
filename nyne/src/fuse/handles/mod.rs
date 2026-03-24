@@ -25,7 +25,9 @@ pub(super) struct OpenMode {
     pub write_intent: bool,
 }
 
+/// Methods for parsing POSIX open flags.
 impl OpenMode {
+    /// Parses raw POSIX open flags into structured mode flags.
     pub const fn parse(flags: i32) -> Self {
         let accmode = flags & libc::O_ACCMODE;
         Self {
@@ -85,6 +87,7 @@ enum BufferSource {
     Materialized { _fd: File, truncated: bool },
 }
 
+/// Methods for querying buffer source state.
 impl BufferSource {
     /// Whether this source was truncated at some point in its lifecycle.
     /// Used to derive [`WriteMode`] for the flush pipeline.
@@ -126,9 +129,12 @@ pub(super) struct HandleEntry {
     truncated_on_open: bool,
 }
 
+/// Methods for querying handle entry state.
 impl HandleEntry {
+    /// Returns whether the handle has uncommitted writes.
     pub const fn is_dirty(&self) -> bool { self.dirty_gen > 0 }
 
+    /// Returns the write mode based on truncation history.
     pub const fn write_mode(&self) -> WriteMode {
         if self.truncated_on_open || self.source.was_truncated() {
             WriteMode::Truncate
@@ -152,10 +158,13 @@ pub(super) struct HandleTable {
     inner: RwLock<Slab<HandleEntry>>,
 }
 
+/// Default implementation for `HandleTable`.
 impl Default for HandleTable {
+    /// Creates a new, empty handle table.
     fn default() -> Self { Self::new() }
 }
 
+/// File handle operations for the FUSE filesystem.
 impl HandleTable {
     /// Create a new, empty handle table.
     pub const fn new() -> Self {
@@ -417,11 +426,13 @@ impl HandleTable {
         }
     }
 
+    /// Looks up a handle entry by file handle number.
     fn get_entry(slab: &Slab<HandleEntry>, fh: u64) -> Option<&HandleEntry> {
         let idx = usize::try_from(fh).ok()?;
         slab.get(idx)
     }
 
+    /// Looks up a mutable handle entry by file handle number.
     fn get_entry_mut(slab: &mut Slab<HandleEntry>, fh: u64) -> Option<&mut HandleEntry> {
         let idx = usize::try_from(fh).ok()?;
         slab.get_mut(idx)

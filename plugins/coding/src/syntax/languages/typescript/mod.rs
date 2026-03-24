@@ -8,13 +8,16 @@ use super::prelude::*;
 /// syntax and LSP language registration.
 pub const EXTENSIONS: &[&str] = &["ts", "tsx"];
 
+/// TypeScript/JavaScript language specification for tree-sitter decomposition.
 struct TypeScriptLanguage;
 
+/// Constants for TypeScript tree-sitter node kinds.
 impl TypeScriptLanguage {
     /// Tree-sitter node kind for `export` wrapper statements.
     const EXPORT_STATEMENT: &str = "export_statement";
 }
 
+/// [`LanguageSpec`] implementation for TypeScript/JavaScript.
 impl LanguageSpec for TypeScriptLanguage {
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
     const IMPORT_KINDS: &'static [&'static str] = &["import_statement"];
@@ -102,6 +105,7 @@ impl LanguageSpec for TypeScriptLanguage {
     }
 }
 
+/// Check whether a node is inside an export statement.
 fn is_exported(node: TsNode<'_>) -> bool {
     node.parent()
         .is_some_and(|p| p.kind() == TypeScriptLanguage::EXPORT_STATEMENT)
@@ -148,5 +152,6 @@ fn strip_jsdoc(raw: &str) -> String {
 
 register_syntax!(TypeScriptLanguage);
 
+/// Tests for TypeScript decomposition.
 #[cfg(test)]
 mod tests;

@@ -6,8 +6,10 @@ use crate::providers::todo::parse_tag_suffix;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
+/// Analysis rule that detects TODO and FIXME comments.
 struct TodoFixme;
 
+/// [`AnalysisRule`] implementation for `TodoFixme`.
 impl AnalysisRule for TodoFixme {
     fn id(&self) -> &'static str { "todo-fixme" }
 

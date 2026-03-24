@@ -120,6 +120,7 @@ pub(crate) mod default_permissions {
     pub const SYMLINK: u16 = 0o700;
 }
 
+/// Construction, capability attachment, and property access.
 impl VirtualNode {
     /// Base constructor — all public constructors delegate here.
     fn new(name: impl Into<String>, kind: NodeKind) -> Self {
@@ -295,10 +296,13 @@ impl VirtualNode {
     /// Retrieve a typed property by type.
     pub fn get_prop<T: 'static>(&self) -> Option<&T> { self.props.get::<T>() }
 
+    /// Returns the node's name.
     pub fn name(&self) -> &str { &self.name }
 
+    /// Returns the node's kind.
     pub const fn kind(&self) -> &NodeKind { &self.kind }
 
+    /// Returns the node's cache policy.
     pub const fn cache_policy(&self) -> CachePolicy { self.cache_policy }
 
     /// The source file and generation this node's content derives from.
@@ -333,20 +337,28 @@ impl VirtualNode {
         }
     }
 
+    /// Returns the readable capability, if attached.
     pub fn readable(&self) -> Option<&dyn Readable> { self.readable.as_deref() }
 
+    /// Returns the writable capability, if attached.
     pub fn writable(&self) -> Option<&dyn Writable> { self.writable.as_deref() }
 
+    /// Returns the renameable capability, if attached.
     pub fn renameable(&self) -> Option<&dyn Renameable> { self.renameable.as_deref() }
 
+    /// Returns the unlinkable capability, if attached.
     pub fn unlinkable(&self) -> Option<&dyn Unlinkable> { self.unlinkable.as_deref() }
 
+    /// Returns the lifecycle hooks, if attached.
     pub fn lifecycle(&self) -> Option<&dyn Lifecycle> { self.lifecycle.as_deref() }
 
+    /// Returns the xattr capability, if attached.
     pub fn xattrable(&self) -> Option<&dyn Xattrable> { self.xattrable.as_deref() }
 
+    /// Returns the attached read middlewares.
     pub fn read_middlewares(&self) -> &[Box<dyn ReadMiddleware>] { &self.read_middlewares }
 
+    /// Returns the attached write middlewares.
     pub fn write_middlewares(&self) -> &[Box<dyn WriteMiddleware>] { &self.write_middlewares }
 }
 
@@ -376,12 +388,14 @@ mod tests {
     use super::*;
     use crate::types::vfs_path::VfsPath;
 
+    /// Tests that source defaults to None for nodes without a source.
     #[test]
     fn source_defaults_to_none() {
         let node = VirtualNode::file("test.rs", StaticContent(b""));
         assert!(node.source().is_none());
     }
 
+    /// Tests that with_source round-trips the source file and generation.
     #[test]
     fn with_source_round_trip() {
         let path = VfsPath::new("src/lib.rs").unwrap();
@@ -391,6 +405,7 @@ mod tests {
         assert_eq!(generation, 42);
     }
 
+    /// Tests that with_source preserves other node fields.
     #[test]
     fn with_source_preserves_other_fields() {
         let path = VfsPath::new("src/lib.rs").unwrap();

@@ -189,6 +189,7 @@ impl Router {
         }
     }
 
+    /// Invalidate a single node's L2 content and optionally notify the kernel.
     fn invalidate_node(&self, vpath: &VfsPath, notifier: Option<&dyn KernelNotifier>) {
         let Some(parent) = vpath.parent() else { return };
         let Some(name) = vpath.name() else { return };
@@ -204,6 +205,7 @@ impl Router {
         }
     }
 
+    /// Invalidate L1/L2 caches for a subtree and notify the kernel to flush dentries.
     fn invalidate_subtree_with_notify(&self, path: &VfsPath, notifier: Option<&dyn KernelNotifier>) {
         let affected = self.collect_subtree_entries(path);
         // Collect directory inodes *before* clearing cache — these are the

@@ -21,7 +21,9 @@ use crate::node::NodeKind;
 use crate::types::ProcessVisibility;
 use crate::types::file_kind::FileKind;
 
+/// `Filesystem` implementation for [`NyneFs`], dispatching FUSE protocol callbacks.
 impl Filesystem for NyneFs {
+    /// Initializes the FUSE filesystem, negotiating kernel capabilities.
     fn init(&mut self, _req: &Request, config: &mut fuser::KernelConfig) -> io::Result<()> {
         if let Err(unsupported) = config.add_capabilities(InitFlags::FUSE_PASSTHROUGH) {
             warn!(target: "nyne::fuse", ?unsupported, "kernel does not support FUSE_PASSTHROUGH");
@@ -48,6 +50,7 @@ impl Filesystem for NyneFs {
         Ok(())
     }
 
+    /// Looks up a child entry by name within a parent directory.
     fn lookup(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
         with_parent_ctx!(self, parent, name, reply, "lookup", |parent_ino, name_str, ctx| {
             // None-visibility processes see only real filesystem entries.
@@ -67,12 +70,14 @@ impl Filesystem for NyneFs {
         });
     }
 
+    /// Returns file attributes for an inode.
     fn getattr(&self, req: &Request, ino: INodeNo, _fh: Option<FileHandle>, reply: ReplyAttr) {
         let ino = u64::from(ino);
         trace!(target: "nyne::fuse", ino, "getattr");
         self.reply_attr(ino, req, reply);
     }
 
+    /// Sets file attributes (size, timestamps) for an inode.
     fn setattr(
         &self,
         req: &Request,
@@ -113,6 +118,7 @@ impl Filesystem for NyneFs {
         self.reply_attr(ino, req, reply);
     }
 
+    /// Lists directory entries for a directory inode.
     fn readdir(&self, req: &Request, ino: INodeNo, _fh: FileHandle, offset: u64, mut reply: ReplyDirectory) {
         let ino = u64::from(ino);
         let dir_path = ensure_dir_path!(self, ino, reply);
@@ -146,6 +152,7 @@ impl Filesystem for NyneFs {
         reply.ok();
     }
 
+    /// Lists directory entries with attributes for a directory inode.
     fn readdirplus(&self, req: &Request, ino: INodeNo, _fh: FileHandle, offset: u64, mut reply: ReplyDirectoryPlus) {
         let ino = u64::from(ino);
         let dir_path = ensure_dir_path!(self, ino, reply);
@@ -174,6 +181,7 @@ impl Filesystem for NyneFs {
         reply.ok();
     }
 
+    /// Opens a file, setting up buffered or passthrough I/O.
     fn open(&self, req: &Request, ino: INodeNo, flags: OpenFlags, reply: ReplyOpen) {
         let ino = u64::from(ino);
         let resolved = self.resolve_for_request(ino, req);
@@ -249,6 +257,7 @@ impl Filesystem for NyneFs {
         reply.opened(FileHandle(fh), FopenFlags::FOPEN_DIRECT_IO);
     }
 
+    /// Reads data from an open file handle at the given offset.
     fn read(
         &self,
         _req: &Request,
@@ -267,6 +276,7 @@ impl Filesystem for NyneFs {
         reply.data(&data);
     }
 
+    /// Writes data to an open file handle at the given offset.
     fn write(
         &self,
         _req: &Request,
@@ -289,6 +299,7 @@ impl Filesystem for NyneFs {
         }
     }
 
+    /// Flushes dirty buffer contents for an open file handle.
     fn flush(&self, _req: &Request, ino: INodeNo, fh: FileHandle, _lock_owner: LockOwner, reply: ReplyEmpty) {
         let (ino, fh) = (u64::from(ino), u64::from(fh));
         trace!(target: "nyne::fuse", ino, fh, "flush");
@@ -326,6 +337,7 @@ impl Filesystem for NyneFs {
         reply.ok();
     }
 
+    /// Releases a file handle, flushing any remaining dirty data.
     fn release(
         &self,
         req: &Request,
@@ -374,18 +386,21 @@ impl Filesystem for NyneFs {
         reply.ok();
     }
 
+    /// Opens a directory for reading.
     fn opendir(&self, _req: &Request, ino: INodeNo, _flags: OpenFlags, reply: ReplyOpen) {
         let ino = u64::from(ino);
         trace!(target: "nyne::fuse", ino, "opendir");
         reply.opened(FileHandle(0), FopenFlags::empty());
     }
 
+    /// Releases a directory handle.
     fn releasedir(&self, _req: &Request, ino: INodeNo, _fh: FileHandle, _flags: OpenFlags, reply: ReplyEmpty) {
         let ino = u64::from(ino);
         trace!(target: "nyne::fuse", ino, "releasedir");
         reply.ok();
     }
 
+    /// Checks access permissions for an inode.
     fn access(&self, req: &Request, ino: INodeNo, mask: AccessFlags, reply: ReplyEmpty) {
         let ino = u64::from(ino);
         trace!(target: "nyne::fuse", ino, ?mask, "access");
@@ -421,6 +436,7 @@ impl Filesystem for NyneFs {
         reply.ok();
     }
 
+    /// Reads the target of a symbolic link.
     fn readlink(&self, req: &Request, ino: INodeNo, reply: ReplyData) {
         let ino = u64::from(ino);
         debug!(target: "nyne::fuse", ino, "readlink");
@@ -453,6 +469,7 @@ impl Filesystem for NyneFs {
         }
     }
 
+    /// Creates a new file in the given parent directory.
     fn create(
         &self,
         req: &Request,
@@ -466,18 +483,22 @@ impl Filesystem for NyneFs {
         self.do_create(req, parent, name, flags, reply);
     }
 
+    /// Creates a new directory in the given parent directory.
     fn mkdir(&self, req: &Request, parent: INodeNo, name: &OsStr, _mode: u32, _umask: u32, reply: ReplyEntry) {
         self.do_mkdir(req, parent, name, reply);
     }
 
+    /// Removes a file from the given parent directory.
     fn unlink(&self, _req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
         self.do_remove(parent, name, false, reply);
     }
 
+    /// Removes a directory from the given parent directory.
     fn rmdir(&self, _req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
         self.do_remove(parent, name, true, reply);
     }
 
+    /// Renames or moves a file or directory.
     fn rename(
         &self,
         _req: &Request,
@@ -491,14 +512,17 @@ impl Filesystem for NyneFs {
         self.do_rename(parent, name, newparent, newname, reply);
     }
 
+    /// Gets an extended attribute value by name.
     fn getxattr(&self, _req: &Request, ino: INodeNo, name: &OsStr, size: u32, reply: ReplyXattr) {
         self.do_getxattr(ino, name, size, reply);
     }
 
+    /// Lists all extended attribute names for an inode.
     fn listxattr(&self, _req: &Request, ino: INodeNo, size: u32, reply: ReplyXattr) {
         self.do_listxattr(ino, size, reply);
     }
 
+    /// Sets an extended attribute value.
     fn setxattr(
         &self,
         _req: &Request,
@@ -512,20 +536,24 @@ impl Filesystem for NyneFs {
         self.do_setxattr(ino, name, value, reply);
     }
 
+    /// Removes an extended attribute (not supported).
     fn removexattr(&self, _req: &Request, ino: INodeNo, name: &OsStr, reply: ReplyEmpty) {
         let ino = u64::from(ino);
         debug!(target: "nyne::fuse", ino, name = ?name, "removexattr");
         reply.error(Errno::ENOTSUP);
     }
 
+    /// Called when the filesystem is unmounted.
     fn destroy(&mut self) {
         info!(target: "nyne::fuse", "filesystem destroyed");
     }
 
+    /// Forgets an inode, decrementing its lookup count.
     fn forget(&self, _req: &Request, ino: INodeNo, nlookup: u64) {
         trace!(target: "nyne::fuse", ino = u64::from(ino), nlookup, "forget");
     }
 
+    /// Creates a special file node (not supported).
     fn mknod(
         &self,
         _req: &Request,
@@ -541,28 +569,33 @@ impl Filesystem for NyneFs {
         reply.error(Errno::EPERM);
     }
 
+    /// Creates a symbolic link (not supported).
     fn symlink(&self, _req: &Request, parent: INodeNo, link_name: &OsStr, _target: &Path, reply: ReplyEntry) {
         let parent = u64::from(parent);
         debug!(target: "nyne::fuse", parent, link_name = ?link_name, "symlink: not supported");
         reply.error(Errno::EPERM);
     }
 
+    /// Creates a hard link (not supported).
     fn link(&self, _req: &Request, _ino: INodeNo, newparent: INodeNo, newname: &OsStr, reply: ReplyEntry) {
         let newparent = u64::from(newparent);
         debug!(target: "nyne::fuse", newparent, newname = ?newname, "link: not supported");
         reply.error(Errno::EPERM);
     }
 
+    /// Synchronizes file contents to storage (no-op).
     fn fsync(&self, _req: &Request, ino: INodeNo, fh: FileHandle, datasync: bool, reply: ReplyEmpty) {
         trace!(target: "nyne::fuse", ino = u64::from(ino), fh = u64::from(fh), datasync, "fsync");
         reply.ok();
     }
 
+    /// Synchronizes directory contents to storage (no-op).
     fn fsyncdir(&self, _req: &Request, ino: INodeNo, fh: FileHandle, datasync: bool, reply: ReplyEmpty) {
         trace!(target: "nyne::fuse", ino = u64::from(ino), fh = u64::from(fh), datasync, "fsyncdir");
         reply.ok();
     }
 
+    /// Returns filesystem statistics from the underlying real filesystem.
     fn statfs(&self, _req: &Request, _ino: INodeNo, reply: ReplyStatfs) {
         match statvfs(self.router.real_fs().source_dir()) {
             Ok(st) => {
@@ -585,6 +618,7 @@ impl Filesystem for NyneFs {
         }
     }
 
+    /// Handles an ioctl request (not supported).
     fn ioctl(
         &self,
         _req: &Request,
@@ -599,6 +633,7 @@ impl Filesystem for NyneFs {
         reply.error(Errno::ENOTTY);
     }
 
+    /// Allocates space for a file (not supported).
     fn fallocate(
         &self,
         _req: &Request,
@@ -613,10 +648,12 @@ impl Filesystem for NyneFs {
         reply.error(Errno::ENOTSUP);
     }
 
+    /// Seeks to a position in a file (not supported).
     fn lseek(&self, _req: &Request, _ino: INodeNo, _fh: FileHandle, _offset: i64, _whence: i32, reply: ReplyLseek) {
         reply.error(Errno::ENOTSUP);
     }
 
+    /// Copies a range of data between files (not supported).
     fn copy_file_range(
         &self,
         _req: &Request,

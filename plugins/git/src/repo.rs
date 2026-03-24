@@ -24,6 +24,7 @@ pub struct GitRepo {
     prefix: String,
 }
 
+/// Core git operations — open, blob retrieval, diff, index, branches, and tags.
 impl GitRepo {
     /// Discover and open the git repository containing `source_dir`.
     pub(crate) fn open(source_dir: &Path) -> Result<Self> {
