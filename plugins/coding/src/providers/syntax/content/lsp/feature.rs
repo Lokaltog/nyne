@@ -53,32 +53,36 @@ impl LspFeature {
             ($file:expr, $dir:expr, $slug:literal) => {
                 FeatureMeta {
                     file_name: $file,
-                    dir_name: $dir,
+                    dir_name: Some($dir),
+                    template_key: concat!("syntax/lsp/", $slug),
+                    template_src: include_str!(concat!("../../templates/lsp/", $slug, ".md.j2")),
+                }
+            };
+            ($file:expr, $slug:literal) => {
+                FeatureMeta {
+                    file_name: $file,
+                    dir_name: None,
                     template_key: concat!("syntax/lsp/", $slug),
                     template_src: include_str!(concat!("../../templates/lsp/", $slug, ".md.j2")),
                 }
             };
         }
         match self {
-            Self::Definition => meta!(names::FILE_DEFINITION, Some(names::DIR_DEFINITION), "definition"),
-            Self::Declaration => meta!(names::FILE_DECLARATION, Some(names::DIR_DECLARATION), "declaration"),
+            Self::Definition => meta!(names::FILE_DEFINITION, names::DIR_DEFINITION, "definition"),
+            Self::Declaration => meta!(names::FILE_DECLARATION, names::DIR_DECLARATION, "declaration"),
             Self::TypeDefinition => meta!(
                 names::FILE_TYPE_DEFINITION,
-                Some(names::DIR_TYPE_DEFINITION),
+                names::DIR_TYPE_DEFINITION,
                 "type_definition"
             ),
-            Self::References => meta!(names::FILE_REFERENCES, Some(names::DIR_REFERENCES), "references"),
-            Self::Implementation => meta!(
-                names::FILE_IMPLEMENTATION,
-                Some(names::DIR_IMPLEMENTATION),
-                "implementation"
-            ),
-            Self::Callers => meta!(names::FILE_CALLERS, Some(names::DIR_CALLERS), "callers"),
-            Self::Deps => meta!(names::FILE_DEPS, Some(names::DIR_DEPS), "deps"),
-            Self::Supertypes => meta!(names::FILE_SUPERTYPES, Some(names::DIR_SUPERTYPES), "supertypes"),
-            Self::Subtypes => meta!(names::FILE_SUBTYPES, Some(names::DIR_SUBTYPES), "subtypes"),
-            Self::Doc => meta!(names::FILE_DOC, None, "doc"),
-            Self::Hints => meta!(names::FILE_HINTS, None, "hints"),
+            Self::References => meta!(names::FILE_REFERENCES, names::DIR_REFERENCES, "references"),
+            Self::Implementation => meta!(names::FILE_IMPLEMENTATION, names::DIR_IMPLEMENTATION, "implementation"),
+            Self::Callers => meta!(names::FILE_CALLERS, names::DIR_CALLERS, "callers"),
+            Self::Deps => meta!(names::FILE_DEPS, names::DIR_DEPS, "deps"),
+            Self::Supertypes => meta!(names::FILE_SUPERTYPES, names::DIR_SUPERTYPES, "supertypes"),
+            Self::Subtypes => meta!(names::FILE_SUBTYPES, names::DIR_SUBTYPES, "subtypes"),
+            Self::Doc => meta!(names::FILE_DOC, "doc"),
+            Self::Hints => meta!(names::FILE_HINTS, "hints"),
         }
     }
 
