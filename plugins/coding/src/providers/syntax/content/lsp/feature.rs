@@ -46,73 +46,39 @@ impl LspFeature {
     ///
     /// Adding a new feature = adding one arm here (plus `is_supported` and `query`).
     const fn metadata(self) -> FeatureMeta {
+        /// Build a `FeatureMeta` from names constants + a template slug.
+        /// The slug drives both the template key (`syntax/lsp/{slug}`) and
+        /// the `include_str!` path (`templates/lsp/{slug}.md.j2`).
+        macro_rules! meta {
+            ($file:expr, $dir:expr, $slug:literal) => {
+                FeatureMeta {
+                    file_name: $file,
+                    dir_name: $dir,
+                    template_key: concat!("syntax/lsp/", $slug),
+                    template_src: include_str!(concat!("../../templates/lsp/", $slug, ".md.j2")),
+                }
+            };
+        }
         match self {
-            Self::Definition => FeatureMeta {
-                file_name: names::FILE_DEFINITION,
-                dir_name: Some(names::DIR_DEFINITION),
-                template_key: "syntax/lsp/definition",
-                template_src: include_str!("../../templates/lsp/definition.md.j2"),
-            },
-            Self::Declaration => FeatureMeta {
-                file_name: names::FILE_DECLARATION,
-                dir_name: Some(names::DIR_DECLARATION),
-                template_key: "syntax/lsp/declaration",
-                template_src: include_str!("../../templates/lsp/declaration.md.j2"),
-            },
-            Self::TypeDefinition => FeatureMeta {
-                file_name: names::FILE_TYPE_DEFINITION,
-                dir_name: Some(names::DIR_TYPE_DEFINITION),
-                template_key: "syntax/lsp/type_definition",
-                template_src: include_str!("../../templates/lsp/type_definition.md.j2"),
-            },
-            Self::References => FeatureMeta {
-                file_name: names::FILE_REFERENCES,
-                dir_name: Some(names::DIR_REFERENCES),
-                template_key: "syntax/lsp/references",
-                template_src: include_str!("../../templates/lsp/references.md.j2"),
-            },
-            Self::Implementation => FeatureMeta {
-                file_name: names::FILE_IMPLEMENTATION,
-                dir_name: Some(names::DIR_IMPLEMENTATION),
-                template_key: "syntax/lsp/implementation",
-                template_src: include_str!("../../templates/lsp/implementation.md.j2"),
-            },
-            Self::Callers => FeatureMeta {
-                file_name: names::FILE_CALLERS,
-                dir_name: Some(names::DIR_CALLERS),
-                template_key: "syntax/lsp/callers",
-                template_src: include_str!("../../templates/lsp/callers.md.j2"),
-            },
-            Self::Deps => FeatureMeta {
-                file_name: names::FILE_DEPS,
-                dir_name: Some(names::DIR_DEPS),
-                template_key: "syntax/lsp/deps",
-                template_src: include_str!("../../templates/lsp/deps.md.j2"),
-            },
-            Self::Supertypes => FeatureMeta {
-                file_name: names::FILE_SUPERTYPES,
-                dir_name: Some(names::DIR_SUPERTYPES),
-                template_key: "syntax/lsp/supertypes",
-                template_src: include_str!("../../templates/lsp/supertypes.md.j2"),
-            },
-            Self::Subtypes => FeatureMeta {
-                file_name: names::FILE_SUBTYPES,
-                dir_name: Some(names::DIR_SUBTYPES),
-                template_key: "syntax/lsp/subtypes",
-                template_src: include_str!("../../templates/lsp/subtypes.md.j2"),
-            },
-            Self::Doc => FeatureMeta {
-                file_name: names::FILE_DOC,
-                dir_name: None,
-                template_key: "syntax/lsp/doc",
-                template_src: include_str!("../../templates/lsp/doc.md.j2"),
-            },
-            Self::Hints => FeatureMeta {
-                file_name: names::FILE_HINTS,
-                dir_name: None,
-                template_key: "syntax/lsp/hints",
-                template_src: include_str!("../../templates/lsp/hints.md.j2"),
-            },
+            Self::Definition => meta!(names::FILE_DEFINITION, Some(names::DIR_DEFINITION), "definition"),
+            Self::Declaration => meta!(names::FILE_DECLARATION, Some(names::DIR_DECLARATION), "declaration"),
+            Self::TypeDefinition => meta!(
+                names::FILE_TYPE_DEFINITION,
+                Some(names::DIR_TYPE_DEFINITION),
+                "type_definition"
+            ),
+            Self::References => meta!(names::FILE_REFERENCES, Some(names::DIR_REFERENCES), "references"),
+            Self::Implementation => meta!(
+                names::FILE_IMPLEMENTATION,
+                Some(names::DIR_IMPLEMENTATION),
+                "implementation"
+            ),
+            Self::Callers => meta!(names::FILE_CALLERS, Some(names::DIR_CALLERS), "callers"),
+            Self::Deps => meta!(names::FILE_DEPS, Some(names::DIR_DEPS), "deps"),
+            Self::Supertypes => meta!(names::FILE_SUPERTYPES, Some(names::DIR_SUPERTYPES), "supertypes"),
+            Self::Subtypes => meta!(names::FILE_SUBTYPES, Some(names::DIR_SUBTYPES), "subtypes"),
+            Self::Doc => meta!(names::FILE_DOC, None, "doc"),
+            Self::Hints => meta!(names::FILE_HINTS, None, "hints"),
         }
     }
 
