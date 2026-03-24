@@ -3,6 +3,7 @@
 use std::fs::File;
 use std::mem;
 use std::os::unix::fs::FileExt;
+use std::sync::Arc;
 
 use parking_lot::RwLock;
 use slab::Slab;
@@ -96,6 +97,45 @@ impl BufferSource {
         matches!(self, Self::Truncated(_) | Self::Materialized { truncated: true, .. })
     }
 }
+/// Copy-on-write content buffer for file handles.
+///
+/// `Shared` holds an `Arc<Vec<u8>>` from the content cache — reads
+/// are zero-copy. On first write, the buffer materializes to `Owned`.
+pub(super) enum ContentBuffer {
+    /// Shared content from the content cache. Read-only until
+    /// materialized by a write operation.
+    Shared(Arc<Vec<u8>>),
+    /// Owned mutable buffer (after write, truncation, or direct-fd
+    /// materialization).
+    Owned(Vec<u8>),
+}
+
+impl ContentBuffer {
+    /// Get the buffer contents as a byte slice.
+    pub(super) fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::Shared(arc) => arc,
+            Self::Owned(vec) => vec,
+        }
+    }
+
+    /// Get a mutable reference to the buffer, materializing if shared.
+    /// This is the COW trigger — called before any mutation.
+    fn make_mut(&mut self) -> &mut Vec<u8> {
+        if let Self::Shared(arc) = self {
+            *self = Self::Owned((**arc).clone());
+        }
+        match self {
+            Self::Owned(vec) => vec,
+            Self::Shared(_) => unreachable!(),
+        }
+    }
+
+    fn len(&self) -> usize { self.as_bytes().len() }
+
+    /// Clone the buffer contents to a `Vec<u8>`.
+    fn to_vec(&self) -> Vec<u8> { self.as_bytes().to_vec() }
+}
 
 /// A file handle for FUSE read/write operations.
 ///
@@ -105,8 +145,8 @@ impl BufferSource {
 pub(super) struct HandleEntry {
     /// The inode this handle is associated with.
     pub inode: u64,
-    /// The buffered content.
-    pub buffer: Vec<u8>,
+    /// The buffered content (COW — shared until first mutation).
+    pub buffer: ContentBuffer,
     /// Where reads come from and how writes populate the buffer.
     source: BufferSource,
     /// Dirty generation counter. Zero means clean. Each `write()` increments
@@ -175,16 +215,21 @@ impl HandleTable {
     }
 
     /// Open a buffered file: store initial content and open flags, return the file handle number.
-    pub fn open(&self, inode: u64, content: Vec<u8>, open_flags: i32) -> u64 {
+    pub fn open(&self, inode: u64, content: Arc<Vec<u8>>, open_flags: i32) -> u64 {
         let mode = OpenMode::parse(open_flags);
         // Truncating non-empty content is a mutation: mark dirty so the
         // empty buffer is flushed on release even without a subsequent write.
         // This makes standalone `: > virtualfile` actually clear the content.
         let content_was_nonempty = !content.is_empty();
+        let buffer = if mode.truncate {
+            ContentBuffer::Owned(Vec::new())
+        } else {
+            ContentBuffer::Shared(content)
+        };
         let mut slab = self.inner.write();
         let idx = slab.insert(HandleEntry {
             inode,
-            buffer: if mode.truncate { Vec::new() } else { content },
+            buffer,
             source: BufferSource::Preloaded,
             dirty_gen: u64::from(mode.truncate && content_was_nonempty),
             append: mode.append,
@@ -208,7 +253,7 @@ impl HandleTable {
         };
         let idx = slab.insert(HandleEntry {
             inode,
-            buffer: Vec::new(),
+            buffer: ContentBuffer::Owned(Vec::new()),
             source,
             dirty_gen: 0,
             append: mode.append,
@@ -244,11 +289,12 @@ impl HandleTable {
         // Buffered path (Preloaded, Truncated, Materialized).
         let offset = usize::try_from(offset).unwrap_or(usize::MAX);
         let size = usize::try_from(size).unwrap_or(usize::MAX);
-        if offset >= entry.buffer.len() {
+        let bytes = entry.buffer.as_bytes();
+        if offset >= bytes.len() {
             return Vec::new();
         }
-        let end = entry.buffer.len().min(offset.saturating_add(size));
-        entry.buffer.get(offset..end).map_or_else(Vec::new, <[u8]>::to_vec)
+        let end = bytes.len().min(offset.saturating_add(size));
+        bytes.get(offset..end).map_or_else(Vec::new, <[u8]>::to_vec)
     }
 
     /// Write to a file handle's buffer at the given offset.
@@ -278,7 +324,7 @@ impl HandleTable {
                 unreachable!()
             };
             if needs_populate {
-                Self::populate_from_fd(&fd, &mut entry.buffer);
+                Self::populate_from_fd(&fd, entry.buffer.make_mut());
             }
             entry.source = BufferSource::Materialized {
                 _fd: fd,
@@ -297,11 +343,12 @@ impl HandleTable {
         let end = offset.saturating_add(data.len());
 
         // Extend buffer if needed.
-        if end > entry.buffer.len() {
-            entry.buffer.resize(end, 0);
+        let buf = entry.buffer.make_mut();
+        if end > buf.len() {
+            buf.resize(end, 0);
         }
 
-        if let Some(slice) = entry.buffer.get_mut(offset..end) {
+        if let Some(slice) = buf.get_mut(offset..end) {
             slice.copy_from_slice(data);
         }
         if !data.is_empty() {
@@ -351,7 +398,7 @@ impl HandleTable {
                 unreachable!()
             };
             if size > 0 {
-                Self::populate_from_fd(&fd, &mut entry.buffer);
+                Self::populate_from_fd(&fd, entry.buffer.make_mut());
             }
             entry.source = BufferSource::Truncated(fd);
         } else if matches!(entry.source, BufferSource::Preloaded) && size < entry.buffer.len() {
@@ -361,7 +408,7 @@ impl HandleTable {
             entry.truncated_on_open = true;
         }
 
-        entry.buffer.truncate(size);
+        entry.buffer.make_mut().truncate(size);
     }
 
     /// Check whether any open handle references the given inode.
@@ -378,7 +425,7 @@ impl HandleTable {
     pub fn dirty_snapshot(&self, fh: u64) -> Option<(Vec<u8>, WriteMode, u64)> {
         let slab = self.inner.read();
         let entry = Self::get_entry(&slab, fh)?;
-        (entry.dirty_gen > 0).then(|| (entry.buffer.clone(), entry.write_mode(), entry.dirty_gen))
+        (entry.dirty_gen > 0).then(|| (entry.buffer.to_vec(), entry.write_mode(), entry.dirty_gen))
     }
 
     /// Clear the dirty flag on a handle after a successful flush.

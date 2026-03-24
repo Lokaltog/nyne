@@ -177,10 +177,10 @@ impl NyneFs {
     ///
     /// For virtual nodes, reads through the L2 content cache.
     /// For real files, reads directly from the filesystem (no caching).
-    fn load_content(&self, ino: u64) -> Result<Vec<u8>> {
+    fn load_content(&self, ino: u64) -> Result<Arc<Vec<u8>>> {
         self.with_inode_io(
             ino,
-            |path| self.router.real_fs().read(path),
+            |path| self.router.real_fs().read(path).map(Arc::new),
             |node, provider, ctx| self.router.read_content(ino, node, provider, ctx),
         )
     }
@@ -193,7 +193,9 @@ impl NyneFs {
     /// without this, two unrelated inodes would serialize their
     /// entire write pipelines behind the map lock.
     fn flush_content(&self, ino: u64, data: &[u8], mode: WriteMode) -> Result<()> {
-        let mutex = {
+        let mutex = if let Some(m) = self.write_locks.read().get(&ino) {
+            Arc::clone(m)
+        } else {
             let mut locks = self.write_locks.write();
             Arc::clone(locks.entry(ino).or_insert_with(|| Arc::new(Mutex::new(()))))
         };

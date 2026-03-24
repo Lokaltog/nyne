@@ -110,20 +110,29 @@ impl ContentCache {
         None
     }
 
-    /// Store content for an inode.
+    /// Store content for an inode, returning an `Arc` to the cached data.
     ///
     /// `source_file` is the real file this content was derived from (if
     /// any). The current generation is recorded for staleness checks.
-    pub(super) fn insert(&self, inode: u64, data: Vec<u8>, provider_id: ProviderId, source_file: Option<&VfsPath>) {
+    pub(super) fn insert(
+        &self,
+        inode: u64,
+        data: Vec<u8>,
+        provider_id: ProviderId,
+        source_file: Option<&VfsPath>,
+    ) -> Arc<Vec<u8>> {
         let source_generation = source_file.map(|sf| {
             let generation = self.file_generations.get(sf);
             (sf.clone(), generation)
         });
+        let arc = Arc::new(data);
+        let result = Arc::clone(&arc);
         self.entries.write().insert(inode, ContentEntry {
-            data: Arc::new(data),
+            data: arc,
             provider_id,
             source_generation,
         });
+        result
     }
 
     /// Invalidate a single inode's content.

@@ -254,7 +254,7 @@ impl Router {
             CachedNodeKind::Virtual { node, provider_id } => Some(ResolvedInode::Virtual {
                 node: Arc::clone(node),
                 provider_id: *provider_id,
-                dir_path: entry.dir_path,
+                dir_path: entry.dir_path.clone(),
             }),
         }
     }

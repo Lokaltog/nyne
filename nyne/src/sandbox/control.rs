@@ -11,12 +11,13 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::net::Shutdown;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::SystemTime;
 use std::{fs, thread};
 
 use base64::prelude::{BASE64_STANDARD as BASE64, Engine};
 use color_eyre::eyre::{Result, WrapErr, eyre};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, trace, warn};
 
@@ -268,9 +269,8 @@ fn handle_exec(
 }
 
 /// Register a process in the attached process table, replacing any prior entry for the same PID.
-#[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn handle_register(pid: i32, command: String, processes: &ProcessTable) -> ControlResponse {
-    let mut table = processes.lock().expect("process table poisoned");
+    let mut table = processes.lock();
     // Remove any existing entry for this PID (re-registration).
     table.retain(|p| p.pid != pid);
     info!(pid, %command, "client attached");
@@ -283,16 +283,13 @@ fn handle_register(pid: i32, command: String, processes: &ProcessTable) -> Contr
 }
 
 /// Remove a process from the attached process table.
-#[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn handle_unregister(pid: i32, processes: &ProcessTable) -> ControlResponse {
-    let mut table = processes.lock().expect("process table poisoned");
-    table.retain(|p| p.pid != pid);
+    processes.lock().retain(|p| p.pid != pid);
     info!(pid, "client detached");
     ControlResponse::Unregistered
 }
 
 /// Set or query visibility rules for a PID or process name.
-#[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn handle_set_visibility(
     pid: Option<i32>,
     name: Option<String>,
@@ -307,8 +304,7 @@ fn handle_set_visibility(
             };
         }
         (Some(pid), None) => {
-            let table = processes.lock().expect("process table poisoned");
-            if !table.iter().any(|p| p.pid == pid) {
+            if !processes.lock().iter().any(|p| p.pid == pid) {
                 return ControlResponse::Error {
                     message: format!(
                         "PID {pid} is not a registered process (use ListProcesses to see registered PIDs)"
@@ -333,9 +329,8 @@ fn handle_set_visibility(
 }
 
 /// Snapshot all active visibility rules (per-PID and per-name) into a response struct.
-#[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> VisibilityRules {
-    let table = processes.lock().expect("process table poisoned");
+    let table = processes.lock();
     let pid_entries = map.explicit_pid_entries();
 
     let pid_rules = table
@@ -360,9 +355,8 @@ fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> Visi
 }
 
 /// Return all attached processes, pruning dead PIDs in the process.
-#[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
 fn handle_list(processes: &ProcessTable) -> ControlResponse {
-    let mut table = processes.lock().expect("process table poisoned");
+    let mut table = processes.lock();
     // Prune dead PIDs while we're at it.
     table.retain(|p| state::is_pid_alive(p.pid));
     ControlResponse::Processes { list: table.clone() }

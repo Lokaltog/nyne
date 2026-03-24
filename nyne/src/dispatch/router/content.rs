@@ -1,5 +1,7 @@
 //! Content I/O operations.
 
+use std::sync::Arc;
+
 use color_eyre::eyre::Result;
 
 use super::Router;
@@ -28,18 +30,17 @@ impl Router {
         node: &VirtualNode,
         provider: &dyn Provider,
         ctx: &RequestContext<'_>,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Arc<Vec<u8>>> {
         let cacheable = node.cache_policy() == CachePolicy::Cache;
         if cacheable && let Some(cached) = self.content_cache.get(inode) {
-            return Ok((*cached).clone());
+            return Ok(cached);
         }
         let source_file = node.source().map(|(f, _)| f);
         let data = self.pipeline.execute_read(node, provider, ctx)?;
         if cacheable {
-            self.content_cache
-                .insert(inode, data.clone(), provider.id(), source_file);
+            return Ok(self.content_cache.insert(inode, data, provider.id(), source_file));
         }
-        Ok(data)
+        Ok(Arc::new(data))
     }
 
     /// Get the L2 cached content size for an inode, if available.

@@ -3,6 +3,7 @@
 use std::ffi::OsStr;
 use std::io;
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::SystemTime;
 
@@ -249,7 +250,7 @@ impl Filesystem for NyneFs {
         // Skip the read pipeline for O_TRUNC — HandleTable::open discards
         // the content anyway, so loading it is pure waste.
         let content = if mode.truncate {
-            Vec::new()
+            Arc::new(Vec::new())
         } else {
             fuse_try!(reply, self.load_content(ino), ino, "open failed")
         };
@@ -320,17 +321,15 @@ impl Filesystem for NyneFs {
                 reply.ok();
                 return;
             }
-            match self.flush_content(ino, &data, mode) {
-                Ok(()) => {
-                    self.handles.clear_dirty(fh, dirty_gen);
-                    self.write_errors.write().remove(&ino);
-                }
-                Err(e) => {
-                    warn!(target: "nyne::fuse", error = %e, ino, fh, "flush failed");
-                    self.write_errors.write().insert(ino, e.to_string());
-                    reply.error(extract_errno(&e));
-                    return;
-                }
+            if let Err(e) = self.flush_content(ino, &data, mode) {
+                warn!(target: "nyne::fuse", error = %e, ino, fh, "flush failed");
+                self.write_errors.write().insert(ino, e.to_string());
+                reply.error(extract_errno(&e));
+                return;
+            }
+            self.handles.clear_dirty(fh, dirty_gen);
+            if self.write_errors.read().contains_key(&ino) {
+                self.write_errors.write().remove(&ino);
             }
         }
         self.router.process_events();
@@ -359,10 +358,10 @@ impl Filesystem for NyneFs {
         };
 
         if entry.is_dirty() {
-            if let Err(e) = self.flush_content(entry.inode, &entry.buffer, entry.write_mode()) {
+            if let Err(e) = self.flush_content(entry.inode, entry.buffer.as_bytes(), entry.write_mode()) {
                 warn!(target: "nyne::fuse", inode = entry.inode, error = %e, "flush on release failed");
                 self.write_errors.write().insert(ino, e.to_string());
-            } else {
+            } else if self.write_errors.read().contains_key(&ino) {
                 self.write_errors.write().remove(&ino);
             }
         }

@@ -1,5 +1,7 @@
 //! Bidirectional inode number <-> VFS location mapping with growth-only semantics.
 
+use std::sync::Arc;
+
 use parking_lot::RwLock;
 use slab::Slab;
 
@@ -43,7 +45,7 @@ pub(super) struct InodeEntry {
 ///    still contains a matching entry before using an `InodeEntry`.
 ///    Stale entries are detected and return `None`.
 pub(super) struct InodeMap {
-    inner: RwLock<Slab<InodeEntry>>,
+    inner: RwLock<Slab<Arc<InodeEntry>>>,
 }
 
 /// Default implementation for `InodeMap`.
@@ -70,15 +72,15 @@ impl InodeMap {
     /// Allocate a new inode, returning its number.
     pub(super) fn allocate(&self, entry: InodeEntry) -> u64 {
         let mut slab = self.inner.write();
-        let idx = slab.insert(entry);
+        let idx = slab.insert(Arc::new(entry));
         idx as u64 + Self::INODE_OFFSET
     }
 
     /// Look up an inode entry by number.
-    pub(super) fn get(&self, inode: u64) -> Option<InodeEntry> {
+    pub(super) fn get(&self, inode: u64) -> Option<Arc<InodeEntry>> {
         let idx = Self::inode_to_index(inode)?;
         let slab = self.inner.read();
-        slab.get(idx).cloned()
+        slab.get(idx).map(Arc::clone)
     }
 
     /// Update the location fields of an existing inode.
@@ -92,9 +94,11 @@ impl InodeMap {
         };
         let mut slab = self.inner.write();
         if let Some(entry) = slab.get_mut(idx) {
-            entry.dir_path = dir_path;
-            entry.name = name;
-            entry.parent_inode = parent_inode;
+            *entry = Arc::new(InodeEntry {
+                dir_path,
+                name,
+                parent_inode,
+            });
         }
     }
 
