@@ -17,8 +17,7 @@ pub(super) const FILE_MOUNT_STATUS: &str = "STATUS.md";
 
 /// Register core name constants as template globals.
 fn register_template_globals(engine: &mut TemplateEngine) {
-    engine.add_global("FILE_OVERVIEW", FILE_OVERVIEW);
-    engine.add_global("SUBDIR_SYMBOLS", SUBDIR_SYMBOLS);
+    crate::register_globals!(engine, FILE_OVERVIEW, SUBDIR_SYMBOLS);
 }
 
 /// Create a [`HandleBuilder`] with core name globals pre-registered.

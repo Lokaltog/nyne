@@ -52,12 +52,15 @@ pub const DIR_TODO: &str = "todo";
 
 /// Register coding name constants as template globals.
 pub fn register_template_globals(engine: &mut TemplateEngine) {
-    engine.add_global("FILE_OVERVIEW", FILE_OVERVIEW);
-    engine.add_global("FILE_DIAGNOSTICS", FILE_DIAGNOSTICS);
-    engine.add_global("SUBDIR_SYMBOLS", SUBDIR_SYMBOLS);
-    engine.add_global("SUBDIR_ACTIONS", SUBDIR_ACTIONS);
-    engine.add_global("VFS_SEP", VFS_SEP);
-    engine.add_global("VFS_SYMBOLS_SEP", VFS_SYMBOLS_SEP);
+    nyne::register_globals!(
+        engine,
+        FILE_OVERVIEW,
+        FILE_DIAGNOSTICS,
+        SUBDIR_SYMBOLS,
+        SUBDIR_ACTIONS,
+        VFS_SEP,
+        VFS_SYMBOLS_SEP,
+    );
 }
 
 /// Create a [`HandleBuilder`] with coding name globals pre-registered.

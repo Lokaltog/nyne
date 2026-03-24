@@ -188,6 +188,17 @@ fn strip_prefix(v: String, prefix: &str) -> String {
         None => v,
     }
 }
+/// Register constants as template globals, using the constant's identifier
+/// as the template variable name.
+///
+/// Eliminates the manual `engine.add_global("NAME", NAME)` duplication —
+/// the string key is derived via `stringify!`.
+#[macro_export]
+macro_rules! register_globals {
+    ($engine:expr, $($name:ident),+ $(,)?) => {
+        $($engine.add_global(stringify!($name), $name);)+
+    };
+}
 
 pub use self::handle::{HandleBuilder, TemplateHandle};
 use crate::dispatch::context::RequestContext;

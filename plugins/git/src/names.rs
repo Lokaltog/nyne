@@ -39,17 +39,19 @@ pub const FILE_HEAD_DIFF: &str = "HEAD.diff";
 /// globals pre-registered for template rendering.
 pub fn handle_builder() -> HandleBuilder {
     let mut b = HandleBuilder::new();
-    let engine = b.engine_mut();
-    engine.add_global("DIR_GIT", DIR_GIT);
-    engine.add_global("DIR_BRANCHES", DIR_BRANCHES);
-    engine.add_global("DIR_TAGS", DIR_TAGS);
-    engine.add_global("DIR_HISTORY", DIR_HISTORY);
-    engine.add_global("DIR_DIFF", DIR_DIFF);
-    engine.add_global("FILE_BLAME", FILE_BLAME);
-    engine.add_global("FILE_LOG", FILE_LOG);
-    engine.add_global("FILE_CONTRIBUTORS", FILE_CONTRIBUTORS);
-    engine.add_global("FILE_NOTES", FILE_NOTES);
-    engine.add_global("FILE_STATUS", FILE_STATUS);
-    engine.add_global("FILE_HEAD_DIFF", FILE_HEAD_DIFF);
+    nyne::register_globals!(
+        b.engine_mut(),
+        DIR_GIT,
+        DIR_BRANCHES,
+        DIR_TAGS,
+        DIR_HISTORY,
+        DIR_DIFF,
+        FILE_BLAME,
+        FILE_LOG,
+        FILE_CONTRIBUTORS,
+        FILE_NOTES,
+        FILE_STATUS,
+        FILE_HEAD_DIFF,
+    );
     b
 }
