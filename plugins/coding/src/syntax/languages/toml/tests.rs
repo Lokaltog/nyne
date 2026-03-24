@@ -3,6 +3,7 @@ use rstest::{fixture, rstest};
 use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, FragmentKind, SymbolKind};
 use crate::test_support::{load_fixture, registry};
 
+/// Fixture: decompose the basic.toml test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
     let source = load_fixture("syntax/languages/toml", "basic.toml");
@@ -19,6 +20,7 @@ fn fragment_count(basic: DecomposedFile) {
     assert_eq!(basic.len(), 6);
 }
 
+/// Verifies that fragment names match the expected table names in order.
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
     let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();

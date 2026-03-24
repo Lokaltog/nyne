@@ -3,6 +3,7 @@ use rstest::rstest;
 use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, FragmentKind, SymbolKind};
 use crate::test_support::registry;
 
+/// Load a fixture file from the syntax/injection test data directory.
 fn load_fixture(name: &str) -> String { crate::test_support::load_fixture("syntax/injection", name) }
 
 /// Decompose a `.j2` compound source through the registry.
@@ -17,6 +18,7 @@ fn decompose_j2(inner_ext: &str, source: &str) -> DecomposedFile {
 
 // Core pipeline
 
+/// Verifies that a markdown-in-jinja2 file produces both Jinja2 and markdown fragments.
 #[test]
 fn markdown_in_jinja2_produces_both_layers() {
     let source = load_fixture("markdown-blocks.md.j2");
@@ -24,6 +26,7 @@ fn markdown_in_jinja2_produces_both_layers() {
     insta::assert_debug_snapshot!(file);
 }
 
+/// Verifies that a TOML-in-jinja2 file decomposes TOML table structures.
 #[test]
 fn toml_in_jinja2_decomposes_tables() {
     let source = load_fixture("toml-conditional.toml.j2");
@@ -33,6 +36,7 @@ fn toml_in_jinja2_decomposes_tables() {
 
 // Byte-range accuracy
 
+/// Verifies that fragment byte ranges point to correct positions in the original source.
 #[test]
 fn byte_ranges_point_to_original_source() {
     let source = load_fixture("markdown-header-block.md.j2");
@@ -53,6 +57,7 @@ fn byte_ranges_point_to_original_source() {
     }
 }
 
+/// Verifies that inner fragment byte ranges round-trip to correct text in the original source.
 #[test]
 fn inner_fragment_byte_ranges_round_trip() {
     let source = load_fixture("markdown-with-extends.md.j2");
@@ -72,6 +77,7 @@ fn inner_fragment_byte_ranges_round_trip() {
     }
 }
 
+/// Verifies that multi-region remapping correctly handles disjoint content gaps.
 #[test]
 fn multi_region_remapping_across_disjoint_gaps() {
     let source = load_fixture("multi-region.md.j2");
@@ -105,6 +111,7 @@ fn multi_region_remapping_across_disjoint_gaps() {
 
 // Children & structure preservation
 
+/// Verifies that inner decomposition preserves child fragments from the inner language.
 #[test]
 fn preserves_inner_children() {
     let source = load_fixture("toml-block.toml.j2");
@@ -112,6 +119,7 @@ fn preserves_inner_children() {
     insta::assert_debug_snapshot!(file);
 }
 
+/// Verifies that compound decomposition passes through inner fields like imports and file_doc.
 #[test]
 fn inner_decomposition_fields_pass_through() {
     use crate::syntax::languages::jinja2::extract_template;
@@ -146,6 +154,7 @@ fn inner_decomposition_fields_pass_through() {
 
 // Line ranges & ordering
 
+/// Verifies that fragment line ranges are correct relative to the original compound source.
 #[test]
 fn line_ranges_are_correct_in_original() {
     use nyne::types::line_of_byte;
@@ -170,6 +179,7 @@ fn line_ranges_are_correct_in_original() {
     }
 }
 
+/// Verifies that decomposed fragments are sorted by position in the source.
 #[test]
 fn fragments_sorted_by_position() {
     let source = load_fixture("two-blocks.md.j2");
@@ -182,6 +192,7 @@ fn fragments_sorted_by_position() {
 
 // Edge cases
 
+/// Verifies that a file with only Jinja2 directives and no content decomposes correctly.
 #[test]
 fn empty_content_only_jinja2_directives() {
     let source = load_fixture("directives-only.md.j2");
@@ -189,6 +200,7 @@ fn empty_content_only_jinja2_directives() {
     insta::assert_debug_snapshot!(file);
 }
 
+/// Verifies that a file with no Jinja2 directives degenerates to inner-only decomposition.
 #[test]
 fn no_jinja2_directives_degenerates_to_inner_only() {
     let source = load_fixture("plain-content.md");
@@ -201,6 +213,7 @@ fn no_jinja2_directives_degenerates_to_inner_only() {
     );
 }
 
+/// Verifies that an empty file produces no fragments.
 #[test]
 fn empty_file_produces_no_fragments() {
     let source = load_fixture("empty.md.j2");
@@ -210,6 +223,7 @@ fn empty_file_produces_no_fragments() {
 
 // Invalid / malformed inputs — all must not panic and produce valid byte ranges
 
+/// Verifies that malformed Jinja2 input does not cause a panic.
 #[rstest]
 #[case::unclosed_block("unclosed-block.md.j2")]
 #[case::malformed_directive("malformed-directive.md.j2")]
@@ -226,6 +240,7 @@ fn malformed_input_does_not_panic(#[case] fixture: &str) {
     }
 }
 
+/// Verifies that an unclosed block is skipped but inner content still decomposes.
 #[test]
 fn unclosed_block_skips_unpaired_but_decomposes_content() {
     let source = load_fixture("unclosed-block.md.j2");
@@ -249,6 +264,7 @@ fn unclosed_block_skips_unpaired_but_decomposes_content() {
 
 // Validation
 
+/// Verifies that the compound decomposer accepts valid templates and plain content.
 #[rstest]
 #[case::valid_template("valid-template.md.j2")]
 #[case::plain_content_fallback("plain-content.md")]
@@ -259,6 +275,7 @@ fn validate_accepts(#[case] fixture: &str) {
     assert!(decomposer.validate(&source).is_ok());
 }
 
+/// Verifies that inner fragment full_span does not bleed into Jinja2 directives.
 #[test]
 fn inner_full_span_does_not_extend_into_jinja2_directives() {
     let source = load_fixture("toml-block.toml.j2");
@@ -283,6 +300,7 @@ fn inner_full_span_does_not_extend_into_jinja2_directives() {
     );
 }
 
+/// Verifies that inner fragment full_span does not bleed into render expressions.
 #[test]
 fn inner_full_span_does_not_extend_into_render_expressions() {
     // Render expressions ({{ var }}) create gaps in content regions just

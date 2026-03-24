@@ -8,8 +8,10 @@ use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, FragmentKind, SymbolKind};
 use crate::syntax::{SyntaxRegistry, resolve_conflicts};
 use crate::test_support::registry;
 
+/// Load a fixture file by language extension and name.
 fn load_fixture(name: &str) -> String { crate::test_support::load_fixture("syntax/view", name) }
 
+/// Decompose a fixture file into a shared DecomposedSource for testing views.
 fn decompose_fixture(reg: &SyntaxRegistry, ext: &str, name: &str) -> Arc<DecomposedSource> {
     let source = load_fixture(name);
     let decomposer = reg.get(ext).expect("no decomposer for extension");
@@ -37,6 +39,7 @@ fn find_view(shared: &Arc<DecomposedSource>, name: &str) -> FragmentView {
     }
 }
 
+/// Verifies that format_kind renders fragment kinds to expected display strings.
 #[rstest]
 #[case(FragmentKind::Symbol(SymbolKind::Function), "Function")]
 #[case(FragmentKind::Symbol(SymbolKind::Struct), "Struct")]
@@ -52,6 +55,7 @@ fn format_kind_renders(#[case] kind: FragmentKind, #[case] expected: &str) {
     assert_eq!(format_kind(&frag), expected);
 }
 
+/// Verifies that compact_visibility shortens Rust visibility modifiers.
 #[rstest]
 #[case("pub", "pub")]
 #[case("pub(crate)", "crate")]
@@ -63,6 +67,7 @@ fn compact_visibility_shortens(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(compact_visibility(input), expected);
 }
 
+/// Verifies that code_block_summary produces a summary from fixture code blocks.
 #[test]
 fn code_block_summary_from_fixture() {
     let reg = registry();
@@ -72,11 +77,13 @@ fn code_block_summary_from_fixture() {
     assert_eq!(code_block_summary(&view.frag.children), "2 blocks (rust, sh)");
 }
 
+/// Verifies that code_block_summary returns empty string for no children.
 #[test]
 fn code_block_summary_empty_children() {
     assert_eq!(code_block_summary(&[]), "");
 }
 
+/// Verifies that code_block_summary deduplicates non-adjacent language tags.
 #[test]
 fn code_block_summary_deduplicates_non_adjacent_langs() {
     let reg = registry();
@@ -94,6 +101,7 @@ fn code_block_summary_deduplicates_non_adjacent_langs() {
     assert_eq!(summary, "3 blocks (rust, sh)");
 }
 
+/// Verifies that section_first_line extracts the first non-heading content line.
 #[rstest]
 #[case("hello\nworld", Some("hello"))]
 #[case("# Heading\nContent here", Some("Content here"))]
@@ -105,6 +113,7 @@ fn section_first_line_extracts(#[case] input: &str, #[case] expected: Option<&st
     assert_eq!(section_first_line(input).as_deref(), expected);
 }
 
+/// Verifies that description returns the cleaned doc comment text.
 #[test]
 fn description_uses_doc_comment_via_decomposer() {
     let reg = registry();
@@ -113,6 +122,7 @@ fn description_uses_doc_comment_via_decomposer() {
     assert_eq!(view.description(), "Does something cool.");
 }
 
+/// Verifies that description returns empty string when no doc comment exists.
 #[test]
 fn description_empty_without_doc_comment() {
     let reg = registry();
@@ -122,6 +132,7 @@ fn description_empty_without_doc_comment() {
     assert_eq!(view.description(), "");
 }
 
+/// Verifies that description returns the first content line for markdown sections.
 #[test]
 fn description_section_returns_first_content_line() {
     let reg = registry();
@@ -130,6 +141,7 @@ fn description_section_returns_first_content_line() {
     assert_eq!(view.description(), "Welcome to the project.");
 }
 
+/// Verifies that visibility returns the compact form of the visibility modifier.
 #[test]
 fn visibility_returns_compact_form() {
     let reg = registry();
@@ -145,6 +157,7 @@ fn visibility_returns_compact_form() {
     assert_eq!(private_view.visibility(), "");
 }
 
+/// Verifies that visibility returns empty string for markdown sections.
 #[test]
 fn visibility_empty_for_sections() {
     let reg = registry();
@@ -153,6 +166,7 @@ fn visibility_empty_for_sections() {
     assert_eq!(view.visibility(), "");
 }
 
+/// Verifies that fragment_list filters out code block fragments.
 #[test]
 fn fragment_list_filters_code_blocks() {
     let reg = registry();

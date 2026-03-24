@@ -18,6 +18,7 @@ fn code_fragment(byte_range: Range<usize>, name_byte_offset: usize, children: Ve
     )
 }
 
+/// Verifies that SpanMap::build produces correct virtual content and offset mapping.
 #[test]
 fn build_produces_correct_content_and_map() {
     let source = "AAAbbbCCCdddEEE";
@@ -31,6 +32,7 @@ fn build_produces_correct_content_and_map() {
     assert_eq!(map.to_real(3), 9); // 'd' at real offset 9
 }
 
+/// Verifies that zero-length regions are skipped during SpanMap construction.
 #[test]
 fn build_skips_zero_length_regions() {
     let source = "hello world";
@@ -40,6 +42,7 @@ fn build_skips_zero_length_regions() {
     assert_eq!(map.virtual_len(), 5);
 }
 
+/// Verifies that empty region list produces empty content and zero-length map.
 #[test]
 fn build_empty_regions_produces_empty_content() {
     let (map, content) = SpanMap::build("anything", &[]);
@@ -48,6 +51,7 @@ fn build_empty_regions_produces_empty_content() {
     assert_eq!(map.virtual_len(), 0);
 }
 
+/// Verifies that SpanMap::build clamps regions that extend past source bounds.
 #[test]
 fn build_clamps_to_source_bounds() {
     let source = "short";
@@ -62,6 +66,7 @@ fn build_clamps_to_source_bounds() {
     assert_eq!(map.virtual_len(), 2);
 }
 
+/// Verifies that a single contiguous region starting at zero is an identity mapping.
 #[test]
 fn single_contiguous_region_identity() {
     // Region starting at real offset 0 — identity mapping.
@@ -72,6 +77,7 @@ fn single_contiguous_region_identity() {
     assert_eq!(map.to_real(9), 9);
 }
 
+/// Verifies that two disjoint regions map virtual offsets to correct real offsets.
 #[test]
 fn two_disjoint_regions() {
     // Region 1: real [10..20), Region 2: real [30..40)
@@ -90,6 +96,7 @@ fn two_disjoint_regions() {
     assert_eq!(map.to_real(19), 39);
 }
 
+/// Verifies that three regions with varying gaps map every boundary correctly.
 #[test]
 fn three_regions_every_boundary() {
     // Three regions with varying gaps:
@@ -110,6 +117,7 @@ fn three_regions_every_boundary() {
     assert_eq!(map.to_real(9), 51);
 }
 
+/// Verifies that to_real at virtual_len maps to one past the last real byte.
 #[test]
 fn to_real_at_virtual_len() {
     // virtual_len is a valid exclusive-end offset. It should map via
@@ -122,12 +130,14 @@ fn to_real_at_virtual_len() {
     assert_eq!(map.to_real(10), 35);
 }
 
+/// Verifies that remap_range maps a virtual range within a single region correctly.
 #[test]
 fn remap_range_within_single_region() {
     let map = SpanMap::new(&[(10, 20)]);
     assert_eq!(map.remap_range(5..15), 15..25);
 }
 
+/// Verifies that remap_range handles ranges at region boundaries and cross-boundary clamping.
 #[test]
 fn remap_range_at_region_boundaries() {
     // Two regions: real [10..20), real [30..40)
@@ -143,6 +153,7 @@ fn remap_range_at_region_boundaries() {
     assert_eq!(map.remap_range(5..15), 15..20);
 }
 
+/// Verifies that an empty virtual range remaps to the corresponding real position.
 #[test]
 fn remap_range_empty_is_identity_at_start() {
     let map = SpanMap::new(&[(100, 10)]);
@@ -150,6 +161,7 @@ fn remap_range_empty_is_identity_at_start() {
     assert_eq!(map.remap_range(5..5), 105..105);
 }
 
+/// Verifies that remap_fragment remaps byte_range and name_byte_offset correctly.
 #[test]
 fn remap_fragment_basic() {
     let map = SpanMap::new(&[(100, 50)]);
@@ -162,6 +174,7 @@ fn remap_fragment_basic() {
     assert_eq!(remapped.name_byte_offset, 105);
 }
 
+/// Verifies that remap_fragment remaps a parent fragment with children.
 #[test]
 fn remap_fragment_with_children() {
     let map = SpanMap::new(&[(100, 50)]);
@@ -174,6 +187,7 @@ fn remap_fragment_with_children() {
     assert_eq!(remapped.name_byte_offset, 110);
 }
 
+/// Verifies that remap_fragment recursively remaps nested children.
 #[test]
 fn remap_fragment_recursive_children() {
     let map = SpanMap::new(&[(200, 100)]);
@@ -192,6 +206,7 @@ fn remap_fragment_recursive_children() {
     assert_eq!(child.name_byte_offset, 220);
 }
 
+/// Verifies that remap_fragment preserves name, signature, parent_name, and fs_name.
 #[test]
 fn remap_fragment_preserves_non_byte_fields() {
     let map = SpanMap::new(&[(50, 30)]);
@@ -209,6 +224,7 @@ fn remap_fragment_preserves_non_byte_fields() {
     assert_eq!(remapped.fs_name.as_deref(), Some("my_func"));
 }
 
+/// Verifies that remap_fragment preserves Section metadata (Document index) unchanged.
 #[test]
 fn remap_fragment_section_metadata_unchanged() {
     let map = SpanMap::new(&[(100, 50)]);
@@ -231,6 +247,7 @@ fn remap_fragment_section_metadata_unchanged() {
     assert_eq!(remapped.metadata, Some(FragmentMetadata::Document { index: 3 }));
 }
 
+/// Verifies that remap_fragment preserves CodeBlock metadata (index and lang) unchanged.
 #[test]
 fn remap_fragment_code_block_metadata_unchanged() {
     let map = SpanMap::new(&[(50, 30)]);
@@ -257,12 +274,14 @@ fn remap_fragment_code_block_metadata_unchanged() {
     });
 }
 
+/// Verifies that an empty SpanMap has zero virtual length.
 #[test]
 fn empty_map() {
     let map = SpanMap::new(&[]);
     assert_eq!(map.virtual_len(), 0);
 }
 
+/// Verifies that zero-length regions are skipped when constructing a SpanMap.
 #[test]
 fn zero_length_regions_skipped() {
     let map = SpanMap::new(&[(10, 0), (20, 5)]);
@@ -271,6 +290,7 @@ fn zero_length_regions_skipped() {
     assert_eq!(map.to_real(4), 24);
 }
 
+/// Verifies that remapped byte ranges extract the correct text from the original source.
 #[test]
 fn round_trip_extract_via_remapped_ranges() {
     // Simulates the real use case: compound source with template gaps,

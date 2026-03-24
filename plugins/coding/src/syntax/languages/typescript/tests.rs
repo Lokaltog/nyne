@@ -3,6 +3,7 @@ use rstest::{fixture, rstest};
 use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, FragmentKind, SymbolKind};
 use crate::test_support::{load_fixture, registry};
 
+/// Fixture: decompose the basic.ts test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
     let source = load_fixture("syntax/languages/typescript", "basic.ts");
@@ -18,6 +19,7 @@ fn fragment_count(basic: DecomposedFile) {
     assert_eq!(basic.len(), 8);
 }
 
+/// Verifies that fragment names match the expected symbol names in order.
 #[rstest]
 fn fragment_names(basic: DecomposedFile) {
     let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
@@ -33,6 +35,7 @@ fn fragment_names(basic: DecomposedFile) {
     ]);
 }
 
+/// Verifies that fragment kinds match the expected symbol kinds in order.
 #[rstest]
 fn fragment_kinds(basic: DecomposedFile) {
     let kinds: Vec<_> = basic.iter().map(|f| &f.kind).collect();

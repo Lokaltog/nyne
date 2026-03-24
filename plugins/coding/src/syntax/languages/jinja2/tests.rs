@@ -18,6 +18,7 @@ fn region_text(source: &str, regions: &[Range<usize>]) -> String {
 
 // Content region extraction
 
+/// Verifies that content between block open and close tags is captured as a region.
 #[test]
 fn content_between_block_tags() {
     let source = "{% block title %}Hello world{% endblock %}";
@@ -29,6 +30,7 @@ fn content_between_block_tags() {
     assert_eq!(regions[0], 17..28);
 }
 
+/// Verifies that adjacent control directives with no content produce no regions.
 #[test]
 fn no_content_between_adjacent_controls() {
     let source = "{% if true %}{% endif %}";
@@ -37,6 +39,7 @@ fn no_content_between_adjacent_controls() {
     assert!(regions.is_empty(), "no content nodes between adjacent controls");
 }
 
+/// Verifies that leading content before the first directive is captured.
 #[test]
 fn leading_content_before_first_directive() {
     let source = "Hello\n{% block title %}world{% endblock %}";
@@ -46,6 +49,7 @@ fn leading_content_before_first_directive() {
     assert_eq!(regions[0], 0..6);
 }
 
+/// Verifies that trailing content after the last directive is captured.
 #[test]
 fn trailing_content_after_last_directive() {
     let source = "{% block title %}Hello{% endblock %}\nGoodbye";
@@ -55,6 +59,7 @@ fn trailing_content_after_last_directive() {
     assert_eq!(&source[last.clone()], "\nGoodbye");
 }
 
+/// Verifies that all content regions across multiple blocks are captured.
 #[test]
 fn multiple_content_regions_all_captured() {
     //                     0         1         2         3         4
@@ -66,6 +71,7 @@ fn multiple_content_regions_all_captured() {
     assert_eq!(all, "Header\nAlpha\nMiddle\nBeta\nFooter");
 }
 
+/// Verifies that render expressions are excluded from content regions.
 #[test]
 fn render_expressions_are_not_content() {
     let source = "before{{ name }}after";
@@ -78,6 +84,7 @@ fn render_expressions_are_not_content() {
 
 // Structural symbol extraction — blocks
 
+/// Verifies that block name, kind, full_span, and signature are extracted correctly.
 #[test]
 fn block_name_and_full_span() {
     let source = "{% block title %}Hello{% endblock %}";
@@ -91,6 +98,7 @@ fn block_name_and_full_span() {
     assert_eq!(block.signature, "{% block title %}");
 }
 
+/// Verifies that block name_byte_offset points to the identifier in source.
 #[test]
 fn block_name_byte_offset_points_to_identifier() {
     let source = "{% block title %}Hello{% endblock %}";
@@ -105,6 +113,7 @@ fn block_name_byte_offset_points_to_identifier() {
     );
 }
 
+/// Verifies that nested blocks are paired correctly via stack-based matching.
 #[test]
 fn nested_blocks_paired_correctly() {
     let source = "{% block outer %}\n{% block inner %}Hello{% endblock %}\n{% endblock %}";
@@ -128,6 +137,7 @@ fn nested_blocks_paired_correctly() {
 
 // Structural symbol extraction — macros
 
+/// Verifies that macro name, kind, and signature are extracted correctly.
 #[test]
 fn macro_name_kind_and_signature() {
     let source = "{% macro render(items) %}\n<ul>{{ items }}</ul>\n{% endmacro %}";
@@ -141,6 +151,7 @@ fn macro_name_kind_and_signature() {
     assert_eq!(mac.signature, "{% macro render(items) %}");
 }
 
+/// Verifies that macro name_byte_offset points to the identifier in source.
 #[test]
 fn macro_name_byte_offset() {
     let source = "{% macro greet(name) %}Hi {{ name }}{% endmacro %}";
@@ -157,6 +168,7 @@ fn macro_name_byte_offset() {
 
 // Structural symbol extraction — set
 
+/// Verifies that set variable name and kind are extracted correctly.
 #[test]
 fn set_variable_extracted() {
     let source = r#"{% set greeting = "hello" %}"#;
@@ -169,6 +181,7 @@ fn set_variable_extracted() {
     assert_eq!(var.full_span, 0..source.len());
 }
 
+/// Verifies that set name_byte_offset points to the variable name in source.
 #[test]
 fn set_name_byte_offset() {
     let source = r#"{% set x = 42 %}"#;
@@ -185,6 +198,7 @@ fn set_name_byte_offset() {
 
 // Critical: for/if inside blocks must not corrupt the stack
 
+/// Verifies that control flow inside a block does not corrupt the block pairing stack.
 #[rstest]
 #[case::for_loop(
     "content",
@@ -209,6 +223,7 @@ fn control_flow_inside_block_does_not_corrupt_stack(#[case] name: &str, #[case] 
     assert_eq!(symbols[0].full_span, 0..source.len());
 }
 
+/// Verifies that an empty template produces no regions or symbols.
 #[test]
 fn empty_template() {
     let t = extract_template("");
@@ -219,6 +234,7 @@ fn empty_template() {
 
 // Mixed: content regions + symbols from the same parse
 
+/// Verifies that extract_template returns both content regions and symbols.
 #[test]
 fn extract_template_returns_both() {
     let source = "Header\n{% block title %}Body{% endblock %}\nFooter";
@@ -233,6 +249,7 @@ fn extract_template_returns_both() {
     assert_eq!(t.symbols[0].name, "title");
 }
 
+/// Verifies that a complex template extracts correct content and symbols.
 #[test]
 fn complex_template_content_and_symbols() {
     let source = r#"{% extends "base.html" %}
@@ -265,6 +282,7 @@ fn complex_template_content_and_symbols() {
 
 // SpanMap integration — content concatenation invariant
 
+/// Verifies that content regions produce a valid SpanMap with matching lengths.
 #[test]
 fn content_regions_produce_valid_span_map() {
     let source = "{% block title %}Hello {{ name }}{% endblock %}\nTrailing";
@@ -286,6 +304,7 @@ fn content_regions_produce_valid_span_map() {
 
 // Fragment conversion
 
+/// Verifies that symbols_to_fragments produces correct kinds and names.
 #[test]
 fn symbols_to_fragments_correct_kinds_and_names() {
     let source = "{% block title %}Hello{% endblock %}\n{% set x = 1 %}";
@@ -295,6 +314,7 @@ fn symbols_to_fragments_correct_kinds_and_names() {
     insta::assert_debug_snapshot!(fragments);
 }
 
+/// Verifies that fragment byte ranges extract the correct source text.
 #[test]
 fn fragment_byte_ranges_extract_correct_source() {
     let source = "{% block title %}Hello{% endblock %}";
@@ -306,6 +326,7 @@ fn fragment_byte_ranges_extract_correct_source() {
     assert_eq!(&source[frag.byte_range.clone()], source);
 }
 
+/// Verifies that fragment name_byte_offset extracts the correct name from source.
 #[test]
 fn fragment_name_byte_offset_extracts_name() {
     let source = "{% block header %}content{% endblock %}";
@@ -317,6 +338,7 @@ fn fragment_name_byte_offset_extracts_name() {
     assert_eq!(extracted_name, "header");
 }
 
+/// Decompose a Jinja2 fixture file into fragments.
 fn decompose_fixture(name: &str) -> Vec<super::Fragment> {
     let source = crate::test_support::load_fixture("syntax/languages/jinja2", name);
     let t = extract_template(&source);
@@ -331,6 +353,7 @@ fn basic_fixture_fragment_count() {
     assert_eq!(fragments.len(), 6);
 }
 
+/// Verifies that basic fixture fragment names match expected template structure.
 #[test]
 fn basic_fixture_fragment_names() {
     let fragments = decompose_fixture("basic.html.j2");

@@ -7,11 +7,13 @@ use crate::config::AnalysisConfig;
 use crate::syntax::fragment::DEFAULT_MAX_DEPTH;
 use crate::test_support::{load_fixture, registry, stub_activation_context};
 
+/// Analyze a fixture file and return all hints.
 fn analyze_fixture(ext: &str, name: &str) -> Vec<Hint> {
     let source = load_fixture("syntax/analysis", name);
     analyze_source(ext, &source)
 }
 
+/// Analyze inline source code and return all hints.
 fn analyze_source(ext: &str, source: &str) -> Vec<Hint> {
     let reg = registry();
     let decomposer = reg.get(ext).expect("no decomposer for extension");
@@ -28,10 +30,12 @@ fn analyze_source(ext: &str, source: &str) -> Vec<Hint> {
     engine.analyze(&tree, &ctx)
 }
 
+/// Filter hints to only those matching a specific rule ID.
 fn hints_by_rule<'a>(hints: &'a [Hint], rule_id: &str) -> Vec<&'a Hint> {
     hints.iter().filter(|h| h.rule_id == rule_id).collect()
 }
 
+/// Verifies that clean code fixtures produce no analysis hints.
 #[rstest]
 #[case("rs", "clean.rs")]
 #[case("rs", "shallow-nesting.rs")]
@@ -44,12 +48,14 @@ fn clean_code_produces_no_hints(#[case] ext: &str, #[case] fixture: &str) {
     assert!(hints.is_empty(), "expected no hints for {fixture}");
 }
 
+/// Verifies that empty source produces no analysis hints.
 #[test]
 fn empty_source_produces_no_hints() {
     let hints = analyze_source("rs", "");
     assert!(hints.is_empty());
 }
 
+/// Verifies that each analysis rule triggers on its corresponding fixture.
 #[rstest]
 #[case("rs", "long-params.rs", "long-parameter-list", 1)]
 #[case("rs", "unnecessary-else.rs", "unnecessary-else", 1)]
@@ -88,6 +94,7 @@ fn rule_triggers(#[case] ext: &str, #[case] fixture: &str, #[case] rule_id: &str
     );
 }
 
+/// Verifies that each analysis rule does not trigger on its negative fixture.
 #[rstest]
 #[case("rs", "no-repeated-field-access.rs", "repeated-field-access")]
 #[case("ts", "no-empty-catch.js", "empty-catch")]
@@ -126,6 +133,7 @@ fn rule_does_not_trigger(#[case] ext: &str, #[case] fixture: &str, #[case] rule_
     );
 }
 
+/// Verifies that the deep-nesting rule triggers across multiple languages.
 #[rstest]
 #[case("rs", "deep-nesting.rs")]
 #[case("py", "deep-nesting.py")]
@@ -136,6 +144,7 @@ fn deep_nesting_triggers(#[case] ext: &str, #[case] fixture: &str) {
     assert!(!matched[0].suggestions.is_empty(), "should provide suggestions");
 }
 
+/// Verifies that TODO/FIXME markers in comments are detected.
 #[rstest]
 #[case("TODO", "todo-comment.rs")]
 fn todo_markers_detected(#[case] marker: &str, #[case] fixture: &str) {
@@ -145,6 +154,7 @@ fn todo_markers_detected(#[case] marker: &str, #[case] fixture: &str) {
     assert!(matched[0].message.contains(marker), "hint should mention {marker}");
 }
 
+/// Verifies that prose mentions of TODO without a colon do not trigger hints.
 #[test]
 fn todo_in_prose_no_hint() {
     let hints = analyze_fixture("rs", "no-todo-in-prose.rs");
@@ -154,6 +164,7 @@ fn todo_in_prose_no_hint() {
     );
 }
 
+/// Verifies that a detected hint has the correct zero-based line range.
 #[test]
 fn hint_has_correct_line_range() {
     let hints = analyze_fixture("rs", "todo-comment.rs");
@@ -163,6 +174,7 @@ fn hint_has_correct_line_range() {
     assert_eq!(matched[0].line_range.start, 1);
 }
 
+/// Verifies that ASCII separator comments are detected across languages.
 #[rstest]
 #[case("rs", "separator-pure.rs")]
 #[case("rs", "separator-header.rs")]
@@ -176,6 +188,7 @@ fn separator_detected(#[case] ext: &str, #[case] fixture: &str) {
     assert_eq!(matched.len(), 1, "expected ascii-separator in {fixture}");
 }
 
+/// Verifies that short or absent separators do not trigger the ascii-separator rule.
 #[rstest]
 #[case("rs", "separator-short.rs")]
 #[case("rs", "clean.rs")]
@@ -187,6 +200,7 @@ fn separator_not_triggered(#[case] ext: &str, #[case] fixture: &str) {
     );
 }
 
+/// Recursively collect all tree-sitter node kinds from a syntax tree.
 fn collect_kinds(node: tree_sitter::Node<'_>, kinds: &mut std::collections::BTreeSet<String>) {
     kinds.insert(node.kind().to_string());
     let mut cursor = node.walk();
@@ -195,6 +209,7 @@ fn collect_kinds(node: tree_sitter::Node<'_>, kinds: &mut std::collections::BTre
     }
 }
 
+/// Debug helper that dumps all tree-sitter node kinds for a set of fixtures.
 #[test]
 fn debug_dump_tree_kinds() {
     let fixtures = &[
@@ -222,6 +237,7 @@ fn debug_dump_tree_kinds() {
     }
 }
 
+/// Analyze inline source with a filtered AnalysisConfig and return all hints.
 fn analyze_source_filtered(ext: &str, source: &str, config: &AnalysisConfig) -> Vec<Hint> {
     let reg = registry();
     let decomposer = reg.get(ext).expect("no decomposer for extension");
@@ -238,6 +254,7 @@ fn analyze_source_filtered(ext: &str, source: &str, config: &AnalysisConfig) -> 
     engine.analyze(&tree, &ctx)
 }
 
+/// Verifies that default config excludes rules listed in DEFAULT_DISABLED_RULES.
 #[test]
 fn default_config_excludes_noisy_rules() {
     let config = AnalysisConfig::default();
@@ -256,6 +273,7 @@ fn default_config_excludes_noisy_rules() {
     }
 }
 
+/// Verifies that an explicit empty rules set runs all rules including disabled ones.
 #[test]
 fn explicit_empty_rules_runs_all() {
     let config = AnalysisConfig {
@@ -269,6 +287,7 @@ fn explicit_empty_rules_runs_all() {
     assert_eq!(all.catch_all.len(), filtered.catch_all.len());
 }
 
+/// Verifies that a filtered config keeps only the named rules.
 #[test]
 fn filtered_keeps_only_named_rules() {
     let config = AnalysisConfig {
@@ -285,6 +304,7 @@ fn filtered_keeps_only_named_rules() {
     );
 }
 
+/// Verifies that a filtered config excludes rules not in the selected set.
 #[test]
 fn filtered_excludes_unselected_rules() {
     let config = AnalysisConfig {
@@ -300,6 +320,7 @@ fn filtered_excludes_unselected_rules() {
     );
 }
 
+/// Verifies that a disabled analysis engine produces no hints.
 #[test]
 fn disabled_produces_no_hints() {
     let config = AnalysisConfig {
