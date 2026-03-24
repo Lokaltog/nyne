@@ -60,22 +60,13 @@ pub enum ControlRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ControlResponse {
-    Exec {
-        ok: bool,
-        data: Option<String>,
-        error: Option<String>,
-    },
+    ExecOk { data: String },
+    ExecErr { error: String },
     Registered,
     Unregistered,
-    Visibility {
-        rules: VisibilityRules,
-    },
-    Processes {
-        list: Vec<AttachedProcess>,
-    },
-    Error {
-        message: String,
-    },
+    Visibility { rules: VisibilityRules },
+    Processes { list: Vec<AttachedProcess> },
+    Error { message: String },
 }
 
 /// A process currently attached to the sandbox via `nyne attach`.
@@ -250,20 +241,14 @@ fn handle_exec(
         Ok(stdout) => {
             let response = String::from_utf8_lossy(&stdout);
             trace!(target: "wire", address, %response, "exec response");
-            ControlResponse::Exec {
-                ok: true,
-                data: Some(BASE64.encode(&stdout)),
-                error: None,
+            ControlResponse::ExecOk {
+                data: BASE64.encode(&stdout),
             }
         }
         Err(e) => {
             let msg = format!("{e:#}");
             error!(address, error = %msg, "script execution failed");
-            ControlResponse::Exec {
-                ok: false,
-                data: None,
-                error: Some(msg),
-            }
+            ControlResponse::ExecErr { error: msg }
         }
     }
 }
@@ -386,12 +371,8 @@ pub fn exec_script(socket_path: &Path, address: &str, stdin: &[u8]) -> Result<Ve
     };
 
     match send_request(socket_path, &req)? {
-        ControlResponse::Exec { ok: true, data, .. } => {
-            let encoded = data.unwrap_or_default();
-            BASE64.decode(&encoded).wrap_err("decoding response data")
-        }
-        ControlResponse::Exec { error, .. } =>
-            Err(eyre!("script error: {}", error.unwrap_or_else(|| "unknown".into()))),
+        ControlResponse::ExecOk { data } => BASE64.decode(&data).wrap_err("decoding response data"),
+        ControlResponse::ExecErr { error } => Err(eyre!("script error: {error}")),
         other => Err(eyre!("unexpected response to exec request: {other:?}")),
     }
 }

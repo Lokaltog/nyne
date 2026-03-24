@@ -4,7 +4,7 @@
 | Lines | Hash | Author | Date | Message |
 |-|-|-|-|-|
 {% for h in data %}
-| {{ h.lines }} | `{{ h.hash }}` | {{ h.author }} | {{ h.date }} | {{ h.message }} |
+| {{ h.start_line }}{% if h.start_line != h.end_line %}-{{ h.end_line }}{% endif %} | `{{ h.hash }}` | {{ h.author }} | {{ h.date }} | {{ h.message }} |
 {% endfor %}
 {% else %}
 _No blame data available._

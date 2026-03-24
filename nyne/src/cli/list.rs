@@ -84,6 +84,9 @@ fn list_processes(term: &Term, id: &str) -> Result<()> {
                 ))?;
             }
         }
+        sandbox::control::ControlResponse::Error { message } => {
+            return Err(color_eyre::eyre::eyre!("daemon error: {message}"));
+        }
         other => {
             return Err(color_eyre::eyre::eyre!("unexpected response from daemon: {other:?}"));
         }

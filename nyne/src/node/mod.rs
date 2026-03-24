@@ -63,6 +63,36 @@ pub enum CachePolicy {
     Never,
 }
 
+/// Extension capabilities and metadata — lazily allocated, only when needed.
+///
+/// Grouped behind a single `Box` to reduce per-node memory for the common
+/// case where none of these are used (directories, symlinks, simple files).
+struct NodeExtensions {
+    renameable: Option<Box<dyn Renameable>>,
+    unlinkable: Option<Box<dyn Unlinkable>>,
+    lifecycle: Option<Box<dyn Lifecycle>>,
+    xattrable: Option<Box<dyn Xattrable>>,
+    read_middlewares: Vec<Box<dyn ReadMiddleware>>,
+    write_middlewares: Vec<Box<dyn WriteMiddleware>>,
+    plugins: Vec<Box<dyn NodePlugin>>,
+    props: TypeMap,
+}
+
+impl Default for NodeExtensions {
+    fn default() -> Self {
+        Self {
+            renameable: None,
+            unlinkable: None,
+            lifecycle: None,
+            xattrable: None,
+            read_middlewares: Vec::new(),
+            write_middlewares: Vec::new(),
+            plugins: Vec::new(),
+            props: TypeMap::new(),
+        }
+    }
+}
+
 /// A virtual node in the FUSE filesystem.
 ///
 /// Identity is data (name, kind, permissions). Behavior is composed from
@@ -82,29 +112,17 @@ pub struct VirtualNode {
     /// cache is per-inode.
     shadows_real: bool,
 
-    // Capabilities
+    // Common capabilities — kept inline (most file nodes have these)
     readable: Option<Box<dyn Readable>>,
     writable: Option<Box<dyn Writable>>,
-    renameable: Option<Box<dyn Renameable>>,
-    unlinkable: Option<Box<dyn Unlinkable>>,
-    lifecycle: Option<Box<dyn Lifecycle>>,
-    xattrable: Option<Box<dyn Xattrable>>,
-
-    // Pipeline extension
-    read_middlewares: Vec<Box<dyn ReadMiddleware>>,
-    write_middlewares: Vec<Box<dyn WriteMiddleware>>,
-
-    // Plugin-based parametric derivation
-    plugins: Vec<Box<dyn NodePlugin>>,
-
-    // Typed property bag for provider-specific extensions
-    props: TypeMap,
 
     // Source file staleness tracking — providers stamp companion nodes
     // with the source file and its generation at creation time.
     source: Option<(VfsPath, u64)>,
-}
 
+    // Rarely-used extensions — lazily allocated
+    ext: Option<Box<NodeExtensions>>,
+}
 /// Default permissions auto-derived from node kind and capabilities.
 ///
 /// Used when no explicit `with_permissions()` override is set.
@@ -141,17 +159,13 @@ impl VirtualNode {
             shadows_real: false,
             readable: None,
             writable: None,
-            renameable: None,
-            unlinkable: None,
-            lifecycle: None,
-            xattrable: None,
-            read_middlewares: Vec::new(),
-            write_middlewares: Vec::new(),
-            plugins: Vec::new(),
-            props: TypeMap::new(),
             source: None,
+            ext: None,
         }
     }
+
+    /// Get or create the extensions box.
+    fn ext_mut(&mut self) -> &mut NodeExtensions { self.ext.get_or_insert_with(Box::default) }
 
     /// Create a read-only file node.
     pub fn file(name: impl Into<String>, readable: impl Readable + 'static) -> Self {
@@ -174,25 +188,25 @@ impl VirtualNode {
 
     /// Attach rename capability.
     pub fn with_renameable(mut self, renameable: impl Renameable + 'static) -> Self {
-        self.renameable = Some(Box::new(renameable));
+        self.ext_mut().renameable = Some(Box::new(renameable));
         self
     }
 
     /// Attach unlink capability.
     pub fn with_unlinkable(mut self, unlinkable: impl Unlinkable + 'static) -> Self {
-        self.unlinkable = Some(Box::new(unlinkable));
+        self.ext_mut().unlinkable = Some(Box::new(unlinkable));
         self
     }
 
     /// Attach lifecycle hooks.
     pub fn with_lifecycle(mut self, lifecycle: impl Lifecycle + 'static) -> Self {
-        self.lifecycle = Some(Box::new(lifecycle));
+        self.ext_mut().lifecycle = Some(Box::new(lifecycle));
         self
     }
 
     /// Attach extended attribute capability.
     pub fn with_xattrable(mut self, xattrable: impl Xattrable + 'static) -> Self {
-        self.xattrable = Some(Box::new(xattrable));
+        self.ext_mut().xattrable = Some(Box::new(xattrable));
         self
     }
 
@@ -264,7 +278,7 @@ impl VirtualNode {
 
     /// Attach a plugin to this node for parametric derivation.
     pub fn plugin(mut self, p: impl NodePlugin + 'static) -> Self {
-        self.plugins.push(Box::new(p));
+        self.ext_mut().plugins.push(Box::new(p));
         self
     }
 
@@ -272,20 +286,20 @@ impl VirtualNode {
     pub fn sliceable(self) -> Self { self.plugin(line_slice::LineSlice) }
 
     /// Get attached plugins.
-    pub fn plugins(&self) -> &[Box<dyn NodePlugin>] { &self.plugins }
+    pub fn plugins(&self) -> &[Box<dyn NodePlugin>] { self.ext.as_ref().map_or(&[], |e| &e.plugins) }
 
     /// Check if this node has any plugins.
-    pub fn has_plugins(&self) -> bool { !self.plugins.is_empty() }
+    pub fn has_plugins(&self) -> bool { self.ext.as_ref().is_some_and(|e| !e.plugins.is_empty()) }
 
     /// Attach read middlewares.
     pub fn with_read_middlewares(mut self, middlewares: Vec<Box<dyn ReadMiddleware>>) -> Self {
-        self.read_middlewares = middlewares;
+        self.ext_mut().read_middlewares = middlewares;
         self
     }
 
     /// Attach write middlewares.
     pub fn with_write_middlewares(mut self, middlewares: Vec<Box<dyn WriteMiddleware>>) -> Self {
-        self.write_middlewares = middlewares;
+        self.ext_mut().write_middlewares = middlewares;
         self
     }
 
@@ -295,12 +309,12 @@ impl VirtualNode {
     /// other providers can read through the resolver. Uses `TypeId` as key —
     /// each type can have at most one value.
     pub fn prop<T: Send + Sync + 'static>(mut self, value: T) -> Self {
-        self.props.insert(value);
+        self.ext_mut().props.insert(value);
         self
     }
 
     /// Retrieve a typed property by type.
-    pub fn get_prop<T: 'static>(&self) -> Option<&T> { self.props.get::<T>() }
+    pub fn get_prop<T: 'static>(&self) -> Option<&T> { self.ext.as_ref()?.props.get::<T>() }
 
     /// Returns the node's name.
     pub fn name(&self) -> &str { &self.name }
@@ -350,22 +364,26 @@ impl VirtualNode {
     pub fn writable(&self) -> Option<&dyn Writable> { self.writable.as_deref() }
 
     /// Returns the renameable capability, if attached.
-    pub fn renameable(&self) -> Option<&dyn Renameable> { self.renameable.as_deref() }
+    pub fn renameable(&self) -> Option<&dyn Renameable> { self.ext.as_ref()?.renameable.as_deref() }
 
     /// Returns the unlinkable capability, if attached.
-    pub fn unlinkable(&self) -> Option<&dyn Unlinkable> { self.unlinkable.as_deref() }
+    pub fn unlinkable(&self) -> Option<&dyn Unlinkable> { self.ext.as_ref()?.unlinkable.as_deref() }
 
     /// Returns the lifecycle hooks, if attached.
-    pub fn lifecycle(&self) -> Option<&dyn Lifecycle> { self.lifecycle.as_deref() }
+    pub fn lifecycle(&self) -> Option<&dyn Lifecycle> { self.ext.as_ref()?.lifecycle.as_deref() }
 
     /// Returns the xattr capability, if attached.
-    pub fn xattrable(&self) -> Option<&dyn Xattrable> { self.xattrable.as_deref() }
+    pub fn xattrable(&self) -> Option<&dyn Xattrable> { self.ext.as_ref()?.xattrable.as_deref() }
 
     /// Returns the attached read middlewares.
-    pub fn read_middlewares(&self) -> &[Box<dyn ReadMiddleware>] { &self.read_middlewares }
+    pub fn read_middlewares(&self) -> &[Box<dyn ReadMiddleware>] {
+        self.ext.as_ref().map_or(&[], |e| &e.read_middlewares)
+    }
 
     /// Returns the attached write middlewares.
-    pub fn write_middlewares(&self) -> &[Box<dyn WriteMiddleware>] { &self.write_middlewares }
+    pub fn write_middlewares(&self) -> &[Box<dyn WriteMiddleware>] {
+        self.ext.as_ref().map_or(&[], |e| &e.write_middlewares)
+    }
 }
 
 /// Generate a `require_*` method that returns the capability or `PermissionDenied`.

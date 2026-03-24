@@ -1,5 +1,7 @@
+use std::convert::Infallible;
 use std::env;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use clap::Args;
@@ -32,13 +34,35 @@ pub struct MountArgs {
     ///   nyne mount /path/to/project
     ///   nyne mount <myid:/path/to/project>
     ///   nyne mount /path/a /path/b
-    pub paths: Vec<String>,
+    pub paths: Vec<MountSpec>,
 }
 
 /// A parsed mount spec: optional explicit ID + path.
-struct MountSpec {
+#[derive(Debug, Clone)]
+pub struct MountSpec {
     explicit_id: Option<String>,
     path: PathBuf,
+}
+
+impl FromStr for MountSpec {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((prefix, rest)) = s.split_once(':')
+            && !prefix.is_empty()
+            && !prefix.contains('/')
+            && !rest.is_empty()
+        {
+            return Ok(Self {
+                explicit_id: Some(prefix.to_owned()),
+                path: PathBuf::from(rest),
+            });
+        }
+        Ok(Self {
+            explicit_id: None,
+            path: PathBuf::from(s),
+        })
+    }
 }
 
 /// Owns the FUSE session, filesystem watcher, and control IPC server.
@@ -52,27 +76,6 @@ struct SessionGuard {
     _control_server: Option<sandbox::control::ControlServer>,
 }
 
-/// Parse a mount argument into an optional explicit ID and a path.
-///
-/// Format: `[id:]path` — if a colon is present and the part before
-/// it looks like an ID (no slashes), treat it as an explicit ID.
-fn parse_mount_spec(arg: &str) -> MountSpec {
-    if let Some((prefix, rest)) = arg.split_once(':')
-        && !prefix.is_empty()
-        && !prefix.contains('/')
-        && !rest.is_empty()
-    {
-        return MountSpec {
-            explicit_id: Some(prefix.to_owned()),
-            path: PathBuf::from(rest),
-        };
-    }
-    MountSpec {
-        explicit_id: None,
-        path: PathBuf::from(arg),
-    }
-}
-
 /// Run the mount subcommand: mount one or more directories as FUSE filesystems.
 pub fn run(args: &MountArgs) -> Result<()> {
     let nyne_config = NyneConfig::load()?;
@@ -84,24 +87,19 @@ pub fn run(args: &MountArgs) -> Result<()> {
 
     // Default to CWD if no paths provided.
     let default_cwd;
-    let raw_paths: &[String] = if args.paths.is_empty() {
-        default_cwd = vec![
-            env::current_dir()
-                .wrap_err("resolving current directory")?
-                .to_string_lossy()
-                .into_owned(),
-        ];
+    let specs: &[MountSpec] = if args.paths.is_empty() {
+        default_cwd = vec![MountSpec {
+            explicit_id: None,
+            path: env::current_dir().wrap_err("resolving current directory")?,
+        }];
         &default_cwd
     } else {
         &args.paths
     };
 
-    // Parse and validate all mount specs.
-    let specs: Vec<MountSpec> = raw_paths.iter().map(|s| parse_mount_spec(s)).collect();
-
     let mut mounts: Vec<(SessionId, PathBuf)> = Vec::with_capacity(specs.len());
 
-    for spec in &specs {
+    for spec in specs {
         let path = spec
             .path
             .canonicalize()

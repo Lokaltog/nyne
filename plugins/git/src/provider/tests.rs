@@ -16,7 +16,6 @@ mod hunk_overlap_tests {
             (line, line)
         };
         history::BlameHunk {
-            lines: lines.to_owned(),
             start_line,
             end_line,
             commit: crate::CommitInfo {

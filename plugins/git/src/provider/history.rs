@@ -19,10 +19,7 @@ const MAX_REVWALK: usize = 5000;
 /// Blame hunk with line range and commit metadata.
 #[derive(serde::Serialize)]
 pub struct BlameHunk {
-    pub lines: String,
-    #[serde(skip)]
     pub start_line: usize,
-    #[serde(skip)]
     pub end_line: usize,
     #[serde(flatten)]
     pub commit: CommitInfo,
@@ -207,12 +204,6 @@ fn blame_hunk(repo: &git2::Repository, hunk: &git2::BlameHunk<'_>) -> Result<Bla
     let start = hunk.final_start_line();
     let end = start + hunk.lines_in_hunk() - 1;
 
-    let lines = if start == end {
-        format!("{start}")
-    } else {
-        format!("{start}-{end}")
-    };
-
     let commit = if oid.is_zero() {
         CommitInfo {
             hash: format!("{oid:.7}"),
@@ -222,12 +213,10 @@ fn blame_hunk(repo: &git2::Repository, hunk: &git2::BlameHunk<'_>) -> Result<Bla
             epoch_secs: 0,
         }
     } else {
-        let c = repo.find_commit(oid).wrap_err("blame commit lookup failed")?;
-        commit_info(&c, oid)
+        commit_info(&repo.find_commit(oid).wrap_err("blame commit lookup failed")?, oid)
     };
 
     Ok(BlameHunk {
-        lines,
         start_line: start,
         end_line: end,
         commit,
