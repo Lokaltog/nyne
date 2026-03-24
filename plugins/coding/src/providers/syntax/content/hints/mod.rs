@@ -101,7 +101,7 @@ fn build_view(hints: &[Hint]) -> (Vec<HintView>, Vec<CollapsedGroup>, Vec<Sugges
         .filter(|h| is_collapsed(h.rule_id) && seen.insert(h.rule_id))
         .map(|h| CollapsedGroup {
             rule_id: h.rule_id,
-            severity: h.severity.as_ref(),
+            severity: h.severity.into(),
             count: counts.get(h.rule_id).copied().unwrap_or(0),
             summary: collapse_summary(h.rule_id),
         })

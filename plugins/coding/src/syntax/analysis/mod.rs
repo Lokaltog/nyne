@@ -67,7 +67,7 @@ macro_rules! register_analysis_rule {
 pub(crate) use register_analysis_rule;
 
 /// Severity level for analysis hints.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::AsRefStr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr)]
 #[strum(serialize_all = "lowercase")]
 pub enum Severity {
     /// Informational hint — useful context, not a problem.
@@ -106,7 +106,7 @@ impl From<&Hint> for HintView {
     fn from(hint: &Hint) -> Self {
         Self {
             rule_id: hint.rule_id,
-            severity: hint.severity.as_ref(),
+            severity: hint.severity.into(),
             message: hint.message.clone(),
             line_start: hint.line_range.start + 1,
             line_end: hint.line_range.end + 1,
