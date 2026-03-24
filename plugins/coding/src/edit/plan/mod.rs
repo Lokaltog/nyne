@@ -17,7 +17,7 @@ use crate::syntax::fragment::Fragment;
 /// The `kebab-case` serialization is used for both VFS directory names
 /// and staged action labels — adding a variant requires no manual name
 /// mapping.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr, strum::EnumIter, strum::EnumCount)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr, strum::EnumIter, strum::EnumCount, strum::EnumString)]
 #[strum(serialize_all = "kebab-case")]
 pub enum EditOpKind {
     Replace,
@@ -26,7 +26,6 @@ pub enum EditOpKind {
     InsertAfter,
     Append,
 }
-
 impl EditOpKind {
     /// Kebab-case name, used as both VFS directory name and staged action label.
     #[must_use]
@@ -34,7 +33,7 @@ impl EditOpKind {
 
     /// Parse a directory/label name back to an operation kind.
     #[must_use]
-    pub fn from_name(name: &str) -> Option<Self> { Self::iter().find(|k| k.name() == name) }
+    pub fn from_name(name: &str) -> Option<Self> { name.parse().ok() }
 }
 
 /// A single edit operation targeting a source file.
