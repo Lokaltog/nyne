@@ -1,5 +1,4 @@
 //! Linux namespace creation and entry.
-#![allow(unsafe_code)]
 
 use std::fs as stdfs;
 use std::os::fd::{AsFd, OwnedFd};
@@ -14,6 +13,22 @@ use tracing::{debug, trace};
 use super::paths;
 use crate::err::ErrnoExt;
 
+/// Safe wrapper around `unshare_unsafe` for flags that don't affect fd tables.
+///
+/// The only flag that makes `unshare` genuinely unsafe is `FILES` (it can
+/// hide fds between threads). This wrapper asserts `FILES` is not set and
+/// encapsulates the single `unsafe` block for the entire module.
+#[allow(unsafe_code)]
+fn unshare(flags: UnshareFlags, label: &str) -> Result<()> {
+    assert!(
+        !flags.contains(UnshareFlags::FILES),
+        "UnshareFlags::FILES must not be used — it breaks cross-thread fd visibility"
+    );
+    // SAFETY: Without FILES, unshare only affects namespace membership of the
+    // calling thread/process — no fd table manipulation, no cross-thread UB.
+    syscall_try!(unsafe { thread::unshare_unsafe(flags) }, "{label}");
+    Ok(())
+}
 /// Handles to a process's user and mount namespace fds.
 ///
 /// Opened from `/proc/<pid>/ns/{user,mnt}`. Used by the command child
@@ -93,12 +108,10 @@ pub(super) fn unshare_user_mount() -> Result<()> {
 
     debug!(uid = uid.as_raw(), gid = gid.as_raw(), "creating user+mount namespace");
 
-    // SAFETY: We only unshare NEWUSER | NEWNS — no CLONE_FILES, so file
-    // descriptor tables remain shared and other threads are unaffected.
-    syscall_try!(
-        unsafe { thread::unshare_unsafe(UnshareFlags::NEWUSER | UnshareFlags::NEWNS) },
-        "unshare(CLONE_NEWUSER | CLONE_NEWNS)"
-    );
+    unshare(
+        UnshareFlags::NEWUSER | UnshareFlags::NEWNS,
+        "unshare(CLONE_NEWUSER | CLONE_NEWNS)",
+    )?;
 
     // Map host uid/gid → root (0) inside the namespace for mount privileges.
     write_id_maps(&format!("0 {} 1", uid.as_raw()), &format!("0 {} 1", gid.as_raw()))?;
@@ -117,12 +130,7 @@ pub(super) fn unshare_user_mount() -> Result<()> {
 /// namespace (i.e., after `setns` into the daemon's user namespace).
 pub(super) fn unshare_private_mount() -> Result<()> {
     debug!("creating private mount namespace");
-    // SAFETY: We only unshare NEWNS — no CLONE_FILES, so file descriptor
-    // tables remain shared and other threads are unaffected.
-    syscall_try!(
-        unsafe { thread::unshare_unsafe(UnshareFlags::NEWNS) },
-        "unshare(CLONE_NEWNS)"
-    );
+    unshare(UnshareFlags::NEWNS, "unshare(CLONE_NEWNS)")?;
     super::mnt::private()?;
     debug!("private mount namespace created");
     Ok(())
@@ -140,12 +148,7 @@ pub(super) fn unshare_private_mount() -> Result<()> {
 pub(super) fn unshare_user_remap(uid: u32, gid: u32) -> Result<()> {
     debug!(uid, gid, "creating user namespace to remap uid/gid");
 
-    // SAFETY: We only unshare NEWUSER — no CLONE_FILES, so file descriptor
-    // tables remain shared and other threads are unaffected.
-    syscall_try!(
-        unsafe { thread::unshare_unsafe(UnshareFlags::NEWUSER) },
-        "unshare(CLONE_NEWUSER)"
-    );
+    unshare(UnshareFlags::NEWUSER, "unshare(CLONE_NEWUSER)")?;
 
     // Map real uid/gid in new ns → uid/gid 0 in parent ns (which itself
     // maps to the real host uid/gid).
@@ -163,12 +166,7 @@ pub(super) fn unshare_user_remap(uid: u32, gid: u32) -> Result<()> {
 pub(super) fn unshare_uts(hostname: &str) -> Result<()> {
     debug!(hostname, "creating UTS namespace");
 
-    // SAFETY: We only unshare NEWUTS — no CLONE_FILES, so file descriptor
-    // tables remain shared and other threads are unaffected.
-    syscall_try!(
-        unsafe { thread::unshare_unsafe(UnshareFlags::NEWUTS) },
-        "unshare(CLONE_NEWUTS)"
-    );
+    unshare(UnshareFlags::NEWUTS, "unshare(CLONE_NEWUTS)")?;
 
     syscall_try!(system::sethostname(hostname.as_bytes()), "sethostname({hostname})");
 
@@ -185,12 +183,7 @@ pub(super) fn unshare_uts(hostname: &str) -> Result<()> {
 pub(super) fn unshare_pid() -> Result<()> {
     debug!("creating PID namespace");
 
-    // SAFETY: We only unshare NEWPID — no CLONE_FILES, so file descriptor
-    // tables remain shared and other threads are unaffected.
-    syscall_try!(
-        unsafe { thread::unshare_unsafe(UnshareFlags::NEWPID) },
-        "unshare(CLONE_NEWPID)"
-    );
+    unshare(UnshareFlags::NEWPID, "unshare(CLONE_NEWPID)")?;
 
     debug!("PID namespace created (next fork will be PID 1)");
     Ok(())
