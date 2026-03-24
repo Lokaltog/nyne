@@ -67,22 +67,13 @@ macro_rules! register_analysis_rule {
 pub(crate) use register_analysis_rule;
 
 /// Severity level for analysis hints.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::AsRefStr)]
+#[strum(serialize_all = "lowercase")]
 pub enum Severity {
     /// Informational hint — useful context, not a problem.
     Info,
     /// Warning — likely code smell worth addressing.
     Warning,
-}
-
-impl Severity {
-    /// Lowercase label for display/serialization.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Info => "info",
-            Self::Warning => "warning",
-        }
-    }
 }
 
 /// A hint produced by an analysis rule.
@@ -115,7 +106,7 @@ impl From<&Hint> for HintView {
     fn from(hint: &Hint) -> Self {
         Self {
             rule_id: hint.rule_id,
-            severity: hint.severity.as_str(),
+            severity: hint.severity.as_ref(),
             message: hint.message.clone(),
             line_start: hint.line_range.start + 1,
             line_end: hint.line_range.end + 1,
