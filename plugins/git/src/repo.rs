@@ -210,7 +210,7 @@ impl GitRepo {
     /// commit is not an ancestor of HEAD.
     pub(crate) fn delete_branch(&self, name: &str) -> Result<()> {
         let repo = self.lock();
-        let branch = repo
+        let mut branch = repo
             .find_branch(name, git2::BranchType::Local)
             .wrap_err_with(|| format!("branch not found: {name}"))?;
 
@@ -244,7 +244,6 @@ impl GitRepo {
             ));
         }
 
-        let mut branch = branch;
         branch
             .delete()
             .wrap_err_with(|| format!("failed to delete branch {name}"))?;
