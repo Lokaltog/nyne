@@ -3,7 +3,6 @@
 use std::ops::Range;
 
 use color_eyre::eyre::Result;
-use strum::IntoEnumIterator;
 
 use super::splice::splice_content;
 use crate::syntax::fragment::Fragment;
@@ -17,7 +16,9 @@ use crate::syntax::fragment::Fragment;
 /// The `kebab-case` serialization is used for both VFS directory names
 /// and staged action labels — adding a variant requires no manual name
 /// mapping.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr, strum::EnumIter, strum::EnumCount, strum::EnumString)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, strum::IntoStaticStr, strum::EnumIter, strum::EnumCount, strum::EnumString,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum EditOpKind {
     Replace,
