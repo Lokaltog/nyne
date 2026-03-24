@@ -1,6 +1,8 @@
 //! TODO/FIXME provider — scans source files for TODO markers.
 
+/// TODO entry -- a single TODO marker in source code.
 mod entry;
+/// TODO scanner -- Aho-Corasick automaton for tag detection.
 mod scan;
 
 use std::collections::{BTreeMap, HashMap};
@@ -62,7 +64,9 @@ struct TodoIndex {
     scanned_files: Vec<VfsPath>,
 }
 
+/// Methods for [`TodoProvider`].
 impl TodoProvider {
+    /// Create a new TODO provider with route tree and scanner.
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
         let tags = ctx
             .get::<CodingConfig>()
@@ -167,6 +171,7 @@ impl TodoProvider {
 
     /// At `@/todo/` level — list tag dirs + overview.
     #[allow(clippy::unnecessary_wraps)] // matches Provider::children return type
+    /// List children at the todo root: tag directories and overview.
     fn children_todo_root(&self, ctx: &RouteCtx<'_>) -> Nodes {
         self.ensure_index(ctx);
         let index_guard = self.index.read();
@@ -213,9 +218,12 @@ impl TodoProvider {
     }
 }
 
+/// [`Provider`] implementation for [`TodoProvider`].
 impl Provider for TodoProvider {
+    /// Return the TODO provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// Activate when the workspace is a git repository.
     fn should_activate(&self, ctx: &ActivationContext) -> bool {
         if !ctx.get::<CodingConfig>().is_some_and(|c| c.todo.enabled) {
             return false;
@@ -230,9 +238,11 @@ impl Provider for TodoProvider {
         }
     }
 
+    /// Dispatch children through the route tree.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes { self.routes.children(&self, ctx) }
 
     #[allow(clippy::expect_used)] // static path constant, always valid
+    /// Invalidate TODO index when scanned files change.
     fn on_fs_change(&self, changed: &[VfsPath]) -> Vec<InvalidationEvent> {
         let index_guard = self.index.read();
         if let Some(idx) = index_guard.as_ref() {
@@ -250,7 +260,9 @@ impl Provider for TodoProvider {
     }
 }
 
+/// Provider ID constant.
 impl TodoProvider {
+    /// Unique provider identifier for TODO scanning.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("todo");
 }
 

@@ -11,6 +11,7 @@ fn file_tool_input(file_path: &str) -> HookInput {
 /// Build a `HookInput` with a Bash command (no file_path field).
 fn bash_input() -> HookInput { serde_json::from_value(json!({ "tool_input": { "command": "ls" } })).unwrap() }
 
+/// Verifies source-relative path extraction for various tool inputs.
 #[rstest]
 #[case::edit_raw("/code/src/lib.rs", "Edit", Some("src/lib.rs"))]
 #[case::write_raw("/code/src/main.rs", "Write", Some("src/main.rs"))]
@@ -28,6 +29,8 @@ fn source_rel_path_cases(#[case] file_path: &str, #[case] tool_name: &str, #[cas
     };
     assert_eq!(source_rel_path(&input, tool_name, "/code/").as_deref(), expected);
 }
+
+/// Builds a `HookInput` for an Edit tool with old/new string replacement.
 fn edit_input(old_string: &str, new_string: &str) -> HookInput {
     serde_json::from_value(json!({
         "tool_name": "Edit",
@@ -40,6 +43,7 @@ fn edit_input(old_string: &str, new_string: &str) -> HookInput {
     .unwrap()
 }
 
+/// Builds a `DecomposedSource` from raw Rust source for testing.
 fn make_decomposed(source: &str) -> DecomposedSource {
     let registry = crate::syntax::SyntaxRegistry::global();
     DecomposedSource {
@@ -49,6 +53,8 @@ fn make_decomposed(source: &str) -> DecomposedSource {
         tree: None,
     }
 }
+
+/// Builds a `HintView` fixture with the given rule ID and line range.
 fn hint(rule_id: &'static str, line_start: usize, line_end: usize) -> HintView {
     HintView {
         rule_id,
@@ -60,6 +66,7 @@ fn hint(rule_id: &'static str, line_start: usize, line_end: usize) -> HintView {
     }
 }
 
+/// Builds a `DiagnosticRow` fixture with the given line and message.
 fn diag(line: u32, message: &str) -> DiagnosticRow {
     DiagnosticRow {
         line,
@@ -71,6 +78,7 @@ fn diag(line: u32, message: &str) -> DiagnosticRow {
     }
 }
 
+/// Verifies that changed_line_range returns a range covering the edited lines.
 #[rstest]
 #[case::single_line("old_val", "new_val", "fn foo() {\n    let x = new_val;\n}\n", 2, 2)]
 #[case::multiline(
@@ -97,6 +105,7 @@ fn changed_line_range_includes_edit(
     assert!(range.end > max_line, "end {range:?} should include line {max_line}");
 }
 
+/// Verifies that changed_line_range returns None for ambiguous or non-Edit inputs.
 #[rstest]
 #[case::write("old", "new", false, "Write", "new\n")]
 #[case::empty_new("deleted", "", false, "Edit", "fn foo() {}\n")]
@@ -122,6 +131,7 @@ fn changed_line_range_returns_none(
     assert!(changed_line_range(&input, tool_name, &decomposed).is_none());
 }
 
+/// Verifies that hints are filtered to the given line range.
 #[rstest]
 #[case::no_range_passes_all(
     vec![hint("r1", 1, 1), hint("r2", 50, 50)],
@@ -143,6 +153,7 @@ fn filter_hints_cases(#[case] hints: Vec<HintView>, #[case] range: Option<Range<
     assert_eq!(result.len(), expected);
 }
 
+/// Verifies that diagnostics are filtered to the given line range.
 #[rstest]
 #[case::no_range_passes_all(vec![diag(1, "a"), diag(99, "b")], None, 2)]
 #[case::narrows_to_range(vec![diag(1, "before"), diag(10, "inside"), diag(50, "after")], Some(8..15), 1)]

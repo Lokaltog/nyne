@@ -4,8 +4,10 @@ use serde_json::{Value, json};
 
 use super::*;
 
+/// Returns a hardcoded project root path for test assertions.
 fn root() -> &'static Path { Path::new("/mnt/project") }
 
+/// Tests that injected hooks merge correctly into an empty JSON object.
 #[test]
 fn merge_into_empty_object() {
     let base = json!({});
@@ -24,6 +26,7 @@ fn merge_into_empty_object() {
     assert!(cmd.contains("/mnt/project/@/STATUS.md"), "command contains mount path");
 }
 
+/// Tests that existing JSON keys are preserved during hook injection.
 #[test]
 fn preserves_existing_keys() {
     let base = json!({
@@ -38,6 +41,7 @@ fn preserves_existing_keys() {
     assert!(result.get("hooks").is_some());
 }
 
+/// Tests that injected hooks append to existing SessionStart entries.
 #[test]
 fn appends_to_existing_session_start_hooks() {
     let base = json!({
@@ -62,6 +66,7 @@ fn appends_to_existing_session_start_hooks() {
     assert_eq!(arr[1]["matcher"], "startup|resume|clear");
 }
 
+/// Tests that hooks for non-injected events are preserved unchanged.
 #[test]
 fn preserves_existing_hooks_for_other_events() {
     let base = json!({
@@ -85,6 +90,7 @@ fn preserves_existing_hooks_for_other_events() {
     assert_eq!(session.len(), 2);
 }
 
+/// Tests that rendering with no existing file produces valid JSON with hooks.
 #[test]
 fn render_settings_with_no_real_file() {
     let result = render_settings(None, root()).unwrap();
@@ -92,6 +98,7 @@ fn render_settings_with_no_real_file() {
     assert!(parsed["hooks"]["SessionStart"].is_array());
 }
 
+/// Tests that rendering with empty bytes produces valid JSON with hooks.
 #[test]
 fn render_settings_with_empty_bytes() {
     let result = render_settings(Some(b""), root()).unwrap();
@@ -99,6 +106,7 @@ fn render_settings_with_empty_bytes() {
     assert!(parsed["hooks"]["SessionStart"].is_array());
 }
 
+/// Tests that existing JSON content is preserved when rendering settings.
 #[test]
 fn render_settings_with_existing_json() {
     let existing = br#"{"model": "fast"}"#;
@@ -108,6 +116,7 @@ fn render_settings_with_existing_json() {
     assert!(parsed["hooks"]["SessionStart"].is_array());
 }
 
+/// Tests that invalid JSON input produces an error.
 #[test]
 fn render_settings_with_invalid_json_returns_error() {
     let bad = b"not json";
@@ -115,6 +124,7 @@ fn render_settings_with_invalid_json_returns_error() {
     assert!(result.is_err());
 }
 
+/// Tests that hook commands use jq for JSON envelope construction.
 #[test]
 fn hook_command_uses_jq_envelope() {
     let hooks = injected_hooks(root());
@@ -128,6 +138,7 @@ fn hook_command_uses_jq_envelope() {
     assert!(cmd.contains("additionalContext"), "command includes additionalContext");
 }
 
+/// Tests that PostToolUse injection does not interfere with SessionStart hooks.
 #[test]
 fn post_tool_use_does_not_interfere_with_session_start() {
     let base = json!({
@@ -150,6 +161,7 @@ fn post_tool_use_does_not_interfere_with_session_start() {
     assert_eq!(post.len(), 1);
 }
 
+/// Tests that all hook commands use nyne exec for dispatch.
 #[test]
 fn hook_commands_use_nyne_exec() {
     let hooks = injected_hooks(root());

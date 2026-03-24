@@ -35,6 +35,7 @@ pub(super) const fn lsp_symbol_kind_label(kind: SymbolKind) -> &'static str {
     }
 }
 
+/// Extract display text from hover contents.
 pub(super) fn extract_hover_content(contents: &HoverContents) -> String {
     match contents {
         HoverContents::Scalar(value) => marked_string_to_text(value),
@@ -47,6 +48,7 @@ pub(super) fn extract_hover_content(contents: &HoverContents) -> String {
     }
 }
 
+/// Convert a `MarkedString` to plain text.
 pub(super) fn marked_string_to_text(ms: &MarkedString) -> String {
     match ms {
         MarkedString::String(s) => s.clone(),
@@ -54,6 +56,7 @@ pub(super) fn marked_string_to_text(ms: &MarkedString) -> String {
     }
 }
 
+/// Extract a display string from an inlay hint label.
 pub(super) fn extract_inlay_label(label: &InlayHintLabel) -> String {
     match label {
         InlayHintLabel::String(s) => s.clone(),

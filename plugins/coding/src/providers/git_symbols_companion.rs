@@ -41,9 +41,12 @@ pub struct GitSymbolsProvider {
     companion_routes: RouteTree<Self>,
 }
 
+/// Methods for [`GitSymbolsProvider`].
 impl GitSymbolsProvider {
+    /// Unique provider identifier for symbol-scoped git features.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("git-symbols");
 
+    /// Create a new provider with blame, log, and history route trees.
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
         let mut b = names::handle_builder();
         let blame_key = b.register("git-symbols/blame", BLAME_TEMPLATE);
@@ -70,6 +73,7 @@ impl GitSymbolsProvider {
         }
     }
 
+    /// Retrieve the git repository from the activation context.
     fn repo(&self) -> Result<Arc<GitRepo>> {
         self.ctx
             .get::<Arc<GitRepo>>()
@@ -77,6 +81,7 @@ impl GitSymbolsProvider {
             .ok_or_else(|| color_eyre::eyre::eyre!("git repo not available"))
     }
 
+    /// Build a fragment resolver for the given source file.
     fn fragment_resolver(&self, source: VfsPath) -> Result<FragmentResolver> {
         let cache = self
             .ctx
@@ -86,6 +91,7 @@ impl GitSymbolsProvider {
         Ok(FragmentResolver::new(cache, source))
     }
 
+    /// Emit blame, log, and history nodes for a symbol's git directory.
     fn children_symbol_git(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let source = source_file(ctx)?;
         let fragment_path = ctx.params("path").to_vec();
@@ -115,6 +121,7 @@ impl GitSymbolsProvider {
         ]))
     }
 
+    /// Lookup a symbol-scoped blame with an optional line-range spec.
     fn lookup_sliced_blame(&self, ctx: &RouteCtx<'_>) -> Node {
         let Some(spec) = parse_spec(ctx.param("spec")) else {
             return Ok(None);
@@ -136,6 +143,7 @@ impl GitSymbolsProvider {
         )))
     }
 
+    /// Lookup a symbol-scoped log with an optional line-range spec.
     fn lookup_sliced_log(&self, ctx: &RouteCtx<'_>) -> Node {
         let Some(spec) = parse_spec(ctx.param("spec")) else {
             return Ok(None);
@@ -157,6 +165,7 @@ impl GitSymbolsProvider {
         )))
     }
 
+    /// List historical versions of a symbol from git history.
     fn children_symbol_history(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let source = source_file(ctx)?;
         let fragment_path = ctx.params("path");
@@ -190,9 +199,12 @@ impl GitSymbolsProvider {
     }
 }
 
+/// [`Provider`] implementation for [`GitSymbolsProvider`].
 impl Provider for GitSymbolsProvider {
+    /// Return the git-symbols provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// List companion children for symbol git routes.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes {
         let Some(split) = split_companion_path(ctx.path) else {
             return Ok(None);
@@ -200,6 +212,7 @@ impl Provider for GitSymbolsProvider {
         companion_children(&self.companion_routes, &self, ctx, &split)
     }
 
+    /// Lookup a companion node by name within symbol git routes.
     fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node {
         let Some(split) = split_companion_path(ctx.path) else {
             return Ok(None);
@@ -217,7 +230,9 @@ struct SymbolBlameView {
     spec: Option<SliceSpec>,
 }
 
+/// [`TemplateView`] implementation for [`SymbolBlameView`].
 impl TemplateView for SymbolBlameView {
+    /// Render the symbol-scoped blame via template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let Some(line_range) = self.resolver.line_range(&self.fragment_path)? else {
             return Ok(engine.render_bytes(template, &minijinja::context!(data => Vec::<()>::new())));
@@ -243,7 +258,9 @@ struct SymbolLogView {
     spec: Option<SliceSpec>,
 }
 
+/// [`TemplateView`] implementation for [`SymbolLogView`].
 impl TemplateView for SymbolLogView {
+    /// Render the symbol-scoped log via template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let Some(line_range) = self.resolver.line_range(&self.fragment_path)? else {
             return Ok(engine.render_bytes(template, &minijinja::context!(data => Vec::<()>::new())));
@@ -274,7 +291,9 @@ struct SymbolHistoryVersionContent {
     oid: git2::Oid,
 }
 
+/// [`Readable`] implementation for [`SymbolHistoryVersionContent`].
 impl Readable for SymbolHistoryVersionContent {
+    /// Read a historical version of the symbol body from a git blob.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let blob = self.ctx.repo.blob_at(&self.ctx.rel_path, self.oid)?;
         let Ok(source) = from_utf8(&blob) else {

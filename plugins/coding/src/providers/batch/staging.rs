@@ -22,6 +22,7 @@ pub(super) struct StagedAction {
     pub op: EditOp,
 }
 
+/// Methods for [`StagedAction`].
 impl StagedAction {
     /// Filename for this staged action (e.g., `10-replace.diff`).
     pub fn filename(&self, index: u32) -> String { format!("{:02}-{}.diff", index, self.op.kind().name()) }
@@ -39,7 +40,9 @@ pub(super) struct StagedBatch {
 }
 
 #[allow(dead_code)] // reorder, renumber: intentional API surface for future use
+/// Methods for [`StagedBatch`].
 impl StagedBatch {
+    /// Create an empty staged batch.
     pub const fn new() -> Self {
         Self {
             actions: BTreeMap::new(),

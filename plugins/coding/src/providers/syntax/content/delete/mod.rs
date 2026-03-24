@@ -28,6 +28,7 @@ pub(in crate::providers::syntax) struct SymbolDelete {
     pub fragment_path: Vec<String>,
 }
 
+/// Methods for [`SymbolDelete`].
 impl SymbolDelete {
     /// Decompose the source file and return its fragments.
     fn fragments(&self) -> Result<(String, Vec<Fragment>)> {
@@ -40,7 +41,9 @@ impl SymbolDelete {
     }
 }
 
+/// [`DiffAction`] implementation for [`SymbolDelete`].
 impl DiffAction for SymbolDelete {
+    /// Compute the deletion range and produce file edits.
     fn compute_edits(&self, _ctx: &RequestContext<'_>) -> Result<Vec<FileEditResult>> {
         let (source, fragments) = self.fragments()?;
 
@@ -63,8 +66,10 @@ impl DiffAction for SymbolDelete {
         }])
     }
 
+    /// Return a header describing the deletion.
     fn header_lines(&self) -> Vec<String> { vec![format!("Delete symbol from {}", self.source_file)] }
 
+    /// Invalidate caches and notify LSP after deletion.
     fn on_applied(&self, _ctx: &RequestContext<'_>) -> Result<()> {
         // Invalidate the decomposition cache so subsequent reads
         // (OVERVIEW, body, docstring, etc.) re-decompose from disk.

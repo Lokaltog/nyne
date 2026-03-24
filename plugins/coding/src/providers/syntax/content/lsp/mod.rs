@@ -20,8 +20,11 @@
 // Template key constants are mechanically parallel (forced by
 // `include_str!` at compile time) but matched by `template_key()`.
 
+/// LSP feature definitions and query dispatch.
 mod feature;
+/// Formatting helpers for LSP data types.
 mod format;
+/// View types for rendering LSP query results.
 mod views;
 
 use std::ops::Range as StdRange;

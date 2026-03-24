@@ -25,7 +25,9 @@ pub struct FragmentResolver {
     source_file: VfsPath,
 }
 
+/// Methods for [`FragmentResolver`].
 impl FragmentResolver {
+    /// Create a new resolver for the given source file.
     pub const fn new(cache: DecompositionCache, source_file: VfsPath) -> Self { Self { cache, source_file } }
 
     /// Get a fresh decomposition of the source file.
@@ -34,6 +36,7 @@ impl FragmentResolver {
     /// Evict cached decomposition, forcing re-parse on next access.
     pub fn invalidate(&self) { self.cache.invalidate(&self.source_file); }
 
+    /// Return the source file path this resolver targets.
     pub const fn source_file(&self) -> &VfsPath { &self.source_file }
 
     /// Resolve the current line range for a symbol by fragment path.

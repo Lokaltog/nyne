@@ -27,9 +27,12 @@ pub(crate) struct WorkspaceSearchProvider {
     routes: RouteTree<Self>,
 }
 
+/// Methods for [`WorkspaceSearchProvider`].
 impl WorkspaceSearchProvider {
+    /// Unique provider identifier for workspace search.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("workspace-search");
 
+    /// Create a new workspace search provider with route tree.
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
         let routes = nyne_macros::routes!(Self, {
             no_emit "@" {
@@ -83,15 +86,20 @@ impl WorkspaceSearchProvider {
     }
 }
 
+/// [`Provider`] implementation for [`WorkspaceSearchProvider`].
 impl Provider for WorkspaceSearchProvider {
+    /// Return the workspace search provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// Activate when LSP workspace symbol search is available.
     fn should_activate(&self, ctx: &ActivationContext) -> bool {
         ctx.get::<CodingConfig>().is_some_and(|c| c.lsp.enabled)
     }
 
+    /// Dispatch children through the route tree.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes { self.routes.children(&self, ctx) }
 
+    /// Dispatch lookup through the route tree.
     fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node { self.routes.lookup(&self, ctx, name) }
 }
 

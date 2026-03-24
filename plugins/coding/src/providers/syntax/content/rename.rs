@@ -29,7 +29,9 @@ pub(in crate::providers::syntax) struct RenameDiff {
     pub new_name: String,
 }
 
+/// Methods for [`RenameDiff`].
 impl RenameDiff {
+    /// Execute the LSP rename and return resolved file edits.
     /// Execute the LSP rename and return resolved file edits.
     fn resolve(&self) -> Result<Vec<FileEditResult>> {
         let fq = self
@@ -44,9 +46,12 @@ impl RenameDiff {
     }
 }
 
+/// [`DiffAction`] implementation for [`RenameDiff`].
 impl DiffAction for RenameDiff {
+    /// Compute edits by resolving the LSP rename.
     fn compute_edits(&self, _ctx: &RequestContext<'_>) -> Result<Vec<FileEditResult>> { self.resolve() }
 
+    /// Return a header describing the rename.
     fn header_lines(&self) -> Vec<String> { vec![format!("Rename to: {}", self.new_name)] }
 }
 
@@ -58,7 +63,9 @@ pub(in crate::providers::syntax) struct SymbolRename {
     pub query: SymbolQuery,
 }
 
+/// [`Renameable`] implementation for [`SymbolRename`].
 impl Renameable for SymbolRename {
+    /// Apply the rename via LSP and patch the diff.
     fn rename(&self, ctx: &RenameContext<'_>) -> Result<()> {
         // The target_name from FUSE is the new directory name (e.g., "NewName@"
         // or "NewName~Struct@"). Strip the companion suffix, then strip any
@@ -93,8 +100,10 @@ pub(in crate::providers::syntax) struct FileRenameDiff {
     pub new_filename: String,
 }
 
+/// Methods for [`FileRenameDiff`].
 impl FileRenameDiff {
     /// Call `workspace/willRenameFiles` and resolve the workspace edit.
+    /// Call workspace/willRenameFiles and resolve the workspace edit.
     fn resolve(&self) -> Result<Vec<FileEditResult>> {
         let overlay_root = self.handle.path_resolver().overlay_root();
         let old_path = overlay_root.join(self.source_file.as_str());
@@ -114,9 +123,12 @@ impl FileRenameDiff {
     }
 }
 
+/// [`DiffAction`] implementation for [`FileRenameDiff`].
 impl DiffAction for FileRenameDiff {
+    /// Compute edits by resolving the file rename.
     fn compute_edits(&self, _ctx: &RequestContext<'_>) -> Result<Vec<FileEditResult>> { self.resolve() }
 
+    /// Return a header describing the file rename operation.
     fn header_lines(&self) -> Vec<String> {
         let old_name = self.source_file.name().unwrap_or("?");
         vec![format!("Rename file: {old_name} → {}", self.new_filename)]

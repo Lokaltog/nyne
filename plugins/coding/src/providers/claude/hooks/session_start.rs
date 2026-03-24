@@ -10,6 +10,7 @@ use nyne::templates::TemplateEngine;
 use crate::providers::claude::hook_schema::HookOutput;
 use crate::providers::names;
 
+/// Template key for the session start hook.
 const TMPL_SESSION_START: &str = "claude/session-start";
 
 /// `SessionStart` hook script implementation.
@@ -17,7 +18,9 @@ pub(in crate::providers::claude) struct SessionStart {
     engine: Arc<TemplateEngine>,
 }
 
+/// Methods for [`SessionStart`].
 impl SessionStart {
+    /// Create a new session start hook with registered templates.
     pub fn new() -> Self {
         let mut b = names::handle_builder();
         b.register(TMPL_SESSION_START, include_str!("templates/session-start.md.j2"));
@@ -25,7 +28,9 @@ impl SessionStart {
     }
 }
 
+/// [`Script`] implementation for [`SessionStart`].
 impl Script for SessionStart {
+    /// Render session start context with mount status and project instructions.
     fn exec(&self, ctx: &ScriptContext<'_>, _stdin: &[u8]) -> Result<Vec<u8>> {
         let activation = ctx.activation();
         let branch = {

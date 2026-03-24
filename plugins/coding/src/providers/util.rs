@@ -3,6 +3,7 @@
 use nyne::dispatch::activation::ActivationContext;
 use nyne::types::ExtensionCounts;
 
+/// Fallback file extension used when no dominant extension is found.
 const FALLBACK_EXT: &str = "ext";
 
 /// Get the dominant non-markdown extension from the activation context.

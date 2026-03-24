@@ -11,7 +11,9 @@ use crate::providers::syntax::content::{BodySplice, MetaSplice, SourceSlice, Spl
 use crate::providers::syntax::{SyntaxProvider, newline};
 use crate::syntax::fragment::FragmentKind;
 
+/// Fragment directory resolution methods for [`SyntaxProvider`].
 impl SyntaxProvider {
+    /// Resolve a fragment directory, listing its children and meta-files.
     pub(in super::super) fn resolve_fragment_dir(
         &self,
         source_file: &VfsPath,

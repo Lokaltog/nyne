@@ -17,6 +17,7 @@ fn resolver_for_source(dir: &std::path::Path, source: &str) -> FragmentResolver 
     FragmentResolver::new(cache, vfs_path)
 }
 
+/// Tests that line_range returns a valid range for a top-level symbol.
 #[test]
 fn line_range_returns_range_for_top_level_symbol() {
     let dir = tempfile::tempdir().unwrap();
@@ -33,6 +34,7 @@ fn line_range_returns_range_for_top_level_symbol() {
     assert_eq!(range.start, 3, "world is on line 3 (1-based)");
 }
 
+/// Tests that line_range returns None for a nonexistent symbol.
 #[test]
 fn line_range_returns_none_for_missing_symbol() {
     let dir = tempfile::tempdir().unwrap();
@@ -42,6 +44,7 @@ fn line_range_returns_none_for_missing_symbol() {
     assert!(range.is_none());
 }
 
+/// Tests that line_range reflects source changes after cache invalidation.
 #[test]
 fn line_range_reflects_source_change_after_invalidation() {
     let dir = tempfile::tempdir().unwrap();

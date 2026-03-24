@@ -12,6 +12,7 @@ use strum::{EnumCount, IntoEnumIterator};
 use super::views::{LspQueryResult, hierarchy_item, type_hierarchy_item};
 use crate::lsp::query::FileQuery;
 
+/// Internal metadata for a single LSP feature variant.
 struct FeatureMeta {
     slug: &'static str,
     file_name: String,
@@ -41,6 +42,7 @@ pub(in crate::providers::syntax) enum LspFeature {
     Hints,
 }
 
+/// Methods for [`LspFeature`].
 impl LspFeature {
     /// Single metadata table per variant — the **only** place that maps
     /// variant → per-variant data.
@@ -87,8 +89,10 @@ impl LspFeature {
         }
     }
 
+    /// Virtual file name derived from the feature slug.
     pub(super) fn file_name(self) -> String { self.metadata().file_name }
 
+    /// Symlink directory name for this feature, if it has one.
     pub(super) fn dir_name(self) -> Option<String> { self.metadata().dir_name }
 
     /// Template registration key and source for this feature.

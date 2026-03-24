@@ -1,10 +1,12 @@
 use super::*;
 
+/// Tests that a colon separator is accepted for tag prefix stripping.
 #[test]
 fn strip_tag_prefix_colon() {
     assert_eq!(strip_tag_prefix("TODO: fix this", "TODO"), Some("fix this".to_owned()));
 }
 
+/// Tests that parenthesized author annotations are stripped from tag prefixes.
 #[test]
 fn strip_tag_prefix_paren() {
     assert_eq!(
@@ -13,21 +15,25 @@ fn strip_tag_prefix_paren() {
     );
 }
 
+/// Tests that a dash separator is rejected for tag prefix stripping.
 #[test]
 fn strip_tag_prefix_dash_rejected() {
     assert_eq!(strip_tag_prefix("FIXME - urgent", "FIXME"), None);
 }
 
+/// Tests that a bare space separator is rejected for tag prefix stripping.
 #[test]
 fn strip_tag_prefix_space_rejected() {
     assert_eq!(strip_tag_prefix("HACK use a real parser", "HACK"), None);
 }
 
+/// Tests that a bare colon with no trailing text returns an empty string.
 #[test]
 fn strip_tag_prefix_bare_colon() {
     assert_eq!(strip_tag_prefix("TODO:", "TODO"), Some(String::new()));
 }
 
+/// Tests byte-offset-to-line-number conversion.
 #[test]
 fn byte_to_line_basic() {
     let source = "line0\nline1\nline2\n";
@@ -38,6 +44,7 @@ fn byte_to_line_basic() {
     assert_eq!(byte_to_line(&starts, 12), 2); // start of line2
 }
 
+/// Tests that consecutive line comments are grouped into a single block.
 #[test]
 fn find_comment_block_line_comments() {
     let source = "fn foo() {}\n// TODO: first\n// continuation\nfn bar() {}\n";
@@ -49,6 +56,7 @@ fn find_comment_block_line_comments() {
     assert!(block_text.contains("continuation"));
 }
 
+/// Tests that block comments are extracted as a single unit.
 #[test]
 fn find_comment_block_block_comment() {
     let source = "/* TODO: fix\n   this thing */\nfn foo() {}\n";

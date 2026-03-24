@@ -18,12 +18,16 @@ fn limits(used_percentage: Option<f64>, resets_at: Option<u64>) -> RateLimits {
     }
 }
 
+/// Seconds per day constant for pacing window calculations.
 const SECS_PER_DAY: f64 = 24.0 * 3600.0;
+
+/// Epoch timestamp used as "now" in pacing tests.
 const NOW_EPOCH: f64 = 1_000_000.0;
 
 /// Compute `resets_at` given how many days have elapsed in the 7-day window.
 fn resets_at_after(days_elapsed: f64) -> u64 { (NOW_EPOCH + (7.0 * SECS_PER_DAY - days_elapsed * SECS_PER_DAY)) as u64 }
 
+/// Verifies pacing delta computation for various usage and elapsed-day scenarios.
 #[rstest]
 #[case::day1_of7_used_20pct(
     // Day 1: expected ~14.3%, used 20% → behind by ~5.7%
@@ -68,29 +72,34 @@ fn pacing_delta(#[case] days_elapsed: f64, #[case] used: f64, #[case] expected_d
     );
 }
 
+/// Tests that pacing returns None when the seven-day window is absent.
 #[test]
 fn returns_none_when_seven_day_absent() {
     assert!(compute_pacing(&RateLimits { seven_day: None }, SystemTime::now()).is_none());
 }
 
+/// Tests that pacing returns None when used_percentage is absent.
 #[test]
 fn returns_none_when_used_percentage_absent() {
     assert!(compute_pacing(&limits(None, Some(1_700_000_000)), epoch(1_699_000_000)).is_none());
 }
 
+/// Tests that pacing returns None when resets_at is absent.
 #[test]
 fn returns_none_when_resets_at_absent() {
     assert!(compute_pacing(&limits(Some(50.0), None), epoch(1_699_000_000)).is_none());
 }
 
+/// Tests that pacing returns None when the rate window has expired.
 #[test]
 fn returns_none_when_window_expired() {
     assert!(compute_pacing(&limits(Some(50.0), Some(1_000_000)), epoch(2_000_000)).is_none());
 }
 
+/// Tests that pacing returns None when the rate window has not started.
 #[test]
 fn returns_none_when_window_not_started() {
-    // remaining > 7 days means window hasn't started yet
+    // remaining > 7 days means window has not started yet
     let now = 1_000_000u64;
     assert!(compute_pacing(&limits(Some(0.0), Some(now + 8 * 24 * 3600)), epoch(now)).is_none());
 }

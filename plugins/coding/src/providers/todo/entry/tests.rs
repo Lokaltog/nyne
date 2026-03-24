@@ -2,16 +2,19 @@ use std::path::PathBuf;
 
 use super::*;
 
+/// Tests that basic alphanumeric content is slugified correctly.
 #[test]
 fn slugify_basic() {
     assert_eq!(slugify_content("fix the frobnicator"), "fix-the-frobnicator");
 }
 
+/// Tests that special characters are stripped during slugification.
 #[test]
 fn slugify_special_chars() {
     assert_eq!(slugify_content("handle error (URGENT!)"), "handle-error-urgent");
 }
 
+/// Tests that long content is truncated at a word boundary.
 #[test]
 fn slugify_truncation() {
     let long = "this is a very long comment that should be truncated at a word boundary";
@@ -20,12 +23,14 @@ fn slugify_truncation() {
     assert!(!slug.ends_with('-'));
 }
 
+/// Tests that empty or whitespace-only content produces "unnamed".
 #[test]
 fn slugify_empty() {
     assert_eq!(slugify_content(""), "unnamed");
     assert_eq!(slugify_content("   "), "unnamed");
 }
 
+/// Tests the filesystem-safe name format for todo entries.
 #[test]
 fn fs_name_format() {
     let entry = TodoEntry {

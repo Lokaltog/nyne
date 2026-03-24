@@ -15,7 +15,9 @@ pub(in crate::providers::syntax) struct HintsContent {
     pub activation: Arc<ActivationContext>,
 }
 
+/// [`TemplateView`] implementation for [`HintsContent`].
 impl TemplateView for HintsContent {
+    /// Run analysis and render hints via template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let ctx = AnalysisContext {
@@ -78,6 +80,7 @@ fn collapse_summary(rule_id: &str) -> &'static str {
     }
 }
 
+/// Build the hints view, collapsing repeated rules above threshold.
 fn build_view(hints: &[Hint]) -> (Vec<HintView>, Vec<CollapsedGroup>, Vec<SuggestionRow>) {
     // Count occurrences per rule to decide what gets collapsed.
     let counts: HashMap<&'static str, usize> = hints.iter().fold(HashMap::new(), |mut acc, h| {

@@ -4,8 +4,10 @@ use rstest::rstest;
 
 use super::*;
 
+/// Builds a test ignore list of file extensions.
 fn ignore_list() -> Vec<String> { ["toml", "md", "json"].into_iter().map(String::from).collect() }
 
+/// Verifies extension-based file filtering across various file types.
 #[rstest]
 #[case::rust_file("src/lib.rs", false)]
 #[case::python_file("scripts/run.py", false)]
@@ -35,6 +37,7 @@ fn tool_use_line(tool: &str, file_path: &str) -> String {
     .to_string()
 }
 
+/// Verifies extraction of changed file paths from transcript lines.
 #[rstest]
 #[case::edit_rs("Edit", "/project/src/lib.rs", &[], 1)]
 #[case::write_rs("Write", "/project/src/main.rs", &[], 1)]
@@ -54,6 +57,7 @@ fn extract_changed_paths_cases(
     assert_eq!(out.len(), expected_count);
 }
 
+/// Tests that extracted paths have the project root prefix stripped.
 #[test]
 fn extract_strips_root_prefix() {
     let line = tool_use_line("Edit", "/project/src/lib.rs");
@@ -62,6 +66,7 @@ fn extract_strips_root_prefix() {
     assert_eq!(out.into_iter().next().unwrap(), "src/lib.rs");
 }
 
+/// Tests that duplicate file paths across tool uses are deduplicated.
 #[test]
 fn extract_deduplicates() {
     let line = serde_json::json!({

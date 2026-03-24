@@ -27,7 +27,9 @@ pub(super) struct SymbolLspView {
     pub fragment_path: Vec<String>,
 }
 
+/// [`TemplateView`] implementation for [`SymbolLspView`].
 impl TemplateView for SymbolLspView {
+    /// Acquire a file query and render the symbol-scoped LSP view.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let fq = self.query.file_query().ok_or_else(|| eyre!(super::LSP_UNAVAILABLE))?;
         let path_resolver = self.query.path_resolver();
@@ -44,7 +46,9 @@ impl TemplateView for SymbolLspView {
 /// File-level diagnostics view — not position-scoped.
 pub(super) struct DiagnosticsLspView(pub Arc<LspHandle>);
 
+/// [`TemplateView`] implementation for [`DiagnosticsLspView`].
 impl TemplateView for DiagnosticsLspView {
+    /// Render file-level diagnostics via template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let fq = self.0.file_query().ok_or_else(|| eyre!(super::LSP_UNAVAILABLE))?;
         let diags = fq.diagnostics()?;
@@ -68,7 +72,9 @@ struct LocationRow {
     col: u32,
 }
 
+/// Methods for [`LocationsView`].
 impl LocationsView {
+    /// Build a locations view from raw LSP locations.
     pub fn from_locations(locs: &[Location], resolver: &LspPathResolver) -> Self {
         Self {
             locations: locs
@@ -92,7 +98,9 @@ pub(super) struct HoverView {
     content: String,
 }
 
+/// Methods for [`HoverView`].
 impl HoverView {
+    /// Create a hover view from an optional LSP hover response.
     pub fn new(hover: Option<&Hover>) -> Self {
         Self {
             content: hover.map(|h| extract_hover_content(&h.contents)).unwrap_or_default(),
@@ -155,7 +163,9 @@ struct InlayHintRow {
     kind: &'static str,
 }
 
+/// Methods for [`InlayHintsRenderView`].
 impl InlayHintsRenderView {
+    /// Build an inlay hints view from raw LSP hints.
     pub fn from_hints(raw: &[InlayHint]) -> Self {
         Self {
             hints: raw
@@ -196,11 +206,13 @@ pub(super) enum LspQueryResult {
     InlayHints(Vec<InlayHint>),
 }
 
+/// Methods for [`LspQueryResult`].
 impl LspQueryResult {
     /// Render this result into template bytes via the appropriate view struct.
     ///
     /// Paths from LSP responses (overlay-rooted) are rewritten to FUSE paths
     /// for user-facing display.
+    /// Render this result into template bytes via the appropriate view struct.
     pub fn render_view(self, engine: &TemplateEngine, template: &str, resolver: &LspPathResolver) -> Vec<u8> {
         match self {
             Self::Locations(locs) => engine.render_bytes(template, &LocationsView::from_locations(&locs, resolver)),
@@ -223,6 +235,7 @@ impl LspQueryResult {
     ///
     /// Paths from LSP responses (overlay-rooted) are rewritten to FUSE paths
     /// so that symlink resolution can match against `fuse_root`.
+    /// Extract raw targets for symlink directory population.
     pub fn into_targets(self, resolver: &LspPathResolver) -> Vec<LspTarget> {
         match self {
             Self::Locations(locs) => locs

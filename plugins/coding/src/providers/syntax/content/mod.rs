@@ -1,10 +1,18 @@
+/// LSP code action resolution and application.
 pub(super) mod actions;
+/// Symbol deletion with surrounding whitespace cleanup.
 pub(super) mod delete;
+/// Inlay hints content and analysis rendering.
 pub(super) mod hints;
+/// LSP feature nodes, diagnostics, and view rendering.
 pub(super) mod lsp;
+/// Symbol meta-file rendering and splicing (signature, docstring, decorators).
 pub(super) mod meta;
+/// OVERVIEW.md rendering for symbol tables.
 pub(super) mod overview;
+/// LSP-powered symbol rename and file rename previews.
 pub(super) mod rename;
+/// Symbol body write and splice operations.
 mod write;
 
 use color_eyre::eyre::{self, Result, eyre};
@@ -40,7 +48,9 @@ pub(super) struct SourceSlice {
     pub target: SpliceTarget,
 }
 
+/// [`Readable`] implementation for [`SourceSlice`].
 impl Readable for SourceSlice {
+    /// Read the targeted byte range from the source, applying byte-masking if needed.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let frags = &shared.decomposed;

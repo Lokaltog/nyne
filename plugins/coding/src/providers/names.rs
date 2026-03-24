@@ -44,10 +44,14 @@ pub const FILE_DECORATORS: &str = "decorators";
 /// Imports file name.
 pub const FILE_IMPORTS: &str = "imports";
 
+/// Subdirectory for batch edit staging operations.
 pub const SUBDIR_EDIT: &str = "edit";
+/// Subdirectory for previewing staged edit actions.
 pub const SUBDIR_STAGED: &str = "staged";
+/// Staged diff file name -- apply on delete, clear on truncate.
 pub const FILE_STAGED_DIFF: &str = "staged.diff";
 
+/// TODO directory name at the `@/` root level.
 pub const DIR_TODO: &str = "todo";
 
 /// Register coding name constants as template globals.

@@ -12,6 +12,7 @@ fn write(mut data: Vec<u8>) -> Vec<u8> {
     data
 }
 
+/// Tests round-trip: content without trailing newline is preserved.
 #[test]
 fn round_trip_no_trailing_newline() {
     let original = b"fn foo() {}".to_vec();
@@ -20,6 +21,7 @@ fn round_trip_no_trailing_newline() {
     assert_eq!(write(after_read), original);
 }
 
+/// Tests round-trip: content with trailing newline is preserved.
 #[test]
 fn round_trip_with_trailing_newline() {
     let original = b"## Section\n\nContent.\n".to_vec();
@@ -28,6 +30,7 @@ fn round_trip_with_trailing_newline() {
     assert_eq!(write(after_read), original);
 }
 
+/// Tests round-trip: edited content has trailing newline stripped on write.
 #[test]
 fn round_trip_with_edit() {
     let original = b"fn foo() {\n    bar()\n}".to_vec();

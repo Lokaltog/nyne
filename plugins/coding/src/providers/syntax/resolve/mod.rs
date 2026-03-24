@@ -1,5 +1,8 @@
+/// Fragment resolution for symbol directory lookups.
 mod fragments;
+/// Symbol inventory resolution (symbols root and by-kind filtering).
 mod inventory;
+/// LSP-powered symlink resolution for cross-file references.
 mod lsp_links;
 
 use std::sync::Arc;
@@ -29,16 +32,20 @@ pub(super) struct DecompositionContext {
     pub(super) ext: &'static str,
 }
 
+/// Methods for [`DecompositionContext`].
 impl DecompositionContext {
+    /// Look up a fragment by path within the cached decomposition.
     /// Look up a fragment by path within the cached decomposition.
     pub(super) fn find_fragment<'a>(&'a self, path: &[String]) -> Option<&'a Fragment> {
         find_fragment(&self.shared.decomposed, path)
     }
 }
 
+/// Decomposition context construction and resolver factory.
 impl SyntaxProvider {
     /// Build a `DecompositionContext` for a source file, returning `None` if
     /// the file has no registered decomposer.
+    /// Build a decomposition context for a source file, returning None if unsupported.
     pub(super) fn decomposition_context(&self, source_file: &VfsPath) -> Result<Option<DecompositionContext>> {
         let Some(decomposer) = self.decomposer_for(source_file) else {
             return Ok(None);
@@ -53,6 +60,7 @@ impl SyntaxProvider {
     }
 
     /// Build a [`FragmentResolver`] for lazy decomposition of a source file.
+    /// Build a fragment resolver for lazy decomposition of a source file.
     pub(super) fn resolver_for(&self, source_file: &VfsPath) -> Result<FragmentResolver> {
         let cache = self
             .ctx
@@ -63,6 +71,7 @@ impl SyntaxProvider {
     }
 }
 
+/// Companion root resolution and node building.
 impl SyntaxProvider {
     /// Resolve the companion root: emit the `symbols/` directory and
     /// the `lines` file if the source file has a registered syntax.
@@ -70,6 +79,7 @@ impl SyntaxProvider {
         clippy::expect_used,
         reason = "returns Option, not Result — programming error if missing"
     )]
+    /// Resolve the companion root: emit symbols directory and file-level nodes.
     pub(super) fn resolve_companion_root(
         &self,
         source_file: &VfsPath,
@@ -115,6 +125,7 @@ impl SyntaxProvider {
     }
 }
 
+/// Build virtual nodes for all fragments in a decomposition.
 pub(super) fn build_fragment_nodes(
     fragments: &[Fragment],
     source: &str,

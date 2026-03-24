@@ -24,7 +24,9 @@ pub(in crate::providers::syntax) struct OverviewContent {
     pub filename: String,
 }
 
+/// [`TemplateView`] implementation for [`OverviewContent`].
 impl TemplateView for OverviewContent {
+    /// Render the companion overview with the full symbol table.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let view = minijinja::context! {
@@ -44,7 +46,9 @@ pub(in crate::providers::syntax) struct SymbolOverviewContent {
     pub fragment_path: Vec<String>,
 }
 
+/// [`TemplateView`] implementation for [`SymbolOverviewContent`].
 impl TemplateView for SymbolOverviewContent {
+    /// Render the per-symbol overview listing child symbols.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let frag = syntax::require_fragment(&shared.decomposed, &self.fragment_path)?;
@@ -66,7 +70,9 @@ pub(in crate::providers::syntax) struct FileOverviewContent {
     pub language: String,
 }
 
+/// [`TemplateView`] implementation for [`FileOverviewContent`].
 impl TemplateView for FileOverviewContent {
+    /// Render the file-level overview with doc text and symbol table.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let total_lines = shared.source.lines().count();

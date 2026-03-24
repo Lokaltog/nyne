@@ -22,12 +22,14 @@ pub(super) struct TodoScanner {
     tags: Vec<String>,
 }
 
+/// Methods for [`TodoScanner`].
 impl TodoScanner {
     /// Build a scanner from the configured tags.
     ///
     /// Tags are matched case-insensitively; the canonical case from the
     /// config is used for categorization and display.
     #[allow(clippy::expect_used)] // simple string patterns, build cannot fail
+    /// Create a new scanner with the given tag patterns.
     pub fn new(tags: &[String]) -> Self {
         let automaton = AhoCorasick::builder()
             .ascii_case_insensitive(true)

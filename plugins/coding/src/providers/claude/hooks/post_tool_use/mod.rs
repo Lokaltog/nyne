@@ -26,6 +26,7 @@ use crate::syntax::decomposed::{DecomposedSource, DecompositionCache};
 /// Minimum combined old+new line count to trigger SSOT reminder on Edit.
 const SSOT_LINE_THRESHOLD: usize = 10;
 
+/// Template key for the post-tool-use hook.
 const TMPL_POST: &str = "claude/post-tool-use";
 
 /// `PostToolUse` hook script implementation.
@@ -33,7 +34,9 @@ pub(in crate::providers::claude) struct PostToolUse {
     engine: Arc<TemplateEngine>,
 }
 
+/// Methods for [`PostToolUse`].
 impl PostToolUse {
+    /// Create a new post-tool-use hook with registered templates.
     pub fn new() -> Self {
         let mut b = names::handle_builder();
         b.register_partial(super::PARTIAL_VFS_HINTS, super::PARTIAL_VFS_HINTS_SRC);
@@ -42,7 +45,9 @@ impl PostToolUse {
     }
 }
 
+/// [`Script`] implementation for [`PostToolUse`].
 impl Script for PostToolUse {
+    /// Process post-tool-use hook input and render context hints.
     fn exec(&self, ctx: &ScriptContext<'_>, stdin: &[u8]) -> Result<Vec<u8>> {
         let Some(input) = HookInput::parse(stdin) else {
             return Ok(HookOutput::empty());

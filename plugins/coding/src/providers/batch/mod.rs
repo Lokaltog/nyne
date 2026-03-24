@@ -1,7 +1,10 @@
 //! Batch editing provider — tracks edit operations and staging area.
 
+/// Anchor resolution for mapping filesystem operations to staged edit actions.
 mod anchors;
+/// Preview computation for staged edits before application.
 mod preview;
+/// Staging area state tracking for batch edits.
 mod staging;
 
 use std::collections::HashMap;
@@ -35,6 +38,7 @@ use crate::edit::plan::EditOpKind;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::decomposed::DecompositionCache;
 
+/// Provider for staging and applying batch edits across symbols and files.
 pub(crate) struct BatchEditProvider {
     ctx: Arc<ActivationContext>,
     /// Per-symbol staged edits.
@@ -45,7 +49,9 @@ pub(crate) struct BatchEditProvider {
     companion_routes: RouteTree<Self>,
 }
 
+/// Core construction, route handlers, and node builders.
 impl BatchEditProvider {
+    /// Create a new batch edit provider with at-routes and companion route trees.
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
         let at_routes = nyne_macros::routes!(Self, {
             no_emit "@" => children_at_root {
@@ -252,7 +258,9 @@ struct StagingWriter {
     anchor: EditOpKind,
 }
 
+/// [`Writable`] implementation for [`StagingWriter`].
 impl Writable for StagingWriter {
+    /// Decompose at write time, resolve the anchor, and stage the resulting action.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         // Decompose at write time — validates against current source state.
         let parsed = self
@@ -282,7 +290,9 @@ struct StagedActionUnlink {
     index: u32,
 }
 
+/// [`Unlinkable`] implementation for [`StagedActionUnlink`].
 impl Unlinkable for StagedActionUnlink {
+    /// Remove a single staged action by index, cleaning up the batch if empty.
     fn unlink(&self, ctx: &RequestContext<'_>) -> Result<()> {
         let mut map = self.batches.write();
         let batch = map
@@ -320,13 +330,16 @@ struct StagedDiffClear {
     scope: ClearScope,
 }
 
+/// [`Writable`] implementation for [`StagedDiffClear`].
 impl Writable for StagedDiffClear {
+    /// Rejects non-truncate writes with an error message.
     fn write(&self, _ctx: &RequestContext<'_>, _data: &[u8]) -> Result<WriteOutcome> {
         Err(color_eyre::eyre::eyre!(
             "staged.diff is read-only; truncate (write empty) to clear staged edits"
         ))
     }
 
+    /// Clear staged edits on empty truncate write, scoped by [`ClearScope`].
     fn truncate_write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         if !data.is_empty() {
             return Err(color_eyre::eyre::eyre!(
@@ -370,13 +383,17 @@ fn invalidate_symbol_edit_dir(key: &StagingKey, ctx: &RequestContext<'_>) {
 
 // Provider trait implementation
 
+/// [`Provider`] implementation for [`BatchEditProvider`].
 impl Provider for BatchEditProvider {
+    /// Return the batch edit provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// Dispatch children via both at-routes and companion route trees.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes {
         dispatch_children(&self.at_routes, &self.companion_routes, &self, ctx, false)
     }
 
+    /// Dispatch lookup via both at-routes and companion route trees.
     fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node {
         dispatch_lookup(&self.at_routes, &self.companion_routes, &self, ctx, name, false)
     }
@@ -389,6 +406,8 @@ fn parse_staged_filename(name: &str) -> Option<u32> {
     index_str.parse().ok()
 }
 
+/// Provider ID constant.
 impl BatchEditProvider {
+    /// Unique provider identifier for batch editing.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("batch-edit");
 }

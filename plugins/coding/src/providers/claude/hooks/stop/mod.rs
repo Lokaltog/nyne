@@ -17,6 +17,7 @@ use crate::config::StopHookConfig;
 use crate::providers::claude::hook_schema::{HookInput, HookOutput};
 use crate::providers::names;
 
+/// Template key for the stop hook.
 const TMPL_STOP: &str = "claude/stop";
 
 /// Stop hook script implementation.
@@ -25,7 +26,9 @@ pub(in crate::providers::claude) struct Stop {
     config: StopHookConfig,
 }
 
+/// Methods for [`Stop`].
 impl Stop {
+    /// Create a new stop hook with registered templates.
     pub fn new(config: &StopHookConfig) -> Self {
         let mut b = names::handle_builder();
         b.register(TMPL_STOP, include_str!("../templates/stop.md.j2"));
@@ -36,7 +39,9 @@ impl Stop {
     }
 }
 
+/// [`Script`] implementation for [`Stop`].
 impl Script for Stop {
+    /// Scan transcript for changes and render a review prompt if needed.
     fn exec(&self, ctx: &ScriptContext<'_>, stdin: &[u8]) -> Result<Vec<u8>> {
         let Some(input) = HookInput::parse(stdin) else {
             return Ok(HookOutput::empty());

@@ -94,6 +94,7 @@ struct CodeActionDiff {
     action: CodeAction,
 }
 
+/// Methods for [`CodeActionDiff`].
 impl CodeActionDiff {
     /// Resolve the code action to get a workspace edit.
     ///
@@ -107,7 +108,9 @@ impl CodeActionDiff {
     }
 }
 
+/// [`DiffAction`] implementation for [`CodeActionDiff`].
 impl DiffAction for CodeActionDiff {
+    /// Resolve and apply the code action to produce file edits.
     fn compute_edits(&self, _ctx: &RequestContext<'_>) -> Result<Vec<FileEditResult>> {
         let action = self
             .resolve_action()
@@ -121,6 +124,7 @@ impl DiffAction for CodeActionDiff {
         resolve_workspace_edit(workspace_edit, self.query.path_resolver())
     }
 
+    /// Return header lines describing the code action.
     fn header_lines(&self) -> Vec<String> {
         let kind = self.action.kind.as_ref().map_or("unknown", |k| k.as_str());
 

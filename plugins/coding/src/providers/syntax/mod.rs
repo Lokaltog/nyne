@@ -17,9 +17,13 @@ use crate::syntax::decomposed::DecompositionCache;
 use crate::syntax::spec::Decomposer;
 use crate::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC};
 
+/// Content reading, writing, and rendering for decomposed symbols.
 mod content;
+/// Symbol lookup by shorthand, line number, and rename preview.
 mod lookup;
+/// Trailing newline middleware for symbol body reads and writes.
 mod newline;
+/// Symbol directory resolution — inventory, fragments, and LSP links.
 mod resolve;
 
 use std::array;
@@ -27,6 +31,7 @@ use std::array;
 use content::lsp::{LspFeature, LspHandles, build_diagnostics_node};
 use strum::IntoEnumIterator;
 
+/// Core syntax decomposition provider — tree-sitter parsing, symbol resolution, and LSP integration.
 pub(crate) struct SyntaxProvider {
     ctx: Arc<ActivationContext>,
     overview: TemplateHandle,
@@ -36,7 +41,9 @@ pub(crate) struct SyntaxProvider {
     routes: RouteTree<Self>,
 }
 
+/// Core construction and decomposition methods.
 impl SyntaxProvider {
+    /// Create a new syntax provider, registering all route trees and templates.
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
         let mut b = names::handle_builder();
         LspFeature::register_globals(b.engine_mut());
@@ -113,12 +120,14 @@ impl SyntaxProvider {
         clippy::expect_used,
         reason = "returns &SyntaxRegistry, not Result — programming error if missing"
     )]
+    /// Return a reference to the syntax registry.
     fn registry(&self) -> &SyntaxRegistry {
         self.ctx
             .get::<Arc<SyntaxRegistry>>()
             .expect("coding plugin not activated")
     }
 
+    /// Return the decomposer for a source file, if supported.
     fn decomposer_for(&self, source_file: &VfsPath) -> Option<&Arc<dyn Decomposer>> {
         self.registry().decomposer_for(source_file)
     }
@@ -149,10 +158,12 @@ use nyne::{companion_children, companion_lookup, source_file};
 /// Route tree handler methods — thin wrappers that extract params and
 /// delegate to the existing resolve/lookup methods.
 impl SyntaxProvider {
+    /// List children at the companion root level.
     fn children_companion_root(&self, ctx: &RouteCtx<'_>) -> Nodes {
         Ok(self.resolve_companion_root(&source_file(ctx)?, ctx))
     }
 
+    /// Lookup a child node in the companion root.
     fn lookup_companion_root(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         let sf = source_file(ctx)?;
         // DIAGNOSTICS.md — lookup-only, hidden from readdir.
@@ -169,8 +180,10 @@ impl SyntaxProvider {
         Ok(None)
     }
 
+    /// List all top-level symbols.
     fn children_symbols_root(&self, ctx: &RouteCtx<'_>) -> Nodes { self.resolve_symbols_root(&source_file(ctx)?, ctx) }
 
+    /// Lookup a symbol by name in the symbols root.
     fn lookup_symbols_root(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         let sf = source_file(ctx)?;
         if name == SUBDIR_AT_LINE {
@@ -179,22 +192,27 @@ impl SyntaxProvider {
         self.lookup_symbol_shorthand(&sf, name, ctx)
     }
 
+    /// List distinct symbol kinds as directories.
     fn children_by_kind_root(&self, ctx: &RouteCtx<'_>) -> Nodes { self.resolve_by_kind_root(&source_file(ctx)?, ctx) }
 
+    /// List symbols of a specific kind.
     fn children_by_kind_filter(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let kind = ctx.param("kind");
         self.resolve_by_kind_filter(&source_file(ctx)?, kind, ctx)
     }
 
+    /// Lookup a symbol by line number.
     fn lookup_at_line(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         self.lookup_at_line_impl(&source_file(ctx)?, name, ctx)
     }
 
+    /// List children of a fragment (symbol) directory.
     fn children_fragment_dir(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let path = ctx.params("path");
         self.resolve_fragment_dir(&source_file(ctx)?, path, ctx)
     }
 
+    /// Lookup a child node within a fragment directory.
     fn lookup_fragment_dir(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         let sf = source_file(ctx)?;
         let path = ctx.params("path");
@@ -211,25 +229,30 @@ impl SyntaxProvider {
         Ok(None)
     }
 
+    /// Lookup a symbol rename preview diff by name.
     fn lookup_rename_preview(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         let path = ctx.params("path");
         self.lookup_rename_preview_impl(&source_file(ctx)?, path, name, ctx)
     }
 
+    /// Lookup a file rename preview diff by name.
     fn lookup_file_rename_preview(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         self.lookup_file_rename_preview_impl(&source_file(ctx)?, name)
     }
 
+    /// List LSP code action nodes for a symbol.
     fn children_actions_dir(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let path = ctx.params("path");
         self.resolve_actions_dir(&source_file(ctx)?, path, ctx)
     }
 
+    /// List fenced code block files for a document section.
     fn children_code_block_dir(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let path = ctx.params("path");
         self.resolve_code_block_dir(&source_file(ctx)?, path, ctx)
     }
 
+    /// List LSP feature nodes for a symbol.
     fn children_lsp_dir(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let lsp_dir = ctx.param("lsp_dir");
         if LspFeature::from_dir_name(lsp_dir).is_none() {
@@ -240,9 +263,12 @@ impl SyntaxProvider {
     }
 }
 
+/// [`Provider`] implementation for [`SyntaxProvider`].
 impl Provider for SyntaxProvider {
+    /// Return the syntax provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// Dispatch children through the companion route tree.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes {
         let Some(split) = split_companion_path(ctx.path) else {
             return Ok(None);
@@ -250,6 +276,7 @@ impl Provider for SyntaxProvider {
         companion_children(&self.routes, &self, ctx, &split)
     }
 
+    /// Dispatch lookup through the companion route tree.
     fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node {
         let Some(split) = split_companion_path(ctx.path) else {
             return Ok(None);
@@ -257,6 +284,7 @@ impl Provider for SyntaxProvider {
         companion_lookup(&self.routes, &self, ctx, &split, name)
     }
 
+    /// Intercept source file renames to coordinate with the LSP server.
     fn handle_mutation(&self, op: &MutationOp<'_>, real_fs: &dyn RealFs) -> eyre::Result<MutationOutcome> {
         let MutationOp::Rename { from, to } = op else {
             return Ok(MutationOutcome::NotHandled);
@@ -290,6 +318,7 @@ impl Provider for SyntaxProvider {
         clippy::expect_used,
         reason = "returns Vec, not Result — programming error if missing"
     )]
+    /// Invalidate decomposition and LSP caches for changed source files.
     fn on_fs_change(&self, changed: &[VfsPath]) -> Vec<InvalidationEvent> {
         changed
             .iter()
@@ -326,6 +355,8 @@ impl Provider for SyntaxProvider {
     }
 }
 
+/// Provider ID constant.
 impl SyntaxProvider {
+    /// Unique provider identifier for syntax decomposition.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("syntax");
 }

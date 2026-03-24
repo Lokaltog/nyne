@@ -25,9 +25,13 @@ use crate::syntax::find_fragment_at_line;
 use crate::syntax::fragment::Fragment;
 use crate::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, fragment_list};
 
+/// Master template key for pre-tool-use hook.
 const TMPL_PRE: &str = "claude/pre-tool-use";
+/// Partial template key for deny response.
 const PARTIAL_DENY: &str = "hooks/pre-tool-use/deny";
+/// Partial template key for VFS hint response.
 const PARTIAL_HINT: &str = "hooks/pre-tool-use/hint";
+/// Partial template key for grep symbol hint.
 const PARTIAL_GREP: &str = "hooks/pre-tool-use/grep";
 
 /// `PreToolUse` hook script implementation.
@@ -36,7 +40,9 @@ pub(in crate::providers::claude) struct PreToolUse {
     config: PreToolHookConfig,
 }
 
+/// Constructor for [`PreToolUse`].
 impl PreToolUse {
+    /// Create a new pre-tool-use hook with registered templates.
     pub fn new(config: &PreToolHookConfig) -> Self {
         let mut b = names::handle_builder();
         b.register_partial(SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC);
@@ -52,7 +58,9 @@ impl PreToolUse {
     }
 }
 
+/// [`Script`] implementation for [`PreToolUse`].
 impl Script for PreToolUse {
+    /// Parse hook input and dispatch to the appropriate handler.
     fn exec(&self, ctx: &ScriptContext<'_>, stdin: &[u8]) -> Result<Vec<u8>> {
         let Some(input) = HookInput::parse(stdin) else {
             return Ok(HookOutput::empty());
@@ -67,7 +75,9 @@ impl Script for PreToolUse {
     }
 }
 
+/// Rendering and file access interception methods.
 impl PreToolUse {
+    /// Render a VFS symbol hint for grep patterns that look like symbol searches.
     /// Render a VFS symbol hint for grep patterns that look like symbol searches.
     fn render_grep(&self, input: &HookInput) -> Vec<u8> {
         let Some(pattern) = input.tool_input_as::<GrepToolInput>().and_then(|g| g.pattern) else {
@@ -89,6 +99,7 @@ impl PreToolUse {
     }
 
     /// File access interception — computes decomposition context, picks hint vs deny.
+    /// Intercept file access: compute decomposition context and pick hint vs deny.
     fn handle_file_access(&self, ctx: &ScriptContext<'_>, input: &HookInput, tool_name: &str) -> Vec<u8> {
         let file_path = match tool_name {
             "Read" => input.tool_input_as::<ReadToolInput>().and_then(|r| r.file_path),

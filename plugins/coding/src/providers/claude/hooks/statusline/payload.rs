@@ -45,6 +45,7 @@ pub(super) struct CurrentUsage {
     pub cache_read_input_tokens: Option<u64>,
 }
 
+/// Methods for [`CurrentUsage`].
 impl CurrentUsage {
     /// Total tokens consumed (input + output + cache).
     pub fn total(&self) -> u64 {

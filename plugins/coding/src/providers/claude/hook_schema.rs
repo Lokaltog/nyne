@@ -44,6 +44,7 @@ pub struct HookInput {
     pub stop_hook_active: Option<bool>,
 }
 
+/// Methods for [`HookInput`].
 impl HookInput {
     /// Parse from stdin bytes, returning `None` on empty input or parse failure.
     pub fn parse(stdin: &[u8]) -> Option<Self> {
@@ -205,6 +206,7 @@ pub struct HookSpecificOutput {
     permission_decision_reason: Option<String>,
 }
 
+/// Methods for [`HookOutput`].
 impl HookOutput {
     /// Emit additional context without affecting tool execution.
     ///

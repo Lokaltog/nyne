@@ -56,6 +56,7 @@ const SEGMENT_GRADIENTS: &[&[(f32, [f32; 3])]] = &[
 
 /// Inactive fill: same hue as segment gradient start, but 30% chroma and 30% lightness.
 const INACTIVE_CHROMA_SCALE: f32 = 0.30;
+/// Lightness for inactive bar cells.
 const INACTIVE_LIGHTNESS: f32 = 0.30;
 
 /// Exponent for the nonlinear scale. x⁰·³ compresses high values, expanding
@@ -212,6 +213,7 @@ fn rate_limit_pacing(ctx: &Context<'_>) -> Option<String> {
     Some(format!("{label} {indicator}"))
 }
 
+/// Render a colored vim mode badge.
 fn render_vim_badge(mode: VimMode) -> String {
     match mode {
         VimMode::Normal => " N ".bold().black().on_green().to_string(),
@@ -226,6 +228,7 @@ struct Gradient {
     stops: Vec<(f32, Oklch)>,
 }
 
+/// Methods for [`Gradient`].
 impl Gradient {
     /// Build a gradient from raw Oklch stop definitions.
     fn from_stops(stops: &[(f32, [f32; 3])]) -> Self {

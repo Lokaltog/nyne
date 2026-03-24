@@ -6,6 +6,7 @@ use rstest::rstest;
 
 use super::*;
 
+/// Builds a `SymbolInformation` fixture for testing.
 fn sym_info(name: &str, path: &str, line: u32) -> SymbolInformation {
     let uri: Uri = format!("file:///overlay/{path}").parse().unwrap();
     #[expect(deprecated, reason = "deprecated field required by lsp_types constructor")]
@@ -22,8 +23,10 @@ fn sym_info(name: &str, path: &str, line: u32) -> SymbolInformation {
     }
 }
 
+/// Returns the base VFS path for workspace symbol search queries.
 fn base() -> VfsPath { VfsPath::new("@/search/symbols/query").unwrap() }
 
+/// Verifies symlink name and target generation for workspace symbols.
 #[rstest]
 #[case(
     "process",
@@ -61,6 +64,7 @@ fn symlink_name_and_target(
     );
 }
 
+/// Tests that duplicate symbols with the same name and location are deduplicated.
 #[test]
 fn deduplicates_by_link_name() {
     let symbols = [sym_info("Foo", "src/a.rs", 10), sym_info("Foo", "src/a.rs", 10)];
@@ -70,6 +74,7 @@ fn deduplicates_by_link_name() {
     assert_eq!(nodes.len(), 1);
 }
 
+/// Tests that symbols outside the project root are excluded.
 #[test]
 fn skips_non_project_files() {
     let uri: lsp_types::Uri = "file:///other/root/lib.rs".parse().unwrap();
@@ -90,11 +95,13 @@ fn skips_non_project_files() {
     assert!(nodes.is_empty());
 }
 
+/// Tests that an empty symbol list produces no symlinks.
 #[test]
 fn empty_results() {
     assert!(build_symlinks(&[], Path::new("/overlay"), &base()).is_empty());
 }
 
+/// Tests that symbols with the same name but different files get unique link names.
 #[test]
 fn same_name_different_files() {
     let symbols = [sym_info("process", "src/a.rs", 10), sym_info("process", "src/b.rs", 20)];
@@ -106,6 +113,7 @@ fn same_name_different_files() {
     assert_eq!(nodes[1].name(), "b.rs::process");
 }
 
+/// Tests that workspace symbol symlinks have no cache policy.
 #[test]
 fn symlinks_have_no_cache_policy() {
     let nodes = build_symlinks(
@@ -118,6 +126,7 @@ fn symlinks_have_no_cache_policy() {
     assert_eq!(nodes[0].cache_policy(), nyne::node::CachePolicy::Never);
 }
 
+/// Tests that query_symbols returns empty when no LSP manager is available.
 #[test]
 fn query_symbols_returns_empty_without_lsp() {
     use crate::test_support::stub_activation_context;

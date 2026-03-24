@@ -86,6 +86,7 @@ fn target_link_name(target: &LspTarget) -> String {
     }
 }
 
+/// LSP symlink resolution methods for [`SyntaxProvider`].
 impl SyntaxProvider {
     /// Resolve an LSP symlink directory for a symbol.
     ///

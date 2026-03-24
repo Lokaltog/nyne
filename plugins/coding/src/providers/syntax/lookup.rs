@@ -15,6 +15,7 @@ use crate::providers::names::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
 use crate::syntax::decomposed::DecompositionCache;
 use crate::syntax::{find_fragment, find_nearest_fragment_at_line};
 
+/// Symbol lookup methods for [`SyntaxProvider`].
 impl SyntaxProvider {
     /// Lookup-only: `symbols/Foo.rs` → symlink to `Foo@/body.rs`.
     pub(super) fn lookup_symbol_shorthand(&self, source_file: &VfsPath, name: &str, _ctx: &RequestContext<'_>) -> Node {
@@ -42,6 +43,7 @@ impl SyntaxProvider {
         Ok(Some(VirtualNode::symlink(name, target.relative_to(&base))))
     }
 
+    /// Generate a symbol rename preview diff via LSP.
     pub(super) fn lookup_rename_preview_impl(
         &self,
         source_file: &VfsPath,
@@ -85,6 +87,7 @@ impl SyntaxProvider {
     ///
     /// Dry-run `workspace/willRenameFiles` — returns a unified diff of all
     /// import-path updates without performing the rename.
+    /// Generate a file rename preview diff via LSP willRenameFiles.
     pub(super) fn lookup_file_rename_preview_impl(&self, source_file: &VfsPath, name: &str) -> Node {
         let Some(new_filename) = name.strip_suffix(".diff") else {
             return Ok(None);
@@ -114,6 +117,7 @@ impl SyntaxProvider {
         Ok(Some(VirtualNode::file(name, DiffActionNode::new(name, action))))
     }
 
+    /// Generate a delete preview diff for a symbol.
     pub(super) fn lookup_delete_preview(
         &self,
         source_file: &VfsPath,
@@ -145,6 +149,7 @@ impl SyntaxProvider {
     ///
     /// Falls back to the nearest fragment when the line is in a gap
     /// (imports, blank lines between items).
+    /// Resolve a line number to a symlink targeting the narrowest symbol.
     pub(super) fn lookup_at_line_impl(&self, source_file: &VfsPath, name: &str, _ctx: &RequestContext<'_>) -> Node {
         let line: usize = name
             .parse()

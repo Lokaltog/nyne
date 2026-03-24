@@ -17,7 +17,9 @@ use nyne::node::middleware::{ReadMiddleware, WriteMiddleware};
 /// write would still strip, losing the original newline.
 pub(super) struct AppendTrailingNewline;
 
+/// [`ReadMiddleware`] implementation for [`AppendTrailingNewline`].
 impl ReadMiddleware for AppendTrailingNewline {
+    /// Append a trailing newline byte to the read data.
     fn process_read(&self, mut data: Vec<u8>, _ctx: &mut PipelineContext<'_>) -> Result<Vec<u8>> {
         data.push(b'\n');
         Ok(data)
@@ -30,7 +32,9 @@ impl ReadMiddleware for AppendTrailingNewline {
 /// splice handler receives content matching the original byte range.
 pub(super) struct StripTrailingNewline;
 
+/// [`WriteMiddleware`] implementation for [`StripTrailingNewline`].
 impl WriteMiddleware for StripTrailingNewline {
+    /// Strip exactly one trailing newline byte before passing data downstream.
     fn process_write(&self, mut data: Vec<u8>, _ctx: &mut PipelineContext<'_>) -> Result<Vec<u8>> {
         if data.ends_with(b"\n") {
             data.pop();

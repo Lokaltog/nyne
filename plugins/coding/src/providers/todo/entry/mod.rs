@@ -21,6 +21,7 @@ pub(super) struct TodoEntry {
     pub text: String,
 }
 
+/// Methods for [`TodoEntry`].
 impl TodoEntry {
     /// Filesystem-safe entry name: `src__main.rs:42--fix-frobnicator`
     pub fn fs_name(&self) -> String {

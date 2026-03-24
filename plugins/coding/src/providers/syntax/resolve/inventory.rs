@@ -12,7 +12,9 @@ use crate::providers::syntax::content::{
 use crate::providers::syntax::{SyntaxProvider, newline};
 use crate::syntax::fragment::{FragmentKind, find_fragment_of_kind};
 
+/// Symbol inventory methods for [`SyntaxProvider`].
 impl SyntaxProvider {
+    /// Resolve the symbols root directory, listing all top-level symbols.
     pub(in super::super) fn resolve_symbols_root(&self, source_file: &VfsPath, _ctx: &RequestContext<'_>) -> Nodes {
         let Some(dctx) = self.decomposition_context(source_file)? else {
             return Ok(None);

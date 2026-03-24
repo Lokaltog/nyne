@@ -53,7 +53,9 @@ pub(in crate::providers::syntax) struct SignatureContent {
     pub fragment_path: Vec<String>,
 }
 
+/// [`Readable`] implementation for [`SignatureContent`].
 impl Readable for SignatureContent {
+    /// Read the symbol signature line.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let frag = syntax::require_fragment(&shared.decomposed, &self.fragment_path)?;
@@ -71,7 +73,9 @@ pub(in crate::providers::syntax) struct DocstringContent {
     pub fragment_path: Vec<String>,
 }
 
+/// [`Readable`] implementation for [`DocstringContent`].
 impl Readable for DocstringContent {
+    /// Read the symbol docstring, stripping comment markers.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let frag = syntax::require_fragment(&shared.decomposed, &self.fragment_path)?;
@@ -89,7 +93,9 @@ pub(in crate::providers::syntax) struct FileDocstringContent {
     pub resolver: FragmentResolver,
 }
 
+/// [`Readable`] implementation for [`FileDocstringContent`].
 impl Readable for FileDocstringContent {
+    /// Read the file-level docstring, stripping comment markers.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)
@@ -105,7 +111,9 @@ pub(in crate::providers::syntax) struct DecoratorsContent {
     pub fragment_path: Vec<String>,
 }
 
+/// [`Readable`] implementation for [`DecoratorsContent`].
 impl Readable for DecoratorsContent {
+    /// Read the decorators/attributes for a symbol.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let frag = syntax::require_fragment(&shared.decomposed, &self.fragment_path)?;
@@ -133,7 +141,9 @@ pub(in crate::providers::syntax) struct LinesContent {
     pub source_file: VfsPath,
 }
 
+/// [`Readable`] implementation for [`LinesContent`].
 impl Readable for LinesContent {
+    /// Read the full source file content.
     fn read(&self, ctx: &RequestContext<'_>) -> Result<Vec<u8>> { ctx.real_fs.read(&self.source_file) }
 }
 
@@ -148,6 +158,7 @@ pub(in crate::providers::syntax) struct MetaSplice {
     pub target: SpliceTarget,
 }
 
+/// Methods for [`MetaSplice`].
 impl MetaSplice {
     /// Resolve the byte range from the current file state.
     ///
@@ -255,7 +266,9 @@ struct ResolvedSplice {
     byte_range: Range<usize>,
 }
 
+/// [`Writable`] implementation for [`MetaSplice`].
 impl Writable for MetaSplice {
+    /// Splice the data into the source file at the resolved byte range.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         self.splice_write(ctx, from_utf8(data)?)
     }
@@ -269,7 +282,9 @@ pub(in crate::providers::syntax) struct DocstringSplice {
     pub meta: MetaSplice,
 }
 
+/// Methods for [`DocstringSplice`].
 impl DocstringSplice {
+    /// Wrap plain text in doc comment markers and splice into the source file.
     fn wrap_and_splice(&self, ctx: &RequestContext<'_>, plain: &str) -> Result<WriteOutcome> {
         let resolved = self.meta.resolve()?;
         let indent = indent_at(&resolved.shared.source, resolved.byte_range.start);
@@ -278,11 +293,14 @@ impl DocstringSplice {
     }
 }
 
+/// [`Writable`] implementation for [`DocstringSplice`].
 impl Writable for DocstringSplice {
+    /// Wrap plain text in doc comment syntax and splice into source.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         self.wrap_and_splice(ctx, from_utf8(data)?)
     }
 
+    /// Remove docstring on empty truncate, otherwise splice.
     fn truncate_write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         self.meta
             .truncate_or(ctx, data, |plain| self.wrap_and_splice(ctx, plain))
@@ -297,7 +315,9 @@ pub(in crate::providers::syntax) struct FileDocstringSplice {
     pub meta: MetaSplice,
 }
 
+/// Methods for [`FileDocstringSplice`].
 impl FileDocstringSplice {
+    /// Wrap plain text in file doc comment syntax and splice into source.
     fn wrap_and_splice(&self, ctx: &RequestContext<'_>, plain: &str) -> Result<WriteOutcome> {
         let resolved = self.meta.resolve()?;
         let indent = indent_at(&resolved.shared.source, resolved.byte_range.start);
@@ -306,11 +326,14 @@ impl FileDocstringSplice {
     }
 }
 
+/// [`Writable`] implementation for [`FileDocstringSplice`].
 impl Writable for FileDocstringSplice {
+    /// Wrap plain text in file doc comment syntax and splice into source.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         self.wrap_and_splice(ctx, from_utf8(data)?)
     }
 
+    /// Remove file docstring on empty truncate, otherwise splice.
     fn truncate_write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         self.meta
             .truncate_or(ctx, data, |plain| self.wrap_and_splice(ctx, plain))
@@ -322,11 +345,14 @@ pub(in crate::providers::syntax) struct DecoratorsSplice {
     pub meta: MetaSplice,
 }
 
+/// [`Writable`] implementation for [`DecoratorsSplice`].
 impl Writable for DecoratorsSplice {
+    /// Splice new decorator content into the source file.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         self.meta.splice_write(ctx, from_utf8(data)?)
     }
 
+    /// Remove decorators on empty truncate, otherwise splice.
     fn truncate_write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         self.meta
             .truncate_or(ctx, data, |content| self.meta.splice_write(ctx, content))
@@ -344,7 +370,9 @@ pub(in crate::providers::syntax) struct LinesWrite {
     pub resolver: FragmentResolver,
 }
 
+/// [`Writable`] implementation for [`LinesWrite`].
 impl Writable for LinesWrite {
+    /// Write full source file content, replacing the existing file.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         let new_content = from_utf8(data)?;
         self.decomposer

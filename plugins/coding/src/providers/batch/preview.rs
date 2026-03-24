@@ -26,7 +26,9 @@ pub(super) struct SymbolPreview {
     pub ctx: Arc<ActivationContext>,
 }
 
+/// [`DiffAction`] implementation for [`SymbolPreview`].
 impl DiffAction for SymbolPreview {
+    /// Resolve staged edits for a single symbol and produce a diff preview.
     fn compute_edits(&self, _ctx: &RequestContext<'_>) -> Result<Vec<FileEditResult>> {
         let map = self.batches.read();
         let batch = map
@@ -62,6 +64,7 @@ impl DiffAction for SymbolPreview {
         }])
     }
 
+    /// Return a summary header describing the staged actions.
     fn header_lines(&self) -> Vec<String> {
         let count = self.batches.read().get(&self.key).map_or(0, |b| b.actions().count());
         let symbol = self.key.fragment_path.join("::");
@@ -71,6 +74,7 @@ impl DiffAction for SymbolPreview {
         )]
     }
 
+    /// Clear staged edits for this symbol after successful application.
     fn on_applied(&self, _ctx: &RequestContext<'_>) -> Result<()> {
         self.batches.write().remove(&self.key);
         Ok(())
@@ -87,7 +91,9 @@ pub(super) struct CrossFilePreview {
     pub ctx: Arc<ActivationContext>,
 }
 
+/// [`DiffAction`] implementation for [`CrossFilePreview`].
 impl DiffAction for CrossFilePreview {
+    /// Resolve staged edits across all files, merging per-file batches.
     fn compute_edits(&self, _ctx: &RequestContext<'_>) -> Result<Vec<FileEditResult>> {
         // Group batches by source file — multiple symbols in the same file
         // must be combined into a single EditPlan to avoid conflicting byte ranges.
@@ -138,6 +144,7 @@ impl DiffAction for CrossFilePreview {
         Ok(results)
     }
 
+    /// Return a summary header with total action and file counts.
     fn header_lines(&self) -> Vec<String> {
         let mut action_count = 0;
         let mut seen_files = HashSet::new();
@@ -155,6 +162,7 @@ impl DiffAction for CrossFilePreview {
         )]
     }
 
+    /// Clear all staged edits after successful application.
     fn on_applied(&self, _ctx: &RequestContext<'_>) -> Result<()> {
         self.batches.write().clear();
         Ok(())
@@ -168,7 +176,9 @@ pub(super) struct StagedActionContent {
     pub index: u32,
 }
 
+/// [`Readable`] implementation for [`StagedActionContent`].
 impl Readable for StagedActionContent {
+    /// Return the staged action content as bytes.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let map = self.batches.read();
         let batch = map

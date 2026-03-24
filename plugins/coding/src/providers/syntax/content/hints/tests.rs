@@ -3,6 +3,7 @@ use rstest::*;
 use super::{COLLAPSE_THRESHOLD, build_view};
 use crate::syntax::analysis::{Hint, Severity};
 
+/// Builds a `Hint` fixture with the given rule ID, line, and suggestions.
 fn hint(rule_id: &'static str, line: usize, suggestions: Vec<String>) -> Hint {
     Hint {
         rule_id,
@@ -13,6 +14,7 @@ fn hint(rule_id: &'static str, line: usize, suggestions: Vec<String>) -> Hint {
     }
 }
 
+/// Fixture with hint count below the collapse threshold.
 #[fixture]
 fn below_threshold() -> Vec<Hint> {
     vec![
@@ -21,6 +23,7 @@ fn below_threshold() -> Vec<Hint> {
     ]
 }
 
+/// Fixture with hint count at the collapse threshold.
 #[fixture]
 fn at_threshold() -> Vec<Hint> {
     vec![
@@ -30,6 +33,7 @@ fn at_threshold() -> Vec<Hint> {
     ]
 }
 
+/// Fixture with hints from multiple rules at varying counts.
 #[fixture]
 fn mixed_rules() -> Vec<Hint> {
     vec![
@@ -40,6 +44,7 @@ fn mixed_rules() -> Vec<Hint> {
     ]
 }
 
+/// Fixture with duplicate suggestion text across multiple hints.
 #[fixture]
 fn duplicate_suggestions() -> Vec<Hint> {
     vec![
@@ -49,6 +54,7 @@ fn duplicate_suggestions() -> Vec<Hint> {
     ]
 }
 
+/// Verifies that below-threshold hints emit individual rows.
 #[rstest]
 fn below_threshold_emits_individual_rows(below_threshold: Vec<Hint>) {
     let (rows, collapsed, suggestions) = build_view(&below_threshold);
@@ -58,6 +64,7 @@ fn below_threshold_emits_individual_rows(below_threshold: Vec<Hint>) {
     assert_eq!(suggestions.len(), 1);
 }
 
+/// Verifies that at-threshold hints collapse into a summary row.
 #[rstest]
 fn at_threshold_collapses_into_summary(at_threshold: Vec<Hint>) {
     let (rows, collapsed, suggestions) = build_view(&at_threshold);
@@ -69,6 +76,7 @@ fn at_threshold_collapses_into_summary(at_threshold: Vec<Hint>) {
     assert_eq!(suggestions.len(), 1);
 }
 
+/// Verifies that each rule collapses independently of others.
 #[rstest]
 fn mixed_rules_collapse_independently(mixed_rules: Vec<Hint>) {
     let (rows, collapsed, _) = build_view(&mixed_rules);
@@ -79,6 +87,7 @@ fn mixed_rules_collapse_independently(mixed_rules: Vec<Hint>) {
     assert_eq!(collapsed[0].rule_id, "magic-string");
 }
 
+/// Verifies that duplicate suggestions are deduplicated across hits.
 #[rstest]
 fn suggestions_deduplicated_across_hits(duplicate_suggestions: Vec<Hint>) {
     let (_, _, suggestions) = build_view(&duplicate_suggestions);
@@ -86,6 +95,7 @@ fn suggestions_deduplicated_across_hits(duplicate_suggestions: Vec<Hint>) {
     assert_eq!(suggestions.len(), 2);
 }
 
+/// Verifies that an empty hint list produces empty output.
 #[test]
 fn empty_hints_returns_empty() {
     let (rows, collapsed, suggestions) = build_view(&[]);

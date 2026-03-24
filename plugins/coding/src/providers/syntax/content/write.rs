@@ -17,7 +17,9 @@ pub(in crate::providers::syntax) struct BodySplice {
     pub meta: MetaSplice,
 }
 
+/// [`Writable`] implementation for [`BodySplice`].
 impl Writable for BodySplice {
+    /// Validate syntax and splice the new body into the source file.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         let content = from_utf8(data)?;
         let shared = self.meta.resolver.decompose()?;
@@ -31,5 +33,6 @@ impl Writable for BodySplice {
         self.meta.splice_write(ctx, content)
     }
 
+    /// Delegate truncate-write to the standard write path.
     fn truncate_write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> { self.write(ctx, data) }
 }
