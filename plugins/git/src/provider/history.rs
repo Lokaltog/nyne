@@ -278,7 +278,7 @@ fn commit_touches_path(repo: &git2::Repository, commit: &git2::Commit<'_>, rel_p
     let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
     let mut opts = diff_opts(rel_path);
     let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut opts))?;
-    Ok(diff.deltas().count() != 0)
+    Ok(diff.deltas().len() != 0)
 }
 
 /// Check whether a commit's diff for `rel_path` touches any lines in the given range.
