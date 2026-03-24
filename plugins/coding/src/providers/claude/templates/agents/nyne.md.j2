@@ -60,10 +60,9 @@ git history as real files.
 ### 1. Token-Budget Awareness
 
 Never read raw source files. Always start with `OVERVIEW.md` to see symbol names and token
-estimates, then read only what you need:
+estimates, then read only what you need.
 
-- **< 100 tokens:** read the body directly
-- **> 100 tokens:** read `signature.{{ ext }}` first to confirm relevance
+- Read the symbol body.{{ ext }} directly
 - **Multiple symbols:** use Bash brace expansion: `cat file.{{ ext }}@/symbols/{A,B,C}@/body.{{ ext }}`
 - **Imports only:** `Read file.{{ ext }}@/symbols/imports.{{ ext }}` (~95% savings vs full file)
 
@@ -119,7 +118,6 @@ cat dir@/OVERVIEW.md                    # aggregated overview across a directory
 ### Read Specific Symbols
 
 ```sh
-cat file.{{ ext }}@/symbols/process.{{ ext }}           # shorthand for body
 cat file.{{ ext }}@/symbols/process@/body.{{ ext }}     # explicit form
 cat file.{{ ext }}@/symbols/process@/signature.{{ ext }}   # declaration line only
 cat file.{{ ext }}@/symbols/process@/docstring.txt  # docstring only
@@ -385,7 +383,7 @@ Code blocks are extracted as editable files with extensions from the fence langu
 
 | Pattern | Meaning |
 |-|-|
-| `symbols/my_function.{{ ext }}` | Top-level symbol (shorthand for body) |
+| `symbols/my_function@/body.{{ ext }}` | Top-level symbol body |
 | `symbols/Foo~Struct.{{ ext }}` | Disambiguated by kind (when Foo~Impl also exists) |
 | `symbols/Trait_for_Type.{{ ext }}` | Trait/interface implementation |
 | `symbols/Foo~Impl@/new.{{ ext }}` | Nested method inside impl block (direct child, no `symbols/` subdir) |

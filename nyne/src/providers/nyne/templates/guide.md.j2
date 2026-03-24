@@ -16,18 +16,15 @@ cat file.{{ ext }}@/OVERVIEW.md
 cat file.{{ ext }}@/symbols/OVERVIEW.md
 
 # 3. Read a specific symbol's body
-cat file.{{ ext }}@/symbols/my_function.{{ ext }}
-
-# 4. Read a symbol's full definition (same as above, explicit form)
 cat file.{{ ext }}@/symbols/my_function@/body.{{ ext }}
 
-# 5. Edit a symbol (write new body content)
+# 4. Edit a symbol (write new body content)
 echo 'new content' > file.{{ ext }}@/symbols/my_function@/body.{{ ext }}
 
-# 6. Read/edit the import block
+# 5. Read/edit the import block
 cat file.{{ ext }}@/symbols/imports.{{ ext }}
 
-# 7. Read specific lines (escape hatch — prefer symbol-targeted reads)
+# 6. Read specific lines (escape hatch — prefer symbol-targeted reads)
 cat file.{{ ext }}@/lines:10-20
 ```
 
@@ -43,7 +40,6 @@ file.{{ ext }}@/lines:M-N                      # line range (read, write, rm del
 file.{{ ext }}@/rename/                         # file rename preview diffs (import updates)
 file.{{ ext }}@/symbols/OVERVIEW.md            # symbol table with line ranges and signatures
 file.{{ ext }}@/symbols/imports.{{ ext }}              # import block (read, write, append)
-file.{{ ext }}@/symbols/Foo.{{ ext }}                  # shorthand for Foo@/body.{{ ext }}
 file.{{ ext }}@/symbols/Foo@/body.{{ ext }}            # full definition (read, write, append)
 file.{{ ext }}@/symbols/Foo@/signature.{{ ext }}       # declaration line (read, write)
 file.{{ ext }}@/symbols/Foo@/docstring.txt     # docstring (read, write, append, truncate)
