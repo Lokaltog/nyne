@@ -59,6 +59,7 @@ pub enum FileModifier {
 }
 
 /// Parsed segment pattern from a string literal.
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub enum ParsedPattern {
     /// `"literal"` — exact match
     Exact(String),
@@ -386,3 +387,6 @@ fn validate_capture_name(name: &str, lit: &LitStr) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

@@ -107,9 +107,10 @@ pub fn run(args: &AttachArgs) -> Result<i32> {
 
     // Set visibility if non-default — applies to this PID and its children.
     if args.visibility != ProcessVisibility::Default
-        && let Some(g) = &guard {
-            g.set_visibility(args.visibility);
-        }
+        && let Some(g) = &guard
+    {
+        g.set_visibility(args.visibility);
+    }
 
     sandbox::run_attach(sandbox::AttachConfig {
         daemon_pid: session_info.pid,
