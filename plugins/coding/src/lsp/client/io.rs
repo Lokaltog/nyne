@@ -2,11 +2,11 @@
 
 use std::fs::File;
 use std::io::{self, BufReader, Read};
-use std::os::fd::{AsRawFd, BorrowedFd, OwnedFd, RawFd};
+use std::os::fd::OwnedFd;
 use std::time::Duration;
 
+use rustix::event;
 use rustix::event::{Nsecs, PollFlags, Timespec};
-use rustix::{event, io as rstx_io};
 use tracing::trace;
 
 /// A `BufRead`-compatible reader that enforces a per-read timeout via `poll()`.
@@ -15,57 +15,23 @@ use tracing::trace;
 /// `io::ErrorKind::TimedOut` if the fd is not ready within the deadline,
 /// which surfaces as a clean error instead of blocking the FUSE handler
 /// indefinitely.
-///
-/// The `OwnedFd` is stored separately from the `BufReader` so we can
-/// borrow the fd safely for poll without `unsafe`.
 pub(super) struct TimeoutReader {
-    /// Owned stdout handle — kept alive so the fd remains valid for poll.
-    stdout_fd: OwnedFd,
-    /// Buffered reader wrapping a `Read` adapter over the stdout fd.
-    inner: BufReader<PollRead>,
+    inner: BufReader<File>,
     timeout: Duration,
-}
-
-/// Thin `Read` adapter that reads from a raw fd.
-///
-/// Exists solely so `BufReader` can wrap something while the actual
-/// `ChildStdout` is held separately for fd borrowing in `poll()`.
-struct PollRead {
-    fd: RawFd,
-}
-
-impl Read for PollRead {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // read via rustix — no unsafe needed.
-        let n = rstx_io::read(
-            // SAFETY (of borrow_raw): fd is valid because TimeoutReader owns
-            // the ChildStdout that backs it, and PollRead only exists inside
-            // TimeoutReader.
-            #[allow(unsafe_code)]
-            unsafe {
-                BorrowedFd::borrow_raw(self.fd)
-            },
-            buf,
-        )
-        .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))?;
-        Ok(n)
-    }
 }
 
 impl TimeoutReader {
     /// Create from an `OwnedFd` (stdout of a spawned LSP server).
     pub(super) fn from_owned_fd(fd: OwnedFd, timeout: Duration) -> Self {
-        let raw = fd.as_raw_fd();
         Self {
-            stdout_fd: fd,
-            inner: BufReader::new(PollRead { fd: raw }),
+            inner: BufReader::new(File::from(fd)),
             timeout,
         }
     }
 
     /// Wait for the fd to become readable, up to the configured timeout.
     fn poll_ready(&self) -> io::Result<()> {
-        let mut pollfd = [event::PollFd::new(&self.stdout_fd, PollFlags::IN)];
+        let mut pollfd = [event::PollFd::new(self.inner.get_ref(), PollFlags::IN)];
 
         let timeout = Timespec {
             tv_sec: self.timeout.as_secs().cast_signed(),
