@@ -106,20 +106,32 @@ impl DecompositionCache {
     ///
     /// Returns the cached result if available, otherwise reads and
     /// decomposes the file, caches the result, and returns it.
+    ///
+    /// The expensive decomposition runs without any lock held so that
+    /// concurrent readers are never blocked.  A re-check under the
+    /// write lock prevents redundant insertions when two threads race
+    /// past the initial read-lock check simultaneously.
     pub fn get(&self, source_file: &VfsPath) -> Result<Arc<DecomposedSource>> {
+        // Fast path: return cached entry under a read lock.
         if let Some(entry) = self.inner.cache.read().get(source_file) {
             return Ok(Arc::clone(entry));
         }
+
+        // Decompose without any lock held — this is the expensive part.
         let decomposer = self
             .inner
             .syntax
             .decomposer_for(source_file)
             .ok_or_else(|| color_eyre::eyre::eyre!("no decomposer for {source_file}"))?;
         let shared = decompose_source(source_file, &*self.inner.real_fs, decomposer)?;
-        self.inner
-            .cache
-            .write()
-            .insert(source_file.clone(), Arc::clone(&shared));
+
+        // Slow path: re-check under write lock — another thread may have
+        // inserted while we were decomposing.
+        let mut cache = self.inner.cache.write();
+        if let Some(entry) = cache.get(source_file) {
+            return Ok(Arc::clone(entry));
+        }
+        cache.insert(source_file.clone(), Arc::clone(&shared));
         Ok(shared)
     }
 

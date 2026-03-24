@@ -280,9 +280,8 @@ impl TreeSitterParser {
         let tree = self
             .parse(source)
             .ok_or_else(|| eyre!("tree-sitter failed to parse {lang_name} source"))?;
-        let root = tree.root_node();
-        if root.has_error() {
-            let errors = self.parse_errors(source);
+        if tree.root_node().has_error() {
+            let errors = collect_parse_errors(&tree, source.as_bytes());
             let detail: Vec<String> = errors
                 .iter()
                 .take(3)
@@ -297,25 +296,18 @@ impl TreeSitterParser {
                     )
                 })
                 .collect();
-            let detail_str = if detail.is_empty() {
-                String::new()
-            } else {
-                format!("\n{}", detail.join("\n"))
-            };
+            let mut suffix = String::new();
+            if !detail.is_empty() {
+                suffix.push('\n');
+                suffix.push_str(&detail.join("\n"));
+            }
             return Err(eyre!(
-                "{lang_name} source contains syntax errors ({} error(s), source_len={}){detail_str}",
+                "{lang_name} source contains syntax errors ({} error(s), source_len={}){suffix}",
                 errors.len(),
                 source.len(),
             ));
         }
         Ok(())
-    }
-
-    /// Return tree-sitter parse errors found in `source`.
-    pub fn parse_errors(&self, source: &str) -> Vec<ParseError> {
-        self.parse(source)
-            .map(|tree| collect_parse_errors(&tree, source.as_bytes()))
-            .unwrap_or_default()
     }
 
     /// Run the standard decomposition pipeline: parse → extract fragments →

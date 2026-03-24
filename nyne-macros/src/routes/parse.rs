@@ -263,6 +263,62 @@ fn parse_file_modifiers(input: ParseStream<'_>) -> Result<Vec<FileModifier>> {
     Ok(modifiers)
 }
 
+/// Validate brace usage in a pattern string, ensuring at most one `{name}` capture group.
+///
+/// Returns `Ok(None)` for literal patterns (no braces), `Ok(Some((open, close)))` for a single
+/// valid capture pair, or `Err` for any malformed brace usage.
+fn validate_braces(s: &str, lit: &LitStr) -> syn::Result<Option<(usize, usize)>> {
+    let open_count = s.chars().filter(|&c| c == '{').count();
+    let close_count = s.chars().filter(|&c| c == '}').count();
+
+    if open_count == 0 && close_count == 0 {
+        return Ok(None);
+    }
+
+    if open_count > 1 {
+        return Err(syn::Error::new(
+            lit.span(),
+            "pattern contains multiple `{` — only one capture group `{name}` is supported",
+        ));
+    }
+    if close_count > 1 {
+        return Err(syn::Error::new(
+            lit.span(),
+            "pattern contains multiple `}` — only one capture group `{name}` is supported",
+        ));
+    }
+
+    // At this point we have at most one of each
+    let open = s.find('{');
+    let close = s.find('}');
+
+    match (open, close) {
+        (Some(o), Some(c)) => {
+            if c < o {
+                return Err(syn::Error::new(
+                    lit.span(),
+                    "closing `}` appears before opening `{` in pattern",
+                ));
+            }
+            if c == o + 1 {
+                return Err(syn::Error::new(
+                    lit.span(),
+                    "empty capture name in pattern — expected `{name}`",
+                ));
+            }
+            Ok(Some((o, c)))
+        }
+        (Some(_), None) => Err(syn::Error::new(
+            lit.span(),
+            "unclosed `{` in pattern — expected `{name}`",
+        )),
+        (None, Some(_)) => Err(syn::Error::new(
+            lit.span(),
+            "unopened `}` in pattern — expected `{name}`",
+        )),
+        (None, None) => Ok(None), // already handled above, but for completeness
+    }
+}
 /// Parse a segment pattern string into its typed representation.
 ///
 /// Supports prefix and suffix around captures: `"BLAME.md:{spec}"`,
@@ -274,18 +330,11 @@ pub fn parse_pattern(lit: &LitStr) -> Result<ParsedPattern> {
         return Ok(ParsedPattern::Glob);
     }
 
-    let Some(open) = s.find('{') else {
-        // No capture — exact literal.
+    let Some((open, close)) = validate_braces(&s, lit)? else {
         return Ok(ParsedPattern::Exact(s));
     };
 
-    let Some(close) = s.find('}') else {
-        return Err(syn::Error::new(lit.span(), "unclosed '{' in pattern"));
-    };
-
-    let prefix_part = &s[..open];
     let inner = &s[open + 1..close];
-    let suffix_part = &s[close + 1..];
 
     let (is_rest, name) = if let Some(rest_name) = inner.strip_prefix("..") {
         (true, rest_name)
@@ -298,8 +347,8 @@ pub fn parse_pattern(lit: &LitStr) -> Result<ParsedPattern> {
     }
     validate_capture_name(name, lit)?;
 
-    let prefix = (!prefix_part.is_empty()).then(|| prefix_part.to_owned());
-    let suffix = (!suffix_part.is_empty()).then(|| suffix_part.to_owned());
+    let prefix = (open > 0).then(|| s[..open].to_owned());
+    let suffix = (close + 1 < s.len()).then(|| s[close + 1..].to_owned());
 
     if is_rest {
         if prefix.is_some() {

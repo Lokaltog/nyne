@@ -87,7 +87,8 @@ impl GitRepo {
                 let blob = repo.find_blob(entry.id())?;
                 Ok(blob.content().to_vec())
             }
-            Err(_) => Ok(Vec::new()),
+            Err(e) if e.code() == git2::ErrorCode::NotFound => Ok(Vec::new()),
+            Err(e) => Err(e.into()),
         }
     }
 

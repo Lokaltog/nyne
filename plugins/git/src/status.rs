@@ -1,6 +1,7 @@
 //! Repository status: branch, tracking, dirty state, recent commits.
 
 use color_eyre::eyre::Result;
+use tracing::warn;
 
 use crate::commit::{CommitInfo, commit_info};
 use crate::repo::GitRepo;
@@ -42,7 +43,10 @@ impl GitRepo {
 
         let tracking = tracking_info(&repo);
         let stash_count = stash_count(&repo);
-        let recent_commits = recent_commits(&repo, RECENT_COMMITS_LIMIT);
+        let recent_commits = recent_commits(&repo, RECENT_COMMITS_LIMIT).unwrap_or_else(|e| {
+            warn!(error = %e, "failed to collect recent commits");
+            Vec::new()
+        });
 
         // Full status: HEAD <-> index <-> workdir. Safe because the repo was
         // opened on the pre-mount real path — git2 stats the real filesystem
@@ -151,19 +155,15 @@ fn tracking_info(repo: &git2::Repository) -> Option<TrackingInfo> {
 fn stash_count(repo: &git2::Repository) -> usize { repo.reflog("refs/stash").map(|log| log.len()).unwrap_or(0) }
 
 /// Collect the N most recent commits on HEAD.
-fn recent_commits(repo: &git2::Repository, limit: usize) -> Vec<CommitInfo> {
-    let Ok(mut revwalk) = repo.revwalk() else {
-        return Vec::new();
-    };
-    if revwalk.set_sorting(git2::Sort::TIME).is_err() || revwalk.push_head().is_err() {
-        return Vec::new();
+fn recent_commits(repo: &git2::Repository, limit: usize) -> Result<Vec<CommitInfo>> {
+    let mut revwalk = repo.revwalk()?;
+    revwalk.set_sorting(git2::Sort::TIME)?;
+    revwalk.push_head()?;
+    let mut commits = Vec::new();
+    for oid_result in revwalk.take(limit) {
+        let oid = oid_result?;
+        let commit = repo.find_commit(oid)?;
+        commits.push(commit_info(&commit, oid));
     }
-    revwalk
-        .take(limit)
-        .filter_map(Result::ok)
-        .filter_map(|oid| {
-            let commit = repo.find_commit(oid).ok()?;
-            Some(commit_info(&commit, oid))
-        })
-        .collect()
+    Ok(commits)
 }

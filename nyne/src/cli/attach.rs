@@ -1,4 +1,5 @@
 use std::ffi::OsString;
+use std::path::PathBuf;
 use std::{env, process};
 
 use clap::Args;
@@ -29,11 +30,53 @@ pub struct AttachArgs {
     pub command: Vec<OsString>,
 }
 
+/// RAII guard that registers a process with the daemon on creation and
+/// unregisters it on drop. Ensures cleanup even if the attach command
+/// panics or returns early via `?`.
+struct RegistrationGuard {
+    socket: PathBuf,
+    pid: i32,
+}
+
+impl RegistrationGuard {
+    /// Send a `Register` request to the daemon and return a guard that will
+    /// `Unregister` on drop. Returns `None` if the registration request fails
+    /// (logged as a warning).
+    fn register(socket: PathBuf, pid: i32, command: String) -> Option<Self> {
+        let req = sandbox::control::ControlRequest::Register { pid, command };
+        if let Err(e) = sandbox::control::send_request(&socket, &req) {
+            warn!(error = %e, "failed to register with daemon — nyne list may not show this process");
+            return None;
+        }
+        Some(Self { socket, pid })
+    }
+
+    /// Set visibility override for this process. Failures are logged as warnings.
+    fn set_visibility(&self, visibility: ProcessVisibility) {
+        let req = sandbox::control::ControlRequest::SetVisibility {
+            pid: Some(self.pid),
+            name: None,
+            visibility,
+        };
+        if let Err(e) = sandbox::control::send_request(&self.socket, &req) {
+            warn!(error = %e, "failed to set visibility — using default");
+        }
+    }
+}
+
+impl Drop for RegistrationGuard {
+    fn drop(&mut self) {
+        let req = sandbox::control::ControlRequest::Unregister { pid: self.pid };
+        if let Err(e) = sandbox::control::send_request(&self.socket, &req) {
+            warn!(error = %e, "failed to unregister from daemon");
+        }
+    }
+}
+
 /// Run the attach subcommand: attach to a running mount and execute a command in its namespace.
 pub fn run(args: &AttachArgs) -> Result<i32> {
     let registry = SessionRegistry::scan()?;
     let session_info = registry.resolve(args.id.as_deref())?;
-
     let control_socket = session::control_socket(&session_info.id).ok();
 
     let command = if args.command.is_empty() {
@@ -50,50 +93,29 @@ pub fn run(args: &AttachArgs) -> Result<i32> {
     );
 
     // Register this process with the daemon so `nyne list` can show it.
-    let pid = process::id().cast_signed();
-    let command_name = command
-        .first()
-        .map(|c| c.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    if let Some(socket) = &control_socket {
-        let req = sandbox::control::ControlRequest::Register {
-            pid,
-            command: command_name,
-        };
-        if let Err(e) = sandbox::control::send_request(socket, &req) {
-            warn!(error = %e, "failed to register with daemon — nyne list may not show this process");
+    // The guard unregisters automatically on drop (panic, early return, or normal exit).
+    let guard = control_socket.as_ref().and_then(|socket| {
+        RegistrationGuard::register(
+            socket.clone(),
+            process::id().cast_signed(),
+            command
+                .first()
+                .map(|c| c.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        )
+    });
+
+    // Set visibility if non-default — applies to this PID and its children.
+    if args.visibility != ProcessVisibility::Default
+        && let Some(g) = &guard {
+            g.set_visibility(args.visibility);
         }
 
-        // Set visibility if non-default — applies to this PID and its children.
-        if args.visibility != ProcessVisibility::Default {
-            let req = sandbox::control::ControlRequest::SetVisibility {
-                pid: Some(pid),
-                name: None,
-                visibility: args.visibility,
-            };
-            if let Err(e) = sandbox::control::send_request(socket, &req) {
-                warn!(error = %e, "failed to set visibility — using default");
-            }
-        }
-    }
-
-    let nyne_config = NyneConfig::load()?;
-
-    let config = sandbox::AttachConfig {
+    sandbox::run_attach(sandbox::AttachConfig {
         daemon_pid: session_info.pid,
         mount_path: session_info.mount_path.clone(),
-        control_socket: control_socket.clone(),
+        control_socket,
         command,
-        sandbox: nyne_config.sandbox,
-    };
-
-    let result = sandbox::run_attach(config);
-
-    // Best-effort unregister on exit.
-    if let Some(socket) = &control_socket {
-        let req = sandbox::control::ControlRequest::Unregister { pid };
-        let _ = sandbox::control::send_request(socket, &req);
-    }
-
-    result
+        sandbox: NyneConfig::load()?.sandbox,
+    })
 }

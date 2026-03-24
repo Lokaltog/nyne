@@ -4,7 +4,6 @@ use std::ops::Range;
 
 use color_eyre::eyre::Result;
 
-use super::splice::splice_content;
 use crate::syntax::fragment::Fragment;
 
 /// Fieldless discriminant for [`EditOp`] — the single source of truth for
@@ -248,14 +247,18 @@ impl EditPlan {
 
     /// Apply resolved edits to source text, returning the modified result.
     ///
-    /// Edits must be sorted by `byte_range.start` descending (bottom-up)
-    /// so that earlier byte offsets remain valid as later regions are spliced.
+    /// Edits must be sorted by `byte_range.start` descending (bottom-up).
+    /// Internally reverses to ascending order for a single-pass O(L) build.
     #[must_use]
     pub fn apply(source: &str, edits: &[ResolvedEdit]) -> String {
-        let mut result = source.to_owned();
-        for edit in edits {
-            result = splice_content(&result, edit.byte_range.clone(), &edit.replacement);
+        let mut result = String::with_capacity(source.len());
+        let mut cursor = 0;
+        for edit in edits.iter().rev() {
+            result.push_str(&source[cursor..edit.byte_range.start]);
+            result.push_str(&edit.replacement);
+            cursor = edit.byte_range.end;
         }
+        result.push_str(&source[cursor..]);
         result
     }
 }
