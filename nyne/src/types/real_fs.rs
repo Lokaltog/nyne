@@ -1,7 +1,7 @@
-use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use std::{fs, io};
 
 use color_eyre::eyre::{Result, WrapErr};
 
@@ -94,20 +94,21 @@ impl OsFs {
             self.source_dir.join(path.as_str())
         }
     }
+
+    /// Resolve a path and run an `io::Result`-returning operation, wrapping
+    /// any error with the verb and resolved path for context.
+    fn fs_op<T>(&self, path: &VfsPath, verb: &str, f: impl FnOnce(&Path) -> io::Result<T>) -> Result<T> {
+        let real = self.resolve(path);
+        f(&real).wrap_err_with(|| format!("failed to {verb} {}", real.display()))
+    }
 }
 
 impl RealFs for OsFs {
     fn source_dir(&self) -> &Path { &self.source_dir }
 
-    fn read(&self, path: &VfsPath) -> Result<Vec<u8>> {
-        let real_path = self.resolve(path);
-        fs::read(&real_path).wrap_err_with(|| format!("failed to read {}", real_path.display()))
-    }
+    fn read(&self, path: &VfsPath) -> Result<Vec<u8>> { self.fs_op(path, "read", |p| fs::read(p)) }
 
-    fn write(&self, path: &VfsPath, data: &[u8]) -> Result<()> {
-        let real_path = self.resolve(path);
-        fs::write(&real_path, data).wrap_err_with(|| format!("failed to write {}", real_path.display()))
-    }
+    fn write(&self, path: &VfsPath, data: &[u8]) -> Result<()> { self.fs_op(path, "write", |p| fs::write(p, data)) }
 
     fn exists(&self, path: &VfsPath) -> bool { self.resolve(path).exists() }
 
@@ -144,10 +145,7 @@ impl RealFs for OsFs {
         })
     }
 
-    fn symlink_target(&self, path: &VfsPath) -> Result<PathBuf> {
-        let real_path = self.resolve(path);
-        fs::read_link(&real_path).wrap_err_with(|| format!("failed to readlink {}", real_path.display()))
-    }
+    fn symlink_target(&self, path: &VfsPath) -> Result<PathBuf> { self.fs_op(path, "readlink", |p| fs::read_link(p)) }
 
     fn rename(&self, from: &VfsPath, to: &VfsPath) -> Result<()> {
         let from_path = self.resolve(from);
@@ -156,26 +154,13 @@ impl RealFs for OsFs {
             .wrap_err_with(|| format!("failed to rename {} to {}", from_path.display(), to_path.display()))
     }
 
-    fn unlink(&self, path: &VfsPath) -> Result<()> {
-        let real_path = self.resolve(path);
-        fs::remove_file(&real_path).wrap_err_with(|| format!("failed to unlink {}", real_path.display()))
-    }
+    fn unlink(&self, path: &VfsPath) -> Result<()> { self.fs_op(path, "unlink", |p| fs::remove_file(p)) }
 
-    fn rmdir(&self, path: &VfsPath) -> Result<()> {
-        let real_path = self.resolve(path);
-        fs::remove_dir(&real_path).wrap_err_with(|| format!("failed to rmdir {}", real_path.display()))
-    }
+    fn rmdir(&self, path: &VfsPath) -> Result<()> { self.fs_op(path, "rmdir", |p| fs::remove_dir(p)) }
 
-    fn create_file(&self, path: &VfsPath) -> Result<()> {
-        let real_path = self.resolve(path);
-        File::create(&real_path).wrap_err_with(|| format!("failed to create {}", real_path.display()))?;
-        Ok(())
-    }
+    fn create_file(&self, path: &VfsPath) -> Result<()> { self.fs_op(path, "create", |p| File::create(p).map(drop)) }
 
-    fn mkdir(&self, path: &VfsPath) -> Result<()> {
-        let real_path = self.resolve(path);
-        fs::create_dir_all(&real_path).wrap_err_with(|| format!("failed to mkdir {}", real_path.display()))
-    }
+    fn mkdir(&self, path: &VfsPath) -> Result<()> { self.fs_op(path, "mkdir", |p| fs::create_dir_all(p)) }
 
     fn open_raw(&self, path: &VfsPath) -> Option<File> {
         let real_path = self.resolve(path);
