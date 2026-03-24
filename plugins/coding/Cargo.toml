@@ -16,6 +16,7 @@ nyne-git = { workspace = true, optional = true }
 
 # Core
 color-eyre.workspace = true
+convert_case.workspace = true
 linkme.workspace = true
 minijinja.workspace = true
 parking_lot.workspace = true

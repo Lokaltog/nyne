@@ -11,6 +11,7 @@
 
 mod handle;
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
@@ -82,8 +83,8 @@ impl TemplateEngine {
     /// Used by `register_template_globals` to
     /// inject VFS name constants so templates can reference them as
     /// `{{ FILE_OVERVIEW }}`, `{{ FILE_CALLERS }}`, etc.
-    pub fn add_global(&mut self, name: &'static str, value: &'static str) {
-        self.env.add_global(name, minijinja::Value::from(value));
+    pub fn add_global(&mut self, name: impl Into<Cow<'static, str>>, value: impl Into<String>) {
+        self.env.add_global(name, minijinja::Value::from(value.into()));
     }
 
     /// Render a named template to bytes.

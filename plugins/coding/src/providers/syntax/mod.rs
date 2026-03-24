@@ -39,6 +39,7 @@ pub(crate) struct SyntaxProvider {
 impl SyntaxProvider {
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
         let mut b = names::handle_builder();
+        LspFeature::register_globals(b.engine_mut());
         // Shared partials (included by individual LSP templates).
         b.register_partial(SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC);
         b.register_partial("syntax/lsp/_locations", include_str!("templates/lsp/_locations.md.j2"));

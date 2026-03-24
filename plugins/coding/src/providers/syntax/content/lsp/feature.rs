@@ -4,17 +4,18 @@ use std::ops::Range as StdRange;
 use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
+use convert_case::{Case, Casing};
 use lsp_types::{Position, Range};
-use nyne::templates::TemplateHandle;
+use nyne::templates::{TemplateEngine, TemplateHandle};
 use strum::{EnumCount, IntoEnumIterator};
 
 use super::views::{LspQueryResult, hierarchy_item, type_hierarchy_item};
 use crate::lsp::query::FileQuery;
-use crate::providers::names;
 
 struct FeatureMeta {
-    file_name: &'static str,
-    dir_name: Option<&'static str>,
+    slug: &'static str,
+    file_name: String,
+    dir_name: Option<String>,
     template_key: &'static str,
     template_src: &'static str,
 }
@@ -42,25 +43,29 @@ pub(in crate::providers::syntax) enum LspFeature {
 
 impl LspFeature {
     /// Single metadata table per variant — the **only** place that maps
-    /// variant → per-variant constants.
+    /// variant → per-variant data.
     ///
-    /// Adding a new feature = adding one arm here (plus `is_supported` and `query`).
-    const fn metadata(self) -> FeatureMeta {
-        /// Build a `FeatureMeta` from names constants + a template slug.
-        /// The slug drives both the template key (`syntax/lsp/{slug}`) and
-        /// the `include_str!` path (`templates/lsp/{slug}.md.j2`).
+    /// All names are derived from the slug via `convert_case`. Adding a
+    /// new feature = adding one arm here (plus `is_supported` and `query`).
+    fn metadata(self) -> FeatureMeta {
+        /// Build a [`FeatureMeta`] from a single slug.
+        ///
+        /// Derives `file_name` and `dir_name` via case conversion,
+        /// `template_key` and `template_src` via `concat!`/`include_str!`.
         macro_rules! meta {
-            ($file:expr, $dir:expr, $slug:literal) => {
+            ($slug:literal) => {
                 FeatureMeta {
-                    file_name: $file,
-                    dir_name: Some($dir),
+                    slug: $slug,
+                    file_name: format!("{}.md", $slug.to_case(Case::UpperKebab)),
+                    dir_name: Some($slug.to_case(Case::Kebab)),
                     template_key: concat!("syntax/lsp/", $slug),
                     template_src: include_str!(concat!("../../templates/lsp/", $slug, ".md.j2")),
                 }
             };
-            ($file:expr, $slug:literal) => {
+            ($slug:literal,no_dir) => {
                 FeatureMeta {
-                    file_name: $file,
+                    slug: $slug,
+                    file_name: format!("{}.md", $slug.to_case(Case::UpperKebab)),
                     dir_name: None,
                     template_key: concat!("syntax/lsp/", $slug),
                     template_src: include_str!(concat!("../../templates/lsp/", $slug, ".md.j2")),
@@ -68,35 +73,44 @@ impl LspFeature {
             };
         }
         match self {
-            Self::Definition => meta!(names::FILE_DEFINITION, names::DIR_DEFINITION, "definition"),
-            Self::Declaration => meta!(names::FILE_DECLARATION, names::DIR_DECLARATION, "declaration"),
-            Self::TypeDefinition => meta!(
-                names::FILE_TYPE_DEFINITION,
-                names::DIR_TYPE_DEFINITION,
-                "type_definition"
-            ),
-            Self::References => meta!(names::FILE_REFERENCES, names::DIR_REFERENCES, "references"),
-            Self::Implementation => meta!(names::FILE_IMPLEMENTATION, names::DIR_IMPLEMENTATION, "implementation"),
-            Self::Callers => meta!(names::FILE_CALLERS, names::DIR_CALLERS, "callers"),
-            Self::Deps => meta!(names::FILE_DEPS, names::DIR_DEPS, "deps"),
-            Self::Supertypes => meta!(names::FILE_SUPERTYPES, names::DIR_SUPERTYPES, "supertypes"),
-            Self::Subtypes => meta!(names::FILE_SUBTYPES, names::DIR_SUBTYPES, "subtypes"),
-            Self::Doc => meta!(names::FILE_DOC, "doc"),
-            Self::Hints => meta!(names::FILE_HINTS, "hints"),
+            Self::Definition => meta!("definition"),
+            Self::Declaration => meta!("declaration"),
+            Self::TypeDefinition => meta!("type_definition"),
+            Self::References => meta!("references"),
+            Self::Implementation => meta!("implementation"),
+            Self::Callers => meta!("callers"),
+            Self::Deps => meta!("deps"),
+            Self::Supertypes => meta!("supertypes"),
+            Self::Subtypes => meta!("subtypes"),
+            Self::Doc => meta!("doc", no_dir),
+            Self::Hints => meta!("hints", no_dir),
         }
     }
 
-    pub(super) const fn file_name(self) -> &'static str { self.metadata().file_name }
+    pub(super) fn file_name(self) -> String { self.metadata().file_name }
 
-    pub(super) const fn dir_name(self) -> Option<&'static str> { self.metadata().dir_name }
+    pub(super) fn dir_name(self) -> Option<String> { self.metadata().dir_name }
 
     /// Template registration key and source for this feature.
     ///
     /// Used by `SyntaxProvider::new()` to build the handles array by
     /// iterating `LspFeature::iter()` — no positional coupling.
-    pub(in crate::providers::syntax) const fn template(self) -> (&'static str, &'static str) {
+    pub(in crate::providers::syntax) fn template(self) -> (&'static str, &'static str) {
         let m = self.metadata();
         (m.template_key, m.template_src)
+    }
+
+    /// Register all LSP feature file names as template globals.
+    ///
+    /// Each feature registers `FILE_{UPPER_SNAKE}` → `{UPPER-KEBAB}.md`,
+    /// e.g. `FILE_TYPE_DEFINITION` → `TYPE-DEFINITION.md`. Called once
+    /// during provider initialization.
+    pub(in crate::providers::syntax) fn register_globals(engine: &mut TemplateEngine) {
+        for feature in Self::iter() {
+            let m = feature.metadata();
+            let key = format!("FILE_{}", m.slug.to_case(Case::UpperSnake));
+            engine.add_global(key, m.file_name);
+        }
     }
 
     /// Index into a `LspHandles` array to get the handle for this feature.
@@ -104,7 +118,7 @@ impl LspFeature {
 
     /// Look up a feature by its symlink directory name.
     pub(in crate::providers::syntax) fn from_dir_name(name: &str) -> Option<Self> {
-        Self::iter().find(|f| f.dir_name() == Some(name))
+        Self::iter().find(|f| f.dir_name().as_deref() == Some(name))
     }
 
     /// Whether the server supports this feature, based on advertised capabilities.
