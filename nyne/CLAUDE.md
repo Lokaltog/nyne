@@ -6,7 +6,7 @@ Core library — all plugin crates depend on this. Module structure is discovera
 
 Modules may only import from their own tier or lower.
 
-- **Tier 0 — Foundation** (no crate imports): `types/`, `format/`, `config/`, `session/`, `process/`
+- **Tier 0 — Foundation** (no crate imports): `types/`, `text/`, `config/`, `session/`, `process/`
 - **Tier 1 — Domain Knowledge** (imports Tier 0 + dispatch interface types†): `node/`, `edit/`
 - **Tier 2 — Contracts & Infrastructure** (imports Tiers 0-1): `provider/`, `templates/`
 - **Tier 3 — Orchestration** (imports any lower tier): `dispatch/`, `fuse/`, `watcher/`, `sandbox/`, `providers/`, `cli/`
