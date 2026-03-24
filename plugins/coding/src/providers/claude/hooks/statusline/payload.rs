@@ -15,6 +15,7 @@ pub(super) struct StatuslinePayload {
     pub model: Option<Model>,
     pub context_window: Option<ContextWindow>,
     pub cost: Option<Cost>,
+    pub rate_limits: Option<RateLimits>,
     pub vim: Option<Vim>,
     #[serde(default)]
     pub exceeds_200k_tokens: bool,
@@ -59,6 +60,19 @@ impl CurrentUsage {
 pub(super) struct Cost {
     pub total_lines_added: Option<u64>,
     pub total_lines_removed: Option<u64>,
+}
+#[derive(Debug, Clone, Deserialize)]
+/// Rate limit windows (Pro/Max subscribers only).
+pub(super) struct RateLimits {
+    pub seven_day: Option<RateWindow>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+/// A single rate-limit window.
+pub(super) struct RateWindow {
+    pub used_percentage: Option<f64>,
+    /// Unix epoch (seconds) when this window resets.
+    pub resets_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]

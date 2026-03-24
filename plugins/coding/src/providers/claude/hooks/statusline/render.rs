@@ -12,12 +12,13 @@
 
 use std::fmt::Write;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use nyne::dispatch::activation::ActivationContext;
 use owo_colors::OwoColorize;
 use palette::{Clamp, IntoColor, Mix, Oklch, Srgb};
 
-use super::payload::{CurrentUsage, StatuslinePayload, VimMode};
+use super::payload::{CurrentUsage, RateLimits, StatuslinePayload, VimMode};
 
 /// Width of the progress bar in characters.
 ///
@@ -75,7 +76,12 @@ type SegmentFn = fn(&Context<'_>) -> Option<String>;
 /// This is the single place that defines which segments appear and where.
 /// Each inner slice is one line; segments within a line are joined with [`SEP`].
 fn layout() -> &'static [&'static [SegmentFn]] {
-    &[&[project, git_branch, model], &[context_window, code_churn, vim_mode]]
+    &[&[project, git_branch, model], &[
+        context_window,
+        code_churn,
+        rate_limit_pacing,
+        vim_mode,
+    ]]
 }
 
 /// Render the full statusline from context.
@@ -146,6 +152,64 @@ fn code_churn(ctx: &Context<'_>) -> Option<String> {
         (added > 0 || removed > 0)
             .then(|| format!("{} {}", format!("+{added}").green(), format!("\u{2212}{removed}").red()))
     })
+}
+/// Deadband (±percentage points) within which pacing is considered "on pace".
+const PACING_DEADBAND: f64 = 1.0;
+
+/// Number of seconds in a full 7-day window.
+const SEVEN_DAYS_SECS: f64 = 7.0 * 24.0 * 3600.0;
+
+/// Pacing result for the 7-day rate-limit window.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Pacing {
+    /// Actual usage percentage (0–100).
+    pub used: f64,
+    /// Difference: expected − used. Positive = ahead (surplus), negative = behind (overspent).
+    pub delta: f64,
+}
+
+/// Compute daily pacing from the 7-day rate-limit window.
+///
+/// Returns `None` if the required fields are absent or the window hasn't started yet.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "unix epoch seconds fit comfortably in f64 mantissa until year 285,616,414"
+)]
+pub(super) fn compute_pacing(rate_limits: &RateLimits, now: SystemTime) -> Option<Pacing> {
+    let window = rate_limits.seven_day.as_ref()?;
+    let used = window.used_percentage?;
+    let resets_at = window.resets_at?;
+
+    let now_epoch = now.duration_since(SystemTime::UNIX_EPOCH).ok()?.as_secs_f64();
+    let remaining_secs = (resets_at as f64) - now_epoch;
+
+    // Window hasn't started yet or already expired — can't compute pacing.
+    if remaining_secs <= 0.0 || remaining_secs > SEVEN_DAYS_SECS {
+        return None;
+    }
+
+    let elapsed_secs = SEVEN_DAYS_SECS - remaining_secs;
+    let expected = (elapsed_secs / SEVEN_DAYS_SECS) * 100.0;
+    let delta = expected - used;
+
+    Some(Pacing { used, delta })
+}
+
+/// 7-day rate-limit pacing: usage + ahead/behind indicator.
+fn rate_limit_pacing(ctx: &Context<'_>) -> Option<String> {
+    let pacing = compute_pacing(ctx.payload.rate_limits.as_ref()?, SystemTime::now())?;
+
+    let label = format!("7d: {:.0}%", pacing.used).dimmed().to_string();
+
+    let indicator = if pacing.delta > PACING_DEADBAND {
+        format!("+{:.1}%", pacing.delta).green().to_string()
+    } else if pacing.delta < -PACING_DEADBAND {
+        format!("{:.1}%", pacing.delta).red().to_string()
+    } else {
+        "on pace".dimmed().to_string()
+    };
+
+    Some(format!("{label} {indicator}"))
 }
 
 fn render_vim_badge(mode: VimMode) -> String {
