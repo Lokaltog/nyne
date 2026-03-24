@@ -16,6 +16,8 @@ fn strip_suffix_nonempty<'a>(s: &'a str, suffix: &str) -> Option<&'a str> {
 /// Returns `None` when the input doesn't end with `@`, or when stripping it would
 /// leave an empty string (bare `@`).
 pub fn strip_companion_suffix(name: &str) -> Option<&str> { strip_suffix_nonempty(name, COMPANION_SUFFIX) }
+/// Build the companion directory name for a base filename (e.g., `"lib.rs"` → `"lib.rs@"`).
+pub fn companion_name(base: &str) -> String { format!("{base}{COMPANION_SUFFIX}") }
 
 /// Result of splitting a path at its `@`-suffixed companion component.
 ///

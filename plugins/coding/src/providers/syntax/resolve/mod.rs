@@ -15,7 +15,7 @@ use super::SyntaxProvider;
 use super::content::{FileOverviewContent, FragmentResolver, LinesContent, LinesWrite, delete, rename};
 use crate::edit::diff_action::DiffActionNode;
 use crate::lsp::handle::LspHandle;
-use crate::providers::names::{COMPANION_SUFFIX, FILE_BODY, FILE_OVERVIEW, SUBDIR_SYMBOLS};
+use crate::providers::names::{COMPANION_SUFFIX, FILE_BODY, FILE_OVERVIEW, SUBDIR_SYMBOLS, companion_name};
 use crate::syntax::decomposed::{DecomposedSource, DecompositionCache};
 use crate::syntax::find_fragment;
 use crate::syntax::fragment::{Fragment, FragmentKind};
@@ -127,7 +127,7 @@ pub(super) fn build_fragment_nodes(
         .iter()
         .filter_map(|frag| {
             let fs_name = frag.fs_name.as_deref()?;
-            let dirname = format!("{fs_name}{COMPANION_SUFFIX}");
+            let dirname = companion_name(fs_name);
             let meta = SymbolLineRange::from_zero_based(&frag.line_range(source));
             let mut node = VirtualNode::directory(dirname).prop(meta);
 

@@ -8,7 +8,7 @@ use nyne::types::RealFs;
 use nyne::types::path_conventions::split_companion_path;
 
 use super::fragment_resolver::FragmentResolver;
-use super::names::{self, COMPANION_SUFFIX, FILE_DIAGNOSTICS, FILE_HINTS, SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
+use super::names::{self, FILE_DIAGNOSTICS, FILE_HINTS, SUBDIR_AT_LINE, SUBDIR_SYMBOLS, companion_name};
 use super::prelude::*;
 use crate::lsp::handle::LspHandle;
 use crate::lsp::manager::LspManager;
@@ -22,7 +22,10 @@ mod lookup;
 mod newline;
 mod resolve;
 
+use std::array;
+
 use content::lsp::{LspFeature, LspHandles, build_diagnostics_node};
+use strum::IntoEnumIterator;
 
 pub(crate) struct SyntaxProvider {
     ctx: Arc<ActivationContext>,
@@ -46,80 +49,62 @@ impl SyntaxProvider {
         // Per-feature templates.
         let overview_key = b.register("syntax/overview", include_str!("templates/overview.md.j2"));
         let file_overview_key = b.register("syntax/file_overview", include_str!("templates/file_overview.md.j2"));
-        let lsp_keys = [
-            b.register("syntax/lsp/definition", include_str!("templates/lsp/definition.md.j2")),
-            b.register(
-                "syntax/lsp/declaration",
-                include_str!("templates/lsp/declaration.md.j2"),
-            ),
-            b.register(
-                "syntax/lsp/type_definition",
-                include_str!("templates/lsp/type_definition.md.j2"),
-            ),
-            b.register("syntax/lsp/references", include_str!("templates/lsp/references.md.j2")),
-            b.register(
-                "syntax/lsp/implementation",
-                include_str!("templates/lsp/implementation.md.j2"),
-            ),
-            b.register("syntax/lsp/callers", include_str!("templates/lsp/callers.md.j2")),
-            b.register("syntax/lsp/deps", include_str!("templates/lsp/deps.md.j2")),
-            b.register("syntax/lsp/supertypes", include_str!("templates/lsp/supertypes.md.j2")),
-            b.register("syntax/lsp/subtypes", include_str!("templates/lsp/subtypes.md.j2")),
-            b.register("syntax/lsp/doc", include_str!("templates/lsp/doc.md.j2")),
-            b.register("syntax/lsp/hints", include_str!("templates/lsp/hints.md.j2")),
-        ];
+        // Per-feature LSP templates — order derived from LspFeature::iter().
+        let lsp_keys: Vec<_> = LspFeature::iter()
+            .map(|f| {
+                let (name, src) = f.template();
+                b.register(name, src)
+            })
+            .collect();
         let diagnostics_key = b.register(
             "syntax/lsp/diagnostics",
             include_str!("templates/lsp/diagnostics.md.j2"),
         );
         let hints_key = b.register("syntax/hints", include_str!("templates/hints.md.j2"));
         let engine = b.finish();
-        let overview = TemplateHandle::new(&engine, overview_key);
-        let file_overview = TemplateHandle::new(&engine, file_overview_key);
-        let hints = TemplateHandle::new(&engine, hints_key);
-        let lsp = LspHandles {
-            features: lsp_keys.map(|key| TemplateHandle::new(&engine, key)),
-            diagnostics: TemplateHandle::new(&engine, diagnostics_key),
-        };
-
-        let routes = nyne_macros::routes!(Self, {
-            // Root = companion root (file.rs@/)
-            children(children_companion_root),
-            lookup(lookup_companion_root),
-
-            "rename" {
-                lookup(lookup_file_rename_preview),
-            }
-
-            "symbols" => children_symbols_root {
-                lookup(lookup_symbols_root),
-
-                "by-kind" => children_by_kind_root {
-                    "{kind}" => children_by_kind_filter,
-                }
-                "at-line" {
-                    lookup(lookup_at_line),
-                }
-                "{..path}@" => children_fragment_dir {
-                    lookup(lookup_fragment_dir),
-
-                    "rename" {
-                        lookup(lookup_rename_preview),
-                    }
-                    "actions" => children_actions_dir,
-                    "code" => children_code_block_dir,
-                    "{lsp_dir}" => children_lsp_dir,
-                }
-            }
-        });
-
+        let mut lsp_keys = lsp_keys.into_iter();
         Self {
             ctx,
-            overview,
-            file_overview,
-            hints,
-            lsp,
-            routes,
+            overview: TemplateHandle::new(&engine, overview_key),
+            file_overview: TemplateHandle::new(&engine, file_overview_key),
+            hints: TemplateHandle::new(&engine, hints_key),
+            lsp: LspHandles {
+                #[expect(clippy::expect_used, reason = "length matches LspFeature::COUNT by construction")]
+                features: array::from_fn(|_| {
+                    TemplateHandle::new(&engine, lsp_keys.next().expect("LspFeature::COUNT mismatch"))
+                }),
+                diagnostics: TemplateHandle::new(&engine, diagnostics_key),
+            },
+            routes: nyne_macros::routes!(Self, {
+                // Root = companion root (file.rs@/)
+                children(children_companion_root),
+                lookup(lookup_companion_root),
+
+                "rename" {
+                    lookup(lookup_file_rename_preview),
+                }
+
+                "symbols" => children_symbols_root {
+                    lookup(lookup_symbols_root),
+
+                    "by-kind" => children_by_kind_root {
+                        "{kind}" => children_by_kind_filter,
+                    }
+                    "at-line" {
+                        lookup(lookup_at_line),
+                    }
+                    "{..path}@" => children_fragment_dir {
+                        lookup(lookup_fragment_dir),
+
+                        "rename" {
+                            lookup(lookup_rename_preview),
+                        }
+                        "actions" => children_actions_dir,
+                        "code" => children_code_block_dir,
+                        "{lsp_dir}" => children_lsp_dir,
+                    }
+                }
+            }),
         }
     }
 
@@ -325,7 +310,7 @@ impl Provider for SyntaxProvider {
                     .invalidate_file(&lsp_file);
                 let name = p.name()?;
                 let parent = p.parent().unwrap_or(VfsPath::root());
-                let companion = format!("{name}{COMPANION_SUFFIX}");
+                let companion = companion_name(name);
                 let companion_path = parent.join(&companion).ok()?;
                 let symbols_path = companion_path.join(SUBDIR_SYMBOLS).ok()?;
                 // Invalidate both the companion root (file-level OVERVIEW.md)

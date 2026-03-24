@@ -4,8 +4,8 @@ use color_eyre::eyre::{Result, eyre};
 
 use crate::dispatch::routing::ctx::RouteCtx;
 use crate::node::VirtualNode;
-pub use crate::types::path_conventions::{COMPANION_SUFFIX, strip_companion_suffix};
 use crate::types::path_conventions::{CompanionSplit, split_companion_path};
+pub use crate::types::path_conventions::{companion_name, strip_companion_suffix};
 use crate::types::real_fs::RealFs;
 use crate::types::vfs_path::VfsPath;
 pub mod names;
@@ -28,10 +28,10 @@ pub fn companion_symbol_path(source_file: &VfsPath, fragment_path: &[String]) ->
     let name = source_file
         .name()
         .ok_or_else(|| eyre!("source file has no name: {source_file}"))?;
-    let mut path = parent.join(&format!("{name}{COMPANION_SUFFIX}"))?;
+    let mut path = parent.join(&companion_name(name))?;
     path = path.join(SUBDIR_SYMBOLS)?;
     for seg in fragment_path {
-        path = path.join(&format!("{seg}{COMPANION_SUFFIX}"))?;
+        path = path.join(&companion_name(seg))?;
     }
     Ok(path)
 }

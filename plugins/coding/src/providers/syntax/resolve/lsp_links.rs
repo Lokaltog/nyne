@@ -8,7 +8,7 @@ use nyne::provider::Nodes;
 use nyne::types::vfs_path::VfsPath;
 
 use crate::lsp::handle::LspHandle;
-use crate::providers::names::{COMPANION_SUFFIX, SUBDIR_SYMBOLS};
+use crate::providers::names::{COMPANION_SUFFIX, SUBDIR_SYMBOLS, companion_name};
 use crate::providers::syntax::SyntaxProvider;
 use crate::providers::syntax::content::actions;
 use crate::providers::syntax::content::lsp::{LspTarget, query_lsp_targets};
@@ -38,9 +38,9 @@ fn resolve_symbol_link(
         .get(target_vfs)
         .ok()?;
     let frag_path = find_fragment_at_line(&target_shared.decomposed, target_line as usize, &target_shared.source)?;
-    let mut to = VfsPath::new(&format!("{rel_path}{COMPANION_SUFFIX}/{SUBDIR_SYMBOLS}")).ok()?;
+    let mut to = VfsPath::new(&format!("{}/{SUBDIR_SYMBOLS}", companion_name(rel_path))).ok()?;
     for name in &frag_path {
-        to = to.join(&format!("{name}{COMPANION_SUFFIX}")).ok()?;
+        to = to.join(&companion_name(name)).ok()?;
     }
     Some(to.relative_to(base))
 }
@@ -52,7 +52,7 @@ fn resolve_symbol_link(
 )]
 fn fallback_line_link(rel_path: &str, target_line: u32, base: &VfsPath) -> PathBuf {
     let line_1based = target_line + 1;
-    let to = VfsPath::new(&format!("{rel_path}{COMPANION_SUFFIX}/lines:{line_1based}"))
+    let to = VfsPath::new(&format!("{}/lines:{line_1based}", companion_name(rel_path)))
         .expect("lsp link target produced invalid VfsPath");
     to.relative_to(base)
 }

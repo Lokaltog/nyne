@@ -119,7 +119,7 @@ impl Provider for DirectoryProvider {
                 let parent = p.parent().unwrap_or(VfsPath::root());
                 let dir_name = parent.name()?;
                 let grandparent = parent.parent().unwrap_or(VfsPath::root());
-                let companion = format!("{dir_name}{}", super::COMPANION_SUFFIX);
+                let companion = super::companion_name(dir_name);
                 let companion_path = grandparent.join(&companion).ok()?;
                 Some(InvalidationEvent::Subtree { path: companion_path })
             })

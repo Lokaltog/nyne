@@ -2,16 +2,14 @@
 
 use nyne::templates::{HandleBuilder, TemplateEngine};
 // Re-exported from nyne core — shared with core providers.
-pub use nyne::types::path_conventions::COMPANION_SUFFIX;
+pub use nyne::types::path_conventions::{COMPANION_SUFFIX, companion_name};
+pub use nyne::{FILE_OVERVIEW, SUBDIR_SYMBOLS};
 
 /// VFS path separator (`@/`).
 pub const VFS_SEP: &str = "@/";
 
 /// VFS symbols path segment (`@/symbols/`).
 pub const VFS_SYMBOLS_SEP: &str = "@/symbols/";
-
-/// Subdirectory for syntax fragments.
-pub const SUBDIR_SYMBOLS: &str = "symbols";
 
 /// Subdirectory for type-filtered symbol views.
 pub const SUBDIR_BY_KIND: &str = "by-kind";
@@ -24,9 +22,6 @@ pub const SUBDIR_CODE: &str = "code";
 
 /// Subdirectory for LSP code actions as `.diff` files.
 pub const SUBDIR_ACTIONS: &str = "actions";
-
-/// Overview file name.
-pub const FILE_OVERVIEW: &str = "OVERVIEW.md";
 
 /// Diagnostics file name.
 pub const FILE_DIAGNOSTICS: &str = "DIAGNOSTICS.md";

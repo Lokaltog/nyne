@@ -5,7 +5,7 @@ use std::sync::Arc;
 use color_eyre::eyre::{Result, eyre};
 use nyne_macros::routes;
 
-use super::names::COMPANION_SUFFIX;
+use super::names::companion_name;
 use super::prelude::*;
 use crate::dispatch::context::RenameContext;
 use crate::dispatch::routing::ctx::RouteCtx;
@@ -45,7 +45,7 @@ impl CompanionProvider {
     /// This is the SSOT for companion node construction — used by both
     /// `children_companions` and `lookup_companion`.
     fn companion_node(dir: &VfsPath, real_name: &str, file_type: FileKind) -> VirtualNode {
-        let name = format!("{real_name}{COMPANION_SUFFIX}");
+        let name = companion_name(real_name);
         let mut node = super::companion_dir(&name);
         if file_type != FileKind::Directory
             && let Ok(source_file) = dir.join(real_name)
