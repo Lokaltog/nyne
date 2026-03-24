@@ -6,6 +6,8 @@ Irrelevant context is the biggest bottleneck in agent-driven development. An age
 
 ## What it looks like
 
+<p align="center"><img alt="Demo" src="./demo/overview.gif" width="800" /></p>
+
 ```sh
 # What's in this file?
 cat lib.rs@/symbols/OVERVIEW.md
@@ -37,7 +39,7 @@ ls lib.rs@/symbols/process_data@/git/history/
 
 # Diff any two versions
 diff <(cat lib.rs@/symbols/process_data@/git/history/001_*.rs) \
-     <(cat lib.rs@/symbols/process_data@/git/history/005_*.rs)
+    <(cat lib.rs@/symbols/process_data@/git/history/005_*.rs)
 ```
 
 ```sh
@@ -79,14 +81,14 @@ nyne attach --visibility all
 
 ## CLI
 
-| Command | Purpose |
-|-|-|
-| `nyne mount [paths...]` | Start FUSE daemon for one or more directories |
-| `nyne attach [id] [-- cmd]` | Enter a mount's sandboxed namespace |
-| `nyne list [id]` | Show active sessions and attached processes |
-| `nyne exec <address>` | Run a registered script against a daemon |
-| `nyne ctl [request]` | Send a JSON control request to a daemon |
-| `nyne config` | Dump resolved configuration |
+| Command                     | Purpose                                       |
+| --------------------------- | --------------------------------------------- |
+| `nyne mount [paths...]`     | Start FUSE daemon for one or more directories |
+| `nyne attach [id] [-- cmd]` | Enter a mount's sandboxed namespace           |
+| `nyne list [id]`            | Show active sessions and attached processes   |
+| `nyne exec <address>`       | Run a registered script against a daemon      |
+| `nyne ctl [request]`        | Send a JSON control request to a daemon       |
+| `nyne config`               | Dump resolved configuration                   |
 
 ```sh
 # Mount a project, then run an agent inside the namespace
