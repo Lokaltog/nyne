@@ -9,8 +9,8 @@ use std::iter;
 
 use color_eyre::eyre::{Result, eyre};
 use nyne::RequestContext;
-use nyne::format::unified_diff;
 use nyne::node::capabilities::{Readable, Unlinkable};
+use nyne::text::unified_diff;
 
 use super::plan::{EditOutcome, FileEditResult, ValidationResult, apply_file_edits};
 

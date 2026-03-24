@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use nyne::format::to_kebab;
+use nyne::text::slugify;
 use nyne::types::path_conventions::COMPANION_SUFFIX;
 use nyne::types::vfs_path::VfsPath;
 
@@ -53,10 +53,10 @@ const TODO_SLUG_MAX_LEN: usize = 40;
 
 /// Slugify the first line of comment text for use in filenames.
 ///
-/// Delegates to [`nyne::format::to_kebab`] for kebab-case conversion and
-/// truncation, then falls back to `"unnamed"` for empty/whitespace-only input.
+/// Delegates to [`nyne::text::slugify`] for slug conversion and truncation,
+/// then falls back to `"unnamed"` for empty/whitespace-only input.
 fn slugify_content(text: &str) -> String {
-    let slug = to_kebab(text.lines().next().unwrap_or("").trim(), TODO_SLUG_MAX_LEN);
+    let slug = slugify(text.lines().next().unwrap_or("").trim(), TODO_SLUG_MAX_LEN);
     if slug.is_empty() { "unnamed".to_owned() } else { slug }
 }
 

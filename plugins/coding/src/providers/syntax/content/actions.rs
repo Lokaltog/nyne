@@ -5,8 +5,8 @@ use std::ops::Range as StdRange;
 use color_eyre::eyre::{Result, eyre};
 use lsp_types::{CodeAction, Position, Range};
 use nyne::dispatch::context::RequestContext;
-use nyne::format;
 use nyne::node::VirtualNode;
+use nyne::text;
 
 use crate::edit::diff_action::{DiffAction, DiffActionNode};
 use crate::edit::plan::FileEditResult;
@@ -56,7 +56,7 @@ pub(in crate::providers::syntax) fn resolve_code_actions(
         .filter(|a| a.disabled.is_none())
         .enumerate()
         .map(|(i, action)| {
-            let slug = format::to_kebab(&action.title, ACTION_SLUG_MAX_LEN);
+            let slug = text::slugify(&action.title, ACTION_SLUG_MAX_LEN);
             let file_name = format!("{:02}-{slug}.diff", i + 1);
             ResolvedAction { action, file_name }
         })

@@ -6,7 +6,7 @@ use std::path::Path;
 use color_eyre::eyre::{Result, ensure, eyre};
 
 use super::SessionRegistry;
-use crate::format::to_kebab_raw;
+use crate::text::slugify_unbounded;
 
 /// A validated session identifier.
 ///
@@ -89,7 +89,7 @@ impl fmt::Display for SessionId {
 }
 
 /// Sanitize a string into a valid session ID component.
-fn sanitize(s: &str) -> String { to_kebab_raw(s) }
+fn sanitize(s: &str) -> String { slugify_unbounded(s) }
 
 /// Unit tests.
 #[cfg(test)]

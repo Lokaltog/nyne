@@ -6,9 +6,9 @@
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::format;
 use nyne::node::VirtualNode;
 use nyne::templates::{TemplateEngine, TemplateView};
+use nyne::text;
 use nyne::types::SymbolLineRange;
 use nyne::types::slice::SliceSpec;
 
@@ -55,7 +55,7 @@ impl GitProvider {
 /// Format a history entry filename: `001_2024-01-15_abc1234_commit-message.rs`
 pub fn history_filename(index: usize, entry: &HistoryEntry, ext: &str) -> String {
     let seq = index + 1;
-    let kebab = format::to_kebab(&entry.commit.message, 50);
+    let kebab = text::slugify(&entry.commit.message, 50);
     if ext.is_empty() {
         format!("{seq:03}_{}_{}_{kebab}", entry.commit.date, entry.commit.hash)
     } else {

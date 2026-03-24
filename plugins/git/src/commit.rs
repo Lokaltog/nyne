@@ -1,7 +1,7 @@
 //! Commit information and diff options helpers.
 
 use git2::Oid;
-use nyne::format;
+use nyne::text;
 use serde::Serialize;
 
 /// Information extracted from a git commit for template rendering.
@@ -22,7 +22,7 @@ pub fn commit_info(commit: &git2::Commit<'_>, oid: Oid) -> CommitInfo {
     CommitInfo {
         hash: format!("{oid:.7}"),
         author: commit.author().name().unwrap_or("unknown").to_owned(),
-        date: format::format_git_date(epoch_secs),
+        date: text::format_git_date(epoch_secs),
         message: commit.message().unwrap_or("").lines().next().unwrap_or("").to_owned(),
         epoch_secs,
     }

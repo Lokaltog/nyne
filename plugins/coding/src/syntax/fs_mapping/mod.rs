@@ -1,6 +1,6 @@
 //! Filesystem naming strategies and conflict resolution for fragments.
 
-use nyne::format::to_kebab;
+use nyne::text::slugify_unbounded;
 
 use super::fragment::{ConflictSet, Fragment, FragmentKind, Resolution};
 
@@ -73,7 +73,7 @@ fn apply_slugified(fragments: &mut [Fragment], indexed: bool) {
             code_block_index += 1;
             frag.fs_name = Some((code_block_index * 10).to_string());
         } else {
-            let slug = slugify(&frag.name);
+            let slug = slugify_unbounded(&frag.name);
             frag.fs_name = Some(if indexed { format!("{i:02}-{slug}") } else { slug });
         }
     }
@@ -144,11 +144,6 @@ fn resolve_numbered(conflicts: &[ConflictSet]) -> Vec<Resolution> {
         })
         .collect()
 }
-
-/// Convert a string to a filesystem-safe kebab-case slug.
-///
-/// Delegates to [`nyne::format::to_kebab`] with no length limit.
-pub fn slugify(s: &str) -> String { to_kebab(s, usize::MAX) }
 
 /// Tests for filesystem naming and conflict resolution.
 #[cfg(test)]

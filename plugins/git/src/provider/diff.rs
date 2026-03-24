@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use nyne::dispatch::context::RequestContext;
-use nyne::format::unified_diff;
 use nyne::node::Readable;
+use nyne::text::unified_diff;
 use nyne::types::vfs_path::VfsPath;
 
 use crate::repo::GitRepo;

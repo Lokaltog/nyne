@@ -7,7 +7,7 @@ use std::path::Path;
 use color_eyre::eyre::{Result, bail};
 use crop::Rope;
 use lsp_types::{DocumentChanges, OneOf, TextEdit, WorkspaceEdit};
-use nyne::format;
+use nyne::text;
 use nyne::types::vfs_path::VfsPath;
 use tracing::{debug, warn};
 
@@ -61,7 +61,7 @@ pub fn workspace_edit_to_diff(edit: &WorkspaceEdit, resolver: &super::path::LspP
     let mut diff = String::new();
     for result in &results {
         let display_path = resolver.rewrite_to_fuse(Path::new(&result.path));
-        diff.push_str(&format::unified_diff(
+        diff.push_str(&text::unified_diff(
             &result.original,
             &result.modified,
             &display_path.to_string_lossy(),

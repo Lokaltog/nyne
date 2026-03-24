@@ -11,13 +11,15 @@ pub fn format_git_date(epoch_secs: i64) -> String {
     )
 }
 
-/// Convert a string to kebab-case suitable for filenames, truncated to
-/// `max_len` at a hyphen boundary.
-pub fn to_kebab(s: &str, max_len: usize) -> String { truncate_kebab(&to_kebab_raw(s), max_len) }
+/// Produce a filesystem-safe slug, truncated to `max_len` at a hyphen
+/// boundary.
+pub fn slugify(s: &str, max_len: usize) -> String { truncate_at_boundary(&slugify_unbounded(s), max_len) }
 
-/// Convert a string to kebab-case, stripping non-alphanumeric characters
-/// before applying case conversion.
-pub fn to_kebab_raw(s: &str) -> String {
+/// Produce a filesystem-safe slug with no length limit.
+///
+/// Strips non-alphanumeric characters and delegates to `convert_case` for
+/// kebab-case conversion.
+pub fn slugify_unbounded(s: &str) -> String {
     use convert_case::{Case, Casing};
     s.chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { ' ' })
@@ -28,8 +30,8 @@ pub fn to_kebab_raw(s: &str) -> String {
         .to_case(Case::Kebab)
 }
 
-/// Truncate a kebab-case string to `max_len`, cutting at a hyphen boundary.
-fn truncate_kebab(s: &str, max_len: usize) -> String {
+/// Truncate a slug to `max_len`, cutting at a hyphen boundary.
+fn truncate_at_boundary(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         return s.to_owned();
     }

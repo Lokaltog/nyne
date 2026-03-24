@@ -1,7 +1,7 @@
+use nyne::text::slugify_unbounded;
 use rstest::{fixture, rstest};
 
 use super::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, Fragment, FragmentKind, SymbolKind};
-use super::fs_mapping::slugify;
 use crate::test_support::{registry, vfs};
 
 /// Decompose source into fragments.
@@ -954,10 +954,10 @@ fn numbered_conflict_resolution() {
 /// Verifies that slugify converts headings to lowercase-hyphenated form.
 #[test]
 fn slugify_basic() {
-    assert_eq!(slugify("Getting Started"), "getting-started");
-    assert_eq!(slugify("API Reference"), "api-reference");
-    assert_eq!(slugify("  leading & trailing  "), "leading-trailing");
-    assert_eq!(slugify("CamelCase"), "camel-case");
+    assert_eq!(slugify_unbounded("Getting Started"), "getting-started");
+    assert_eq!(slugify_unbounded("API Reference"), "api-reference");
+    assert_eq!(slugify_unbounded("  leading & trailing  "), "leading-trailing");
+    assert_eq!(slugify_unbounded("CamelCase"), "camel-case");
 }
 
 // Validation

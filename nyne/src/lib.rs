@@ -10,8 +10,8 @@ pub mod cli;
 pub mod config;
 /// Request dispatch: routing, caching, and content pipeline.
 pub mod dispatch;
-/// Shared formatting utilities: markdown tables, diffs, kebab-case conversion.
-pub mod format;
+/// Shared text utilities: slugification, date formatting, diffs.
+pub mod text;
 // Re-export provider helpers for plugin crates.
 pub use providers::names::{FILE_OVERVIEW, SUBDIR_SYMBOLS};
 pub use providers::{

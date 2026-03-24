@@ -2,15 +2,15 @@ use rstest::rstest;
 
 use super::*;
 
-/// Verifies kebab-case conversion with truncation and edge cases.
+/// Verifies slug generation with truncation and edge cases.
 #[rstest]
 #[case::basic("Fix the bug", 50, "fix-the-bug")]
 #[case::special_chars("feat(scope): add thing!", 50, "feat-scope-add-thing")]
 #[case::truncates_at_hyphen_boundary("this is a very long commit message", 20, "this-is-a-very-long")]
 #[case::no_leading_or_trailing_hyphens("--hello--world--", 50, "hello-world")]
 #[case::empty("", 50, "")]
-fn to_kebab_conversion(#[case] input: &str, #[case] max_len: usize, #[case] expected: &str) {
-    assert_eq!(to_kebab(input, max_len), expected);
+fn slugify_conversion(#[case] input: &str, #[case] max_len: usize, #[case] expected: &str) {
+    assert_eq!(slugify(input, max_len), expected);
 }
 
 /// Formats a known timestamp and verifies the expected date string.
