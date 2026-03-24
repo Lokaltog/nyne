@@ -1,6 +1,7 @@
 Source demo/setup.tape
 
 Output demo/overview.mp4
+Output demo/overview.gif
 
 Type "cd /code/plugins/coding/src/syntax"
 Enter
