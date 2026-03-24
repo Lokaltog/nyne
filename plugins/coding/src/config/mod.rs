@@ -92,6 +92,7 @@ pub struct ClaudeConfig {
 
 /// Default implementation for `ClaudeConfig`.
 impl Default for ClaudeConfig {
+    /// Returns the default value.
     fn default() -> Self {
         Self {
             enabled: true,
@@ -132,6 +133,7 @@ pub struct ClaudeHooksToggle {
 
 /// Default implementation for `ClaudeHooksToggle`.
 impl Default for ClaudeHooksToggle {
+    /// Returns the default value.
     fn default() -> Self {
         Self {
             session_start: true,
@@ -164,6 +166,7 @@ pub struct StopHookConfig {
 
 /// Default implementation for `StopHookConfig`.
 impl Default for StopHookConfig {
+    /// Returns the default value.
     fn default() -> Self {
         Self {
             min_files: default_min_files(),

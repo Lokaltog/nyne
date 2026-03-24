@@ -36,6 +36,7 @@ pub(crate) struct DiagnosticStore {
     notify: Condvar,
 }
 
+/// Methods for creating, updating, and querying the diagnostic store.
 impl DiagnosticStore {
     /// Create a new empty diagnostic store.
     pub(crate) fn new() -> Self {

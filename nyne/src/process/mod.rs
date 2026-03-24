@@ -26,11 +26,13 @@ pub struct Spawner {
 
 /// Returns the default value.
 impl Default for Spawner {
+    /// Returns the default value.
     fn default() -> Self { Self::new() }
 }
 
 /// Process spawning and child lifecycle management.
 impl Spawner {
+    /// Creates a new spawner with no tracked children.
     pub const fn new() -> Self {
         Self {
             children: Mutex::new(Vec::new()),
@@ -91,7 +93,9 @@ impl Spawner {
     }
 }
 
+/// Kills any lingering child processes on drop.
 impl Drop for Spawner {
+    /// Cleans up resources on drop.
     fn drop(&mut self) {
         let children = self.children.get_mut();
         for child in children {

@@ -158,6 +158,7 @@ impl TemplateView for StatusView {
     }
 }
 
+/// Associated constants for the nyne meta provider.
 impl NyneProvider {
     /// The provider identifier for the nyne meta provider.
     const PROVIDER_ID: ProviderId = ProviderId::new("nyne");

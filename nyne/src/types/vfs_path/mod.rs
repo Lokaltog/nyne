@@ -222,6 +222,7 @@ impl fmt::Display for VfsPath {
 
 /// Debug-formats as `VfsPath("inner/path")`.
 impl fmt::Debug for VfsPath {
+    /// Formats the value for debug output.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "VfsPath({:?})", self.0) }
 }
 

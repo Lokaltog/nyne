@@ -69,6 +69,7 @@ impl<T> DiffActionNode<T> {
     }
 }
 
+/// Node construction for diff action types that are both `Clone` and `'static`.
 impl<T: DiffAction + Clone + 'static> DiffActionNode<T> {
     /// Create a file node with both diff preview (`Readable`) and apply-on-delete (`Unlinkable`).
     pub fn into_node(name: impl Into<String>, action: T) -> nyne::VirtualNode {

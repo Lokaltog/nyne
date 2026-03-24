@@ -136,6 +136,7 @@ impl Provider for DirectoryProvider {
     }
 }
 
+/// Associated constants for the directory provider.
 impl DirectoryProvider {
     /// The provider identifier for the directory provider.
     pub(super) const PROVIDER_ID: ProviderId = ProviderId::new("directory");

@@ -55,6 +55,7 @@ pub struct FilePosition<'a> {
     pub character: u32,
 }
 
+/// Methods for converting file positions to LSP protocol types.
 impl FilePosition<'_> {
     /// Convert to LSP `TextDocumentPositionParams` for requests.
     fn to_params(&self) -> Result<TextDocumentPositionParams> {
@@ -108,6 +109,7 @@ pub struct LspClient {
     diagnostic_store: Arc<DiagnosticStore>,
 }
 
+/// Core LSP client lifecycle: spawning, initialization, and shutdown.
 impl LspClient {
     /// Spawn a language server as a direct child of the daemon, perform the
     /// initialize handshake, and return a ready-to-use client.

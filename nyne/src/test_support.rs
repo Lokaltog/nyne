@@ -30,30 +30,43 @@ pub struct StubFs;
 
 /// Stub filesystem that rejects all operations.
 impl RealFs for StubFs {
+    /// Returns a fixed stub source directory path.
     fn source_dir(&self) -> &Path { Path::new("/stub") }
 
+    /// Rejects all file reads with a stub error.
     fn read(&self, _: &VfsPath) -> Result<Vec<u8>> { bail!("stub") }
 
+    /// Rejects all file writes with a stub error.
     fn write(&self, _: &VfsPath, _: &[u8]) -> Result<()> { bail!("stub") }
 
+    /// Always reports that no path exists.
     fn exists(&self, _: &VfsPath) -> bool { false }
 
+    /// Always reports that no path is a directory.
     fn is_dir(&self, _: &VfsPath) -> bool { false }
 
+    /// Rejects all directory listings with a stub error.
     fn read_dir(&self, _: &VfsPath) -> Result<Vec<DirEntry>> { bail!("stub") }
 
+    /// Rejects all metadata queries with a stub error.
     fn metadata(&self, _: &VfsPath) -> Result<FileMeta> { bail!("stub") }
 
+    /// Rejects all symlink target lookups with a stub error.
     fn symlink_target(&self, _: &VfsPath) -> Result<std::path::PathBuf> { bail!("stub") }
 
+    /// Rejects all rename operations with a stub error.
     fn rename(&self, _: &VfsPath, _: &VfsPath) -> Result<()> { bail!("stub") }
 
+    /// Rejects all unlink operations with a stub error.
     fn unlink(&self, _: &VfsPath) -> Result<()> { bail!("stub") }
 
+    /// Rejects all rmdir operations with a stub error.
     fn rmdir(&self, _: &VfsPath) -> Result<()> { bail!("stub") }
 
+    /// Rejects all file creation with a stub error.
     fn create_file(&self, _: &VfsPath) -> Result<()> { bail!("stub") }
 
+    /// Rejects all directory creation with a stub error.
     fn mkdir(&self, _: &VfsPath) -> Result<()> { bail!("stub") }
 }
 
@@ -62,6 +75,7 @@ pub struct StubEvents;
 
 /// No-op event sink that silently discards all invalidation events.
 impl EventSink for StubEvents {
+    /// Silently discards the invalidation event.
     fn emit(&self, _: InvalidationEvent) {}
 }
 
@@ -70,8 +84,10 @@ pub struct StubResolver;
 
 /// Stub resolver that rejects all lookups.
 impl Resolver for StubResolver {
+    /// Rejects all resolve requests with a stub error.
     fn resolve(&self, _: &VfsPath) -> Result<Vec<Arc<VirtualNode>>> { bail!("stub") }
 
+    /// Rejects all lookup requests with a stub error.
     fn lookup(&self, _: &VfsPath) -> Result<Option<Arc<VirtualNode>>> { bail!("stub") }
 }
 

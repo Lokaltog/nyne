@@ -50,6 +50,7 @@ pub struct LspCache {
     ttl: Duration,
 }
 
+/// Methods for querying, caching, and invalidating LSP results.
 impl LspCache {
     /// Create a new cache with the given time-to-live for entries.
     pub(crate) fn new(ttl: Duration) -> Self {

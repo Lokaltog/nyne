@@ -112,6 +112,7 @@ struct SerializeView<T>(T);
 
 /// Renders by serializing the inner value directly into the template engine.
 impl<T: Serialize + Send + Sync> TemplateView for SerializeView<T> {
+    /// Renders by serializing the inner value into the template engine.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         Ok(engine.render_bytes(template, &self.0))
     }
@@ -119,6 +120,7 @@ impl<T: Serialize + Send + Sync> TemplateView for SerializeView<T> {
 
 /// Blanket impl: `Arc<dyn TemplateView>` delegates to the inner view.
 impl<T: TemplateView + ?Sized> TemplateView for Arc<T> {
+    /// Delegates rendering to the inner view.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> { (**self).render(engine, template) }
 }
 
