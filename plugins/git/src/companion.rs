@@ -26,17 +26,22 @@ pub struct GitCompanionProvider {
 
 /// Associated constants and constructor for [`GitCompanionProvider`].
 impl GitCompanionProvider {
+    /// Provider identifier for the git companion.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("git-companion");
 
+    /// Creates a new git companion provider.
     pub(crate) const fn new(ctx: Arc<ActivationContext>) -> Self { Self { ctx } }
 }
 
 /// [`Provider`] implementation for [`GitCompanionProvider`].
 impl Provider for GitCompanionProvider {
+    /// Returns the provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// Returns child nodes (none for companion).
     fn children(self: Arc<Self>, _ctx: &RequestContext<'_>) -> Nodes { Ok(None) }
 
+    /// Wins conflicts over the core companion provider.
     fn on_conflict(
         self: Arc<Self>,
         _ctx: &RequestContext<'_>,
@@ -46,6 +51,7 @@ impl Provider for GitCompanionProvider {
         Ok(ConflictResolution::Force(vec![]))
     }
 
+    /// Looks up a companion node for a real file, attaching git-aware rename.
     fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node {
         // Only handle companion paths for real files (not directories).
         let Some(real_name) = strip_companion_suffix(name) else {
@@ -74,6 +80,7 @@ struct GitFileRename {
 
 /// [`Renameable`] implementation for [`GitFileRename`].
 impl Renameable for GitFileRename {
+    /// Renames the source file on disk and updates the git index.
     fn rename(&self, ctx: &RenameContext<'_>) -> Result<()> {
         let new_name = strip_companion_suffix(ctx.target_name)
             .ok_or_else(|| eyre!("rename target must end with companion suffix (@)"))?;

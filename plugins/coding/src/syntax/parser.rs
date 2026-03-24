@@ -258,6 +258,7 @@ impl TreeSitterParser {
     /// Panics if the language cannot be set (indicates a build/version
     /// mismatch).
     #[allow(clippy::expect_used)] // language is a linked grammar, failure = build mismatch
+    /// Creates a new tree-sitter parser for the given language grammar.
     pub fn new(language: &tree_sitter::Language) -> Self {
         let mut parser = tree_sitter::Parser::new();
         parser

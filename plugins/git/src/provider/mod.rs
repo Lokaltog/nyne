@@ -50,15 +50,25 @@ macro_rules! git_template_view {
     };
 }
 
+/// Blame rendering.
 mod blame;
+/// Branch browsing and mutation.
 mod branches;
+/// Contributor ranking.
 mod contributors;
+/// Diff generation.
 mod diff;
+/// File history versions.
 pub mod history;
+/// Commit log rendering.
 mod log;
+/// Git notes read/write.
 mod notes;
+/// Repository file view context.
 pub mod repo;
+/// Working tree status rendering.
 mod status;
+/// Blame and log template views.
 pub mod views;
 
 use branches::{branch_segments_at_prefix, branch_tree_nodes};
@@ -71,6 +81,7 @@ pub struct CommitMtime(pub i64);
 
 /// [`Lifecycle`] implementation for [`CommitMtime`].
 impl Lifecycle for CommitMtime {
+    /// Returns node attributes with mtime from the commit timestamp.
     fn getattr(&self, _ctx: &RequestContext<'_>) -> Option<NodeAttr> {
         Some(NodeAttr {
             mtime: Some(u64::try_from(self.0).unwrap_or(0)),
@@ -103,8 +114,10 @@ pub(crate) struct GitProvider {
 
 /// Construction, route handlers, and helper methods for [`GitProvider`].
 impl GitProvider {
+    /// Provider identifier for git.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("git");
 
+    /// Creates a new git provider with routes and template handles.
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
         let git_dir_component = ctx.get::<GitDirName>().and_then(|g| g.0.clone());
 
@@ -155,6 +168,7 @@ impl GitProvider {
         }
     }
 
+    /// Returns the shared git repository.
     fn repo(&self) -> Result<Arc<GitRepo>> {
         self.ctx
             .get::<Arc<GitRepo>>()
@@ -162,6 +176,7 @@ impl GitProvider {
             .ok_or_else(|| color_eyre::eyre::eyre!("git repo not available"))
     }
 
+    /// Lists children at the git root (branches, tags, status).
     fn children_git_root(&self, _ctx: &RouteCtx<'_>) -> Nodes {
         let repo = self.repo()?;
         let secs = repo.head_epoch_secs();
@@ -176,8 +191,10 @@ impl GitProvider {
         ]))
     }
 
+    /// Lists top-level branch name segments.
     fn children_branches(&self, _ctx: &RouteCtx<'_>) -> Nodes { branch_segments_at_prefix(&self.repo()?, "") }
 
+    /// Resolves nested branch segments or browses a branch tree.
     fn children_branches_nested(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let repo = self.repo()?;
         let segs = ctx.params("prefix");
@@ -204,6 +221,7 @@ impl GitProvider {
         Ok(None)
     }
 
+    /// Lists all tags.
     fn children_tags(&self, _ctx: &RouteCtx<'_>) -> Nodes {
         let repo = self.repo()?;
         let head_mtime = repo.head_epoch_secs();
@@ -215,6 +233,7 @@ impl GitProvider {
         Ok(Some(nodes))
     }
 
+    /// Lists companion directories (git, history, diff) for a source file.
     fn children_companion_root(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let source = source_file(ctx)?;
         let repo = self.repo()?;
@@ -227,6 +246,7 @@ impl GitProvider {
         ]))
     }
 
+    /// Lists diff children for a source file.
     fn children_diff(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let source = source_file(ctx)?;
         let repo = self.repo()?;
@@ -242,6 +262,7 @@ impl GitProvider {
         ]))
     }
 
+    /// Lists companion git children (blame, log, etc.) for a source file.
     fn children_companion_git(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let source = source_file(ctx)?;
         let repo = self.repo()?;
@@ -249,6 +270,7 @@ impl GitProvider {
         Ok(Some(self.resolve_companion_git(&repo, rel)))
     }
 
+    /// Looks up a line-range-sliced blame view.
     fn lookup_sliced_blame(&self, ctx: &RouteCtx<'_>) -> Node {
         use nyne::types::slice::parse_spec;
         let Some(spec) = parse_spec(ctx.param("spec")) else {
@@ -264,6 +286,7 @@ impl GitProvider {
         )))
     }
 
+    /// Looks up a line-range-sliced log view.
     fn lookup_sliced_log(&self, ctx: &RouteCtx<'_>) -> Node {
         use nyne::types::slice::parse_spec;
         let Some(spec) = parse_spec(ctx.param("spec")) else {
@@ -279,6 +302,7 @@ impl GitProvider {
         )))
     }
 
+    /// Looks up a diff against a named ref.
     fn lookup_diff_ref(&self, ctx: &RouteCtx<'_>) -> Node {
         let refspec = ctx.param("ref");
         if refspec == "HEAD" {
@@ -293,6 +317,7 @@ impl GitProvider {
         })))
     }
 
+    /// Lists file history version entries.
     fn children_history(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let source = source_file(ctx)?;
         let repo = self.repo()?;
@@ -319,20 +344,25 @@ impl GitProvider {
 
 /// [`Provider`] implementation for [`GitProvider`].
 impl Provider for GitProvider {
+    /// Returns the provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
+    /// Handles mutation operations (currently a no-op).
     fn handle_mutation(&self, _op: &MutationOp<'_>, _real_fs: &dyn RealFs) -> Result<MutationOutcome> {
         Ok(MutationOutcome::NotHandled)
     }
 
+    /// Dispatches child listing to at-root or companion routes.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes {
         dispatch_children(&self.at_routes, &self.companion_routes, &self, ctx, true)
     }
 
+    /// Dispatches name lookup to at-root or companion routes.
     fn lookup(self: Arc<Self>, ctx: &RequestContext<'_>, name: &str) -> Node {
         dispatch_lookup(&self.at_routes, &self.companion_routes, &self, ctx, name, true)
     }
 
+    /// Invalidates provider state when git directory changes.
     fn on_fs_change(&self, changed: &[VfsPath]) -> Vec<InvalidationEvent> {
         let Some(git_dir) = &self.git_dir_component else {
             return Vec::new();
@@ -347,5 +377,6 @@ impl Provider for GitProvider {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

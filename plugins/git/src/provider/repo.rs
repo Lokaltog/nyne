@@ -13,6 +13,7 @@ pub struct FileViewCtx {
 
 /// Constructor for [`FileViewCtx`].
 impl FileViewCtx {
+    /// Creates a new file view context for the given repository path.
     pub fn new(repo: &Arc<GitRepo>, rel_path: String) -> Self {
         Self {
             repo: Arc::clone(repo),

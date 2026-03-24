@@ -19,9 +19,13 @@ impl TypeScriptLanguage {
 
 /// [`LanguageSpec`] implementation for TypeScript/JavaScript.
 impl LanguageSpec for TypeScriptLanguage {
+    /// File extensions for TypeScript.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
+    /// AST node kinds that represent imports.
     const IMPORT_KINDS: &'static [&'static str] = &["import_statement"];
+    /// Language name identifier.
     const NAME: &'static str = "TypeScript";
+    /// AST node kinds that can contain nested symbols.
     const RECURSABLE_KINDS: &'static [&'static str] =
         &["class_declaration", "abstract_class_declaration", "internal_module"];
 
@@ -37,6 +41,7 @@ impl LanguageSpec for TypeScriptLanguage {
         "internal_module"            => Module,
     }
 
+    /// Returns the tree-sitter grammar for the given file extension.
     fn grammar(ext: &str) -> tree_sitter::Language {
         match ext {
             "tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
@@ -44,6 +49,7 @@ impl LanguageSpec for TypeScriptLanguage {
         }
     }
 
+    /// Unwraps export statements to expose the inner symbol.
     fn unwrap_wrapper(node: TsNode<'_>) -> Option<(TsNode<'_>, WrapperInfo)> {
         match node.kind() {
             Self::EXPORT_STATEMENT => {
@@ -61,6 +67,7 @@ impl LanguageSpec for TypeScriptLanguage {
         }
     }
 
+    /// Builds a display signature for the symbol.
     fn build_signature(node: TsNode<'_>, kind: SymbolKind) -> String {
         match kind {
             SymbolKind::Variable => node.first_line().trim_end_matches(';').trim().to_owned(),
@@ -68,6 +75,7 @@ impl LanguageSpec for TypeScriptLanguage {
         }
     }
 
+    /// Extracts the symbol name from the AST node.
     fn extract_name(node: TsNode<'_>, kind: SymbolKind) -> String {
         if kind == SymbolKind::Variable {
             return extract_variable_name(node);
@@ -75,10 +83,12 @@ impl LanguageSpec for TypeScriptLanguage {
         node.field_text("name").unwrap_or("anonymous").to_owned()
     }
 
+    /// Extracts the `JSDoc` or line comment range for a symbol.
     fn extract_doc_range(node: TsNode<'_>) -> Option<Range<usize>> {
         extract_preceding_doc_range(unwrap_export(node)?, "comment", &["/**", "///", "//"], &[])
     }
 
+    /// Strips doc comment prefix from a line.
     fn strip_doc_comment(raw: &str) -> String {
         if raw.starts_with("/**") {
             strip_jsdoc(raw)
@@ -87,6 +97,7 @@ impl LanguageSpec for TypeScriptLanguage {
         }
     }
 
+    /// Wraps text in `JSDoc` comment syntax.
     fn wrap_doc_comment(plain: &str, indent: &str) -> String {
         let mut result = String::from("/**\n");
         for line in plain.lines() {
@@ -100,6 +111,7 @@ impl LanguageSpec for TypeScriptLanguage {
         result
     }
 
+    /// Extracts the decorator range preceding a node.
     fn extract_decorator_range(node: TsNode<'_>) -> Option<Range<usize>> {
         extract_preceding_decorator_range(unwrap_export(node)?, "decorator")
     }

@@ -25,9 +25,13 @@ impl PythonLanguage {
 
 /// [`LanguageSpec`] implementation for Python.
 impl LanguageSpec for PythonLanguage {
+    /// File extensions for Python.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
+    /// AST node kinds that represent imports.
     const IMPORT_KINDS: &'static [&'static str] = &["import_statement", "import_from_statement"];
+    /// Language name identifier.
     const NAME: &'static str = "Python";
+    /// AST node kinds that can contain nested symbols.
     const RECURSABLE_KINDS: &'static [&'static str] = &["class_definition"];
 
     symbol_map! {
@@ -36,8 +40,10 @@ impl LanguageSpec for PythonLanguage {
         "type_alias_statement" => TypeAlias,
     }
 
+    /// Returns the tree-sitter grammar.
     fn grammar(_ext: &str) -> tree_sitter::Language { tree_sitter_python::LANGUAGE.into() }
 
+    /// Unwraps a decorated definition to expose the inner symbol.
     fn unwrap_wrapper(node: TsNode<'_>) -> Option<(TsNode<'_>, WrapperInfo)> {
         if node.kind() != "decorated_definition" {
             return None;
@@ -50,8 +56,10 @@ impl LanguageSpec for PythonLanguage {
         }))
     }
 
+    /// Builds a display signature for the symbol.
     fn build_signature(node: TsNode<'_>, _kind: SymbolKind) -> String { node.first_line().to_owned() }
 
+    /// Extracts non-standard symbols like assignments.
     fn extract_extra(node: TsNode<'_>, _remaining_depth: usize, parent_name: Option<&str>) -> Option<Fragment> {
         match node.kind() {
             Self::EXPRESSION_STATEMENT => node
@@ -63,8 +71,10 @@ impl LanguageSpec for PythonLanguage {
         }
     }
 
+    /// Extracts the docstring range for a symbol.
     fn extract_doc_range(node: TsNode<'_>) -> Option<Range<usize>> { extract_body_docstring_range(node) }
 
+    /// Extracts the module-level docstring range.
     fn extract_file_doc_range(root: TsNode<'_>) -> Option<Range<usize>> {
         let first_stmt = root.children().find(|child| child.kind() != Self::COMMENT)?;
         if first_stmt.kind() != Self::EXPRESSION_STATEMENT {
@@ -78,6 +88,7 @@ impl LanguageSpec for PythonLanguage {
         Some(first_stmt.byte_range())
     }
 
+    /// Strips doc comment prefix from a line.
     fn strip_doc_comment(raw: &str) -> String {
         if is_triple_quoted(raw) {
             let (content, _) = strip_triple_quotes(raw);
@@ -87,6 +98,7 @@ impl LanguageSpec for PythonLanguage {
         }
     }
 
+    /// Wraps text in doc comment syntax.
     fn wrap_doc_comment(plain: &str, indent: &str) -> String {
         let mut result = String::from("\"\"\"");
         result.push_str(plain);

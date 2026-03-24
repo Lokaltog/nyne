@@ -284,6 +284,7 @@ pub struct CodeDecomposer<L: LanguageSpec> {
 
 /// Constructor for `CodeDecomposer`, initializing the tree-sitter parser for the language.
 impl<L: LanguageSpec> CodeDecomposer<L> {
+    /// Creates a new decomposer for the given file extension.
     #[must_use]
     pub fn new(ext: &'static str) -> Self {
         let grammar = L::grammar(ext);
@@ -297,6 +298,7 @@ impl<L: LanguageSpec> CodeDecomposer<L> {
 
 /// [`Decomposer`] implementation that delegates to [`LanguageSpec`] methods.
 impl<L: LanguageSpec> Decomposer for CodeDecomposer<L> {
+    /// Decomposes source code into fragments using tree-sitter.
     fn decompose(&self, source: &str, max_depth: usize) -> (DecomposedFile, Option<tree_sitter::Tree>) {
         self.parser.decompose(
             source,
@@ -313,25 +315,35 @@ impl<L: LanguageSpec> Decomposer for CodeDecomposer<L> {
         )
     }
 
+    /// Validates source code syntax via tree-sitter.
     fn validate(&self, source: &str) -> Result<()> { self.parser.validate(source, L::NAME) }
 
+    /// Returns the language name.
     fn language_name(&self) -> &'static str { L::NAME }
 
+    /// Returns the file extension this decomposer handles.
     fn file_extension(&self) -> &'static str { self.ext }
 
+    /// Strips doc comment prefixes from raw text.
     fn strip_doc_comment(&self, raw: &str) -> String { L::strip_doc_comment(raw) }
 
+    /// Wraps plain text in language-specific doc comment syntax.
     fn wrap_doc_comment(&self, plain: &str, indent: &str) -> String { L::wrap_doc_comment(plain, indent) }
 
+    /// Wraps plain text in file-level doc comment syntax.
     fn wrap_file_doc_comment(&self, plain: &str, indent: &str) -> String { L::wrap_file_doc_comment(plain, indent) }
 
+    /// Cleans a doc comment for display.
     fn clean_doc_comment(&self, raw: &str) -> Option<String> { L::clean_doc_comment(raw) }
 
+    /// Applies filesystem name mapping to fragments.
     fn map_to_fs(&self, fragments: &mut [Fragment]) { apply_fs_mapping(fragments, L::NAMING_STRATEGY); }
 
+    /// Resolves naming conflicts between fragments.
     fn resolve_conflicts(&self, conflicts: &[ConflictSet]) -> Vec<Resolution> {
         resolve_conflicts(conflicts, L::CONFLICT_STRATEGY)
     }
 
+    /// Returns the splice mode for this language.
     fn splice_mode(&self) -> SpliceMode { L::SPLICE_MODE }
 }

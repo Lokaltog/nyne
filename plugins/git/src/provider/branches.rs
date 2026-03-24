@@ -29,6 +29,7 @@ pub(super) struct BranchRename {
 
 /// [`Renameable`] implementation for [`BranchRename`].
 impl Renameable for BranchRename {
+    /// Renames a git branch, preserving namespace prefix.
     fn rename(&self, ctx: &RenameContext<'_>) -> Result<()> {
         self.repo
             .rename_branch(&self.branch_name, &match self.branch_name.rsplit_once('/') {
@@ -49,6 +50,7 @@ pub(super) struct BranchRemove {
 
 /// [`Unlinkable`] implementation for [`BranchRemove`].
 impl Unlinkable for BranchRemove {
+    /// Deletes a git branch.
     fn unlink(&self, _ctx: &RequestContext<'_>) -> Result<()> { self.repo.delete_branch(&self.branch_name) }
 }
 
@@ -122,6 +124,7 @@ pub(super) struct BranchBlobContent {
 
 /// [`Readable`] implementation for [`BranchBlobContent`].
 impl Readable for BranchBlobContent {
+    /// Reads a blob from a branch at the given path.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.repo.blob_at_ref(&self.branch, &self.path) }
 }
 

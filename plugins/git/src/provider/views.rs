@@ -76,6 +76,7 @@ pub(super) struct SlicedBlameView {
 
 /// [`TemplateView`] implementation for [`SlicedBlameView`].
 impl TemplateView for SlicedBlameView {
+    /// Renders a line-range-sliced blame view using a template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let hunks = self.ctx.repo.blame(&self.ctx.rel_path)?;
         let sliced = self.spec.apply(&hunks);
@@ -91,6 +92,7 @@ pub(super) struct SlicedLogView {
 
 /// [`TemplateView`] implementation for [`SlicedLogView`].
 impl TemplateView for SlicedLogView {
+    /// Renders a line-range-sliced log view using a template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let entries = self.ctx.repo.file_history(&self.ctx.rel_path, super::log::LOG_LIMIT)?;
         let sliced = self.spec.apply(&entries);

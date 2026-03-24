@@ -14,6 +14,7 @@ pub(super) struct GitStatusView {
 
 /// [`TemplateView`] implementation for [`GitStatusView`].
 impl TemplateView for GitStatusView {
+    /// Renders the working tree status using a template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let data = self.repo.status()?;
         Ok(engine.render_bytes(template, &minijinja::context!(data)))

@@ -70,6 +70,7 @@ impl GitRepo {
     /// absolute path to the git directory (e.g., `/project/.git/`).
     pub(crate) fn git_dir_path(&self) -> PathBuf { self.lock().path().to_owned() }
 
+    /// Acquires a lock on the underlying git2 repository.
     pub(crate) fn lock(&self) -> parking_lot::MutexGuard<'_, git2::Repository> { self.repo.lock() }
 
     /// Retrieve file content at HEAD from the object store.

@@ -33,13 +33,16 @@ pub struct FragmentView {
 
 /// Display implementation for `FragmentView`, showing the fragment name.
 impl fmt::Display for FragmentView {
+    /// Displays the fragment name.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.frag.name) }
 }
 
 /// Minijinja [`Object`] implementation exposing fragment properties to templates.
 impl Object for FragmentView {
+    /// Returns the string representation for minijinja.
     fn repr(self: &Arc<Self>) -> ObjectRepr { ObjectRepr::Map }
 
+    /// Looks up a template variable by key.
     fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
         match key.as_str()? {
             "name" => Some(Value::from(self.frag.name.as_str())),
@@ -68,6 +71,7 @@ impl Object for FragmentView {
         }
     }
 
+    /// Enumerates available template variable keys.
     fn enumerate(self: &Arc<Self>) -> Enumerator {
         Enumerator::Str(&[
             "name",
@@ -84,6 +88,7 @@ impl Object for FragmentView {
         ])
     }
 
+    /// Dispatches template method calls.
     fn call_method(
         self: &Arc<Self>,
         _state: &minijinja::State<'_, '_>,
@@ -114,6 +119,7 @@ impl FragmentView {
         }
     }
 
+    /// Returns the compact visibility string.
     fn visibility(&self) -> &str {
         match &self.frag.visibility {
             Some(vis) => compact_visibility(vis),

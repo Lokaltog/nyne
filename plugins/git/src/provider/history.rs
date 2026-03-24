@@ -62,6 +62,7 @@ pub struct HistoryVersionContent {
 
 /// [`Readable`] implementation for [`HistoryVersionContent`].
 impl Readable for HistoryVersionContent {
+    /// Reads the file content at a specific historical commit.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.repo.blob_at(&self.rel_path, self.oid) }
 }
 

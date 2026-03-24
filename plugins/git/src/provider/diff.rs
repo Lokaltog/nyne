@@ -28,6 +28,7 @@ pub(super) struct DiffContent {
 
 /// [`Readable`] implementation for [`DiffContent`].
 impl Readable for DiffContent {
+    /// Reads a unified diff against HEAD or a named ref.
     fn read(&self, ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let text = match &self.target {
             DiffTarget::Workdir { source_file: real_file } => {

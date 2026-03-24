@@ -18,8 +18,10 @@ pub struct GitPlugin;
 
 /// [`Plugin`] implementation for [`GitPlugin`].
 impl Plugin for GitPlugin {
+    /// Returns the plugin identifier.
     fn id(&self) -> &'static str { "git" }
 
+    /// Opens the git repo and inserts shared state into the activation context.
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
         match GitRepo::open(ctx.overlay_root()) {
             Ok(repo) => {
@@ -37,6 +39,7 @@ impl Plugin for GitPlugin {
         Ok(())
     }
 
+    /// Creates git and git-companion providers if a repo is available.
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
         if ctx.get::<Arc<GitRepo>>().is_none() {
             return Ok(vec![]);
