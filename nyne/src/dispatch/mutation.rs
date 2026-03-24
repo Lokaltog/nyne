@@ -320,7 +320,7 @@ impl Router {
     /// Uses single-claim semantics: all providers are queried, and at
     /// most one may return `Handled`. If multiple providers claim the
     /// same mutation, the operation fails (ambiguous). If none claim it,
-    /// the router falls back to the corresponding [`RealFs`] method.
+    /// the router falls back to [`MutationOp::execute`].
     ///
     /// Either way, the actual filesystem change triggers inotify events
     /// that flow through the watcher for cache invalidation (SSOT).
@@ -353,13 +353,7 @@ impl Router {
 
         // No provider claimed — fall back to direct filesystem operation.
         if handlers.is_empty() {
-            match op {
-                MutationOp::Rename { from, to } => self.real_fs.rename(from, to)?,
-                MutationOp::Unlink { path } => self.real_fs.unlink(path)?,
-                MutationOp::Rmdir { path } => self.real_fs.rmdir(path)?,
-                MutationOp::Create { path } => self.real_fs.create_file(path)?,
-                MutationOp::Mkdir { path } => self.real_fs.mkdir(path)?,
-            }
+            op.execute(self.real_fs.as_ref())?;
         }
         Ok(())
     }

@@ -35,6 +35,20 @@ pub enum MutationOp<'a> {
     /// Directory creation (FUSE `mkdir`).
     Mkdir { path: &'a VfsPath },
 }
+impl MutationOp<'_> {
+    /// Execute this mutation against a real filesystem.
+    ///
+    /// Bridges each variant to the corresponding [`RealFs`] method.
+    pub(crate) fn execute(&self, fs: &dyn RealFs) -> Result<()> {
+        match self {
+            Self::Rename { from, to } => fs.rename(from, to),
+            Self::Unlink { path } => fs.unlink(path),
+            Self::Rmdir { path } => fs.rmdir(path),
+            Self::Create { path } => fs.create_file(path),
+            Self::Mkdir { path } => fs.mkdir(path),
+        }
+    }
+}
 
 /// Unique identifier for a provider.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
