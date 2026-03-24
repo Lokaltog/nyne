@@ -79,12 +79,12 @@ impl Lifecycle for CommitMtime {
 }
 
 /// Template handles for git-backed virtual files.
-pub struct GitHandles {
-    pub blame: TemplateHandle,
-    pub log: TemplateHandle,
-    pub contributors: TemplateHandle,
-    pub status: TemplateHandle,
-    pub notes: TemplateHandle,
+pub(crate) struct GitHandles {
+    pub(crate) blame: TemplateHandle,
+    pub(crate) log: TemplateHandle,
+    pub(crate) contributors: TemplateHandle,
+    pub(crate) status: TemplateHandle,
+    pub(crate) notes: TemplateHandle,
 }
 
 /// Git provider for file-level blame, history, diff, log, contributors, and
