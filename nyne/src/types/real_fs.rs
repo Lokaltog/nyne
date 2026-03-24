@@ -85,6 +85,7 @@ pub struct OsFs {
 
 /// Construction and path resolution helpers for the OS filesystem backend.
 impl OsFs {
+    /// Creates a new OS filesystem rooted at the given directory.
     pub const fn new(source_dir: PathBuf) -> Self { Self { source_dir } }
 
     /// Resolve a `VfsPath` to an absolute path on the real filesystem.
@@ -106,16 +107,22 @@ impl OsFs {
 
 /// [`RealFs`] implementation backed by `std::fs` operations.
 impl RealFs for OsFs {
+    /// Returns the root directory this filesystem operates on.
     fn source_dir(&self) -> &Path { &self.source_dir }
 
+    /// Reads the entire contents of a file into a byte vector.
     fn read(&self, path: &VfsPath) -> Result<Vec<u8>> { self.fs_op(path, "read", |p| fs::read(p)) }
 
+    /// Writes data to a file, creating or overwriting it.
     fn write(&self, path: &VfsPath, data: &[u8]) -> Result<()> { self.fs_op(path, "write", |p| fs::write(p, data)) }
 
+    /// Returns whether the path exists on disk.
     fn exists(&self, path: &VfsPath) -> bool { self.resolve(path).exists() }
 
+    /// Returns whether the path is a directory.
     fn is_dir(&self, path: &VfsPath) -> bool { self.resolve(path).is_dir() }
 
+    /// Lists directory entries with their file types.
     fn read_dir(&self, path: &VfsPath) -> Result<Vec<DirEntry>> {
         let real_path = self.resolve(path);
         let mut entries = Vec::new();
@@ -131,6 +138,7 @@ impl RealFs for OsFs {
         Ok(entries)
     }
 
+    /// Returns file metadata (size, mtime, type, permissions) without following symlinks.
     fn metadata(&self, path: &VfsPath) -> Result<FileMeta> {
         let real_path = self.resolve(path);
         let meta =
@@ -147,8 +155,10 @@ impl RealFs for OsFs {
         })
     }
 
+    /// Reads the target of a symlink.
     fn symlink_target(&self, path: &VfsPath) -> Result<PathBuf> { self.fs_op(path, "readlink", |p| fs::read_link(p)) }
 
+    /// Renames a file or directory from one path to another.
     fn rename(&self, from: &VfsPath, to: &VfsPath) -> Result<()> {
         let from_path = self.resolve(from);
         let to_path = self.resolve(to);
@@ -156,14 +166,19 @@ impl RealFs for OsFs {
             .wrap_err_with(|| format!("failed to rename {} to {}", from_path.display(), to_path.display()))
     }
 
+    /// Removes a file.
     fn unlink(&self, path: &VfsPath) -> Result<()> { self.fs_op(path, "unlink", |p| fs::remove_file(p)) }
 
+    /// Removes an empty directory.
     fn rmdir(&self, path: &VfsPath) -> Result<()> { self.fs_op(path, "rmdir", |p| fs::remove_dir(p)) }
 
+    /// Creates an empty file, truncating if it already exists.
     fn create_file(&self, path: &VfsPath) -> Result<()> { self.fs_op(path, "create", |p| File::create(p).map(drop)) }
 
+    /// Creates a directory and all missing parents.
     fn mkdir(&self, path: &VfsPath) -> Result<()> { self.fs_op(path, "mkdir", |p| fs::create_dir_all(p)) }
 
+    /// Opens a file for reading, returning `None` if it does not exist.
     fn open_raw(&self, path: &VfsPath) -> Option<File> {
         let real_path = self.resolve(path);
         File::open(&real_path).ok()

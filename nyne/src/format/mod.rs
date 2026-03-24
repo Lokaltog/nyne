@@ -3,6 +3,7 @@
 /// Format a git timestamp (seconds since epoch) as `YYYY-MM-DD`.
 use jiff::tz::TimeZone;
 
+/// Formats a Unix epoch timestamp as a `YYYY-MM-DD` date string in UTC.
 pub fn format_git_date(epoch_secs: i64) -> String {
     jiff::Timestamp::from_second(epoch_secs).map_or_else(
         |_| "-".to_owned(),
@@ -49,5 +50,6 @@ pub fn unified_diff(old: &str, new: &str, path: &str) -> String {
         .to_string()
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

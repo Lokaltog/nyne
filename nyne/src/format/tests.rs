@@ -2,6 +2,7 @@ use rstest::rstest;
 
 use super::*;
 
+/// Verifies kebab-case conversion with truncation and edge cases.
 #[rstest]
 #[case::basic("Fix the bug", 50, "fix-the-bug")]
 #[case::special_chars("feat(scope): add thing!", 50, "feat-scope-add-thing")]
@@ -12,6 +13,7 @@ fn to_kebab_conversion(#[case] input: &str, #[case] max_len: usize, #[case] expe
     assert_eq!(to_kebab(input, max_len), expected);
 }
 
+/// Formats a known timestamp and verifies the expected date string.
 #[test]
 fn format_git_date_valid() {
     // 2024-01-15 in UTC
@@ -19,11 +21,13 @@ fn format_git_date_valid() {
     assert_eq!(date, "2024-01-15");
 }
 
+/// Formats Unix epoch zero as `1970-01-01`.
 #[test]
 fn format_git_date_epoch() {
     assert_eq!(format_git_date(0), "1970-01-01");
 }
 
+/// Unified diff correctly shows a replaced line.
 #[test]
 fn unified_diff_replacement() {
     let old = "line one\nline two\nline three\n";
@@ -31,6 +35,7 @@ fn unified_diff_replacement() {
     insta::assert_snapshot!(unified_diff(old, new, "src/foo.rs"));
 }
 
+/// Unified diff correctly shows an inserted line.
 #[test]
 fn unified_diff_insertion() {
     let old = "first\nsecond\n";
@@ -38,6 +43,7 @@ fn unified_diff_insertion() {
     insta::assert_snapshot!(unified_diff(old, new, "src/foo.rs"));
 }
 
+/// Unified diff correctly shows a deleted line.
 #[test]
 fn unified_diff_deletion() {
     let old = "keep\nremove\ntrailing\n";
@@ -45,6 +51,7 @@ fn unified_diff_deletion() {
     insta::assert_snapshot!(unified_diff(old, new, "src/foo.rs"));
 }
 
+/// Unified diff produces multiple hunks for non-adjacent changes.
 #[test]
 fn unified_diff_multi_hunk() {
     let old = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n";
@@ -52,6 +59,7 @@ fn unified_diff_multi_hunk() {
     insta::assert_snapshot!(unified_diff(old, new, "src/foo.rs"));
 }
 
+/// Identical inputs produce an empty diff.
 #[test]
 fn unified_diff_identical_returns_empty() {
     let content = "unchanged\n";

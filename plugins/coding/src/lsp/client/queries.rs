@@ -86,6 +86,7 @@ macro_rules! hierarchy_query {
     };
 }
 
+/// LSP query methods (goto, hover, diagnostics, rename, code actions).
 impl LspClient {
     goto_method! {
         /// Find the definition of the symbol at the given position.

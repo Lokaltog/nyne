@@ -164,5 +164,6 @@ impl SessionRegistry {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

@@ -9,10 +9,13 @@ struct StringConcatLoop;
 
 /// [`AnalysisRule`] implementation for `StringConcatLoop`.
 impl AnalysisRule for StringConcatLoop {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "string-concat-loop" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::LOOP }
 
+    /// Checks the given node for string concatenation in loop violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let body = node.raw().child_by_field_name("body")?;
 

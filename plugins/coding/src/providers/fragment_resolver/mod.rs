@@ -52,5 +52,6 @@ impl FragmentResolver {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

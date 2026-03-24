@@ -22,6 +22,7 @@ pub struct CacheKey<'a> {
 
 /// Display a cache key as `path:method:line:param`.
 impl fmt::Display for CacheKey<'_> {
+    /// Formats the value for display.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -134,5 +135,6 @@ impl LspCache {
     pub(crate) fn is_empty(&self) -> bool { self.len() == 0 }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

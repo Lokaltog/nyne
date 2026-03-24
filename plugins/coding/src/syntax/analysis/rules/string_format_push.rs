@@ -9,10 +9,13 @@ struct StringFormatPush;
 
 /// [`AnalysisRule`] implementation for `StringFormatPush`.
 impl AnalysisRule for StringFormatPush {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "string-format-push" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::MACRO_INVOCATION }
 
+    /// Checks the given node for string formatting before push violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();

@@ -12,10 +12,13 @@ struct RepeatedFieldAccess;
 
 /// [`AnalysisRule`] implementation for `RepeatedFieldAccess`.
 impl AnalysisRule for RepeatedFieldAccess {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "repeated-field-access" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::FUNCTION }
 
+    /// Checks the given node for repeated field access violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let body = node.raw().child_by_field_name("body")?;
         let source = node.source();

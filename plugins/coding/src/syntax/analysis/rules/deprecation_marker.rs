@@ -54,10 +54,13 @@ struct DeprecationMarker;
 
 /// [`AnalysisRule`] implementation for `DeprecationMarker`.
 impl AnalysisRule for DeprecationMarker {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "deprecation-marker" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::COMMENT }
 
+    /// Checks the given node for deprecation marker violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let text = node.text().to_ascii_lowercase();
 

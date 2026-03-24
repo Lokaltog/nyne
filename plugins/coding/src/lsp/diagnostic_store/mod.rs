@@ -119,5 +119,6 @@ impl DiagnosticStore {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

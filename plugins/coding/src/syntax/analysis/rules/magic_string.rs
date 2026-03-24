@@ -24,10 +24,13 @@ struct MagicString;
 
 /// [`AnalysisRule`] implementation for `MagicString`.
 impl AnalysisRule for MagicString {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "magic-string" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::STRING }
 
+    /// Checks the given node for magic string violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let text = node.text();
 

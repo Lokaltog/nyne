@@ -86,5 +86,6 @@ impl SliceSpec {
     pub fn apply<'a, T>(&self, items: &'a [T]) -> &'a [T] { items.get(self.index_range(items.len())).unwrap_or(&[]) }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

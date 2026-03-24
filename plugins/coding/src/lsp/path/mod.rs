@@ -23,7 +23,9 @@ pub struct LspPathResolver {
     overlay_root: PathBuf,
 }
 
+/// Path translation between FUSE mount paths and overlay storage paths.
 impl LspPathResolver {
+    /// Creates a new path resolver with the given FUSE and overlay roots.
     pub(crate) const fn new(fuse_root: PathBuf, overlay_root: PathBuf) -> Self {
         Self {
             fuse_root,
@@ -74,5 +76,6 @@ impl LspPathResolver {
     pub(crate) fn overlay_root(&self) -> &Path { &self.overlay_root }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

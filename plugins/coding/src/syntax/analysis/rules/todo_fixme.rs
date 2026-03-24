@@ -11,10 +11,13 @@ struct TodoFixme;
 
 /// [`AnalysisRule`] implementation for `TodoFixme`.
 impl AnalysisRule for TodoFixme {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "todo-fixme" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::COMMENT }
 
+    /// Checks the given node for TODO/FIXME comment violations.
     fn check(&self, node: TsNode<'_>, context: &AnalysisContext<'_>) -> Option<Hint> {
         let text = node.text();
 

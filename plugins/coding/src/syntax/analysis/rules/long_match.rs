@@ -12,10 +12,13 @@ struct LongMatch;
 
 /// [`AnalysisRule`] implementation for `LongMatch`.
 impl AnalysisRule for LongMatch {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "long-match" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::MATCH }
 
+    /// Checks the given node for overly long match expression violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
 

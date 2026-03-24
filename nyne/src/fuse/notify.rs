@@ -66,6 +66,7 @@ pub struct AsyncNotifier {
 impl AsyncNotifier {
     /// Wrap a synchronous notifier in an async channel + drain thread.
     #[allow(clippy::expect_used)] // thread spawn failure = system resource exhaustion
+    /// Creates a new async notifier that dispatches invalidations on a background thread.
     pub fn new(inner: impl KernelNotifier + 'static) -> Self {
         let (tx, rx) = mpsc::channel::<NotifyMsg>();
 
@@ -90,6 +91,7 @@ impl KernelNotifier for AsyncNotifier {
     /// Enqueues an inode invalidation message.
     fn inval_inode(&self, inode: u64) { let _ = self.tx.send(NotifyMsg::InvalInode { inode }); }
 
+    /// Sends an entry invalidation message to the background notification thread.
     fn inval_entry(&self, parent_inode: u64, name: &str) {
         let _ = self.tx.send(NotifyMsg::InvalEntry {
             parent_inode,

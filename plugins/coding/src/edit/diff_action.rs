@@ -79,6 +79,7 @@ impl<T: DiffAction + Clone + 'static> DiffActionNode<T> {
 
 /// `Readable` implementation that renders computed edits as a unified diff preview.
 impl<T: DiffAction> Readable for DiffActionNode<T> {
+    /// Computes and renders the diff as a unified patch with a header.
     fn read(&self, ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let edits = self.action.compute_edits(ctx)?;
 
@@ -110,6 +111,7 @@ impl<T: DiffAction> Readable for DiffActionNode<T> {
 
 /// `Unlinkable` implementation that applies computed edits to disk on delete.
 impl<T: DiffAction> Unlinkable for DiffActionNode<T> {
+    /// Validates and applies the computed edits to source files.
     fn unlink(&self, ctx: &RequestContext<'_>) -> Result<()> {
         let edits = self.action.compute_edits(ctx)?;
 

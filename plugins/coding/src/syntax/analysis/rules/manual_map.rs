@@ -9,10 +9,13 @@ struct ManualMap;
 
 /// [`AnalysisRule`] implementation for `ManualMap`.
 impl AnalysisRule for ManualMap {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "manual-map" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::MATCH }
 
+    /// Checks the given node for manual map pattern violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();

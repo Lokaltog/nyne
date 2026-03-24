@@ -249,6 +249,7 @@ fn source_rel_path(input: &HookInput, tool_name: &str, root: &str) -> Option<Str
     src.strip_prefix(root).map(str::to_owned)
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;
 

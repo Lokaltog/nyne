@@ -169,6 +169,7 @@ impl ChildGuard {
 
 /// Kills and reaps the child process if the guard was not defused.
 impl Drop for ChildGuard {
+    /// Cleans up resources.
     fn drop(&mut self) {
         if let Some(pid) = self.0.take() {
             warn!(pid = pid.as_raw_pid(), "child guard triggered (parent panic?)");

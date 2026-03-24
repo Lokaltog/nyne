@@ -9,10 +9,13 @@ struct IndexInLoop;
 
 /// [`AnalysisRule`] implementation for `IndexInLoop`.
 impl AnalysisRule for IndexInLoop {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "index-in-loop" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::LOOP }
 
+    /// Checks the given node for array indexing in loop violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();

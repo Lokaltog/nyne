@@ -12,10 +12,13 @@ struct TooManyMethods;
 
 /// [`AnalysisRule`] implementation for `TooManyMethods`.
 impl AnalysisRule for TooManyMethods {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "too-many-methods" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IMPL_BLOCK }
 
+    /// Checks the given node for too many methods violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
 

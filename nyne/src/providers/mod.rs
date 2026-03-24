@@ -8,6 +8,7 @@ use crate::types::path_conventions::{CompanionSplit, split_companion_path};
 pub use crate::types::path_conventions::{companion_name, strip_companion_suffix};
 use crate::types::real_fs::RealFs;
 use crate::types::vfs_path::VfsPath;
+/// Well-known VFS node names used across providers.
 pub mod names;
 use names::SUBDIR_SYMBOLS;
 
@@ -149,14 +150,21 @@ pub fn dispatch_lookup<P: Provider>(
     companion_lookup(companion_routes, provider, ctx, &split, name)
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;
 
+/// Common imports re-exported for provider implementations.
 mod prelude;
+/// Shared utilities for core providers.
 mod util;
 
+/// Plugin registration for built-in core providers.
 mod core_plugin;
 
+/// Companion directory provider for `@/` namespaces.
 mod companion;
+/// Directory overview and aggregation provider.
 mod directory;
+/// Root `@/` namespace provider (global config, git, edit staging).
 mod nyne;

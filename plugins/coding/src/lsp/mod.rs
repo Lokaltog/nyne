@@ -78,6 +78,7 @@ pub struct LspRegistry {
     language_ids: HashMap<String, &'static str>,
 }
 
+/// Registry of LSP language definitions and server configurations.
 impl LspRegistry {
     /// Build the registry from all link-time registered LSP language definitions.
     pub(crate) fn build() -> Self {

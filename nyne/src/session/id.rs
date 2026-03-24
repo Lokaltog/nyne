@@ -78,16 +78,19 @@ impl SessionId {
         Self::new(sanitized)
     }
 
+    /// Returns the session ID as a string slice.
     pub(crate) fn as_str(&self) -> &str { &self.0 }
 }
 
 /// Displays the session ID as its inner string.
 impl fmt::Display for SessionId {
+    /// Formats the value for display.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.0) }
 }
 
 /// Sanitize a string into a valid session ID component.
 fn sanitize(s: &str) -> String { to_kebab_raw(s) }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

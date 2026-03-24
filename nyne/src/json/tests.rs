@@ -3,6 +3,7 @@ use serde_json::{Value, json};
 
 use super::deep_merge;
 
+/// Verifies recursive JSON object merging across various value types.
 #[rstest]
 #[case::scalars_replaced(
     json!({"a": 1}),

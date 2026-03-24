@@ -19,10 +19,13 @@ struct AsciiSeparator;
 
 /// [`AnalysisRule`] implementation for `AsciiSeparator`.
 impl AnalysisRule for AsciiSeparator {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "ascii-separator" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::COMMENT }
 
+    /// Checks the given node for ASCII art separator violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let text = node.text();
 

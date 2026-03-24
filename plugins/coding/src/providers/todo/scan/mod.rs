@@ -283,5 +283,6 @@ fn strip_tag_prefix(text: &str, tag: &str) -> Option<String> {
     super::parse_tag_suffix(&text[tag.len()..]).map(str::to_owned)
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

@@ -6,9 +6,12 @@ struct PythonLsp;
 
 /// LSP spec for Python: basedpyright with pyproject.toml detection.
 impl LspSpec for PythonLsp {
+    /// File extensions handled by the Python LSP.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
+    /// LSP language identifier for Python.
     const LANGUAGE_ID: &'static str = "python";
 
+    /// Returns the basedpyright server definition for Python projects.
     fn servers() -> Vec<LspServerDef> {
         vec![
             LspServerDef::new("basedpyright")

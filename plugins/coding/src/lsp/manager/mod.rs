@@ -25,6 +25,7 @@ struct OpenDocument {
     version: i32,
 }
 
+/// Version tracking and state for an LSP-opened document.
 impl OpenDocument {
     /// Initial version for a newly opened document. This is the single source
     /// of truth — `LspClient::open_document` receives this value.
@@ -68,6 +69,7 @@ pub struct LspManager {
     path_resolver: super::path::LspPathResolver,
 }
 
+/// Manages LSP client lifecycle, document tracking, and query routing.
 impl LspManager {
     /// Create a new manager with the given registry, config, and process spawner.
     pub(crate) fn new(
@@ -485,5 +487,6 @@ impl LspManager {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

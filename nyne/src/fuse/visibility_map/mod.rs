@@ -12,6 +12,7 @@ use tracing::debug;
 
 use crate::types::ProcessVisibility;
 
+/// Cgroup-based process tracking for visibility rules.
 mod cgroup;
 use cgroup::CgroupTracker;
 
@@ -281,5 +282,6 @@ fn truncate_comm(name: String) -> String {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

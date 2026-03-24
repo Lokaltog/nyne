@@ -57,6 +57,7 @@ impl Router {
     /// cache, and bumps the source file's generation so that sibling
     /// companion entries are lazily detected as stale on next access.
     #[allow(clippy::too_many_arguments)] // internal dispatch: inode + node + provider + write data + context
+    /// Writes content to a node, invalidating caches and bumping file generations.
     pub(crate) fn write_content(
         &self,
         inode: u64,

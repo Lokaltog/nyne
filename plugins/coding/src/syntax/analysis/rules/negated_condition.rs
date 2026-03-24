@@ -9,10 +9,13 @@ struct NegatedCondition;
 
 /// [`AnalysisRule`] implementation for `NegatedCondition`.
 impl AnalysisRule for NegatedCondition {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "negated-condition" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IF }
 
+    /// Checks the given node for negated condition violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
 

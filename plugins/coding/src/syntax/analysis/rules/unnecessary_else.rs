@@ -9,10 +9,13 @@ struct UnnecessaryElse;
 
 /// [`AnalysisRule`] implementation for `UnnecessaryElse`.
 impl AnalysisRule for UnnecessaryElse {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "unnecessary-else" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IF }
 
+    /// Checks the given node for unnecessary else block violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         // Must have an else clause/alternative.
         let raw = node.raw();

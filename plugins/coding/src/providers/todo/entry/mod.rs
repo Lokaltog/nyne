@@ -60,5 +60,6 @@ fn slugify_content(text: &str) -> String {
     if slug.is_empty() { "unnamed".to_owned() } else { slug }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

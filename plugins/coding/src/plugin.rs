@@ -25,8 +25,10 @@ pub struct CodingPlugin;
 
 /// Plugin trait implementation for the coding plugin.
 impl Plugin for CodingPlugin {
+    /// Returns the plugin identifier.
     fn id(&self) -> &'static str { "coding" }
 
+    /// Registers syntax, LSP, analysis, and decomposition services into the context.
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
         let syntax = SyntaxRegistry::global();
         ctx.insert(Arc::clone(&syntax));
@@ -79,6 +81,7 @@ impl Plugin for CodingPlugin {
         Ok(())
     }
 
+    /// Returns Claude hook script entries based on plugin configuration.
     fn scripts(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<ScriptEntry>> {
         let coding_config = ctx
             .get::<CodingConfig>()
@@ -86,11 +89,13 @@ impl Plugin for CodingPlugin {
         Ok(claude::script_entries(coding_config))
     }
 
+    /// Returns the fully resolved coding plugin configuration as TOML.
     fn resolved_config(&self, config: &NyneConfig) -> Option<toml::Value> {
         let resolved = CodingConfig::from_plugin_table(&config.plugin);
         toml::Value::try_from(&resolved).ok()
     }
 
+    /// Creates all coding plugin providers (syntax, batch edit, claude, todo, search).
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
         use crate::providers::batch::BatchEditProvider;
         use crate::providers::claude::ClaudeProvider;

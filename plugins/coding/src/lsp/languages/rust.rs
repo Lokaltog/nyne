@@ -6,9 +6,12 @@ struct RustLsp;
 
 /// LSP spec for Rust: rust-analyzer with Cargo.toml detection.
 impl LspSpec for RustLsp {
+    /// File extensions handled by the Rust LSP.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
+    /// LSP language identifier for Rust.
     const LANGUAGE_ID: &'static str = "rust";
 
+    /// Returns the rust-analyzer server definition for Cargo projects.
     fn servers() -> Vec<LspServerDef> {
         vec![LspServerDef::new("rust-analyzer").detect(|root| root.join("Cargo.toml").exists())]
     }

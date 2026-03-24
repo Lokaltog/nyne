@@ -7,18 +7,29 @@ struct FennelLanguage;
 
 /// [`LanguageSpec`] implementation for Fennel.
 impl LanguageSpec for FennelLanguage {
+    /// Conflict resolution strategy for Fennel symbols.
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
+    /// Tree-sitter node kind for Fennel doc comments.
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
+    /// Comment prefix patterns for Fennel doc comments.
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &[";"];
+    /// File extensions for Fennel.
     const EXTENSIONS: &'static [&'static str] = &["fnl"];
+    /// Tree-sitter node kinds for Fennel import declarations.
     const IMPORT_KINDS: &'static [&'static str] = &[];
+    /// Language name identifier.
     const NAME: &'static str = "Fennel";
+    /// Naming strategy for Fennel symbol deduplication.
     const NAMING_STRATEGY: NamingStrategy = NamingStrategy::Identity;
+    /// Tree-sitter node kinds that support recursive decomposition in Fennel.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
+    /// Splice mode for Fennel source editing.
     const SPLICE_MODE: SpliceMode = SpliceMode::Byte;
 
+    /// Returns the tree-sitter grammar for Fennel.
     fn grammar(_ext: &str) -> tree_sitter::Language { tree_sitter_fennel::LANGUAGE.into() }
 
+    /// Extracts Fennel-specific fragments from the syntax tree.
     fn extract_custom(root: TsNode<'_>, _max_depth: usize) -> Option<Vec<Fragment>> {
         let source = root.source_str();
         let mut fragments = Vec::new();
@@ -26,8 +37,10 @@ impl LanguageSpec for FennelLanguage {
         Some(fragments)
     }
 
+    /// Strips doc comment markers from Fennel source.
     fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &[";;;", ";;", ";"]) }
 
+    /// Wraps text in Fennel doc comment syntax.
     fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, ";;", ";; ") }
 }
 

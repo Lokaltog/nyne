@@ -31,6 +31,7 @@ pub struct TemplateEngine {
 
 /// Default implementation for `TemplateEngine`.
 impl Default for TemplateEngine {
+    /// Returns the default value.
     fn default() -> Self { Self::new() }
 }
 
@@ -155,6 +156,7 @@ impl TemplateContent {
 
 /// Delegates reads to the inner [`TemplateView`] for on-demand rendering.
 impl Readable for TemplateContent {
+    /// Renders the template with the stored view and returns the result as bytes.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.view.render(&self.engine, self.template) }
 }
 
@@ -210,5 +212,6 @@ pub use self::handle::{HandleBuilder, TemplateHandle};
 use crate::dispatch::context::RequestContext;
 use crate::node::Readable;
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

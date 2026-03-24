@@ -39,6 +39,7 @@ macro_rules! cached_pos_query {
     };
 }
 
+/// Cached LSP queries scoped to a single file.
 impl<'a> FileQuery<'a> {
     cached_pos_query! {
         /// Find all references to the symbol at the given position.

@@ -9,10 +9,13 @@ struct BooleanParameter;
 
 /// [`AnalysisRule`] implementation for `BooleanParameter`.
 impl AnalysisRule for BooleanParameter {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "boolean-parameter" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::FUNCTION }
 
+    /// Checks the given node for boolean parameter violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();

@@ -32,6 +32,7 @@ pub(super) struct CompanionProvider {
 
 /// Construction and companion node building.
 impl CompanionProvider {
+    /// Creates a new companion provider with its route tree.
     pub(super) fn new(_ctx: Arc<ActivationContext>) -> Self {
         let routes = routes!(Self, {
             children(children_companions),
@@ -73,6 +74,7 @@ impl CompanionProvider {
         Ok(Some(nodes))
     }
 
+    /// Looks up a companion directory for a real file or directory entry.
     #[expect(clippy::unused_self, reason = "route handler called as instance method")]
     fn lookup_companion(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         let Some(real_name) = super::strip_companion_suffix(name) else {

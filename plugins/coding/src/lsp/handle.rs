@@ -30,6 +30,7 @@ pub struct LspHandle {
     ext: String,
 }
 
+/// Per-file LSP handle for querying language server features.
 impl LspHandle {
     /// Create a handle for the given source file, or `None` if no LSP server
     /// is available for this file's extension.
@@ -102,6 +103,7 @@ pub struct SymbolQuery {
     position: Position,
 }
 
+/// Per-symbol LSP query bound to a specific position.
 impl SymbolQuery {
     /// Acquire a `FileQuery` for cached LSP operations.
     pub(crate) fn file_query(&self) -> Option<FileQuery<'_>> { self.handle.file_query() }

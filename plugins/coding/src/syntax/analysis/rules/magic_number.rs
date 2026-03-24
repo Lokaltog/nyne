@@ -32,10 +32,13 @@ struct MagicNumber;
 
 /// [`AnalysisRule`] implementation for `MagicNumber`.
 impl AnalysisRule for MagicNumber {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "magic-number" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { NUMBER_KINDS }
 
+    /// Checks the given node for magic number violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let text = node.text();
 

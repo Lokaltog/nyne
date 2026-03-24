@@ -50,5 +50,6 @@ pub(crate) const fn severity_label(s: Option<DiagnosticSeverity>) -> &'static st
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

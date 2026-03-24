@@ -20,10 +20,13 @@ struct LongParameterList;
 
 /// [`AnalysisRule`] implementation for `LongParameterList`.
 impl AnalysisRule for LongParameterList {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "long-parameter-list" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { PARAM_LIST_KINDS }
 
+    /// Checks the given node for long parameter list violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         // Count named children that are actual parameters (skip delimiters like commas, parens).
         let param_count = node

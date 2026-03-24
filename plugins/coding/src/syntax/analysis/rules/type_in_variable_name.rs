@@ -17,10 +17,13 @@ struct TypeInVariableName;
 
 /// [`AnalysisRule`] implementation for `TypeInVariableName`.
 impl AnalysisRule for TypeInVariableName {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "type-in-variable-name" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::BINDING }
 
+    /// Checks the given node for type name in variable name violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();

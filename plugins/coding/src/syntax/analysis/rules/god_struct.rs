@@ -12,10 +12,13 @@ struct GodStruct;
 
 /// [`AnalysisRule`] implementation for `GodStruct`.
 impl AnalysisRule for GodStruct {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "god-struct" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::STRUCT_DEF }
 
+    /// Checks the given node for god struct violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let count = count_fields(raw);

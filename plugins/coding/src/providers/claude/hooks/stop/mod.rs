@@ -178,5 +178,6 @@ fn is_ignored_extension(path: &str, ignore_extensions: &[String]) -> bool {
         .any(|ignored| ignored.eq_ignore_ascii_case(ext))
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

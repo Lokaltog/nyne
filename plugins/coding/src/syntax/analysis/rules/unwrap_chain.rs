@@ -12,11 +12,13 @@ struct UnwrapChain;
 
 /// [`AnalysisRule`] implementation for `UnwrapChain`.
 impl AnalysisRule for UnwrapChain {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "unwrap-chain" }
 
     /// Trigger on expression statements — we scan each for chained unwraps.
     fn node_kinds(&self) -> &'static [&'static str] { &[kinds::EXPRESSION_STATEMENT, "let_declaration"] }
 
+    /// Checks the given node for unwrap chain violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();

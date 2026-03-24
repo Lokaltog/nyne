@@ -9,10 +9,13 @@ struct EmptyCatch;
 
 /// [`AnalysisRule`] implementation for `EmptyCatch`.
 impl AnalysisRule for EmptyCatch {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "empty-catch" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::CATCH }
 
+    /// Checks the given node for empty catch block violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
 

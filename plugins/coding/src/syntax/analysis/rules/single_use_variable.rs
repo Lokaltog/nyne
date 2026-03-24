@@ -9,10 +9,13 @@ struct SingleUseVariable;
 
 /// [`AnalysisRule`] implementation for `SingleUseVariable`.
 impl AnalysisRule for SingleUseVariable {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "single-use-variable" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::BINDING }
 
+    /// Checks the given node for single-use variable violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();

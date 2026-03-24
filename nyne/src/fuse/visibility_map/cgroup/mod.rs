@@ -188,5 +188,6 @@ fn cleanup_empty_children(dir: &Path) {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

@@ -80,5 +80,6 @@ impl DiffAction for SymbolDelete {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

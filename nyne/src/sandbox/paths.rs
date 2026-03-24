@@ -12,7 +12,9 @@ use rustix::process::Pid;
 
 /// Static procfs paths (no allocation needed).
 pub const UID_MAP: &str = "/proc/self/uid_map";
+/// Path to the current process GID mapping file.
 pub const GID_MAP: &str = "/proc/self/gid_map";
+/// Path to the current process setgroups control file.
 pub const SETGROUPS: &str = "/proc/self/setgroups";
 
 /// `/proc/<pid>/ns/user`
@@ -21,6 +23,7 @@ pub fn ns_user(pid: Pid) -> PathBuf { proc_pid(pid).join("ns/user") }
 /// `/proc/<pid>/ns/mnt`
 pub fn ns_mnt(pid: Pid) -> PathBuf { proc_pid(pid).join("ns/mnt") }
 
+/// Returns the `/proc/<pid>` path for the given process ID.
 fn proc_pid(pid: Pid) -> PathBuf { Path::new("/proc").join(pid.to_string()) }
 
 /// Strip the leading `/` to make an absolute path relative to some root.

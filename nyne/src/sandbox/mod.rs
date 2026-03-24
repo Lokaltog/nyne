@@ -88,6 +88,7 @@ impl MountConfig {
     }
 }
 
+/// Configuration for attaching to a running nyne daemon's namespace.
 pub struct AttachConfig {
     /// Daemon PID to attach to.
     pub daemon_pid: i32,

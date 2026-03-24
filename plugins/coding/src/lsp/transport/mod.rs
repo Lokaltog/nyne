@@ -24,6 +24,7 @@ pub struct JsonRpcError {
     pub message: String,
 }
 
+/// Error code constants and classification helpers.
 impl JsonRpcError {
     /// JSON-RPC standard error code for "method not found".
     pub const METHOD_NOT_FOUND: i64 = -32601;
@@ -120,5 +121,6 @@ fn read_headers(reader: &mut impl BufRead) -> Result<usize> {
     content_length.ok_or_else(|| eyre!("missing Content-Length header"))
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

@@ -21,10 +21,13 @@ struct LargeClosure;
 
 /// [`AnalysisRule`] implementation for `LargeClosure`.
 impl AnalysisRule for LargeClosure {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "large-closure" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { CLOSURE }
 
+    /// Checks the given node for large closure violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let start_line = raw.start_position().row;

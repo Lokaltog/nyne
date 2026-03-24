@@ -10,6 +10,7 @@ use tracing::warn;
 
 use crate::dispatch::WriteMode;
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;
 

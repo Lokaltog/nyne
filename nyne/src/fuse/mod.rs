@@ -1,8 +1,12 @@
 //! FUSE filesystem handler — maps fuser callbacks to router operations.
 
+/// FUSE file attribute helpers.
 mod attrs;
+/// File handle table for open files.
 mod handles;
+/// Kernel cache invalidation notifications.
 mod notify;
+/// Per-process visibility filtering for VFS entries.
 mod visibility_map;
 
 pub use attrs::file_kind_to_fuse;
@@ -59,8 +63,11 @@ macro_rules! with_parent_ctx {
     }};
 }
 
+/// FUSE mutation operations (write, create, rename, unlink, mkdir, rmdir).
 mod mutations;
+/// FUSE read-only operations (lookup, getattr, readdir, read, open).
 mod ops;
+/// Extended attribute handling for FUSE nodes.
 mod xattr;
 
 use std::collections::HashMap;

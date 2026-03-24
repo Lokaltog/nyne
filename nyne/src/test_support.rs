@@ -28,6 +28,7 @@ pub fn vfs(s: &str) -> VfsPath { VfsPath::new(s).unwrap() }
 /// real filesystem (e.g., template rendering, snapshot assertions).
 pub struct StubFs;
 
+/// Stub filesystem that rejects all operations.
 impl RealFs for StubFs {
     fn source_dir(&self) -> &Path { Path::new("/stub") }
 
@@ -59,6 +60,7 @@ impl RealFs for StubFs {
 /// Stub `EventSink` — silently discards all events.
 pub struct StubEvents;
 
+/// No-op event sink that silently discards all invalidation events.
 impl EventSink for StubEvents {
     fn emit(&self, _: InvalidationEvent) {}
 }
@@ -66,6 +68,7 @@ impl EventSink for StubEvents {
 /// Stub `Resolver` — all lookups bail.
 pub struct StubResolver;
 
+/// Stub resolver that rejects all lookups.
 impl Resolver for StubResolver {
     fn resolve(&self, _: &VfsPath) -> Result<Vec<Arc<VirtualNode>>> { bail!("stub") }
 
@@ -101,6 +104,7 @@ pub struct StubRequestContext {
     pub file_generations: FileGenerations,
 }
 
+/// Convenience methods for building test request contexts.
 impl StubRequestContext {
     /// Borrow a `RequestContext` from the owned stubs.
     pub fn ctx(&self) -> RequestContext<'_> {

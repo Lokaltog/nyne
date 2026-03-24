@@ -312,5 +312,6 @@ fn collect_resource_op(
     Ok(())
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

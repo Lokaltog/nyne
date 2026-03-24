@@ -141,5 +141,6 @@ impl DirectoryProvider {
     pub(super) const PROVIDER_ID: ProviderId = ProviderId::new("directory");
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

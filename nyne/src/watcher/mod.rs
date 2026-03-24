@@ -108,6 +108,7 @@ impl FsWatcher {
     }
 }
 
+/// Installs filesystem watches on all non-ignored directories under the root.
 fn install_initial_watches(watcher: &Mutex<notify::RecommendedWatcher>, root: &Path, git_dir: &str) -> usize {
     let start = Instant::now();
     let mut w = watcher.lock();
@@ -216,6 +217,7 @@ fn process_raw_event(
     }
 }
 
+/// Adds watches for a newly created directory and its non-ignored children.
 fn watch_new_directory(watch_root: &Path, watcher: &Mutex<notify::RecommendedWatcher>, path: &Path, git_dir: &str) {
     // Skip directories inside the git dir — already covered by recursive watch.
     if let Ok(relative) = path.strip_prefix(watch_root)
@@ -260,6 +262,7 @@ fn watch_directory_tree(
     count
 }
 
+/// Drains pending change events and dispatches them to the router.
 fn flush(pending: &mut HashSet<VfsPath>, router: &Router, batch_deadline: &mut Option<Instant>) {
     if pending.is_empty() {
         return;
@@ -291,6 +294,7 @@ fn to_vfs_path(watch_root: &Path, path: &Path) -> Option<VfsPath> {
     VfsPath::new(relative.to_str()?).ok()
 }
 
+/// Returns whether a filesystem event kind affects content or structure.
 const fn is_relevant_event(kind: EventKind) -> bool {
     match kind {
         // Metadata-only changes (chmod, chown, atime) don't affect

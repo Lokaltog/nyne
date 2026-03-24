@@ -12,10 +12,13 @@ struct ElseIfChain;
 
 /// [`AnalysisRule`] implementation for `ElseIfChain`.
 impl AnalysisRule for ElseIfChain {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "else-if-chain" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IF }
 
+    /// Checks the given node for else-if chain violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         // Only fire on the outermost if — don't re-fire on inner else-ifs.
         if let Some(parent) = node.raw().parent() {

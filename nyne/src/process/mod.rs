@@ -24,10 +24,12 @@ pub struct Spawner {
     children: Mutex<Vec<Child>>,
 }
 
+/// Returns the default value.
 impl Default for Spawner {
     fn default() -> Self { Self::new() }
 }
 
+/// Process spawning and child lifecycle management.
 impl Spawner {
     pub const fn new() -> Self {
         Self {

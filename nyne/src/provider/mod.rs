@@ -79,6 +79,7 @@ pub enum ConflictParty {
     RealFile,
 }
 
+/// Describes a naming conflict between providers for a single node name.
 #[non_exhaustive]
 pub struct ConflictInfo {
     pub name: String,

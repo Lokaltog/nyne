@@ -22,6 +22,7 @@ pub struct TodoConfig {
 
 /// Default implementation for `TodoConfig`.
 impl Default for TodoConfig {
+    /// Returns the default value.
     fn default() -> Self {
         Self {
             enabled: true,

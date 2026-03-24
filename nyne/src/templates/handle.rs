@@ -65,11 +65,13 @@ pub struct HandleBuilder {
 
 /// Default implementation for `HandleBuilder`.
 impl Default for HandleBuilder {
+    /// Returns the default value.
     fn default() -> Self { Self::new() }
 }
 
 /// Template registration and engine construction.
 impl HandleBuilder {
+    /// Creates a new handle builder with a default template engine.
     pub fn new() -> Self {
         Self {
             engine: TemplateEngine::new(),

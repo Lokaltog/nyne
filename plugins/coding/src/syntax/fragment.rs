@@ -79,6 +79,7 @@ impl FragmentKind {
 
 /// Display implementation for `FragmentKind`.
 impl Display for FragmentKind {
+    /// Formats the fragment kind as a human-readable label.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Symbol(kind) => write!(f, "{kind}"),

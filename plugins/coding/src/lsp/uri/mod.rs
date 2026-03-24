@@ -84,5 +84,6 @@ pub fn byte_offset_to_position(rope: &Rope, offset: usize) -> Position {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

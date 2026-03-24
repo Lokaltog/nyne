@@ -203,5 +203,6 @@ pub(super) fn render_settings(real_json: Option<&[u8]>, root: &Path) -> Result<V
     Ok(output.into_bytes())
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

@@ -36,6 +36,7 @@ pub struct DecomposedSource {
 
 /// Debug implementation for `DecomposedSource`, showing only the decomposed fragments.
 impl fmt::Debug for DecomposedSource {
+    /// Formats the decomposed source for debug output.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DecomposedSource")
             .field("decomposed", &self.decomposed)

@@ -9,15 +9,23 @@ struct MarkdownLanguage;
 
 /// [`LanguageSpec`] implementation for Markdown.
 impl LanguageSpec for MarkdownLanguage {
+    /// Conflict resolution strategy for Markdown symbols.
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
+    /// File extensions for Markdown.
     const EXTENSIONS: &'static [&'static str] = &["md", "mdx"];
+    /// Tree-sitter node kinds for Markdown import declarations.
     const IMPORT_KINDS: &'static [&'static str] = &[];
+    /// Language name identifier.
     const NAME: &'static str = "Markdown";
+    /// Naming strategy for Markdown symbol deduplication.
     const NAMING_STRATEGY: NamingStrategy = NamingStrategy::Slugified { indexed: true };
+    /// Tree-sitter node kinds that support recursive decomposition in Markdown.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
 
+    /// Returns the tree-sitter grammar for Markdown.
     fn grammar(_ext: &str) -> tree_sitter::Language { tree_sitter_md::LANGUAGE.into() }
 
+    /// Extracts Markdown-specific fragments (sections, code blocks, preamble).
     fn extract_custom(root: TsNode<'_>, _max_depth: usize) -> Option<Vec<Fragment>> {
         let source = root.source_str();
         let headings = collect_headings(root, root.source());

@@ -28,10 +28,13 @@ struct FatTrait;
 
 /// [`AnalysisRule`] implementation for `FatTrait`.
 impl AnalysisRule for FatTrait {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "fat-trait" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { TRAIT_DEF }
 
+    /// Checks the given node for fat trait violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
 

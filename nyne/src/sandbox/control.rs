@@ -116,6 +116,7 @@ pub struct ControlServer {
 
 /// Removes the Unix domain socket file on drop.
 impl Drop for ControlServer {
+    /// Cleans up resources.
     fn drop(&mut self) {
         if let Err(e) = fs::remove_file(&self.socket_path)
             && e.kind() != io::ErrorKind::NotFound

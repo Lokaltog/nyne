@@ -12,10 +12,13 @@ struct TooManyLocals;
 
 /// [`AnalysisRule`] implementation for `TooManyLocals`.
 impl AnalysisRule for TooManyLocals {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "too-many-locals" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::FUNCTION }
 
+    /// Checks the given node for too many local variables violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let body = node.raw().child_by_field_name("body")?;
         let count = count_bindings(body);

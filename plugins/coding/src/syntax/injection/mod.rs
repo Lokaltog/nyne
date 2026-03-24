@@ -23,11 +23,13 @@ pub(super) struct InjectionDecomposer {
 
 /// Constructor for `InjectionDecomposer`.
 impl InjectionDecomposer {
+    /// Creates a new injection decomposer wrapping the given inner decomposer.
     pub(super) fn new(inner: Arc<dyn Decomposer>, inner_ext: &'static str) -> Self { Self { inner, inner_ext } }
 }
 
 /// [`Decomposer`] implementation for injection-based compound files.
 impl Decomposer for InjectionDecomposer {
+    /// Decomposes source by extracting Jinja2 structure then delegating inner content.
     fn decompose(&self, source: &str, max_depth: usize) -> (DecomposedFile, Option<tree_sitter::Tree>) {
         // 1. Parse with Jinja2 grammar and extract content regions + structural symbols.
         let extraction = extract_template(source);
@@ -60,6 +62,7 @@ impl Decomposer for InjectionDecomposer {
         (fragments, None)
     }
 
+    /// Validates the Jinja2 template layer, falling back to inner validation.
     fn validate(&self, source: &str) -> Result<()> {
         // Validate only the Jinja2 layer — inner content may contain template
         // artifacts that are valid Jinja2 but would fail strict inner parsing.
@@ -72,26 +75,35 @@ impl Decomposer for InjectionDecomposer {
         Ok(())
     }
 
+    /// Returns the language name for the injection layer.
     fn language_name(&self) -> &'static str { "Jinja2" }
 
+    /// Returns the file extension of the inner language.
     fn file_extension(&self) -> &'static str { self.inner_ext }
 
+    /// Delegates doc comment stripping to the inner decomposer.
     fn strip_doc_comment(&self, raw: &str) -> String { self.inner.strip_doc_comment(raw) }
 
+    /// Delegates doc comment wrapping to the inner decomposer.
     fn wrap_doc_comment(&self, plain: &str, indent: &str) -> String { self.inner.wrap_doc_comment(plain, indent) }
 
+    /// Delegates doc comment cleaning to the inner decomposer.
     fn clean_doc_comment(&self, raw: &str) -> Option<String> { self.inner.clean_doc_comment(raw) }
 
+    /// Delegates filesystem mapping to the inner decomposer.
     fn map_to_fs(&self, fragments: &mut [Fragment]) { self.inner.map_to_fs(fragments); }
 
+    /// Delegates conflict resolution to the inner decomposer.
     fn resolve_conflicts(&self, conflicts: &[ConflictSet]) -> Vec<Resolution> {
         self.inner.resolve_conflicts(conflicts)
     }
 
+    /// Delegates file-level doc comment wrapping to the inner decomposer.
     fn wrap_file_doc_comment(&self, plain: &str, indent: &str) -> String {
         self.inner.wrap_file_doc_comment(plain, indent)
     }
 
+    /// Returns byte-based splice mode to avoid corrupting interleaved template nodes.
     fn splice_mode(&self) -> SpliceMode {
         // Injection-decomposed files have non-content nodes (render expressions,
         // control directives) interspersed within content lines. Line-snapped

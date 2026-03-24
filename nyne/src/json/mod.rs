@@ -19,5 +19,6 @@ pub fn deep_merge(base: &mut Value, overlay: &Value) {
     }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

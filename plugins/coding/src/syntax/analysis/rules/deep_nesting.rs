@@ -34,10 +34,13 @@ struct DeepNesting;
 
 /// [`AnalysisRule`] implementation for `DeepNesting`.
 impl AnalysisRule for DeepNesting {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "deep-nesting" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { NESTING_KINDS }
 
+    /// Checks the given node for excessive code nesting violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let depth = nesting_depth(node);
         if depth <= MAX_DEPTH {

@@ -142,5 +142,6 @@ fn build_symlinks(symbols: &[SymbolInformation], overlay_root: &Path, base: &Vfs
     nodes
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

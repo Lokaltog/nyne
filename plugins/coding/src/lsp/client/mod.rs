@@ -353,6 +353,7 @@ impl LspClient {
 
 /// Gracefully shuts down the language server on drop.
 impl Drop for LspClient {
+    /// Cleans up resources.
     fn drop(&mut self) {
         if let Err(e) = self.shutdown() {
             warn!(target: "nyne::lsp", server = %self.name, error = %e, "LSP shutdown failed");

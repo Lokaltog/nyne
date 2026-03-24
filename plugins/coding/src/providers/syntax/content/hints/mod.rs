@@ -125,5 +125,6 @@ fn build_view(hints: &[Hint]) -> (Vec<HintView>, Vec<CollapsedGroup>, Vec<Sugges
     (rows, collapsed, suggestions)
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

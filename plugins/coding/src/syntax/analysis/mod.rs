@@ -107,6 +107,7 @@ pub struct HintView {
 
 /// Converts a [`Hint`] to its serializable [`HintView`] representation.
 impl From<&Hint> for HintView {
+    /// Converts a [`Hint`] into a display-oriented [`HintView`].
     fn from(hint: &Hint) -> Self {
         Self {
             rule_id: hint.rule_id,
@@ -256,6 +257,7 @@ impl AnalysisEngine {
         hints
     }
 
+    /// Recursively walks the tree-sitter AST, checking each node against active rules.
     fn walk_recursive(
         &self,
         cursor: &mut tree_sitter::TreeCursor<'_>,

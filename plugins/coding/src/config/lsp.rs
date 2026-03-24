@@ -57,6 +57,7 @@ pub struct LspConfig {
 
 /// Default implementation for `LspConfig`.
 impl Default for LspConfig {
+    /// Returns the default value.
     fn default() -> Self {
         Self {
             enabled: default_true(),

@@ -52,5 +52,6 @@ pub(super) fn with_newline_middlewares(node: VirtualNode) -> VirtualNode {
         .with_write_middlewares(vec![Box::new(StripTrailingNewline)])
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

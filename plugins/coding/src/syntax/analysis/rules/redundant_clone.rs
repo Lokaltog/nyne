@@ -9,10 +9,13 @@ struct RedundantClone;
 
 /// [`AnalysisRule`] implementation for `RedundantClone`.
 impl AnalysisRule for RedundantClone {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "redundant-clone" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::CALL }
 
+    /// Checks the given node for redundant clone violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();

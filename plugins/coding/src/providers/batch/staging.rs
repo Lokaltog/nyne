@@ -107,6 +107,7 @@ impl StagedBatch {
 
     /// Renumber all actions to consistent `INDEX_STEP` increments.
     #[allow(clippy::cast_possible_truncation)] // action counts are always small
+    /// Reassigns contiguous index keys to all staged actions.
     fn renumber(&mut self) {
         use std::mem;
         let old = mem::take(&mut self.actions);

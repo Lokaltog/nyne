@@ -257,6 +257,7 @@ pub struct AnalysisConfig {
 
 /// Default implementation for `AnalysisConfig`.
 impl Default for AnalysisConfig {
+    /// Returns the default value.
     fn default() -> Self {
         Self {
             enabled: true,

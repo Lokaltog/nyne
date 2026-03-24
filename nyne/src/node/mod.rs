@@ -1,10 +1,16 @@
 //! Virtual filesystem node types and capabilities.
 
+/// Built-in node content types (static, empty, symlink).
 pub mod builtins;
+/// Node capability traits (readable, writable, unlinkable, renameable).
 pub mod capabilities;
+/// Node kind classification (file, directory, symlink).
 pub mod kind;
+/// Line-range slicing plugin for `lines:M-N` suffixes.
 pub(crate) mod line_slice;
+/// Read/write middleware pipeline for node content transformations.
 pub mod middleware;
+/// Node plugin trait for extending node construction.
 pub(crate) mod plugin;
 
 use std::io::{self, ErrorKind};
@@ -383,6 +389,7 @@ require_capability!(require_writable, writable, Writable, "writable");
 require_capability!(require_renameable, renameable, Renameable, "renameable");
 require_capability!(require_unlinkable, unlinkable, Unlinkable, "unlinkable");
 
+/// Unit tests.
 #[cfg(test)]
 mod tests {
     use super::*;

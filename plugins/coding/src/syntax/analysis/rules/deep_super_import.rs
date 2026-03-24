@@ -16,10 +16,13 @@ const USE_DECLARATION: &[&str] = &["use_declaration"];
 
 /// [`AnalysisRule`] implementation for `DeepSuperImport`.
 impl AnalysisRule for DeepSuperImport {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "deep-super-import" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { USE_DECLARATION }
 
+    /// Checks the given node for deep super-chain import violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let text = node.text();
 
@@ -69,6 +72,7 @@ register_analysis_rule!(DeepSuperImport);
 mod tests {
     use super::*;
 
+    /// Verifies that super-chain depth counting works correctly.
     #[test]
     fn counts_depth_correctly() {
         assert_eq!(super_depth("use super::foo::Bar;"), 1);
@@ -76,16 +80,19 @@ mod tests {
         assert_eq!(super_depth("use super::super::super::names::FOO;"), 3);
     }
 
+    /// Verifies detection of deep super chains in grouped imports.
     #[test]
     fn handles_grouped_imports() {
         assert_eq!(super_depth("use super::super::{Foo, Bar};"), 2);
     }
 
+    /// Verifies no false positive on crate-rooted paths.
     #[test]
     fn no_false_positive_on_crate_path() {
         assert_eq!(super_depth("use crate::foo::Bar;"), 0);
     }
 
+    /// Verifies no false positive on single super imports.
     #[test]
     fn no_false_positive_on_single_super() {
         assert_eq!(super_depth("use super::foo::Bar;"), 1);

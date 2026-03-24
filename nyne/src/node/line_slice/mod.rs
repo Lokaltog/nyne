@@ -142,5 +142,6 @@ fn splice_lines(current: &[u8], spec: &SliceSpec, new_data: &[u8]) -> Vec<u8> {
     out.into_bytes()
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

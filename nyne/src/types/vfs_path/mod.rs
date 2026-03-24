@@ -210,6 +210,7 @@ impl VfsPath {
 
 /// Displays root as `"/"` and all other paths as their inner string.
 impl fmt::Display for VfsPath {
+    /// Formats the value for display.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.0.is_empty() {
             f.write_str("/")
@@ -226,8 +227,10 @@ impl fmt::Debug for VfsPath {
 
 /// Borrows the inner string representation.
 impl AsRef<str> for VfsPath {
+    /// Returns the path as a string slice.
     fn as_ref(&self) -> &str { &self.0 }
 }
 
+/// Unit tests.
 #[cfg(test)]
 mod tests;

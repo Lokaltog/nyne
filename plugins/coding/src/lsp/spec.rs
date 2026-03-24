@@ -27,6 +27,7 @@ pub struct LspServerDef {
     detect: Option<DetectFn>,
 }
 
+/// Builder-style construction and configuration for LSP server definitions.
 impl LspServerDef {
     /// Create a new server definition. `name` is both the identifier
     /// and the default command.
@@ -135,6 +136,7 @@ pub struct LspLanguageDef {
     pub(crate) servers: Vec<LspServerDef>,
 }
 
+/// Construction from compile-time `LspSpec` implementations.
 impl LspLanguageDef {
     /// Build a runtime language definition from a compile-time `LspSpec`.
     pub(crate) fn from_spec<S: LspSpec>() -> Self {

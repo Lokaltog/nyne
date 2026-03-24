@@ -7,17 +7,27 @@ struct NixLanguage;
 
 /// [`LanguageSpec`] implementation for Nix.
 impl LanguageSpec for NixLanguage {
+    /// Conflict resolution strategy for Nix symbols.
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
+    /// Tree-sitter node kind for Nix doc comments.
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
+    /// Comment prefix patterns for Nix doc comments.
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &["#"];
+    /// File extensions for Nix.
     const EXTENSIONS: &'static [&'static str] = &["nix"];
+    /// Tree-sitter node kinds for Nix import declarations.
     const IMPORT_KINDS: &'static [&'static str] = &[];
+    /// Language name identifier.
     const NAME: &'static str = "Nix";
+    /// Naming strategy for Nix symbol deduplication.
     const NAMING_STRATEGY: NamingStrategy = NamingStrategy::Identity;
+    /// Tree-sitter node kinds that support recursive decomposition in Nix.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
 
+    /// Returns the tree-sitter grammar for Nix.
     fn grammar(_ext: &str) -> tree_sitter::Language { tree_sitter_nix::LANGUAGE.into() }
 
+    /// Extracts Nix-specific fragments from the syntax tree.
     fn extract_custom(root: TsNode<'_>, _max_depth: usize) -> Option<Vec<Fragment>> {
         let source = root.source_str();
         let mut fragments = Vec::new();
@@ -25,8 +35,10 @@ impl LanguageSpec for NixLanguage {
         Some(fragments)
     }
 
+    /// Strips doc comment markers from Nix source.
     fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &["#"]) }
 
+    /// Wraps text in Nix doc comment syntax.
     fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, "#", "# ") }
 }
 

@@ -20,6 +20,7 @@ pub(super) struct TimeoutReader {
     timeout: Duration,
 }
 
+/// Construction and poll-based timeout logic.
 impl TimeoutReader {
     /// Create from an `OwnedFd` (stdout of a spawned LSP server).
     pub(super) fn from_owned_fd(fd: OwnedFd, timeout: Duration) -> Self {
@@ -53,6 +54,7 @@ impl TimeoutReader {
 
 /// `Read` impl that polls for readability before delegating to the inner buffer.
 impl Read for TimeoutReader {
+    /// Reads bytes, polling for readiness with a timeout when the buffer is empty.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // Only poll when the BufReader's internal buffer is empty.
         // When buffered data exists, the read completes immediately.
@@ -65,6 +67,7 @@ impl Read for TimeoutReader {
 
 /// `BufRead` impl that polls for readability before filling the buffer.
 impl io::BufRead for TimeoutReader {
+    /// Fills the internal buffer, polling for readiness with a timeout when empty.
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         if self.inner.buffer().is_empty() {
             self.poll_ready()?;
@@ -72,6 +75,7 @@ impl io::BufRead for TimeoutReader {
         self.inner.fill_buf()
     }
 
+    /// Marks bytes as consumed in the internal buffer.
     fn consume(&mut self, amt: usize) { self.inner.consume(amt); }
 }
 

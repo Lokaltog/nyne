@@ -12,10 +12,13 @@ struct DeeplyNestedType;
 
 /// [`AnalysisRule`] implementation for `DeeplyNestedType`.
 impl AnalysisRule for DeeplyNestedType {
+    /// Returns the rule identifier.
     fn id(&self) -> &'static str { "deeply-nested-type" }
 
+    /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::TYPE_ANNOTATION }
 
+    /// Checks the given node for deeply nested generic type violations.
     fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
         let raw = node.raw();
 
