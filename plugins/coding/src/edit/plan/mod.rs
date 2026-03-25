@@ -1,5 +1,6 @@
 //! File edit operations and planning.
 
+use std::cmp::Ordering;
 use std::ops::Range;
 
 use color_eyre::eyre::Result;
@@ -83,6 +84,17 @@ pub struct ResolvedEdit {
     pub byte_range: Range<usize>,
     /// Replacement content (empty string for deletions).
     pub replacement: String,
+}
+impl ResolvedEdit {
+    /// Ascending order: by `byte_range.start`, then zero-width (insertions)
+    /// before non-empty (replacements/deletions). This ensures insertions at
+    /// a boundary are processed before the adjacent non-empty edit.
+    fn cmp_ascending(&self, other: &Self) -> Ordering {
+        self.byte_range
+            .start
+            .cmp(&other.byte_range.start)
+            .then_with(|| self.byte_range.is_empty().cmp(&other.byte_range.is_empty()).reverse())
+    }
 }
 
 /// A plan of edits for a single source file.
@@ -213,15 +225,10 @@ impl EditPlan {
         // Detect overlapping non-empty ranges (conflicts).
         Self::check_conflicts(&resolved)?;
 
-        // Sort by byte_range.start descending for bottom-up application.
-        // Secondary key: non-empty before empty (zero-width) so that after
-        // `.rev()` in `apply`, zero-width insertions come first at each offset.
-        resolved.sort_by(|a, b| {
-            b.byte_range
-                .start
-                .cmp(&a.byte_range.start)
-                .then_with(|| a.byte_range.is_empty().cmp(&b.byte_range.is_empty()))
-        });
+        // Sort descending (reverse of ascending) for bottom-up application.
+        // After `.rev()` in `apply`, this becomes ascending order with
+        // zero-width insertions before non-empty edits at each offset.
+        resolved.sort_by(|a, b| a.cmp_ascending(b).reverse());
 
         Ok(resolved)
     }
@@ -229,15 +236,7 @@ impl EditPlan {
     /// Check for overlapping edit ranges.
     fn check_conflicts(edits: &[ResolvedEdit]) -> Result<()> {
         let mut sorted: Vec<&ResolvedEdit> = edits.iter().collect();
-        // Stable order: by start ascending, then empty (zero-width) before
-        // non-empty so that insertions at the boundary of a replace are
-        // correctly adjacent rather than hidden by sort instability.
-        sorted.sort_by(|a, b| {
-            a.byte_range
-                .start
-                .cmp(&b.byte_range.start)
-                .then_with(|| a.byte_range.is_empty().cmp(&b.byte_range.is_empty()).reverse())
-        });
+        sorted.sort_by(|a, b| a.cmp_ascending(b));
 
         for pair in sorted.windows(2) {
             let &[a, b] = pair else { continue };
