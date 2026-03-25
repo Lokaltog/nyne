@@ -18,9 +18,9 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
             EnvFilter::new(match cli.verbose {
-                0 => "warn",
-                1 => "nyne=info",
-                2 => "nyne=debug,nyne::fuse=info",
+                0 => "warn,fuser::reply=off",
+                1 => "nyne=info,fuser::reply=off",
+                2 => "nyne=debug,nyne::fuse=info,fuser::reply=off",
                 _ => "nyne=trace",
             })
         }))
