@@ -1,5 +1,7 @@
 //! Filesystem naming strategies and conflict resolution for fragments.
 
+use std::collections::HashMap;
+
 use nyne::text::slugify_unbounded;
 
 use super::fragment::{ConflictSet, Fragment, FragmentKind, Resolution};
@@ -88,36 +90,29 @@ pub fn resolve_conflicts(conflicts: &[ConflictSet], strategy: ConflictStrategy) 
 }
 
 /// Resolve name collisions by appending `~Kind` suffixes (e.g. `Foo~Struct`, `Foo~Impl`).
+///
+/// When `~Kind` alone still produces duplicates (e.g. two `impl Foo` blocks →
+/// `Foo~Impl`, `Foo~Impl`), the first occurrence keeps the bare `~Kind` name
+/// and subsequent duplicates get a numeric suffix: `Foo~Impl`, `Foo~Impl-2`.
 fn resolve_kind_suffix(conflicts: &[ConflictSet]) -> Vec<Resolution> {
     let sep = DISAMBIGUATOR_SEP;
 
     let mut resolutions = Vec::new();
 
     for conflict in conflicts {
-        // Try disambiguating by appending ~Kind.
-        let disambiguated: Vec<String> = conflict
-            .entries
-            .iter()
-            .map(|e| format!("{}{sep}{}", conflict.name, e.fragment_kind))
-            .collect();
-
-        // Check if all disambiguated names are unique.
-        let unique = {
-            let mut sorted = disambiguated.clone();
-            sorted.sort();
-            sorted.dedup();
-            sorted.len() == disambiguated.len()
-        };
-
-        for (i, (disambig_name, entry)) in disambiguated.iter().zip(&conflict.entries).enumerate() {
+        let mut seen: HashMap<String, usize> = HashMap::new();
+        for entry in &conflict.entries {
+            let kind = entry.fragment_kind.to_string();
+            let count = seen.entry(kind.clone()).or_insert(0);
+            *count += 1;
+            let fs_name = if *count == 1 {
+                format!("{}{sep}{kind}", conflict.name)
+            } else {
+                format!("{}{sep}{kind}-{count}", conflict.name)
+            };
             resolutions.push(Resolution {
                 index: entry.index,
-                fs_name: if unique {
-                    Some(disambig_name.clone())
-                } else {
-                    // Can't disambiguate — hide all but the first.
-                    (i == 0).then(|| conflict.name.clone())
-                },
+                fs_name: Some(fs_name),
             });
         }
     }

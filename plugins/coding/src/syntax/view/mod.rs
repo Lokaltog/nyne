@@ -129,12 +129,15 @@ impl FragmentView {
 }
 
 /// Build a minijinja `Value` list of `FragmentView` objects, skipping
-/// code blocks and structural fragments (docstrings, imports, decorators).
+/// code blocks, structural fragments (docstrings, imports, decorators),
+/// and fragments without a filesystem name (hidden by conflict resolution).
 pub fn fragment_list(fragments: &[Fragment], shared: &Arc<DecomposedSource>) -> Value {
     Value::from(
         fragments
             .iter()
-            .filter(|f| !matches!(f.kind, FragmentKind::CodeBlock { .. }) && !f.kind.is_structural())
+            .filter(|f| {
+                f.fs_name.is_some() && !matches!(f.kind, FragmentKind::CodeBlock { .. }) && !f.kind.is_structural()
+            })
             .map(|f| {
                 Value::from_object(FragmentView {
                     frag: f.clone(),
