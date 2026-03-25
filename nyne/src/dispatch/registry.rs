@@ -19,6 +19,10 @@ pub struct ProviderRegistry {
 
 /// Provider discovery, activation, and lookup.
 impl ProviderRegistry {
+    /// Create an empty registry with no providers (test-only).
+    #[cfg(test)]
+    pub fn empty() -> Self { Self { active: vec![] } }
+
     /// Return only the providers that passed activation.
     pub fn active_providers(&self) -> &[Arc<dyn Provider>] { &self.active }
 

@@ -197,14 +197,11 @@ impl Router {
         }
         let child_path = ctx.path.join(name)?;
         if self.real_fs.exists(&child_path) {
-            let file_type = if self.real_fs.is_dir(&child_path) {
-                FileKind::Directory
-            } else {
-                self.real_fs
-                    .metadata(&child_path)
-                    .map(|m| m.file_type)
-                    .unwrap_or(FileKind::File)
-            };
+            let file_type = self
+                .real_fs
+                .metadata(&child_path)
+                .map(|m| m.file_type)
+                .unwrap_or(FileKind::File);
             let handle = self.cache.get_or_create(ctx.path);
             let mut dir = handle.write();
             let inode = self.insert_node(&mut dir, ctx.path, NodeEntry {
