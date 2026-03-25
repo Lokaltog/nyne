@@ -33,7 +33,7 @@ fn generate_entries(entries: &[RouteEntry], ty: &syn::Type) -> Result<Vec<TokenS
             RouteEntry::Children(handler) => quote! {
                 .children(|p: &#ty, ctx: &RouteCtx<'_>| p.#handler(ctx))
             },
-            RouteEntry::Lookup(lookup) => generate_root_lookup(lookup, ty),
+            RouteEntry::Lookup(lookup) => generate_root_lookup(lookup, ty)?,
             RouteEntry::File(file) => generate_file(file),
         };
         calls.push(tokens);
@@ -114,7 +114,7 @@ fn generate_lookup_closure(lookups: &[LookupEntry], ty: &syn::Type) -> Result<Op
                 catch_all = Some(handler);
             }
             LookupEntry::Pattern { parsed, handler, .. } => {
-                pattern_arms.push(generate_lookup_pattern_arm(parsed, handler));
+                pattern_arms.push(generate_lookup_pattern_arm(parsed, handler)?);
             }
         }
     }
@@ -145,9 +145,12 @@ fn generate_lookup_closure(lookups: &[LookupEntry], ty: &syn::Type) -> Result<Op
 /// Generate an `if let` arm that strips a prefix/suffix from the lookup name and dispatches to the handler.
 ///
 /// The pattern is pre-validated during parsing to be a `Capture` with at least a prefix or suffix.
-fn generate_lookup_pattern_arm(pattern: &ParsedPattern, handler: &syn::Ident) -> TokenStream {
+fn generate_lookup_pattern_arm(pattern: &ParsedPattern, handler: &syn::Ident) -> Result<TokenStream> {
     let ParsedPattern::Capture { name, prefix, suffix } = pattern else {
-        unreachable!("lookup patterns are validated as Capture during parsing")
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "internal: lookup pattern must be a Capture variant",
+        ));
     };
 
     // Build the match expression: strip prefix then suffix (or just one).
@@ -157,10 +160,15 @@ fn generate_lookup_pattern_arm(pattern: &ParsedPattern, handler: &syn::Ident) ->
         },
         (Some(pfx), None) => quote! { name.strip_prefix(#pfx) },
         (None, Some(sfx)) => quote! { name.strip_suffix(#sfx) },
-        (None, None) => unreachable!("lookup patterns are validated to have prefix or suffix during parsing"),
+        (None, None) => {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "internal: lookup capture pattern must have a prefix or suffix",
+            ));
+        }
     };
 
-    quote! {
+    Ok(quote! {
         if let Some(__captured) = #strip_expr {
             if !__captured.is_empty() {
                 let mut __params = ctx.route_params().clone();
@@ -169,7 +177,7 @@ fn generate_lookup_pattern_arm(pattern: &ParsedPattern, handler: &syn::Ident) ->
                 return ::nyne::dispatch::routing::tree::IntoNode::into_node(p.#handler(&__rctx));
             }
         }
-    }
+    })
 }
 
 /// Convert `Option<String>` to `Some("...")` / `None` token stream.
@@ -182,19 +190,19 @@ fn option_to_tokens(opt: Option<&String>) -> TokenStream {
 }
 
 /// Generate a root-level `.lookup(...)` call on `RouteTreeBuilder`.
-fn generate_root_lookup(lookup: &LookupEntry, ty: &syn::Type) -> TokenStream {
+fn generate_root_lookup(lookup: &LookupEntry, ty: &syn::Type) -> Result<TokenStream> {
     match lookup {
-        LookupEntry::CatchAll { handler } => quote! {
+        LookupEntry::CatchAll { handler } => Ok(quote! {
             .lookup(|p: &#ty, ctx: &RouteCtx<'_>, name: &str| ::nyne::dispatch::routing::tree::IntoNode::into_node(p.#handler(ctx, name)))
-        },
+        }),
         LookupEntry::Pattern { parsed, handler, .. } => {
-            let arm = generate_lookup_pattern_arm(parsed, handler);
-            quote! {
+            let arm = generate_lookup_pattern_arm(parsed, handler)?;
+            Ok(quote! {
                 .lookup(|p: &#ty, ctx: &RouteCtx<'_>, name: &str| {
                     #arm
                     Ok(None)
                 })
-            }
+            })
         }
     }
 }

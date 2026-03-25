@@ -165,10 +165,12 @@ impl LspClient {
         {
             let stderr_file = File::from(fds.stderr);
             let server_name = name.to_owned();
-            Builder::new()
+            if let Err(e) = Builder::new()
                 .name(format!("lsp-stderr-{name}"))
                 .spawn(move || drain_stderr(stderr_file, &server_name))
-                .ok();
+            {
+                warn!(target: "nyne::lsp", name, error = %e, "failed to spawn stderr drain thread");
+            }
         }
 
         let root_uri = uri::file_path_to_uri(root_dir)?;

@@ -300,9 +300,7 @@ impl Filesystem for NyneFs {
                 return;
             }
             self.handles.clear_dirty(fh, dirty_gen);
-            if self.write_errors.read().contains_key(&ino) {
-                self.write_errors.write().remove(&ino);
-            }
+            self.write_errors.write().remove(&ino);
         }
         self.router.process_events();
         reply.ok();
