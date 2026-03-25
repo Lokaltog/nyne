@@ -7,9 +7,8 @@ use color_eyre::eyre::Result;
 use tracing::{info, warn};
 
 use crate::config::NyneConfig;
-use crate::sandbox;
-use crate::session::{self, SessionRegistry};
 use crate::types::ProcessVisibility;
+use crate::{sandbox, session};
 
 /// Arguments for the `attach` subcommand.
 #[derive(Debug, Args)]
@@ -75,8 +74,7 @@ impl Drop for RegistrationGuard {
 
 /// Run the attach subcommand: attach to a running mount and execute a command in its namespace.
 pub fn run(args: &AttachArgs) -> Result<i32> {
-    let registry = SessionRegistry::scan()?;
-    let session_info = registry.resolve(args.id.as_deref())?;
+    let session_info = super::resolve_session(args.id.as_deref())?;
     let control_socket = session::control_socket(&session_info.id)
         .inspect_err(|e| warn!(error = %e, "control socket unavailable — process registration disabled"))
         .ok();
@@ -116,7 +114,7 @@ pub fn run(args: &AttachArgs) -> Result<i32> {
 
     sandbox::run_attach(sandbox::AttachConfig {
         daemon_pid: session_info.pid,
-        mount_path: session_info.mount_path.clone(),
+        mount_path: session_info.mount_path,
         control_socket,
         command,
         sandbox: NyneConfig::load()?.sandbox,

@@ -69,6 +69,15 @@ impl SessionArgs {
     pub(crate) fn socket_path(&self) -> Result<PathBuf> { discover_socket(self.id.as_deref()) }
 }
 
+/// Resolve a session by optional ID.
+///
+/// Scans for active sessions and resolves the target:
+/// - With ID: resolve that specific session
+/// - Without ID: auto-resolve if exactly one session is active
+pub(super) fn resolve_session(id: Option<&str>) -> Result<session::SessionInfo> {
+    Ok(SessionRegistry::scan()?.resolve(id)?.clone())
+}
+
 /// Discover the control socket path for a session.
 ///
 /// Priority:
@@ -85,5 +94,5 @@ fn discover_socket(id: Option<&str>) -> Result<PathBuf> {
         return Ok(PathBuf::from(socket));
     }
 
-    session::control_socket(&SessionRegistry::scan()?.resolve(None)?.id)
+    session::control_socket(&resolve_session(None)?.id)
 }

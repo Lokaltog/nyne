@@ -6,6 +6,7 @@ pub mod todo;
 
 use std::collections::{HashMap, HashSet};
 
+use nyne::json::deep_merge_non_null;
 use serde::{Deserialize, Serialize};
 
 use self::lsp::LspConfig;
@@ -274,9 +275,9 @@ const fn default_true() -> bool { true }
 
 /// Deserialization and config loading methods.
 impl CodingConfig {
-    /// Deserialize from the plugin config map, falling back to defaults.
-    pub fn from_plugin_table(plugin_map: &HashMap<String, toml::Value>) -> Self {
-        let Some(table) = plugin_map.get("coding") else {
+    /// Deserialize from the plugin config section, falling back to defaults.
+    pub fn from_plugin_config(section: Option<&toml::Value>) -> Self {
+        let Some(table) = section else {
             return Self::default();
         };
         // toml::Value::try_into consumes self, clone is required.
@@ -330,10 +331,12 @@ impl PreToolPolicy {
     /// fields to `PreToolPolicy` requires zero changes here.
     #[expect(clippy::expect_used, reason = "serde roundtrip on a simple struct is infallible")]
     fn merge(self, over: &Self) -> Self {
-        let base = serde_json::to_value(&self).expect("PreToolPolicy serializes");
-        let over = serde_json::to_value(over).expect("PreToolPolicy serializes");
-        let merged = json_merge(base, over);
-        serde_json::from_value(merged).expect("merged PreToolPolicy deserializes")
+        let mut base = serde_json::to_value(&self).expect("PreToolPolicy serializes");
+        deep_merge_non_null(
+            &mut base,
+            &serde_json::to_value(over).expect("PreToolPolicy serializes"),
+        );
+        serde_json::from_value(base).expect("merged PreToolPolicy deserializes")
     }
 
     /// Resolved `deny_lines_threshold` with builtin fallback.
@@ -342,24 +345,6 @@ impl PreToolPolicy {
     /// Resolved `narrow_read_limit` with builtin fallback.
     pub fn narrow_read_limit(&self) -> i64 { self.narrow_read_limit.unwrap_or(80) }
 }
-
-/// Merge two JSON objects, with non-null values in `over` taking precedence.
-fn json_merge(base: serde_json::Value, over: serde_json::Value) -> serde_json::Value {
-    use serde_json::Value;
-    match (base, over) {
-        (Value::Object(mut b), Value::Object(o)) => {
-            for (k, v) in o {
-                if !v.is_null() {
-                    b.insert(k, v);
-                }
-            }
-            Value::Object(b)
-        }
-        (b, Value::Null) => b,
-        (_, o) => o,
-    }
-}
-
 /// Unit tests for coding plugin configuration.
 #[cfg(test)]
 mod tests;

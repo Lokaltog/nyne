@@ -122,27 +122,7 @@ impl Filesystem for NyneFs {
     /// Lists directory entries for a directory inode.
     fn readdir(&self, req: &Request, ino: INodeNo, _fh: FileHandle, offset: u64, mut reply: ReplyDirectory) {
         let ino = u64::from(ino);
-        let dir_path = ensure_dir_path!(self, ino, reply);
-        let vis = self.process_visibility(req);
-        debug!(target: "nyne::fuse", ino, offset, path = %dir_path, %vis, "readdir");
-
-        if vis == ProcessVisibility::None {
-            self.for_each_real_readdir_entry(&dir_path, ino, offset, |entry_ino, next_offset, entry| {
-                reply.add(
-                    INodeNo(entry_ino),
-                    next_offset,
-                    file_kind_to_fuse(entry.kind),
-                    &entry.name,
-                )
-            });
-            reply.ok();
-            return;
-        }
-
-        let ctx = self.router.make_request_context(&dir_path);
-        fuse_try!(reply, self.router.ensure_resolved(&ctx), ino, "readdir: resolve failed");
-
-        self.for_each_readdir_entry(&dir_path, ino, offset, vis, |entry_ino, next_offset, entry| {
+        let result = self.resolve_readdir(req, ino, offset, |entry_ino, next_offset, entry| {
             reply.add(
                 INodeNo(entry_ino),
                 next_offset,
@@ -150,36 +130,28 @@ impl Filesystem for NyneFs {
                 &entry.name,
             )
         });
-        reply.ok();
+        match result {
+            Ok(()) => reply.ok(),
+            Err(e) => {
+                warn!(target: "nyne::fuse", error = %e, ino, "readdir failed");
+                reply.error(extract_errno(&e));
+            }
+        }
     }
 
     /// Lists directory entries with attributes for a directory inode.
     fn readdirplus(&self, req: &Request, ino: INodeNo, _fh: FileHandle, offset: u64, mut reply: ReplyDirectoryPlus) {
         let ino = u64::from(ino);
-        let dir_path = ensure_dir_path!(self, ino, reply);
-        let vis = self.process_visibility(req);
-        debug!(target: "nyne::fuse", ino, offset, path = %dir_path, %vis, "readdirplus");
-
-        if vis == ProcessVisibility::None {
-            self.for_each_real_readdir_entry(&dir_path, ino, offset, |entry_ino, next_offset, entry| {
-                self.add_dirplus_entry(&mut reply, entry_ino, next_offset, entry, req)
-            });
-            reply.ok();
-            return;
-        }
-
-        let ctx = self.router.make_request_context(&dir_path);
-        fuse_try!(
-            reply,
-            self.router.ensure_resolved(&ctx),
-            ino,
-            "readdirplus: resolve failed"
-        );
-
-        self.for_each_readdir_entry(&dir_path, ino, offset, vis, |entry_ino, next_offset, entry| {
+        let result = self.resolve_readdir(req, ino, offset, |entry_ino, next_offset, entry| {
             self.add_dirplus_entry(&mut reply, entry_ino, next_offset, entry, req)
         });
-        reply.ok();
+        match result {
+            Ok(()) => reply.ok(),
+            Err(e) => {
+                warn!(target: "nyne::fuse", error = %e, ino, "readdirplus failed");
+                reply.error(extract_errno(&e));
+            }
+        }
     }
 
     /// Opens a file, setting up buffered or passthrough I/O.

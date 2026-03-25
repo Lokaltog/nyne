@@ -17,7 +17,7 @@ Coding plugin — syntax decomposition, LSP integration, AI-assisted editing, de
 
 Plugin config: `[plugin.coding]` in `~/.config/nyne/config.toml`. LSP config: `[lsp]` (top-level, `ctx.config().lsp`).
 
-- `config.rs`: `CodingConfig` + `AnalysisConfig` + `ClaudeConfig` — deserialized via `CodingConfig::from_plugin_table()`
+- `config.rs`: `CodingConfig` + `AnalysisConfig` + `ClaudeConfig` — deserialized via `CodingConfig::from_plugin_config()`
 - `[plugin.coding.analysis]`: `enabled` (bool), `rules` (optional list — `None` = all except `DEFAULT_DISABLED_RULES`)
 - `[plugin.coding.claude]`: `enabled` (bool, default true) — master toggle for `.claude/` directory and all hooks
 - `[plugin.coding.claude.hooks]`: per-hook toggles — `session_start`, `pre_tool_use`, `post_tool_use`, `stop`, `statusline` (all default true)

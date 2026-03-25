@@ -79,6 +79,7 @@ use std::time::SystemTime;
 use color_eyre::eyre::{Report, Result, eyre};
 use fuser::{Errno, Request};
 use parking_lot::{Mutex, RwLock};
+use tracing::debug;
 
 use self::handles::HandleTable;
 use crate::dispatch::context::RequestContext;
@@ -284,6 +285,36 @@ impl NyneFs {
         let ctx = self.router.make_request_context(dir_path);
         let entries = self.router.readdir_real(dir_path, dir_ino);
         Self::iter_readdir_entries(&entries, offset, |name| self.router.lookup_real(name, &ctx), emit)
+    }
+
+    /// Resolve directory entries and emit them via the callback.
+    ///
+    /// Shared logic for `readdir` and `readdirplus` — resolves the dir path,
+    /// checks visibility, ensures providers are resolved, then iterates
+    /// entries through the caller-provided `emit` closure.
+    fn resolve_readdir(
+        &self,
+        req: &Request,
+        ino: u64,
+        offset: u64,
+        mut emit: impl FnMut(u64, u64, &ReaddirEntry) -> bool,
+    ) -> Result<()> {
+        let dir_path = self
+            .router
+            .dir_path_for_inode(ino)
+            .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
+        let vis = self.process_visibility(req);
+        debug!(target: "nyne::fuse", ino, offset, path = %dir_path, %vis, "readdir");
+
+        if vis == ProcessVisibility::None {
+            self.for_each_real_readdir_entry(&dir_path, ino, offset, &mut emit);
+            return Ok(());
+        }
+
+        self.router
+            .ensure_resolved(&self.router.make_request_context(&dir_path))?;
+        self.for_each_readdir_entry(&dir_path, ino, offset, vis, emit);
+        Ok(())
     }
 
     /// Core readdir iteration: resolve placeholder inodes and emit entries.

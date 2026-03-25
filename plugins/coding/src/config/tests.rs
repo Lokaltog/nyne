@@ -1,13 +1,10 @@
-use std::collections::HashMap;
-
 use rstest::rstest;
 
 use super::*;
 
 /// Parses a TOML string into a `CodingConfig` for testing.
 fn parse_coding_config(toml_str: &str) -> CodingConfig {
-    let toml: toml::Value = toml::from_str(toml_str).unwrap();
-    CodingConfig::from_plugin_table(&HashMap::from([("coding".into(), toml)]))
+    CodingConfig::from_plugin_config(Some(&toml::from_str(toml_str).unwrap()))
 }
 
 /// Loads a `CodingConfig` from a named test fixture file.
@@ -28,7 +25,7 @@ fn default_has_no_rules_override() {
 /// Verifies that a missing plugin section returns default config.
 #[test]
 fn missing_plugin_section_returns_defaults() {
-    let config = CodingConfig::from_plugin_table(&HashMap::new());
+    let config = CodingConfig::from_plugin_config(None);
     assert!(config.analysis.enabled);
     assert!(config.analysis.rules.is_none());
 }
@@ -252,7 +249,7 @@ fn config_from_fixture() {
 /// Verifies that absent hooks section uses default policy values.
 #[test]
 fn absent_hooks_uses_defaults() {
-    let config = CodingConfig::from_plugin_table(&HashMap::new());
+    let config = CodingConfig::from_plugin_config(None);
     assert_eq!(config.hooks.pre_tool.resolve("Rust").deny_lines_threshold(), 60);
     assert_eq!(config.hooks.pre_tool.resolve("Markdown").deny_lines_threshold(), -1);
 }
@@ -286,7 +283,7 @@ fn wrong_type_falls_back_to_defaults() {
 /// Verifies stop hook default values.
 #[test]
 fn stop_defaults() {
-    let config = CodingConfig::from_plugin_table(&HashMap::new());
+    let config = CodingConfig::from_plugin_config(None);
     assert_eq!(config.hooks.stop.min_files, 2);
     assert!(config.hooks.stop.ignore_extensions.contains(&"toml".to_owned()));
     assert!(config.hooks.stop.ignore_extensions.contains(&"md".to_owned()));
@@ -312,7 +309,7 @@ fn stop_unknown_field_falls_back_to_defaults() {
 /// Verifies that all Claude hooks default to enabled.
 #[test]
 fn claude_defaults_all_enabled() {
-    let config = CodingConfig::from_plugin_table(&HashMap::new());
+    let config = CodingConfig::from_plugin_config(None);
     assert!(config.claude.enabled);
     assert!(config.claude.hooks.session_start);
     assert!(config.claude.hooks.pre_tool_use);

@@ -22,7 +22,7 @@ use tracing::{debug, warn};
 pub use self::id::SessionId;
 
 /// Persisted daemon metadata for session discovery.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     /// Human-readable session ID.
     pub id: String,

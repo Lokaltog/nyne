@@ -33,7 +33,7 @@ impl Plugin for CodingPlugin {
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
         let syntax = SyntaxRegistry::global();
 
-        let coding_config = CodingConfig::from_plugin_table(&ctx.config().plugin);
+        let coding_config = CodingConfig::from_plugin_config(ctx.plugin_config("coding"));
         let sandbox_env = ctx.config().sandbox.env.clone();
         let lsp_registry = LspRegistry::build_with_config(&coding_config.lsp);
         let lsp_config = coding_config.lsp.clone();
@@ -92,7 +92,7 @@ impl Plugin for CodingPlugin {
 
     /// Returns the fully resolved coding plugin configuration as TOML.
     fn resolved_config(&self, config: &NyneConfig) -> Option<toml::Value> {
-        let resolved = CodingConfig::from_plugin_table(&config.plugin);
+        let resolved = CodingConfig::from_plugin_config(config.plugin.get("coding"));
         toml::Value::try_from(&resolved).ok()
     }
 

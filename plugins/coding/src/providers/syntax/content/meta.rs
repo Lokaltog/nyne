@@ -243,6 +243,20 @@ impl MetaSplice {
         Ok(WriteOutcome::Written(n))
     }
 
+    /// Resolve the splice target, apply a wrapping function to the plain text
+    /// (e.g. doc comment markers), then splice the result into the source file.
+    pub(super) fn wrap_and_splice(
+        &self,
+        ctx: &RequestContext<'_>,
+        plain: &str,
+        wrap_fn: impl FnOnce(&dyn Decomposer, &str, &str) -> String,
+    ) -> Result<WriteOutcome> {
+        let resolved = self.resolve()?;
+        let indent = indent_at(&resolved.shared.source, resolved.byte_range.start);
+        let wrapped = wrap_fn(resolved.shared.decomposer.as_ref(), plain, indent);
+        self.splice_write(ctx, &wrapped)
+    }
+
     /// Handle truncate-write: if `data` is empty, remove the span entirely;
     /// otherwise delegate to `write_fn`.
     pub(super) fn truncate_or(
@@ -282,28 +296,21 @@ pub(in crate::providers::syntax) struct DocstringSplice {
     pub meta: MetaSplice,
 }
 
-/// Methods for [`DocstringSplice`].
-impl DocstringSplice {
-    /// Wrap plain text in doc comment markers and splice into the source file.
-    fn wrap_and_splice(&self, ctx: &RequestContext<'_>, plain: &str) -> Result<WriteOutcome> {
-        let resolved = self.meta.resolve()?;
-        let indent = indent_at(&resolved.shared.source, resolved.byte_range.start);
-        let wrapped = resolved.shared.decomposer.wrap_doc_comment(plain, indent);
-        self.meta.splice_write(ctx, &wrapped)
-    }
-}
-
 /// [`Writable`] implementation for [`DocstringSplice`].
 impl Writable for DocstringSplice {
     /// Wrap plain text in doc comment syntax and splice into source.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
-        self.wrap_and_splice(ctx, from_utf8(data)?)
+        self.meta.wrap_and_splice(ctx, from_utf8(data)?, |d, text, indent| {
+            d.wrap_doc_comment(text, indent)
+        })
     }
 
     /// Remove docstring on empty truncate, otherwise splice.
     fn truncate_write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
-        self.meta
-            .truncate_or(ctx, data, |plain| self.wrap_and_splice(ctx, plain))
+        self.meta.truncate_or(ctx, data, |plain| {
+            self.meta
+                .wrap_and_splice(ctx, plain, |d, text, indent| d.wrap_doc_comment(text, indent))
+        })
     }
 }
 
@@ -315,28 +322,21 @@ pub(in crate::providers::syntax) struct FileDocstringSplice {
     pub meta: MetaSplice,
 }
 
-/// Methods for [`FileDocstringSplice`].
-impl FileDocstringSplice {
-    /// Wrap plain text in file doc comment syntax and splice into source.
-    fn wrap_and_splice(&self, ctx: &RequestContext<'_>, plain: &str) -> Result<WriteOutcome> {
-        let resolved = self.meta.resolve()?;
-        let indent = indent_at(&resolved.shared.source, resolved.byte_range.start);
-        let wrapped = resolved.shared.decomposer.wrap_file_doc_comment(plain, indent);
-        self.meta.splice_write(ctx, &wrapped)
-    }
-}
-
 /// [`Writable`] implementation for [`FileDocstringSplice`].
 impl Writable for FileDocstringSplice {
     /// Wrap plain text in file doc comment syntax and splice into source.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
-        self.wrap_and_splice(ctx, from_utf8(data)?)
+        self.meta.wrap_and_splice(ctx, from_utf8(data)?, |d, text, indent| {
+            d.wrap_file_doc_comment(text, indent)
+        })
     }
 
     /// Remove file docstring on empty truncate, otherwise splice.
     fn truncate_write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
-        self.meta
-            .truncate_or(ctx, data, |plain| self.wrap_and_splice(ctx, plain))
+        self.meta.truncate_or(ctx, data, |plain| {
+            self.meta
+                .wrap_and_splice(ctx, plain, |d, text, indent| d.wrap_file_doc_comment(text, indent))
+        })
     }
 }
 
