@@ -5,9 +5,9 @@
 
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
+use std::panic;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
-use std::{iter, panic};
 
 use color_eyre::eyre::{Report, Result, bail};
 
@@ -15,7 +15,7 @@ use super::cache::CachedNodeKind;
 use crate::dispatch::context::RequestContext;
 use crate::node::VirtualNode;
 use crate::node::kind::NodeKind;
-use crate::provider::{ConflictInfo, ConflictParty, ConflictResolution, Provider, ProviderId};
+use crate::provider::{ConflictInfo, ConflictResolution, Provider, ProviderId};
 
 /// Catch panics from a provider closure, logging them with provider identity.
 ///
@@ -254,13 +254,7 @@ pub(super) fn resolve_directory(providers: &[Arc<dyn Provider>], ctx: &RequestCo
         .collect();
 
     for (name, provider_ids) in &conflicts {
-        let conflict_infos: Vec<ConflictInfo> = provider_ids
-            .iter()
-            .map(|pid| ConflictInfo {
-                name: name.clone(),
-                party: ConflictParty::Provider(*pid),
-            })
-            .collect();
+        let conflict_infos = ConflictInfo::for_providers(name, provider_ids.iter().copied());
 
         let involved: HashSet<ProviderId> = provider_ids.iter().copied().collect();
 
@@ -342,13 +336,7 @@ fn resolve_competing_claims(
     let involved: HashSet<ProviderId> = claims.iter().map(|c| c.provider_id).collect();
 
     // Build conflict info: each claimant is told about the other claimants.
-    let conflict_infos: Vec<ConflictInfo> = claims
-        .iter()
-        .map(|c| ConflictInfo {
-            name: name.to_owned(),
-            party: ConflictParty::Provider(c.provider_id),
-        })
-        .collect();
+    let conflict_infos = ConflictInfo::for_providers(name, claims.iter().map(|c| c.provider_id));
 
     let outcome = collect_conflict_responses(providers, &involved, &conflict_infos, ctx);
 
@@ -449,13 +437,7 @@ pub(super) fn resolve_real_conflicts(
 
     for (name, nodes) in conflicting {
         let involved: HashSet<ProviderId> = nodes.iter().map(|o| o.provider_id).collect();
-        let conflict_infos: Vec<ConflictInfo> = iter::once(ConflictParty::RealFile)
-            .chain(involved.iter().map(|&pid| ConflictParty::Provider(pid)))
-            .map(|party| ConflictInfo {
-                name: name.clone(),
-                party,
-            })
-            .collect();
+        let conflict_infos = ConflictInfo::for_real_conflict(&name, involved.iter().copied());
 
         match resolve_conflict(&name, providers, &involved, &conflict_infos, ctx) {
             ConflictResult::Forced(winners) => {

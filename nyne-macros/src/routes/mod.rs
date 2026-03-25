@@ -84,29 +84,9 @@ fn validate_segment(
 
     // Lookup patterns are validated during parsing (must be Capture with prefix/suffix).
 
-    // Recursively validate children
-    let child_segments: Vec<&SegmentRoute> = seg
-        .sub_routes
-        .iter()
-        .filter_map(|e| if let RouteEntry::Segment(s) = e { Some(s) } else { None })
-        .collect();
-
-    if !child_segments.is_empty() {
-        let mut child_exacts = Vec::new();
-        let mut child_captures = 0;
-        let mut child_rests = 0;
-        let mut child_globs = 0;
-
-        for child in child_segments {
-            validate_segment(
-                child,
-                &mut child_exacts,
-                &mut child_captures,
-                &mut child_rests,
-                &mut child_globs,
-            )?;
-        }
-    }
+    // Recursively validate children — delegate to `validate_entries` which
+    // sets up fresh accumulators and filters for segments.
+    validate_entries(&seg.sub_routes)?;
 
     Ok(())
 }

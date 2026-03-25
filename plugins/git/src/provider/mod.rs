@@ -123,8 +123,8 @@ impl GitProvider {
         let git_dir_component = ctx.get::<GitDirName>().and_then(|g| g.0.clone());
 
         let mut b = names::handle_builder();
-        let blame_key = b.register("git/blame", include_str!("templates/blame.md.j2"));
-        let log_key = b.register("git/log", include_str!("templates/log.md.j2"));
+        let blame_key = b.register("git/blame", views::BLAME_TEMPLATE);
+        let log_key = b.register("git/log", views::LOG_TEMPLATE);
         let contributors_key = b.register("git/contributors", include_str!("templates/contributors.md.j2"));
         let status_key = b.register("git/status", include_str!("templates/status.md.j2"));
         let notes_key = b.register("git/notes", include_str!("templates/notes.md.j2"));

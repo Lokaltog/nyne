@@ -1,6 +1,6 @@
 //! Provider interface and registration.
-use std::fmt;
 use std::sync::Arc;
+use std::{fmt, iter};
 
 use color_eyre::eyre::Result;
 
@@ -84,6 +84,28 @@ pub enum ConflictParty {
 pub struct ConflictInfo {
     pub name: String,
     pub party: ConflictParty,
+}
+impl ConflictInfo {
+    /// Build conflict infos for provider-vs-provider conflicts.
+    pub fn for_providers(name: &str, pids: impl IntoIterator<Item = ProviderId>) -> Vec<Self> {
+        pids.into_iter()
+            .map(|pid| Self {
+                name: name.to_owned(),
+                party: ConflictParty::Provider(pid),
+            })
+            .collect()
+    }
+
+    /// Build conflict infos for real-vs-virtual conflicts (real file + providers).
+    pub fn for_real_conflict(name: &str, pids: impl IntoIterator<Item = ProviderId>) -> Vec<Self> {
+        iter::once(ConflictParty::RealFile)
+            .chain(pids.into_iter().map(ConflictParty::Provider))
+            .map(|party| Self {
+                name: name.to_owned(),
+                party,
+            })
+            .collect()
+    }
 }
 
 /// Result of conflict resolution by a provider.

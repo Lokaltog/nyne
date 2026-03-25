@@ -78,7 +78,7 @@ struct SessionGuard {
 
 /// Run the mount subcommand: mount one or more directories as FUSE filesystems.
 pub fn run(args: &MountArgs) -> Result<()> {
-    let nyne_config = NyneConfig::load()?;
+    let nyne_config = Arc::new(NyneConfig::load()?);
     let storage_strategy = nyne_config.repository.storage_strategy;
 
     // Ensure session directory exists before scanning.
@@ -155,7 +155,7 @@ pub fn run(args: &MountArgs) -> Result<()> {
             let config = sandbox::MountConfig::new(sandbox::MountEntry { path })?;
 
             let session_id = id.clone();
-            let nyne_config = nyne_config.clone();
+            let nyne_config = Arc::clone(&nyne_config);
             let mount_fn: sandbox::MountFn = Box::new(move |mount_path| {
                 build_fuse_session(
                     mount_path,

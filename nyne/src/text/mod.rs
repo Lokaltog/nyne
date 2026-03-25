@@ -21,10 +21,11 @@ pub fn slugify(s: &str, max_len: usize) -> String { truncate_at_boundary(&slugif
 /// kebab-case conversion.
 pub fn slugify_unbounded(s: &str) -> String {
     use convert_case::{Case, Casing};
-    s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { ' ' })
-        .collect::<String>()
-        .split_ascii_whitespace()
+    // Split on non-alphanumeric boundaries directly, filtering empties to
+    // normalize leading/trailing/consecutive separators. Avoids the extra
+    // `chars().map().collect::<String>()` from splitting on the input directly.
+    s.split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
         .to_case(Case::Kebab)
