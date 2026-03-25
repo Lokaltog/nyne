@@ -2,6 +2,7 @@
 
 use std::ops::Range as StdRange;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use color_eyre::eyre::Result;
 use convert_case::{Case, Casing};
@@ -44,12 +45,24 @@ pub(in crate::providers::syntax) enum LspFeature {
 
 /// Methods for [`LspFeature`].
 impl LspFeature {
+    /// Cached metadata for all variants, computed once on first access.
+    ///
+    /// Returns a `&'static` reference — no per-call allocation.
+    fn metadata(self) -> &'static FeatureMeta {
+        static TABLE: LazyLock<Vec<FeatureMeta>> =
+            LazyLock::new(|| LspFeature::iter().map(LspFeature::build_metadata).collect());
+        // SAFETY: TABLE has exactly LspFeature::COUNT entries (one per variant),
+        // and `self as usize` is always a valid variant index.
+        #[expect(clippy::indexing_slicing, reason = "variant index is always in bounds")]
+        &TABLE[self as usize]
+    }
+
     /// Single metadata table per variant — the **only** place that maps
     /// variant → per-variant data.
     ///
     /// All names are derived from the slug via `convert_case`. Adding a
     /// new feature = adding one arm here (plus `is_supported` and `query`).
-    fn metadata(self) -> FeatureMeta {
+    fn build_metadata(self) -> FeatureMeta {
         /// Build a [`FeatureMeta`] from a single slug.
         ///
         /// Derives `file_name` and `dir_name` via case conversion,
@@ -90,10 +103,10 @@ impl LspFeature {
     }
 
     /// Virtual file name derived from the feature slug.
-    pub(super) fn file_name(self) -> String { self.metadata().file_name }
+    pub(super) fn file_name(self) -> &'static str { &self.metadata().file_name }
 
     /// Symlink directory name for this feature, if it has one.
-    pub(super) fn dir_name(self) -> Option<String> { self.metadata().dir_name }
+    pub(super) fn dir_name(self) -> Option<&'static str> { self.metadata().dir_name.as_deref() }
 
     /// Template registration key and source for this feature.
     ///
@@ -112,8 +125,9 @@ impl LspFeature {
     pub(in crate::providers::syntax) fn register_globals(engine: &mut TemplateEngine) {
         for feature in Self::iter() {
             let m = feature.metadata();
-            let key = format!("FILE_{}", m.slug.to_case(Case::UpperSnake));
-            engine.add_global(key, m.file_name);
+            let mut key = String::from("FILE_");
+            key.push_str(&m.slug.to_case(Case::UpperSnake));
+            engine.add_global(key, &m.file_name);
         }
     }
 
@@ -122,7 +136,7 @@ impl LspFeature {
 
     /// Look up a feature by its symlink directory name.
     pub(in crate::providers::syntax) fn from_dir_name(name: &str) -> Option<Self> {
-        Self::iter().find(|f| f.dir_name().as_deref() == Some(name))
+        Self::iter().find(|f| f.dir_name() == Some(name))
     }
 
     /// Whether the server supports this feature, based on advertised capabilities.

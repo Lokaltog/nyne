@@ -9,9 +9,8 @@ use crate::sandbox;
 /// Arguments for the `exec` subcommand.
 #[derive(Debug, Args)]
 pub struct ExecArgs {
-    /// Session ID (optional if only one mount is active).
-    #[arg(long)]
-    pub id: Option<String>,
+    #[command(flatten)]
+    session: super::SessionArgs,
 
     /// Script address to execute (e.g., `provider.claude.post-tool-use`).
     pub address: String,
@@ -19,7 +18,7 @@ pub struct ExecArgs {
 
 /// Run the exec subcommand: execute a registered script via a daemon's control socket.
 pub fn run(args: &ExecArgs) -> Result<i32> {
-    let socket_path = super::discover_socket(args.id.as_deref())?;
+    let socket_path = args.session.socket_path()?;
 
     info!(
         socket = %socket_path.display(),

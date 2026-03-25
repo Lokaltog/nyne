@@ -111,14 +111,13 @@ impl GitRepo {
     ///
     /// Falls back to HEAD time if the revwalk finds nothing.
     pub fn file_epoch_secs(&self, rel_path: &str) -> i64 {
-        let repo = self.lock();
-        walk_file_commits(&repo, rel_path, 1, |c, _| c.time().seconds())
-            .ok()
-            .and_then(|mut v| v.pop())
-            .unwrap_or_else(|| {
-                drop(repo);
-                self.head_epoch_secs()
-            })
+        let result = {
+            let repo = self.lock();
+            walk_file_commits(&repo, rel_path, 1, |c, _| c.time().seconds())
+                .ok()
+                .and_then(|mut v| v.pop())
+        };
+        result.unwrap_or_else(|| self.head_epoch_secs())
     }
 
     /// Retrieve file content at a specific commit.
@@ -268,22 +267,27 @@ fn first_file_commit(repo: &git2::Repository, rel_path: &str) -> Result<Oid> {
         .ok_or_else(|| color_eyre::eyre::eyre!("no commits found touching {rel_path}"))
 }
 
-/// Check whether a commit's diff touches the given path.
-fn commit_touches_path(repo: &git2::Repository, commit: &git2::Commit<'_>, rel_path: &str) -> Result<bool> {
+/// Compute the diff for a single commit's changes to `rel_path`.
+fn commit_diff<'repo>(
+    repo: &'repo git2::Repository,
+    commit: &git2::Commit<'_>,
+    rel_path: &str,
+) -> Result<git2::Diff<'repo>> {
     let commit_tree = commit.tree()?;
     let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
     let mut opts = diff_opts(rel_path);
-    let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut opts))?;
+    Ok(repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut opts))?)
+}
+/// Check whether a commit's diff touches the given path.
+fn commit_touches_path(repo: &git2::Repository, commit: &git2::Commit<'_>, rel_path: &str) -> Result<bool> {
+    let diff = commit_diff(repo, commit, rel_path)?;
     Ok(diff.deltas().len() != 0)
 }
 
 /// Check whether a commit's diff for `rel_path` touches any lines in the given range.
 fn commit_touches_range(repo: &git2::Repository, oid: Oid, rel_path: &str, range: &SymbolLineRange) -> Result<bool> {
     let commit = repo.find_commit(oid)?;
-    let commit_tree = commit.tree()?;
-    let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
-    let mut opts = diff_opts(rel_path);
-    let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut opts))?;
+    let diff = commit_diff(repo, &commit, rel_path)?;
 
     let mut touches = false;
     let result = diff.foreach(

@@ -235,10 +235,13 @@ impl DirState {
     ///
     /// - `All`: returns all entries (including `Visibility::Hidden` nodes).
     /// - `Default` / `None`: returns only nodes passing [`CachedNode::is_visible`].
-    pub(super) fn readdir_entries(&self, visibility: ProcessVisibility) -> Vec<(&str, &CachedNode)> {
+    pub(super) fn readdir_entries(
+        &self,
+        visibility: ProcessVisibility,
+    ) -> Box<dyn Iterator<Item = (&str, &CachedNode)> + '_> {
         match visibility {
-            ProcessVisibility::All => self.all_entries().collect(),
-            _ => self.visible_entries().collect(),
+            ProcessVisibility::All => Box::new(self.all_entries()),
+            _ => Box::new(self.visible_entries()),
         }
     }
 

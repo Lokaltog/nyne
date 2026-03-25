@@ -77,12 +77,8 @@ impl ContentCache {
         }
     }
 
-    /// Get cached content for an inode.
-    ///
-    /// Returns `None` (and evicts the entry) if the source file has
-    /// been modified since the entry was cached.
-    pub(super) fn get(&self, inode: u64) -> Option<Arc<Vec<u8>>> {
-        // Fast path: read lock only.
+    /// Return the cached data for `inode` if it exists and is fresh, evicting stale entries.
+    fn get_if_fresh(&self, inode: u64) -> Option<Arc<Vec<u8>>> {
         {
             let entries = self.entries.read();
             let entry = entries.get(&inode)?;
@@ -90,25 +86,20 @@ impl ContentCache {
                 return Some(Arc::clone(&entry.data));
             }
         }
-        // Stale — evict under write lock.
         self.entries.write().remove(&inode);
         None
     }
 
+    /// Get cached content for an inode.
+    ///
+    /// Returns `None` (and evicts the entry) if the source file has
+    /// been modified since the entry was cached.
+    pub(super) fn get(&self, inode: u64) -> Option<Arc<Vec<u8>>> { self.get_if_fresh(inode) }
+
     /// Get the cached content size for an inode without cloning the data.
     ///
     /// Returns `None` (and evicts) if stale.
-    pub(super) fn get_size(&self, inode: u64) -> Option<u64> {
-        {
-            let entries = self.entries.read();
-            let entry = entries.get(&inode)?;
-            if !self.is_stale(entry) {
-                return Some(entry.data.len() as u64);
-            }
-        }
-        self.entries.write().remove(&inode);
-        None
-    }
+    pub(super) fn get_size(&self, inode: u64) -> Option<u64> { self.get_if_fresh(inode).map(|data| data.len() as u64) }
 
     /// Store content for an inode, returning an `Arc` to the cached data.
     ///

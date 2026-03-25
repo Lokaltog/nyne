@@ -9,9 +9,8 @@ use crate::sandbox;
 /// Arguments for the `ctl` subcommand.
 #[derive(Debug, Args)]
 pub struct CtlArgs {
-    /// Session ID (optional if only one mount is active).
-    #[arg(long)]
-    pub id: Option<String>,
+    #[command(flatten)]
+    session: super::SessionArgs,
 
     /// Control request JSON. Reads from stdin if omitted.
     pub request: Option<String>,
@@ -19,7 +18,7 @@ pub struct CtlArgs {
 
 /// Send a control request to a running daemon and print the JSON response.
 pub fn run(args: &CtlArgs) -> Result<()> {
-    let socket_path = super::discover_socket(args.id.as_deref())?;
+    let socket_path = args.session.socket_path()?;
 
     let req: sandbox::control::ControlRequest = match &args.request {
         Some(json) => serde_json::from_str(json).wrap_err("parsing control request")?,

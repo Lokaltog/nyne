@@ -3,7 +3,7 @@
 use std::io::ErrorKind;
 use std::sync::Arc;
 
-use color_eyre::eyre::{Report, Result, ensure};
+use color_eyre::eyre::{Report, Result, bail};
 
 use super::cache::{CachedNodeKind, NodeEntry, NodeSource};
 use super::resolve::{self, OwnedNode};
@@ -325,14 +325,21 @@ impl Router {
     /// Either way, the actual filesystem change triggers inotify events
     /// that flow through the watcher for cache invalidation (SSOT).
     fn dispatch_real_mutation(&self, op: &MutationOp<'_>) -> Result<()> {
-        // Collect providers that claim this mutation.
-        let handlers: Vec<ProviderId> = self
-            .registry
-            .active_providers()
-            .iter()
-            .filter_map(|provider| match provider.handle_mutation(op, self.real_fs.as_ref()) {
-                Ok(MutationOutcome::Handled) => Some(provider.id()),
-                Ok(MutationOutcome::NotHandled) => None,
+        // Single-claim loop: track the first provider that claims the mutation,
+        // bail immediately if a second one does.
+        let mut handler: Option<ProviderId> = None;
+        for provider in self.registry.active_providers() {
+            match provider.handle_mutation(op, self.real_fs.as_ref()) {
+                Ok(MutationOutcome::Handled) => {
+                    if let Some(first) = &handler {
+                        bail!(
+                            "ambiguous mutation: providers [{first}, {}] both claimed {op:?}",
+                            provider.id()
+                        );
+                    }
+                    handler = Some(provider.id());
+                }
+                Ok(MutationOutcome::NotHandled) => {}
                 Err(e) => {
                     tracing::warn!(
                         provider = %provider.id(),
@@ -340,19 +347,12 @@ impl Router {
                         error = %e,
                         "provider handle_mutation failed"
                     );
-                    None
                 }
-            })
-            .collect();
-
-        ensure!(
-            handlers.len() <= 1,
-            "ambiguous mutation: providers [{}] all claimed {op:?}",
-            handlers.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ")
-        );
+            }
+        }
 
         // No provider claimed — fall back to direct filesystem operation.
-        if handlers.is_empty() {
+        if handler.is_none() {
             op.execute(self.real_fs.as_ref())?;
         }
         Ok(())

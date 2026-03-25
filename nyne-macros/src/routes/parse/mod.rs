@@ -23,7 +23,7 @@ pub enum RouteEntry {
 
 /// A segment route with optional handler and children.
 pub struct SegmentRoute {
-    pub pattern: LitStr,
+    pub parsed_pattern: ParsedPattern,
     pub children_handler: Option<Ident>,
     pub lookups: Vec<LookupEntry>,
     pub files: Vec<FileEntry>,
@@ -38,7 +38,7 @@ pub enum LookupEntry {
     /// `lookup(handler)`
     CatchAll { handler: Ident },
     /// `lookup "{name}.ext" => handler`
-    Pattern { pattern: LitStr, handler: Ident },
+    Pattern { parsed: ParsedPattern, handler: Ident },
 }
 
 /// `file("name", readable_expr)` with optional `.no_cache()`, `.hidden()`, `.sliceable()`.
@@ -60,6 +60,7 @@ pub enum FileModifier {
 
 /// Parsed segment pattern from a string literal.
 #[cfg_attr(test, derive(Debug, PartialEq))]
+#[derive(Clone)]
 pub enum ParsedPattern {
     /// `"literal"` — exact match
     Exact(String),
@@ -140,6 +141,7 @@ fn parse_segment_route(input: ParseStream<'_>) -> Result<SegmentRoute> {
     };
 
     let pattern: LitStr = input.parse()?;
+    let parsed_pattern = parse_pattern(&pattern)?;
     let span = pattern.span();
     let mut children_handler = None;
     let mut lookups = Vec::new();
@@ -155,10 +157,9 @@ fn parse_segment_route(input: ParseStream<'_>) -> Result<SegmentRoute> {
             let ident: Ident = input.fork().parse()?;
             if ident == "lookup" {
                 // `"**" => lookup(handler)` form
-                let lookup = parse_lookup(input)?;
-                lookups.push(lookup);
+                lookups.push(parse_lookup(input)?);
                 return Ok(SegmentRoute {
-                    pattern,
+                    parsed_pattern,
                     children_handler,
                     lookups,
                     files,
@@ -183,7 +184,7 @@ fn parse_segment_route(input: ParseStream<'_>) -> Result<SegmentRoute> {
                 RouteEntry::Segment(_) => sub_routes.push(entry),
                 RouteEntry::Children(_) => {
                     return Err(syn::Error::new(
-                        pattern.span(),
+                        span,
                         "children() inside a segment block is redundant — use `=> handler` on the segment instead",
                     ));
                 }
@@ -193,7 +194,7 @@ fn parse_segment_route(input: ParseStream<'_>) -> Result<SegmentRoute> {
     }
 
     Ok(SegmentRoute {
-        pattern,
+        parsed_pattern,
         children_handler,
         lookups,
         files,
@@ -216,9 +217,25 @@ fn parse_lookup(input: ParseStream<'_>) -> Result<LookupEntry> {
     } else {
         // `lookup "pattern" => handler`
         let pattern: LitStr = input.parse()?;
+        let parsed = parse_pattern(&pattern)?;
+        let ParsedPattern::Capture {
+            ref prefix, ref suffix, ..
+        } = parsed
+        else {
+            return Err(syn::Error::new(
+                pattern.span(),
+                "lookup pattern must be a capture (e.g., \"{name}.ext\" or \"PREFIX:{name}\")",
+            ));
+        };
+        if prefix.is_none() && suffix.is_none() {
+            return Err(syn::Error::new(
+                pattern.span(),
+                "lookup pattern capture must have a prefix or suffix (e.g., \"{}.ext\" or \"BLAME.md:{}\")",
+            ));
+        }
         input.parse::<Token![=>]>()?;
         let handler: Ident = input.parse()?;
-        Ok(LookupEntry::Pattern { pattern, handler })
+        Ok(LookupEntry::Pattern { parsed, handler })
     }
 }
 

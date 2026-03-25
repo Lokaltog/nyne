@@ -96,7 +96,7 @@ impl LspCache {
     /// Insert a value into the cache.
     pub(crate) fn insert<T: Send + Sync + 'static>(&self, key: &CacheKey, data: T) {
         let key_str = key.to_string();
-        trace!(target: "nyne::lsp", key = %key, "cache insert");
+        trace!(target: "nyne::lsp", key = %key_str, "cache insert");
         let mut entries = self.entries.write();
         entries.insert(key_str, CacheEntry {
             data: Box::new(data),

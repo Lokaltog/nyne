@@ -16,9 +16,10 @@ use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::node::{CachePolicy, Lifecycle, NodeAttr, VirtualNode};
 use nyne::provider::{MutationOp, MutationOutcome, Node, Nodes, Provider, ProviderId};
-use nyne::templates::TemplateHandle;
+use nyne::templates::{TemplateHandle, TemplateView};
 use nyne::types::GitDirName;
 use nyne::types::real_fs::RealFs;
+use nyne::types::slice::SliceSpec;
 use nyne::types::vfs_path::VfsPath;
 use nyne::{dispatch_children, dispatch_lookup, source_file};
 use nyne_macros::routes;
@@ -270,8 +271,14 @@ impl GitProvider {
         Ok(Some(self.resolve_companion_git(&repo, rel)))
     }
 
-    /// Looks up a line-range-sliced blame view.
-    fn lookup_sliced_blame(&self, ctx: &RouteCtx<'_>) -> Node {
+    /// Shared implementation for line-range-sliced view lookups.
+    fn lookup_sliced_view<V: TemplateView + 'static>(
+        &self,
+        ctx: &RouteCtx<'_>,
+        handle: &TemplateHandle,
+        file_name: &str,
+        make_view: impl FnOnce(repo::FileViewCtx, SliceSpec) -> V,
+    ) -> Node {
         use nyne::types::slice::parse_spec;
         let Some(spec) = parse_spec(ctx.param("spec")) else {
             return Ok(None);
@@ -280,26 +287,25 @@ impl GitProvider {
         let repo = self.repo()?;
         let fctx = repo::FileViewCtx::new(&repo, repo.rel_path(&source));
         let spec_label = ctx.param("spec");
-        Ok(Some(self.handles.blame.node(
-            format!("{FILE_BLAME}:{spec_label}"),
-            SlicedBlameView { ctx: fctx, spec },
-        )))
+        Ok(Some(
+            handle.node(format!("{file_name}:{spec_label}"), make_view(fctx, spec)),
+        ))
+    }
+
+    /// Looks up a line-range-sliced blame view.
+    fn lookup_sliced_blame(&self, ctx: &RouteCtx<'_>) -> Node {
+        self.lookup_sliced_view(ctx, &self.handles.blame, FILE_BLAME, |fctx, spec| SlicedBlameView {
+            ctx: fctx,
+            spec,
+        })
     }
 
     /// Looks up a line-range-sliced log view.
     fn lookup_sliced_log(&self, ctx: &RouteCtx<'_>) -> Node {
-        use nyne::types::slice::parse_spec;
-        let Some(spec) = parse_spec(ctx.param("spec")) else {
-            return Ok(None);
-        };
-        let source = source_file(ctx)?;
-        let repo = self.repo()?;
-        let fctx = repo::FileViewCtx::new(&repo, repo.rel_path(&source));
-        let spec_label = ctx.param("spec");
-        Ok(Some(self.handles.log.node(
-            format!("{FILE_LOG}:{spec_label}"),
-            SlicedLogView { ctx: fctx, spec },
-        )))
+        self.lookup_sliced_view(ctx, &self.handles.log, FILE_LOG, |fctx, spec| SlicedLogView {
+            ctx: fctx,
+            spec,
+        })
     }
 
     /// Looks up a diff against a named ref.

@@ -2,9 +2,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Result;
 
-use super::parse::{
-    FileEntry, FileModifier, LookupEntry, ParsedPattern, RouteEntry, RoutesInput, SegmentRoute, parse_pattern,
-};
+use super::parse::{FileEntry, FileModifier, LookupEntry, ParsedPattern, RouteEntry, RoutesInput, SegmentRoute};
 
 /// Generate the complete `RouteTree` token stream from parsed and validated route input.
 pub fn generate(input: &RoutesInput) -> Result<TokenStream> {
@@ -35,7 +33,7 @@ fn generate_entries(entries: &[RouteEntry], ty: &syn::Type) -> Result<Vec<TokenS
             RouteEntry::Children(handler) => quote! {
                 .children(|p: &#ty, ctx: &RouteCtx<'_>| p.#handler(ctx))
             },
-            RouteEntry::Lookup(lookup) => generate_root_lookup(lookup, ty)?,
+            RouteEntry::Lookup(lookup) => generate_root_lookup(lookup, ty),
             RouteEntry::File(file) => generate_file(file),
         };
         calls.push(tokens);
@@ -45,8 +43,7 @@ fn generate_entries(entries: &[RouteEntry], ty: &syn::Type) -> Result<Vec<TokenS
 
 /// Generate a `.route(...)` builder call for a single segment, including its children, lookups, and files.
 fn generate_segment(seg: &SegmentRoute, ty: &syn::Type) -> Result<TokenStream> {
-    let pattern = parse_pattern(&seg.pattern)?;
-    let builder_ctor = pattern_to_builder(&pattern);
+    let builder_ctor = pattern_to_builder(&seg.parsed_pattern);
 
     let children_call = seg.children_handler.as_ref().map(|handler| {
         quote! { .children(|p: &#ty, ctx: &RouteCtx<'_>| ::nyne::dispatch::routing::tree::IntoNodes::into_nodes(p.#handler(ctx))) }
@@ -116,8 +113,8 @@ fn generate_lookup_closure(lookups: &[LookupEntry], ty: &syn::Type) -> Result<Op
                 }
                 catch_all = Some(handler);
             }
-            LookupEntry::Pattern { pattern, handler } => {
-                pattern_arms.push(generate_lookup_pattern_arm(pattern, handler)?);
+            LookupEntry::Pattern { parsed, handler, .. } => {
+                pattern_arms.push(generate_lookup_pattern_arm(parsed, handler));
             }
         }
     }
@@ -146,40 +143,24 @@ fn generate_lookup_closure(lookups: &[LookupEntry], ty: &syn::Type) -> Result<Op
 }
 
 /// Generate an `if let` arm that strips a prefix/suffix from the lookup name and dispatches to the handler.
-fn generate_lookup_pattern_arm(pattern: &syn::LitStr, handler: &syn::Ident) -> Result<TokenStream> {
-    let parsed = parse_pattern(pattern)?;
-    let ParsedPattern::Capture { name, prefix, suffix } = parsed else {
-        return Err(syn::Error::new(
-            pattern.span(),
-            concat!(
-                "lookup pattern must be a capture (e.g., \"{name",
-                "}.ext\" or \"PREFIX:{name",
-                "}\")"
-            ),
-        ));
+///
+/// The pattern is pre-validated during parsing to be a `Capture` with at least a prefix or suffix.
+fn generate_lookup_pattern_arm(pattern: &ParsedPattern, handler: &syn::Ident) -> TokenStream {
+    let ParsedPattern::Capture { name, prefix, suffix } = pattern else {
+        unreachable!("lookup patterns are validated as Capture during parsing")
     };
-    if prefix.is_none() && suffix.is_none() {
-        return Err(syn::Error::new(
-            pattern.span(),
-            concat!(
-                "lookup pattern capture must have a prefix or suffix (e.g., \"{",
-                "}.ext\" or \"BLAME.md:{",
-                "}\")"
-            ),
-        ));
-    }
 
     // Build the match expression: strip prefix then suffix (or just one).
-    let strip_expr = match (&prefix, &suffix) {
+    let strip_expr = match (prefix, suffix) {
         (Some(pfx), Some(sfx)) => quote! {
             name.strip_prefix(#pfx).and_then(|s| s.strip_suffix(#sfx))
         },
         (Some(pfx), None) => quote! { name.strip_prefix(#pfx) },
         (None, Some(sfx)) => quote! { name.strip_suffix(#sfx) },
-        (None, None) => unreachable!(),
+        (None, None) => unreachable!("lookup patterns are validated to have prefix or suffix during parsing"),
     };
 
-    Ok(quote! {
+    quote! {
         if let Some(__captured) = #strip_expr {
             if !__captured.is_empty() {
                 let mut __params = ctx.route_params().clone();
@@ -188,7 +169,7 @@ fn generate_lookup_pattern_arm(pattern: &syn::LitStr, handler: &syn::Ident) -> R
                 return ::nyne::dispatch::routing::tree::IntoNode::into_node(p.#handler(&__rctx));
             }
         }
-    })
+    }
 }
 
 /// Convert `Option<String>` to `Some("...")` / `None` token stream.
@@ -201,19 +182,19 @@ fn option_to_tokens(opt: Option<&String>) -> TokenStream {
 }
 
 /// Generate a root-level `.lookup(...)` call on `RouteTreeBuilder`.
-fn generate_root_lookup(lookup: &LookupEntry, ty: &syn::Type) -> Result<TokenStream> {
+fn generate_root_lookup(lookup: &LookupEntry, ty: &syn::Type) -> TokenStream {
     match lookup {
-        LookupEntry::CatchAll { handler } => Ok(quote! {
+        LookupEntry::CatchAll { handler } => quote! {
             .lookup(|p: &#ty, ctx: &RouteCtx<'_>, name: &str| ::nyne::dispatch::routing::tree::IntoNode::into_node(p.#handler(ctx, name)))
-        }),
-        LookupEntry::Pattern { pattern, handler } => {
-            let arm = generate_lookup_pattern_arm(pattern, handler)?;
-            Ok(quote! {
+        },
+        LookupEntry::Pattern { parsed, handler, .. } => {
+            let arm = generate_lookup_pattern_arm(parsed, handler);
+            quote! {
                 .lookup(|p: &#ty, ctx: &RouteCtx<'_>, name: &str| {
                     #arm
                     Ok(None)
                 })
-            })
+            }
         }
     }
 }

@@ -129,7 +129,7 @@ impl Router {
         // Skip provider notification if we're already inside a provider's
         // on_fs_change — prevents infinite loops from back-propagated
         // real-FS mutations.
-        if self.in_fs_change_notify.swap(true, Ordering::Acquire) {
+        if self.in_fs_change_notify.swap(true, Ordering::Relaxed) {
             return;
         }
 
@@ -142,7 +142,7 @@ impl Router {
             }
         }
 
-        self.in_fs_change_notify.store(false, Ordering::Release);
+        self.in_fs_change_notify.store(false, Ordering::Relaxed);
     }
 
     /// Evict L1 entry and kernel dentry for a skippable (gitignored /

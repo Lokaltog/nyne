@@ -57,6 +57,18 @@ pub enum Command {
     Config(ConfigArgs),
 }
 
+/// Common arguments for commands that target a running session.
+#[derive(Debug, clap::Args)]
+pub(crate) struct SessionArgs {
+    /// Session ID (optional if only one mount is active).
+    #[arg(long)]
+    id: Option<String>,
+}
+
+impl SessionArgs {
+    pub(crate) fn socket_path(&self) -> Result<PathBuf> { discover_socket(self.id.as_deref()) }
+}
+
 /// Discover the control socket path for a session.
 ///
 /// Priority:
@@ -64,7 +76,7 @@ pub enum Command {
 /// 2. `NYNE_CONTROL_SOCKET` env var → use directly
 /// 3. Single active session → use its socket
 /// 4. Error
-pub(crate) fn discover_socket(id: Option<&str>) -> Result<PathBuf> {
+fn discover_socket(id: Option<&str>) -> Result<PathBuf> {
     if let Some(id) = id {
         return session::control_socket(id);
     }

@@ -3,7 +3,7 @@ mod codegen;
 /// Parsing: converts `routes!` token input into a typed AST.
 pub mod parse;
 
-use parse::{ParsedPattern, RouteEntry, RoutesInput, SegmentRoute, parse_pattern};
+use parse::{ParsedPattern, RouteEntry, RoutesInput, SegmentRoute};
 use proc_macro2::TokenStream;
 use syn::Result;
 
@@ -43,9 +43,7 @@ fn validate_segment(
     rest_count: &mut usize,
     glob_count: &mut usize,
 ) -> Result<()> {
-    let pattern = parse_pattern(&seg.pattern)?;
-
-    match &pattern {
+    match &seg.parsed_pattern {
         ParsedPattern::Exact(name) => {
             if exact_names.iter().any(|(n, _)| n == name) {
                 return Err(syn::Error::new(
@@ -84,23 +82,7 @@ fn validate_segment(
         }
     }
 
-    // Validate lookup patterns: must be a capture with prefix and/or suffix.
-    for lookup in &seg.lookups {
-        if let parse::LookupEntry::Pattern { pattern, .. } = lookup {
-            let parsed = parse_pattern(pattern)?;
-            let is_bounded = matches!(
-                &parsed,
-                ParsedPattern::Capture { prefix: Some(_), .. } | ParsedPattern::Capture { suffix: Some(_), .. }
-            );
-            if !is_bounded {
-                return Err(syn::Error::new(
-                    pattern.span(),
-                    "lookup pattern must be a capture with prefix or suffix \
-                     (e.g., \"{ref}.diff\" or \"BLAME.md:{spec}\")",
-                ));
-            }
-        }
-    }
+    // Lookup patterns are validated during parsing (must be Capture with prefix/suffix).
 
     // Recursively validate children
     let child_segments: Vec<&SegmentRoute> = seg

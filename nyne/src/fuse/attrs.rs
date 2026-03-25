@@ -7,9 +7,10 @@ use fuser::{Errno, FileType, Generation, INodeNo, ReplyDirectoryPlus, Request};
 
 use super::NyneFs;
 use crate::dispatch::{ReaddirEntry, ResolvedInode, Router};
-use crate::node::NodeKind;
 use crate::node::default_permissions::{DIR_RO, DIR_RW, FILE_RW};
+use crate::node::{NodeKind, VirtualNode};
 use crate::types::file_kind::FileKind;
+use crate::types::vfs_path::VfsPath;
 
 /// TTL for cached attribute/entry responses on most paths.
 const TTL: Duration = Duration::from_secs(1);
@@ -70,113 +71,127 @@ impl NyneFs {
             return Some((Self::root_attr(req), TTL));
         }
         match self.resolve_for_request(ino, req)? {
-            ResolvedInode::Real { file_type, path } => {
-                let meta = self.router.real_fs().metadata(&path).ok()?;
-                // Directories report r-xr-xr-x to prevent editors from
-                // attempting atomic saves (rename-write-unlink). Without
-                // `default_permissions`, the kernel still forwards create/
-                // rename/unlink to FUSE — the permission bits only affect
-                // editor save-strategy decisions, not actual enforcement.
-                let perm = if file_type == FileKind::Directory {
-                    u16::try_from(meta.permissions & 0o7777).unwrap_or(DIR_RW) & !0o222
-                } else {
-                    u16::try_from(meta.permissions & 0o7777).unwrap_or(FILE_RW)
-                };
-                Some((
-                    make_attr(
-                        ino,
-                        meta.size,
-                        file_kind_to_fuse(file_type),
-                        perm,
-                        Timestamps {
-                            atime: self.atime_overrides.read().get(&ino).copied().unwrap_or(UNIX_EPOCH),
-                            mtime: meta.mtime,
-                            ctime: meta.mtime,
-                        },
-                        req,
-                    ),
-                    TTL,
-                ))
-            }
-            ResolvedInode::Virtual {
-                node,
-                dir_path,
-                provider_id: _,
-            } => {
-                // Query lifecycle for custom attribute overrides.
-                let ctx = self.router.make_request_context(&dir_path);
-                let lifecycle_attr = node.lifecycle().and_then(|lc| lc.getattr(&ctx));
-
-                let size = lifecycle_attr
-                    .as_ref()
-                    .and_then(|a| a.size)
-                    .or_else(|| match node.kind() {
-                        NodeKind::File { size_hint } => *size_hint,
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| match node.kind() {
-                        NodeKind::File { .. } => {
-                            // All virtual files use FOPEN_DIRECT_IO, so st_size
-                            // is advisory — the kernel reads until EOF regardless.
-                            // Use the L2 cached size when available (cheap lookup),
-                            // otherwise fall back to a non-zero sentinel. This
-                            // avoids running the full read pipeline just for a
-                            // byte count, which matters especially for derived
-                            // inodes that now have TTL=0 (more frequent getattr).
-                            //
-                            // The sentinel must be non-zero: st_size=0 causes
-                            // tools like `cat` and `wc` to report empty files.
-                            self.router
-                                .content_cache_size(ino)
-                                .unwrap_or_else(|| u64::from(BLKSIZE))
-                        }
-                        _ => 0,
-                    });
-
-                // Use UNIX_EPOCH as fallback — stability is what matters for
-                // editors. SystemTime::now() caused every getattr to return a
-                // different mtime, triggering "file modified since opening"
-                // warnings in neovim. Providers that need real timestamps
-                // should implement Lifecycle::getattr.
-                let mtime = lifecycle_attr
-                    .as_ref()
-                    .and_then(|a| a.mtime)
-                    .map_or(UNIX_EPOCH, |secs| UNIX_EPOCH + Duration::from_secs(secs));
-
-                let ctime = lifecycle_attr
-                    .as_ref()
-                    .and_then(|a| a.ctime)
-                    .map_or(mtime, |secs| UNIX_EPOCH + Duration::from_secs(secs));
-
-                // Kernel cache TTL is structural, not configurable:
-                // - Derived inodes (have a source file) → TTL=0 so every
-                //   access consults the daemon's generation-based staleness.
-                // - Shadow inodes (force-won over real file) → TTL=0 so
-                //   per-process visibility demoting works correctly.
-                // - All others → standard TTL.
-                let ttl = if node.source().is_some() || node.shadows_real() {
-                    Duration::ZERO
-                } else {
-                    TTL
-                };
-
-                Some((
-                    make_attr(
-                        ino,
-                        size,
-                        file_kind_to_fuse(node.kind().file_kind()),
-                        node.permissions(),
-                        Timestamps {
-                            atime: UNIX_EPOCH,
-                            mtime,
-                            ctime,
-                        },
-                        req,
-                    ),
-                    ttl,
-                ))
-            }
+            ResolvedInode::Real { file_type, path } => self.build_real_attr(ino, file_type, &path, req),
+            ResolvedInode::Virtual { node, dir_path, .. } => self.build_virtual_attr(ino, &node, &dir_path, req),
         }
+    }
+
+    /// Build attributes for a real filesystem inode.
+    fn build_real_attr(
+        &self,
+        ino: u64,
+        file_type: FileKind,
+        path: &VfsPath,
+        req: &Request,
+    ) -> Option<(fuser::FileAttr, Duration)> {
+        let meta = self.router.real_fs().metadata(path).ok()?;
+        // Directories report r-xr-xr-x to prevent editors from
+        // attempting atomic saves (rename-write-unlink). Without
+        // `default_permissions`, the kernel still forwards create/
+        // rename/unlink to FUSE — the permission bits only affect
+        // editor save-strategy decisions, not actual enforcement.
+        let perm = if file_type == FileKind::Directory {
+            u16::try_from(meta.permissions & 0o7777).unwrap_or(DIR_RW) & !0o222
+        } else {
+            u16::try_from(meta.permissions & 0o7777).unwrap_or(FILE_RW)
+        };
+        Some((
+            make_attr(
+                ino,
+                meta.size,
+                file_kind_to_fuse(file_type),
+                perm,
+                Timestamps {
+                    atime: self.atime_overrides.read().get(&ino).copied().unwrap_or(UNIX_EPOCH),
+                    mtime: meta.mtime,
+                    ctime: meta.mtime,
+                },
+                req,
+            ),
+            TTL,
+        ))
+    }
+
+    /// Build attributes for a virtual (provider-generated) inode.
+    fn build_virtual_attr(
+        &self,
+        ino: u64,
+        node: &VirtualNode,
+        dir_path: &VfsPath,
+        req: &Request,
+    ) -> Option<(fuser::FileAttr, Duration)> {
+        // Query lifecycle for custom attribute overrides.
+        let ctx = self.router.make_request_context(dir_path);
+        let lifecycle_attr = node.lifecycle().and_then(|lc| lc.getattr(&ctx));
+
+        let size = lifecycle_attr
+            .as_ref()
+            .and_then(|a| a.size)
+            .or_else(|| match node.kind() {
+                NodeKind::File { size_hint } => *size_hint,
+                _ => None,
+            })
+            .unwrap_or_else(|| match node.kind() {
+                NodeKind::File { .. } => {
+                    // All virtual files use FOPEN_DIRECT_IO, so st_size
+                    // is advisory — the kernel reads until EOF regardless.
+                    // Use the L2 cached size when available (cheap lookup),
+                    // otherwise fall back to a non-zero sentinel. This
+                    // avoids running the full read pipeline just for a
+                    // byte count, which matters especially for derived
+                    // inodes that now have TTL=0 (more frequent getattr).
+                    //
+                    // The sentinel must be non-zero: st_size=0 causes
+                    // tools like `cat` and `wc` to report empty files.
+                    self.router
+                        .content_cache_size(ino)
+                        .unwrap_or_else(|| u64::from(BLKSIZE))
+                }
+                _ => 0,
+            });
+
+        // Use UNIX_EPOCH as fallback — stability is what matters for
+        // editors. SystemTime::now() caused every getattr to return a
+        // different mtime, triggering "file modified since opening"
+        // warnings in neovim. Providers that need real timestamps
+        // should implement Lifecycle::getattr.
+        let mtime = lifecycle_attr
+            .as_ref()
+            .and_then(|a| a.mtime)
+            .map_or(UNIX_EPOCH, |secs| UNIX_EPOCH + Duration::from_secs(secs));
+
+        let ctime = lifecycle_attr
+            .as_ref()
+            .and_then(|a| a.ctime)
+            .map_or(mtime, |secs| UNIX_EPOCH + Duration::from_secs(secs));
+
+        // Kernel cache TTL is structural, not configurable:
+        // - Derived inodes (have a source file) → TTL=0 so every
+        //   access consults the daemon's generation-based staleness.
+        // - Shadow inodes (force-won over real file) → TTL=0 so
+        //   per-process visibility demoting works correctly.
+        // - All others → standard TTL.
+        let ttl = if node.source().is_some() || node.shadows_real() {
+            Duration::ZERO
+        } else {
+            TTL
+        };
+
+        Some((
+            make_attr(
+                ino,
+                size,
+                file_kind_to_fuse(node.kind().file_kind()),
+                node.permissions(),
+                Timestamps {
+                    atime: UNIX_EPOCH,
+                    mtime,
+                    ctime,
+                },
+                req,
+            ),
+            ttl,
+        ))
     }
 
     /// Build a `FileAttr` for the root directory.

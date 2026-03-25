@@ -228,6 +228,14 @@ impl LspClient {
         self.send_request(lsp_req::Rename::METHOD, params)
     }
 
+    /// Access the server's file operations capabilities, if advertised.
+    fn file_operations(&self) -> Option<&lsp_types::WorkspaceFileOperationsServerCapabilities> {
+        self.capabilities()
+            .workspace
+            .as_ref()
+            .and_then(|ws| ws.file_operations.as_ref())
+    }
+
     /// Request import-path updates before renaming files.
     ///
     /// Sends `workspace/willRenameFiles` to compute workspace edits (e.g.,
@@ -235,15 +243,7 @@ impl LspClient {
     /// rename. Returns `None` if the server doesn't support file rename
     /// operations or returns a null edit.
     pub(crate) fn will_rename_files(&self, old_uri: &str, new_uri: &str) -> Result<Option<WorkspaceEdit>> {
-        let supports = self
-            .capabilities
-            .workspace
-            .as_ref()
-            .and_then(|ws| ws.file_operations.as_ref())
-            .and_then(|fo| fo.will_rename.as_ref())
-            .is_some();
-
-        if !supports {
+        if self.file_operations().and_then(|fo| fo.will_rename.as_ref()).is_none() {
             debug!(
                 target: "nyne::lsp",
                 server = %self.name,
@@ -267,15 +267,7 @@ impl LspClient {
     /// Fire-and-forget notification so the server can update its internal
     /// state (e.g., update its file index, re-resolve module paths).
     pub(crate) fn did_rename_files(&self, old_uri: &str, new_uri: &str) -> Result<()> {
-        let supports = self
-            .capabilities
-            .workspace
-            .as_ref()
-            .and_then(|ws| ws.file_operations.as_ref())
-            .and_then(|fo| fo.did_rename.as_ref())
-            .is_some();
-
-        if !supports {
+        if self.file_operations().and_then(|fo| fo.did_rename.as_ref()).is_none() {
             debug!(
                 target: "nyne::lsp",
                 server = %self.name,

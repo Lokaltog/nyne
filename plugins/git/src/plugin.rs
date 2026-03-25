@@ -61,11 +61,10 @@ fn git_dir_component(overlay_root: &Path, git_dir_path: &Path) -> Option<String>
         .to_str()
         .map_or(git_dir_path, |s| Path::new(s.trim_end_matches('/')));
 
-    let relative = git_path.strip_prefix(overlay_root).ok()?;
-    let first = relative.components().next()?;
-    let name = first.as_os_str().to_str()?;
+    let mut components = git_path.strip_prefix(overlay_root).ok()?.components();
+    let name = components.next()?.as_os_str().to_str()?;
 
-    if relative.components().count() > 1 {
+    if components.next().is_some() {
         warn!(
             git_path = %git_path.display(),
             "git directory is nested — using first component for filter"

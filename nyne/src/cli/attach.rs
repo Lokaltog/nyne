@@ -77,7 +77,9 @@ impl Drop for RegistrationGuard {
 pub fn run(args: &AttachArgs) -> Result<i32> {
     let registry = SessionRegistry::scan()?;
     let session_info = registry.resolve(args.id.as_deref())?;
-    let control_socket = session::control_socket(&session_info.id).ok();
+    let control_socket = session::control_socket(&session_info.id)
+        .inspect_err(|e| warn!(error = %e, "control socket unavailable — process registration disabled"))
+        .ok();
 
     let command = if args.command.is_empty() {
         vec![env::var_os("SHELL").unwrap_or_else(|| OsString::from("/bin/sh"))]
