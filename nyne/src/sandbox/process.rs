@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use std::io::Error;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::process::Command;
-use std::{env, process};
+use std::{env, fs, process};
 
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use rustix::io::{self as rstx_io, Errno};
@@ -199,7 +199,20 @@ fn kill_and_reap(pid: Pid) {
 ///
 /// SAFETY: must be called single-threaded (before any threads are
 /// spawned). This is guaranteed in the PID namespace init process.
-pub(super) fn set_env(key: &str, value: &str) { unsafe { env::set_var(key, value) }; }
+pub(super) fn set_env(key: &str, value: &str) {
+    debug_assert!(
+        {
+            let status = fs::read_to_string("/proc/self/status").unwrap_or_default();
+            status
+                .lines()
+                .find_map(|l| l.strip_prefix("Threads:"))
+                .and_then(|v| v.trim().parse::<usize>().ok())
+                == Some(1)
+        },
+        "set_env must be called single-threaded"
+    );
+    unsafe { env::set_var(key, value) };
+}
 
 /// PID 1 init process: fork the command, forward signals, and reap orphans on exit.
 pub(super) fn run_init(command: &[OsString]) -> Result<i32> {

@@ -3,19 +3,19 @@
 use nyne::templates::HandleBuilder;
 
 /// Well-known directory name for git content (`@/git/`).
-pub const DIR_GIT: &str = "git";
+pub(crate) const DIR_GIT: &str = "git";
 
 /// Directory name for branch listing (`@/git/branches/`).
-pub const DIR_BRANCHES: &str = "branches";
+pub(crate) const DIR_BRANCHES: &str = "branches";
 
 /// Directory name for tag listing (`@/git/tags/`).
-pub const DIR_TAGS: &str = "tags";
+pub(crate) const DIR_TAGS: &str = "tags";
 
 /// Directory name for file history versions (`file.rs@/history/`).
 pub const DIR_HISTORY: &str = "history";
 
 /// Directory name for diff variants (`file.rs@/diff/`).
-pub const DIR_DIFF: &str = "diff";
+pub(crate) const DIR_DIFF: &str = "diff";
 
 /// Virtual file for per-file git blame.
 pub const FILE_BLAME: &str = "BLAME.md";
@@ -24,16 +24,16 @@ pub const FILE_BLAME: &str = "BLAME.md";
 pub const FILE_LOG: &str = "LOG.md";
 
 /// Virtual file for per-file git contributors.
-pub const FILE_CONTRIBUTORS: &str = "CONTRIBUTORS.md";
+pub(crate) const FILE_CONTRIBUTORS: &str = "CONTRIBUTORS.md";
 
 /// Virtual file for per-file git notes.
-pub const FILE_NOTES: &str = "NOTES.md";
+pub(crate) const FILE_NOTES: &str = "NOTES.md";
 
 /// Virtual file for repository-wide git status.
-pub const FILE_STATUS: &str = "STATUS.md";
+pub(crate) const FILE_STATUS: &str = "STATUS.md";
 
 /// Virtual file for HEAD working-directory diff.
-pub const FILE_HEAD_DIFF: &str = "HEAD.diff";
+pub(crate) const FILE_HEAD_DIFF: &str = "HEAD.diff";
 
 /// Create a [`HandleBuilder`](nyne::templates::HandleBuilder) with git name
 /// globals pre-registered for template rendering.

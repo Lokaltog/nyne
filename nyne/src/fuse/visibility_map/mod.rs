@@ -272,11 +272,12 @@ fn read_ppid(pid: u32) -> Option<u32> {
         .and_then(|s| s.parse().ok())
 }
 
-/// Truncate a process name to [`COMM_MAX_LEN`] chars, matching the kernel's
-/// `/proc/{pid}/comm` truncation behavior.
+/// Truncate a process name to [`COMM_MAX_LEN`] bytes, matching the kernel's
+/// `/proc/{pid}/comm` truncation behavior. Uses `floor_char_boundary` to
+/// avoid panicking on multi-byte UTF-8 characters at the boundary.
 fn truncate_comm(name: String) -> String {
     if name.len() > COMM_MAX_LEN {
-        name[..COMM_MAX_LEN].to_owned()
+        name[..name.floor_char_boundary(COMM_MAX_LEN)].to_owned()
     } else {
         name
     }

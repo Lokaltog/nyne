@@ -1,21 +1,7 @@
-//! Git clone for overlay lowerdir construction.
+//! Git-backed project cloning for overlay lowerdirs.
 //!
-//! Creates an independent clone of a project to serve as an immutable
-//! lowerdir for overlayfs. Two strategies are available (selected via
-//! [`StorageStrategy`]):
-//!
-//! - **Snapshot**: initialises a fresh repo and copies only the git objects
-//!   reachable from the source HEAD tree via the `Odb` read/write API.
-//!   Produces a single snapshot commit. Minimal disk usage (~working tree
-//!   size), works across filesystems.
-//!
-//! - **Hardlink**: uses `git2::build::RepoBuilder` with `CloneLocal::Auto`.
-//!   Hardlinks objects when source and target are on the same filesystem;
-//!   falls back to a full copy otherwise. Fast and fully independent, but
-//!   the fallback copy can be very large.
-//!
-//! **Note:** `Passthrough` mode bypasses cloning entirely — the caller
-//! never invokes [`clone_project`] for that strategy.
+//! Implements [`ProjectCloner`] for snapshot and hardlink cloning strategies.
+//! Registered at link time via the [`PROJECT_CLONERS`] distributed slice.
 
 use std::collections::HashSet;
 use std::fs;
@@ -24,20 +10,29 @@ use std::path::Path;
 use color_eyre::eyre::{Result, WrapErr};
 use git2::build::CloneLocal;
 use git2::{ObjectType, Odb, Oid, Repository, Tree};
+use linkme::distributed_slice;
+use nyne::config::StorageStrategy;
+use nyne::{ClonerFactory, PROJECT_CLONERS, ProjectCloner};
 use tracing::{debug, info};
 
-use crate::config::StorageStrategy;
+struct GitCloner;
 
-/// Clone a git repository using the configured strategy.
-pub(super) fn clone_project(source: &Path, target: &Path, strategy: StorageStrategy) -> Result<()> {
-    fs::create_dir_all(target).wrap_err_with(|| format!("creating clone target {}", target.display()))?;
+impl ProjectCloner for GitCloner {
+    fn clone_project(&self, source: &Path, target: &Path, strategy: StorageStrategy) -> Result<()> {
+        fs::create_dir_all(target).wrap_err_with(|| format!("creating clone target {}", target.display()))?;
 
-    match strategy {
-        StorageStrategy::Snapshot => clone_snapshot(source, target),
-        StorageStrategy::Hardlink => clone_hardlink(source, target),
-        StorageStrategy::Passthrough => unreachable!("passthrough strategy does not clone"),
+        match strategy {
+            StorageStrategy::Snapshot => clone_snapshot(source, target),
+            StorageStrategy::Hardlink => clone_hardlink(source, target),
+            StorageStrategy::Passthrough => unreachable!("passthrough strategy does not clone"),
+        }
     }
 }
+
+/// Cloner factory registered via `linkme` distributed slice.
+#[allow(unsafe_code)]
+#[distributed_slice(PROJECT_CLONERS)]
+static GIT_CLONER: ClonerFactory = || Box::new(GitCloner);
 
 /// Snapshot clone: copy only HEAD tree objects via the git object database.
 ///

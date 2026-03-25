@@ -14,10 +14,8 @@ pub enum FileKind {
     Symlink,
 }
 
-/// Conversion from standard library filesystem types.
-impl FileKind {
-    /// Convert from `std::fs::FileType`.
-    pub fn from_std(ft: FileType) -> Self {
+impl From<FileType> for FileKind {
+    fn from(ft: FileType) -> Self {
         if ft.is_dir() {
             Self::Directory
         } else if ft.is_symlink() {

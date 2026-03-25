@@ -1,5 +1,6 @@
 //! Nyne provider — root-level meta files (GUIDE, STATUS).
 
+use std::sync::Arc;
 use std::time::Instant;
 
 use color_eyre::eyre::Result;
@@ -8,6 +9,7 @@ use serde::Serialize;
 
 use super::names::{self, COMPANION_SUFFIX, FILE_GUIDE, FILE_MOUNT_STATUS};
 use super::prelude::*;
+use crate::dispatch::activation::ActivationContext;
 use crate::dispatch::routing::ctx::RouteCtx;
 use crate::dispatch::routing::tree::RouteTree;
 use crate::plugin::PLUGINS;
@@ -30,8 +32,8 @@ impl NyneProvider {
         let source_dir = ctx.root().display().to_string();
         let empty = ExtensionCounts::default();
         let ext_counts = ctx.get::<ExtensionCounts>().unwrap_or(&empty);
-        let languages = super::util::languages_display(&ext_counts.0);
-        let ext = super::util::dominant_ext(&ext_counts.0).to_owned();
+        let languages = super::util::languages_display(ext_counts.as_slice());
+        let ext = super::util::dominant_ext(ext_counts.as_slice()).to_owned();
 
         let mut b = names::handle_builder();
         let guide_key = b.register("nyne/guide", include_str!("templates/guide.md.j2"));
@@ -40,14 +42,14 @@ impl NyneProvider {
         let guide = TemplateHandle::new(&engine, guide_key);
         let status = TemplateHandle::new(&engine, status_key);
 
+        let status_view = StatusView {
+            ctx: Arc::clone(ctx),
+            start_time: Instant::now(),
+        };
         let guide_view = GuideView {
             source_dir,
             languages,
             ext,
-        };
-        let status_view = StatusView {
-            ctx: Arc::clone(ctx),
-            start_time: Instant::now(),
         };
 
         let routes = routes!(Self, {
@@ -91,7 +93,7 @@ impl NyneProvider {
     /// At `@/` level — emit GUIDE.md and STATUS.md.
     fn children_at_root(&self, _ctx: &RouteCtx<'_>) -> Vec<VirtualNode> {
         vec![
-            self.guide.node(FILE_GUIDE, serialize_view(self.guide_view.clone())),
+            self.guide.node(FILE_GUIDE, serialize_view(&self.guide_view)),
             self.status
                 .node(FILE_MOUNT_STATUS, StatusView {
                     ctx: Arc::clone(&self.status_view.ctx),
@@ -139,7 +141,14 @@ impl TemplateView for StatusView {
         let uptime = humantime::format_duration(self.start_time.elapsed()).to_string();
         let providers: Vec<&str> = PLUGINS
             .iter()
-            .filter_map(|factory| factory().providers(&self.ctx).ok())
+            .filter_map(|factory| {
+                factory()
+                    .providers(&self.ctx)
+                    .inspect_err(|e| {
+                        tracing::warn!(error = %e, "provider creation failed in status view");
+                    })
+                    .ok()
+            })
             .flatten()
             .filter(|p| p.should_activate(&self.ctx))
             .map(|p| p.id().as_str())
@@ -149,7 +158,7 @@ impl TemplateView for StatusView {
             languages => {
                 let empty = ExtensionCounts::default();
                 let ext_counts = self.ctx.get::<ExtensionCounts>().unwrap_or(&empty);
-                super::util::languages_display(&ext_counts.0)
+                super::util::languages_display(ext_counts.as_slice())
             },
             providers,
             uptime,

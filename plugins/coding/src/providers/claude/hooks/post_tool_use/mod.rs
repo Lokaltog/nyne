@@ -56,7 +56,7 @@ impl Script for PostToolUse {
         let root = ctx.activation().root_prefix();
 
         let services = CodingServices::get(ctx.activation());
-        let analysis = run_analysis_for_tool(&services.analysis, ctx, &input, tool_name, &root);
+        let analysis = run_analysis_for_tool(&services.analysis, ctx, &input, tool_name, root);
 
         // Narrow hints/diagnostics to the changed region for Edit calls.
         let changed = analysis
@@ -65,11 +65,11 @@ impl Script for PostToolUse {
             .and_then(|d| changed_line_range(&input, tool_name, d));
         let hints = filter_hints(analysis.hints, changed.as_ref());
         let diagnostics = filter_diagnostics(
-            fetch_diagnostics_for_tool(ctx, &input, tool_name, &root),
+            fetch_diagnostics_for_tool(ctx, &input, tool_name, root),
             changed.as_ref(),
         );
 
-        let view = build_view(&input, tool_name, &root, &hints, &diagnostics);
+        let view = build_view(&input, tool_name, root, &hints, &diagnostics);
         let rendered = self.engine.render(TMPL_POST, &view);
         let trimmed = rendered.trim();
 
@@ -91,22 +91,20 @@ fn build_view(
 ) -> minijinja::Value {
     let tool_input = input.tool_input.clone().unwrap_or(serde_json::Value::Null);
 
+    // Deserialize typed inputs once for reuse across sections.
+    let bash_input = (tool_name == "Bash")
+        .then(|| input.tool_input_as::<BashToolInput>())
+        .flatten();
+    let bash_cmd = bash_input.and_then(|b| b.command);
+
     // Bash: extract command name and relative file paths.
-    let (bin, rel_paths) = if tool_name == "Bash" {
-        match input.tool_input_as::<BashToolInput>().and_then(|b| b.command) {
-            Some(cmd) => (Some(extract_command_name(&cmd)), extract_rel_paths(&cmd, root)),
-            None => (None, Vec::new()),
-        }
-    } else {
-        (None, Vec::new())
+    let (bin, rel_paths) = match &bash_cmd {
+        Some(cmd) => (Some(extract_command_name(cmd)), extract_rel_paths(cmd, root)),
+        None => (None, Vec::new()),
     };
 
     // Edit/Write: file path, relative path, symbol, VFS status.
-    let file_path = match tool_name {
-        "Edit" => input.tool_input_as::<EditToolInput>().and_then(|e| e.file_path),
-        "Write" => input.tool_input_as::<WriteToolInput>().and_then(|w| w.file_path),
-        _ => None,
-    };
+    let file_path = tool_file_path(input, tool_name);
     let is_vfs = file_path.as_deref().is_some_and(super::is_vfs_path);
     let rel = file_path
         .as_deref()
@@ -139,9 +137,7 @@ fn build_view(
             .and_then(|r| r.file_path)
             .filter(|fp| super::is_symbols_overview(fp))
             .map(|fp| strip_to_rel(&fp, root)),
-        "Bash" => input
-            .tool_input_as::<BashToolInput>()
-            .and_then(|b| b.command)
+        "Bash" => bash_cmd
             .as_deref()
             .and_then(extract_cat_overview_path)
             .filter(|fp| super::is_symbols_overview(fp))
@@ -220,18 +216,20 @@ fn extract_cat_overview_path(cmd: &str) -> Option<String> {
     path.ends_with(FILE_OVERVIEW).then(|| path.to_owned())
 }
 
+/// Extract the file path from an Edit or Write tool call.
+fn tool_file_path(input: &HookInput, tool_name: &str) -> Option<String> {
+    match tool_name {
+        "Edit" => input.tool_input_as::<EditToolInput>().and_then(|e| e.file_path),
+        "Write" => input.tool_input_as::<WriteToolInput>().and_then(|w| w.file_path),
+        _ => None,
+    }
+}
 /// Extract the source file's relative path from an Edit/Write tool call.
 ///
 /// Returns `None` for non-file tools or paths outside root.
 /// VFS paths are resolved to their underlying source file.
-/// Returns an owned `String` because the file path is deserialized from
-/// the hook input and not borrowed from a longer-lived source.
 fn source_rel_path(input: &HookInput, tool_name: &str, root: &str) -> Option<String> {
-    let file_path = match tool_name {
-        "Edit" => input.tool_input_as::<EditToolInput>().and_then(|e| e.file_path),
-        "Write" => input.tool_input_as::<WriteToolInput>().and_then(|w| w.file_path),
-        _ => return None,
-    }?;
+    let file_path = tool_file_path(input, tool_name)?;
 
     let src = if super::is_vfs_path(&file_path) {
         super::source_file_of(&file_path)
@@ -384,9 +382,10 @@ fn changed_line_range(input: &HookInput, tool_name: &str, decomposed: &Decompose
     };
     let byte_end = byte_start + new_string.len();
 
-    // 0-based line numbers.
-    let start_line = decomposed.source[..byte_start].bytes().filter(|&b| b == b'\n').count();
-    let end_line = decomposed.source[..byte_end].bytes().filter(|&b| b == b'\n').count();
+    // 0-based line numbers via Rope (O(log n) instead of O(n) byte scan).
+    let rope = crop::Rope::from(&*decomposed.source);
+    let start_line = rope.line_of_byte(byte_start);
+    let end_line = rope.line_of_byte(byte_end);
 
     // Expand to enclosing tree-sitter scope if a parse tree is available.
     let (scope_start, scope_end) = decomposed

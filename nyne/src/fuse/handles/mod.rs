@@ -1,9 +1,9 @@
 //! File handle management for buffered reads and writes.
 
 use std::fs::File;
-use std::mem;
 use std::os::unix::fs::FileExt;
 use std::sync::Arc;
+use std::{io, mem};
 
 use parking_lot::RwLock;
 use slab::Slab;
@@ -99,12 +99,12 @@ impl BufferSource {
 }
 /// Copy-on-write content buffer for file handles.
 ///
-/// `Shared` holds an `Arc<Vec<u8>>` from the content cache — reads
+/// `Shared` holds an `Arc<[u8]>` from the content cache — reads
 /// are zero-copy. On first write, the buffer materializes to `Owned`.
 pub(super) enum ContentBuffer {
     /// Shared content from the content cache. Read-only until
     /// materialized by a write operation.
-    Shared(Arc<Vec<u8>>),
+    Shared(Arc<[u8]>),
     /// Owned mutable buffer (after write, truncation, or direct-fd
     /// materialization).
     Owned(Vec<u8>),
@@ -123,7 +123,7 @@ impl ContentBuffer {
     /// This is the COW trigger — called before any mutation.
     fn make_mut(&mut self) -> &mut Vec<u8> {
         if let Self::Shared(arc) = self {
-            *self = Self::Owned((**arc).clone());
+            *self = Self::Owned(arc.to_vec());
         }
         match self {
             Self::Owned(vec) => vec,
@@ -215,7 +215,7 @@ impl HandleTable {
     }
 
     /// Open a buffered file: store initial content and open flags, return the file handle number.
-    pub fn open(&self, inode: u64, content: Arc<Vec<u8>>, open_flags: i32) -> u64 {
+    pub fn open(&self, inode: u64, content: Arc<[u8]>, open_flags: i32) -> u64 {
         let mode = OpenMode::parse(open_flags);
         // Truncating non-empty content is a mutation: mark dirty so the
         // empty buffer is flushed on release even without a subsequent write.
@@ -267,23 +267,21 @@ impl HandleTable {
     /// Dispatch depends on [`BufferSource`]:
     /// - `DirectFd`: reads via `pread()` on the backing fd (zero copy).
     /// - All others: reads from the in-memory buffer.
-    pub fn read(&self, fh: u64, offset: u64, size: u32) -> Vec<u8> {
+    ///
+    /// Returns `Err` on IO failure (propagated to FUSE as `EIO`).
+    pub fn read(&self, fh: u64, offset: u64, size: u32) -> io::Result<Vec<u8>> {
         let slab = self.inner.read();
         let Some(entry) = Self::get_entry(&slab, fh) else {
-            return Vec::new();
+            return Ok(Vec::new());
         };
 
         // Direct fd path: pread() from the backing file.
         if let BufferSource::DirectFd(fd) = &entry.source {
             let size = usize::try_from(size).unwrap_or(usize::MAX);
             let mut buf = vec![0u8; size];
-            return match fd.read_at(&mut buf, offset) {
-                Ok(n) => {
-                    buf.truncate(n);
-                    buf
-                }
-                Err(_) => Vec::new(),
-            };
+            let n = fd.read_at(&mut buf, offset)?;
+            buf.truncate(n);
+            return Ok(buf);
         }
 
         // Buffered path (Preloaded, Truncated, Materialized).
@@ -291,10 +289,10 @@ impl HandleTable {
         let size = usize::try_from(size).unwrap_or(usize::MAX);
         let bytes = entry.buffer.as_bytes();
         if offset >= bytes.len() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
         let end = bytes.len().min(offset.saturating_add(size));
-        bytes.get(offset..end).map_or_else(Vec::new, <[u8]>::to_vec)
+        Ok(bytes.get(offset..end).map_or_else(Vec::new, <[u8]>::to_vec))
     }
 
     /// Write to a file handle's buffer at the given offset.
@@ -323,8 +321,9 @@ impl HandleTable {
             let (BufferSource::DirectFd(fd) | BufferSource::Truncated(fd)) = old else {
                 unreachable!()
             };
-            if needs_populate {
-                Self::populate_from_fd(&fd, entry.buffer.make_mut());
+            if needs_populate && let Err(e) = Self::populate_from_fd(&fd, entry.buffer.make_mut()) {
+                warn!(target: "nyne::fuse", error = %e, "failed to populate buffer from direct fd");
+                return None;
             }
             entry.source = BufferSource::Materialized {
                 _fd: fd,
@@ -397,8 +396,10 @@ impl HandleTable {
             let BufferSource::DirectFd(fd) = old else {
                 unreachable!()
             };
-            if size > 0 {
-                Self::populate_from_fd(&fd, entry.buffer.make_mut());
+            if size > 0
+                && let Err(e) = Self::populate_from_fd(&fd, entry.buffer.make_mut())
+            {
+                warn!(target: "nyne::fuse", error = %e, "failed to populate buffer during truncate");
             }
             entry.source = BufferSource::Truncated(fd);
         } else if matches!(entry.source, BufferSource::Preloaded) && size < entry.buffer.len() {
@@ -454,24 +455,17 @@ impl HandleTable {
     /// Read the full contents of a backing fd into `buffer`.
     ///
     /// Used for lazy buffer population on first write to a direct fd handle.
-    fn populate_from_fd(fd: &File, buffer: &mut Vec<u8>) {
-        let size = fd.metadata().map(|m| m.len()).unwrap_or(0);
+    fn populate_from_fd(fd: &File, buffer: &mut Vec<u8>) -> io::Result<()> {
+        let size = fd.metadata()?.len();
         if size == 0 {
-            return;
+            return Ok(());
         }
-        let Ok(len) = usize::try_from(size) else {
-            return;
-        };
+        let len = usize::try_from(size).unwrap_or(usize::MAX);
         let mut buf = vec![0u8; len];
-        match fd.read_at(&mut buf, 0) {
-            Ok(n) => {
-                buf.truncate(n);
-                *buffer = buf;
-            }
-            Err(e) => {
-                warn!(target: "nyne::fuse", error = %e, "failed to populate buffer from direct fd");
-            }
-        }
+        let n = fd.read_at(&mut buf, 0)?;
+        buf.truncate(n);
+        *buffer = buf;
+        Ok(())
     }
 
     /// Looks up a handle entry by file handle number.

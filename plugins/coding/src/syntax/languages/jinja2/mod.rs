@@ -42,7 +42,7 @@ pub struct TemplateExtraction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Jinja2Symbol {
     pub name: String,
-    pub kind: SymbolKind,
+    pub kind: FragmentKind,
     /// Signature line (e.g. `{% block title %}`, `{% macro render(items) %}`).
     pub signature: String,
     /// Byte offset of the name token in the original source.
@@ -102,7 +102,7 @@ pub fn extract_template(source: &str) -> TemplateExtraction {
     if let Some(start) = preamble_start {
         symbols.insert(0, Jinja2Symbol {
             name: "preamble".to_owned(),
-            kind: SymbolKind::Decorator, // placeholder — converted to Preamble by symbols_to_fragments
+            kind: FragmentKind::Preamble,
             signature: String::new(),
             name_byte_offset: start,
             full_span: start..preamble_end,
@@ -127,7 +127,7 @@ struct PendingBlock {
 
 /// Data for a pending directive that will become a [`Jinja2Symbol`] on close.
 struct EmittableSymbol {
-    kind: SymbolKind,
+    kind: FragmentKind,
     signature: String,
     name_byte_offset: usize,
 }
@@ -165,10 +165,22 @@ fn handle_control_node(
             match stmt.kind() {
                 // Paired emittable: block → Module, macro → Function.
                 "block_statement" => {
-                    push_paired(node, stmt, source, SymbolKind::Module, block_stack);
+                    push_paired(
+                        node,
+                        stmt,
+                        source,
+                        FragmentKind::Symbol(SymbolKind::Module),
+                        block_stack,
+                    );
                 }
                 "macro_statement" => {
-                    push_paired(node, stmt, source, SymbolKind::Function, block_stack);
+                    push_paired(
+                        node,
+                        stmt,
+                        source,
+                        FragmentKind::Symbol(SymbolKind::Function),
+                        block_stack,
+                    );
                 }
                 // Paired non-emittable: pushed for correct stack pairing only.
                 "for_statement" | "if_expression" => {
@@ -184,7 +196,7 @@ fn handle_control_node(
                     let signature = control_signature(node, source);
                     symbols.push(Jinja2Symbol {
                         name,
-                        kind: SymbolKind::Variable,
+                        kind: FragmentKind::Symbol(SymbolKind::Variable),
                         signature,
                         name_byte_offset: name_offset,
                         full_span: node.byte_range(),
@@ -214,7 +226,7 @@ fn push_paired(
     control_node: tree_sitter::Node<'_>,
     stmt_child: tree_sitter::Node<'_>,
     source: &str,
-    kind: SymbolKind,
+    kind: FragmentKind,
     block_stack: &mut Vec<PendingBlock>,
 ) {
     let (name, name_offset) = extract_identifier(stmt_child, source);
@@ -309,19 +321,10 @@ pub fn symbols_to_fragments(symbols: Vec<Jinja2Symbol>) -> Vec<Fragment> {
     symbols
         .into_iter()
         .map(|sym| {
-            let kind = if sym.kind == SymbolKind::Decorator {
-                FragmentKind::Preamble
-            } else {
-                FragmentKind::Symbol(sym.kind)
-            };
-            let signature = if sym.signature.is_empty() {
-                None
-            } else {
-                Some(sym.signature)
-            };
+            let signature = (!sym.signature.is_empty()).then_some(sym.signature);
             Fragment::new(
                 sym.name,
-                kind,
+                sym.kind,
                 sym.full_span,
                 signature,
                 None,

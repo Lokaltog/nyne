@@ -47,10 +47,10 @@ impl PreToolUse {
         let mut b = names::handle_builder();
         b.register_partial(SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC);
         b.register_partial(super::PARTIAL_VFS_HINTS, super::PARTIAL_VFS_HINTS_SRC);
-        b.register_partial(PARTIAL_DENY, include_str!("templates/pre-tool-use/deny.md.j2"));
-        b.register_partial(PARTIAL_HINT, include_str!("templates/pre-tool-use/hint.md.j2"));
-        b.register_partial(PARTIAL_GREP, include_str!("templates/pre-tool-use/grep.md.j2"));
-        b.register(TMPL_PRE, include_str!("templates/pre-tool-use.md.j2"));
+        b.register_partial(PARTIAL_DENY, include_str!("../templates/pre-tool-use/deny.md.j2"));
+        b.register_partial(PARTIAL_HINT, include_str!("../templates/pre-tool-use/hint.md.j2"));
+        b.register_partial(PARTIAL_GREP, include_str!("../templates/pre-tool-use/grep.md.j2"));
+        b.register(TMPL_PRE, include_str!("../templates/pre-tool-use.md.j2"));
         Self {
             engine: b.finish(),
             config: config.clone(),
@@ -78,7 +78,6 @@ impl Script for PreToolUse {
 /// Rendering and file access interception methods.
 impl PreToolUse {
     /// Render a VFS symbol hint for grep patterns that look like symbol searches.
-    /// Render a VFS symbol hint for grep patterns that look like symbol searches.
     fn render_grep(&self, input: &HookInput) -> Vec<u8> {
         let Some(pattern) = input.tool_input_as::<GrepToolInput>().and_then(|g| g.pattern) else {
             return HookOutput::empty();
@@ -99,12 +98,22 @@ impl PreToolUse {
     }
 
     /// File access interception — computes decomposition context, picks hint vs deny.
-    /// Intercept file access: compute decomposition context and pick hint vs deny.
     fn handle_file_access(&self, ctx: &ScriptContext<'_>, input: &HookInput, tool_name: &str) -> Vec<u8> {
+        // Deserialize typed inputs once for reuse across sections.
+        let read_input = (tool_name == "Read")
+            .then(|| input.tool_input_as::<ReadToolInput>())
+            .flatten();
+        let edit_input = (tool_name == "Edit")
+            .then(|| input.tool_input_as::<EditToolInput>())
+            .flatten();
+        let write_input = (tool_name == "Write")
+            .then(|| input.tool_input_as::<WriteToolInput>())
+            .flatten();
+
         let file_path = match tool_name {
-            "Read" => input.tool_input_as::<ReadToolInput>().and_then(|r| r.file_path),
-            "Edit" => input.tool_input_as::<EditToolInput>().and_then(|e| e.file_path),
-            "Write" => input.tool_input_as::<WriteToolInput>().and_then(|w| w.file_path),
+            "Read" => read_input.as_ref().and_then(|r| r.file_path.clone()),
+            "Edit" => edit_input.as_ref().and_then(|e| e.file_path.clone()),
+            "Write" => write_input.and_then(|w| w.file_path),
             _ => return HookOutput::empty(),
         };
 
@@ -115,7 +124,7 @@ impl PreToolUse {
         // Only intercept paths under the mount root, skip @/ virtual paths.
         let activation = ctx.activation();
         let root_prefix = activation.root_prefix();
-        let Some(rel) = file_path.strip_prefix(&root_prefix) else {
+        let Some(rel) = file_path.strip_prefix(root_prefix) else {
             return HookOutput::empty();
         };
         if super::is_vfs_path(&file_path) {
@@ -146,18 +155,14 @@ impl PreToolUse {
         // Resolve which symbol the tool call targets.
         let sym = match tool_name {
             "Read" => {
-                let offset = input
-                    .tool_input_as::<ReadToolInput>()
-                    .and_then(|r| r.offset)
-                    .unwrap_or(0);
+                let offset = read_input.as_ref().and_then(|r| r.offset).unwrap_or(0);
                 resolve_symbol_at_line(
                     &decomposed.decomposed,
                     usize::try_from(offset).unwrap_or(usize::MAX),
                     &decomposed.source,
                 )
             }
-            "Edit" => input
-                .tool_input_as::<EditToolInput>()
+            "Edit" => edit_input
                 .and_then(|e| e.old_string)
                 .and_then(|old| find_line_of_string(overlay, rel, &old))
                 .and_then(|line| {
@@ -174,8 +179,7 @@ impl PreToolUse {
 
         // Pick mode: deny broad reads, hint everything else.
         let mode = if tool_name == "Read" {
-            let narrow = input
-                .tool_input_as::<ReadToolInput>()
+            let narrow = read_input
                 .and_then(|r| r.limit)
                 .is_some_and(|l| l.cast_signed() <= policy.narrow_read_limit());
             let threshold = policy.deny_lines_threshold();
@@ -293,3 +297,5 @@ fn resolve_symbol_at_line(fragments: &[Fragment], line: usize, source: &str) -> 
     let path = find_fragment_at_line(fragments, line, source)?;
     Some(path.join(names::VFS_SEP))
 }
+#[cfg(test)]
+mod tests;

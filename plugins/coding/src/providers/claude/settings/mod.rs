@@ -123,47 +123,64 @@ pub(super) fn merge_settings(mut base: Value, injected: Map<String, Value>) -> R
     Ok(base)
 }
 
+/// Environment variables injected into Claude Code's settings.
+///
+/// Each entry is `(key, value)`. Changing a value here is all that's needed —
+/// the JSON structure in [`default_settings`] references this slice.
+const ENV_VARS: &[(&str, &str)] = &[
+    ("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "1"),
+    ("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", "1"),
+    ("CLAUDE_CODE_DISABLE_CRON", "1"),
+    ("CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS", "1"),
+    ("CLAUDE_CODE_HIDE_ACCOUNT_INFO", "1"),
+    ("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "128000"),
+    ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"),
+    // ("ENABLE_TOOL_SEARCH", "auto:1"), // NOTE: temporarily disabled for testing
+    ("SLASH_COMMAND_TOOL_CHAR_BUDGET", "1"),
+    ("USE_BUILTIN_RIPGREP", "0"),
+];
+
+/// Tool names denied in Claude Code's permission settings.
+///
+/// Sorted alphabetically. Add new entries here — the deny list in
+/// [`default_settings`] is built from this slice.
+const DENIED_TOOLS: &[&str] = &[
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "EnterPlanMode",
+    "EnterWorktree",
+    "ExitPlanMode",
+    "LSP",
+    "ListMcpResourcesTool",
+    "NotebookEdit",
+    "ReadMcpResourceTool",
+    "TodoWrite",
+    "ToolSearch",
+    "WorktreeCreate",
+    "WorktreeRemove",
+];
+
 /// Nyne-managed default settings for Claude Code.
 ///
 /// These are the single source of truth for settings values that nyne
 /// controls. The real `.claude/settings.json` on disk can override any
 /// of these — user values always win.
 fn default_settings() -> Value {
+    let env: Map<String, Value> = ENV_VARS
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), Value::String((*v).to_owned())))
+        .collect();
+
+    let deny: Vec<Value> = DENIED_TOOLS.iter().map(|t| Value::String((*t).to_owned())).collect();
+
     json!({
         "$schema": "https://json.schemastore.org/claude-code-settings.json",
         "outputStyle": "Principal SWE",
-        "env": {
-            "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
-            "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
-            "CLAUDE_CODE_DISABLE_CRON": "1",
-            "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1",
-            "CLAUDE_CODE_HIDE_ACCOUNT_INFO": "1",
-            "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "128000",
-            "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
-            // "ENABLE_TOOL_SEARCH": "auto:1", // NOTE: temporarily disabled for testing
-            "SLASH_COMMAND_TOOL_CHAR_BUDGET": "1",
-            "USE_BUILTIN_RIPGREP": "0",
-        },
+        "env": env,
         "includeGitInstructions": false,
         "attribution": { "commit": "", "pr": "" },
-        "permissions": { "defaultMode": "bypassPermissions",
-            "deny": [
-                "CronCreate",
-                "CronDelete",
-                "CronList",
-                "EnterPlanMode",
-                "EnterWorktree",
-                "ExitPlanMode",
-                "LSP",
-                "ListMcpResourcesTool",
-                "NotebookEdit",
-                "ReadMcpResourceTool",
-                "TodoWrite",
-                "ToolSearch",
-                "WorktreeCreate",
-                "WorktreeRemove",
-            ]
-        },
+        "permissions": { "defaultMode": "bypassPermissions", "deny": deny },
         "companyAnnouncements": [
             "You are running in a \x1b[1mnyne\x1b[0m managed environment, enjoy!",
         ],

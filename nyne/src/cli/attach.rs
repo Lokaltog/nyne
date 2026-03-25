@@ -42,7 +42,7 @@ impl RegistrationGuard {
     /// `Unregister` on drop. Returns `None` if the registration request fails
     /// (logged as a warning).
     fn register(socket: PathBuf, pid: i32, command: String) -> Option<Self> {
-        let req = sandbox::control::ControlRequest::Register { pid, command };
+        let req = sandbox::control::Request::Register { pid, command };
         if let Err(e) = sandbox::control::send_request(&socket, &req) {
             warn!(error = %e, "failed to register with daemon — nyne list may not show this process");
             return None;
@@ -52,7 +52,7 @@ impl RegistrationGuard {
 
     /// Set visibility override for this process. Failures are logged as warnings.
     fn set_visibility(&self, visibility: ProcessVisibility) {
-        let req = sandbox::control::ControlRequest::SetVisibility {
+        let req = sandbox::control::Request::SetVisibility {
             pid: Some(self.pid),
             name: None,
             visibility,
@@ -65,7 +65,7 @@ impl RegistrationGuard {
 
 impl Drop for RegistrationGuard {
     fn drop(&mut self) {
-        let req = sandbox::control::ControlRequest::Unregister { pid: self.pid };
+        let req = sandbox::control::Request::Unregister { pid: self.pid };
         if let Err(e) = sandbox::control::send_request(&self.socket, &req) {
             warn!(error = %e, "failed to unregister from daemon");
         }
@@ -74,6 +74,7 @@ impl Drop for RegistrationGuard {
 
 /// Run the attach subcommand: attach to a running mount and execute a command in its namespace.
 pub fn run(args: &AttachArgs) -> Result<i32> {
+    let config = NyneConfig::load()?;
     let session_info = super::resolve_session(args.id.as_deref())?;
     let control_socket = session::control_socket(&session_info.id)
         .inspect_err(|e| warn!(error = %e, "control socket unavailable — process registration disabled"))
@@ -117,6 +118,6 @@ pub fn run(args: &AttachArgs) -> Result<i32> {
         mount_path: session_info.mount_path,
         control_socket,
         command,
-        sandbox: NyneConfig::load()?.sandbox,
+        sandbox: config.sandbox,
     })
 }

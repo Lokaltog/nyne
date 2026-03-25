@@ -26,7 +26,7 @@ pub(super) const GENERATION: Generation = Generation(0);
 ///
 /// Single conversion point — all FUSE file-type needs go through this.
 /// Lives here to keep the `fuser` dependency out of the core trait/dispatch layers.
-pub const fn file_kind_to_fuse(ft: FileKind) -> FileType {
+pub(super) const fn file_kind_to_fuse(ft: FileKind) -> FileType {
     match ft {
         FileKind::File => FileType::RegularFile,
         FileKind::Directory => FileType::Directory,
@@ -72,7 +72,7 @@ impl NyneFs {
         }
         match self.resolve_for_request(ino, req)? {
             ResolvedInode::Real { file_type, path } => self.build_real_attr(ino, file_type, &path, req),
-            ResolvedInode::Virtual { node, dir_path, .. } => self.build_virtual_attr(ino, &node, &dir_path, req),
+            ResolvedInode::Virtual { node, dir_path, .. } => Some(self.build_virtual_attr(ino, &node, &dir_path, req)),
         }
     }
 
@@ -119,7 +119,7 @@ impl NyneFs {
         node: &VirtualNode,
         dir_path: &VfsPath,
         req: &Request,
-    ) -> Option<(fuser::FileAttr, Duration)> {
+    ) -> (fuser::FileAttr, Duration) {
         // Query lifecycle for custom attribute overrides.
         let ctx = self.router.make_request_context(dir_path);
         let lifecycle_attr = node.lifecycle().and_then(|lc| lc.getattr(&ctx));
@@ -177,7 +177,7 @@ impl NyneFs {
             TTL
         };
 
-        Some((
+        (
             make_attr(
                 ino,
                 size,
@@ -191,7 +191,7 @@ impl NyneFs {
                 req,
             ),
             ttl,
-        ))
+        )
     }
 
     /// Build a `FileAttr` for the root directory.

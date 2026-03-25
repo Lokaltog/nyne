@@ -11,8 +11,8 @@ use nyne::node::Readable;
 use nyne::types::SymbolLineRange;
 use tracing::warn;
 
+use crate::commit::{CommitInfo, commit_info, diff_opts};
 use crate::repo::GitRepo;
-use crate::{CommitInfo, commit_info, diff_opts};
 
 /// Safety cap on revwalk iterations to prevent unbounded history walks.
 const MAX_REVWALK: usize = 5000;
@@ -106,9 +106,10 @@ impl GitRepo {
 
         // Filter by line range (re-acquires lock for diff checks).
         let repo = self.lock();
+        let mut opts = diff_opts(rel_path);
         let filtered: Vec<_> = all
             .into_iter()
-            .filter(|entry| match commit_touches_range(&repo, entry.oid, rel_path, range) {
+            .filter(|entry| match commit_touches_range(&repo, entry.oid, &mut opts, range) {
                 Ok(touches) => touches,
                 Err(e) => {
                     warn!(oid = %entry.oid, path = rel_path, error = %e, "commit range check failed");
@@ -224,24 +225,15 @@ impl GitRepo {
 fn blame_hunk(repo: &git2::Repository, hunk: &git2::BlameHunk<'_>) -> Result<BlameHunk> {
     let oid = hunk.orig_commit_id();
     let start = hunk.final_start_line();
-    let end = start + hunk.lines_in_hunk() - 1;
-
-    let commit = if oid.is_zero() {
-        CommitInfo {
-            hash: format!("{oid:.7}"),
-            author: "uncommitted".into(),
-            date: "-".into(),
-            message: "uncommitted changes".into(),
-            epoch_secs: 0,
-        }
-    } else {
-        commit_info(&repo.find_commit(oid).wrap_err("blame commit lookup failed")?, oid)
-    };
 
     Ok(BlameHunk {
         start_line: start,
-        end_line: end,
-        commit,
+        end_line: start + hunk.lines_in_hunk() - 1,
+        commit: if oid.is_zero() {
+            CommitInfo::uncommitted(oid)
+        } else {
+            commit_info(&repo.find_commit(oid).wrap_err("blame commit lookup failed")?, oid)
+        },
     })
 }
 
@@ -268,6 +260,7 @@ fn walk_file_commits<T>(
         .wrap_err("failed to configure revwalk")?;
     revwalk.push_head().wrap_err("HEAD not found")?;
 
+    let mut opts = diff_opts(rel_path);
     let mut results = Vec::new();
     for (walked, oid_result) in revwalk.enumerate() {
         if results.len() >= limit || walked >= MAX_REVWALK {
@@ -275,7 +268,7 @@ fn walk_file_commits<T>(
         }
         let oid = oid_result?;
         let commit = repo.find_commit(oid)?;
-        if commit_touches_path(repo, &commit, rel_path)? {
+        if commit_touches_path(repo, &commit, &mut opts)? {
             results.push(visit(&commit, oid));
         }
     }
@@ -294,23 +287,33 @@ fn first_file_commit(repo: &git2::Repository, rel_path: &str) -> Result<Oid> {
 fn commit_diff<'repo>(
     repo: &'repo git2::Repository,
     commit: &git2::Commit<'_>,
-    rel_path: &str,
+    opts: &mut git2::DiffOptions,
 ) -> Result<git2::Diff<'repo>> {
     let commit_tree = commit.tree()?;
-    let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
-    let mut opts = diff_opts(rel_path);
-    Ok(repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut opts))?)
+    Ok(repo.diff_tree_to_tree(
+        commit.parent(0).ok().and_then(|p| p.tree().ok()).as_ref(),
+        Some(&commit_tree),
+        Some(opts),
+    )?)
 }
 /// Check whether a commit's diff touches the given path.
-fn commit_touches_path(repo: &git2::Repository, commit: &git2::Commit<'_>, rel_path: &str) -> Result<bool> {
-    let diff = commit_diff(repo, commit, rel_path)?;
-    Ok(diff.deltas().len() != 0)
+fn commit_touches_path(
+    repo: &git2::Repository,
+    commit: &git2::Commit<'_>,
+    opts: &mut git2::DiffOptions,
+) -> Result<bool> {
+    Ok(commit_diff(repo, commit, opts)?.deltas().next().is_some())
 }
 
 /// Check whether a commit's diff for `rel_path` touches any lines in the given range.
-fn commit_touches_range(repo: &git2::Repository, oid: Oid, rel_path: &str, range: &SymbolLineRange) -> Result<bool> {
+fn commit_touches_range(
+    repo: &git2::Repository,
+    oid: Oid,
+    opts: &mut git2::DiffOptions,
+    range: &SymbolLineRange,
+) -> Result<bool> {
     let commit = repo.find_commit(oid)?;
-    let diff = commit_diff(repo, &commit, rel_path)?;
+    let diff = commit_diff(repo, &commit, opts)?;
 
     let mut touches = false;
     let result = diff.foreach(

@@ -14,6 +14,7 @@ use super::staging::StagingKey;
 use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOutcome, EditPlan, FileEditResult, ValidationResult};
 use crate::services::CodingServices;
+use crate::syntax::decomposed::DecomposedSource;
 
 /// `DiffAction` for a single symbol's staged edits.
 ///
@@ -26,6 +27,25 @@ pub(super) struct SymbolPreview {
     pub ctx: Arc<ActivationContext>,
 }
 
+/// Resolve an edit plan against a decomposed source and produce a preview.
+fn resolve_and_preview(source_file: &VfsPath, plan: &EditPlan, parsed: &DecomposedSource) -> Result<FileEditResult> {
+    let resolved = plan.resolve(&parsed.decomposed, &parsed.source)?;
+    let modified = EditPlan::apply(&parsed.source, &resolved);
+
+    let validation = match parsed.decomposer.validate(&modified) {
+        Ok(()) => ValidationResult::Pass,
+        Err(e) => ValidationResult::Fail(format!("{source_file}: {e}")),
+    };
+
+    Ok(FileEditResult {
+        source_file: source_file.clone(),
+        display_path: source_file.as_str().to_owned(),
+        original: parsed.source.clone(),
+        modified,
+        outcome: EditOutcome::Modify,
+        validation,
+    })
+}
 /// [`DiffAction`] implementation for [`SymbolPreview`].
 impl DiffAction for SymbolPreview {
     /// Resolve staged edits for a single symbol and produce a diff preview.
@@ -44,22 +64,7 @@ impl DiffAction for SymbolPreview {
             .get(&self.key.source_file)?;
 
         let plan = batch.to_edit_plan();
-        let resolved = plan.resolve(&parsed.decomposed, &parsed.source)?;
-        let modified = EditPlan::apply(&parsed.source, &resolved);
-
-        let validation = match parsed.decomposer.validate(&modified) {
-            Ok(()) => ValidationResult::Pass,
-            Err(e) => ValidationResult::Fail(format!("{}: {e}", self.key.source_file)),
-        };
-
-        Ok(vec![FileEditResult {
-            source_file: self.key.source_file.clone(),
-            display_path: self.key.source_file.as_str().to_owned(),
-            original: parsed.source.clone(),
-            modified,
-            outcome: EditOutcome::Modify,
-            validation,
-        }])
+        Ok(vec![resolve_and_preview(&self.key.source_file, &plan, &parsed)?])
     }
 
     /// Return a summary header describing the staged actions.
@@ -106,9 +111,10 @@ impl DiffAction for CrossFilePreview {
             }
         }
 
+        let services = CodingServices::get(&self.ctx);
         let mut results = Vec::new();
         for (source_file, plans) in &by_file {
-            let Ok(parsed) = CodingServices::get(&self.ctx).decomposition.get(source_file) else {
+            let Ok(parsed) = services.decomposition.get(source_file) else {
                 continue;
             };
 
@@ -116,22 +122,7 @@ impl DiffAction for CrossFilePreview {
             let all_ops: Vec<_> = plans.iter().flat_map(|p| p.ops.iter().cloned()).collect();
             let plan = EditPlan { ops: all_ops };
 
-            let resolved = plan.resolve(&parsed.decomposed, &parsed.source)?;
-            let modified = EditPlan::apply(&parsed.source, &resolved);
-
-            let validation = match parsed.decomposer.validate(&modified) {
-                Ok(()) => ValidationResult::Pass,
-                Err(e) => ValidationResult::Fail(format!("{source_file}: {e}")),
-            };
-
-            results.push(FileEditResult {
-                source_file: source_file.clone(),
-                display_path: source_file.as_str().to_owned(),
-                original: parsed.source.clone(),
-                modified,
-                outcome: EditOutcome::Modify,
-                validation,
-            });
+            results.push(resolve_and_preview(source_file, &plan, &parsed)?);
         }
 
         Ok(results)
@@ -139,17 +130,19 @@ impl DiffAction for CrossFilePreview {
 
     /// Return a summary header with total action and file counts.
     fn header_lines(&self) -> Vec<String> {
-        let mut action_count = 0;
-        let mut seen_files = HashSet::new();
-        let map = self.batches.read();
-        for (key, batch) in map.iter() {
-            if batch.is_empty() {
-                continue;
+        let (action_count, file_count) = {
+            let map = self.batches.read();
+            let mut actions = 0;
+            let mut seen_files = HashSet::new();
+            for (key, batch) in map.iter() {
+                if batch.is_empty() {
+                    continue;
+                }
+                actions += batch.actions().count();
+                seen_files.insert(&key.source_file);
             }
-            action_count += batch.actions().count();
-            seen_files.insert(key.source_file.clone());
-        }
-        let file_count = seen_files.len();
+            (actions, seen_files.len())
+        };
         vec![format!(
             "Batch edit: {action_count} action(s) across {file_count} file(s)"
         )]

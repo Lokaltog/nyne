@@ -31,7 +31,7 @@ use crate::services::CodingServices;
 /// - `": fix this"` → `Some("fix this")`
 /// - `"(user): fix"` → `Some("fix")`
 /// - `" bare mention"` → `None`
-pub(crate) fn parse_tag_suffix(after_tag: &str) -> Option<&str> {
+pub fn parse_tag_suffix(after_tag: &str) -> Option<&str> {
     // Skip optional parenthesized annotation like `(scope)`.
     let rest = if after_tag.starts_with('(') {
         after_tag.find(')').map_or(after_tag, |pos| &after_tag[pos + 1..])
@@ -44,7 +44,7 @@ pub(crate) fn parse_tag_suffix(after_tag: &str) -> Option<&str> {
 }
 
 /// TODO provider — aggregates TODO/FIXME markers from source files.
-pub(crate) struct TodoProvider {
+pub struct TodoProvider {
     ctx: Arc<ActivationContext>,
     scanner: TodoScanner,
     index: RwLock<Option<TodoIndex>>,
@@ -164,7 +164,7 @@ impl TodoProvider {
 
         // OVERVIEW.md — all tags, grouped by file, ranked by priority.
         let overview_view = build_overview_view(index, &self.tags);
-        nodes.push(self.overview_tmpl.node("OVERVIEW.md", serialize_view(overview_view)));
+        nodes.push(self.overview_tmpl.node("OVERVIEW.md", serialize_view(&overview_view)));
 
         // Per-tag: directory + .md file.
         for tag in &self.tags {
@@ -173,7 +173,7 @@ impl TodoProvider {
             };
             nodes.push(VirtualNode::directory(tag));
             let tag_view = build_tag_view(tag, tag_entries);
-            nodes.push(self.tag_tmpl.node(format!("{tag}.md"), serialize_view(tag_view)));
+            nodes.push(self.tag_tmpl.node(format!("{tag}.md"), serialize_view(&tag_view)));
         }
 
         Ok(Some(nodes))

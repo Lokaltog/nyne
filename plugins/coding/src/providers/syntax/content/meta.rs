@@ -165,30 +165,29 @@ impl MetaSplice {
     /// Re-decomposes the source file to get fresh byte offsets, then
     /// derives the target range from the current fragment tree.
     fn resolve(&self) -> Result<ResolvedSplice> {
+        /// Extend a byte range backward to the start of its first line.
+        fn line_aligned(source: &str, range: Range<usize>) -> Range<usize> {
+            line_start_of(source, range.start)..range.end
+        }
+
         let shared = self.resolver.decompose()?;
         let source = &shared.source;
         let frags = &shared.decomposed;
         let byte_range = match &self.target {
             SpliceTarget::Imports => {
-                let imports = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Imports)
+                let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Imports)
                     .ok_or_else(|| eyre::eyre!("no import span in {}", self.resolver.source_file()))?;
-                let start = line_start_of(source, imports.byte_range.start);
-                start..imports.byte_range.end
+                line_aligned(source, frag.byte_range.clone())
             }
             SpliceTarget::FileDoc => {
-                let doc = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)
+                let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)
                     .ok_or_else(|| eyre::eyre!("no file-level doc in {}", self.resolver.source_file()))?;
-                let start = line_start_of(source, doc.byte_range.start);
-                start..doc.byte_range.end
+                line_aligned(source, frag.byte_range.clone())
             }
             SpliceTarget::FragmentBody(path) => {
                 let frag = syntax::require_fragment(frags, path)?;
                 match shared.decomposer.splice_mode() {
-                    SpliceMode::Line => {
-                        let span = frag.full_span();
-                        let start = line_start_of(source, span.start);
-                        start..span.end
-                    }
+                    SpliceMode::Line => line_aligned(source, frag.full_span()),
                     SpliceMode::Byte => frag.full_span(),
                 }
             }
@@ -210,17 +209,13 @@ impl MetaSplice {
                 let frag = syntax::require_fragment(frags, path)?;
                 let range = frag
                     .child_of_kind(&FragmentKind::Decorator)
-                    .map(|c| &c.byte_range)
                     .ok_or_else(|| eyre::eyre!("no decorator range on fragment {path:?}"))?;
-                let start = line_start_of(source, range.start);
-                start..range.end
+                line_aligned(source, range.byte_range.clone())
             }
             SpliceTarget::CodeBlockBody { parent_path, fs_name } => {
                 let parent = syntax::require_fragment(frags, parent_path)?;
                 let cb = parent
-                    .children
-                    .iter()
-                    .find(|c| c.fs_name.as_deref() == Some(fs_name.as_str()))
+                    .child_by_fs_name(fs_name)
                     .ok_or_else(|| eyre::eyre!("code block {fs_name:?} not found in {parent_path:?}"))?;
                 cb.byte_range.clone()
             }
@@ -466,6 +461,11 @@ fn find_signature_range(source: &str, signature: &str, frag_start: usize) -> Ran
         let start = frag_start + offset;
         start..start + signature.len()
     } else {
+        tracing::warn!(
+            signature,
+            frag_start,
+            "signature text not found in fragment range — falling back to zero-width range"
+        );
         frag_start..frag_start
     }
 }

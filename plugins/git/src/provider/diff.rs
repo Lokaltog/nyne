@@ -30,19 +30,17 @@ pub(super) struct DiffContent {
 impl Readable for DiffContent {
     /// Reads a unified diff against HEAD or a named ref.
     fn read(&self, ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
-        let text = match &self.target {
+        Ok(match &self.target {
             DiffTarget::Workdir { source_file: real_file } => {
                 // Read HEAD version from git object store (no filesystem access).
                 let old = self.repo.head_blob(&self.rel_path)?;
                 let new = ctx.real_fs.read(real_file)?;
-                unified_diff(
-                    from_utf8(&old).unwrap_or(""),
-                    from_utf8(&new).unwrap_or(""),
-                    &self.rel_path,
-                )
+                match (from_utf8(&old), from_utf8(&new)) {
+                    (Ok(old_str), Ok(new_str)) => unified_diff(old_str, new_str, &self.rel_path).into_bytes(),
+                    _ => "Binary file differs\n".into(),
+                }
             }
-            DiffTarget::Ref(refspec) => self.repo.diff_ref(&self.rel_path, refspec)?,
-        };
-        Ok(text.into_bytes())
+            DiffTarget::Ref(refspec) => self.repo.diff_ref(&self.rel_path, refspec)?.into_bytes(),
+        })
     }
 }

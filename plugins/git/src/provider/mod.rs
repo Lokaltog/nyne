@@ -120,7 +120,7 @@ impl GitProvider {
 
     /// Creates a new git provider with routes and template handles.
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
-        let git_dir_component = ctx.get::<GitDirName>().and_then(|g| g.0.clone());
+        let git_dir_component = ctx.get::<GitDirName>().map(|g| g.0.clone());
 
         let mut b = names::handle_builder();
         let blame_key = b.register("git/blame", views::BLAME_TEMPLATE);

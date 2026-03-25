@@ -16,7 +16,7 @@ pub mod text;
 pub use providers::names::{FILE_OVERVIEW, SUBDIR_SYMBOLS};
 pub use providers::{
     companion_children, companion_dir, companion_lookup, companion_symbol_path, dispatch_children, dispatch_lookup,
-    is_file_companion, source_file,
+    source_file,
 };
 /// Shared JSON utilities: deep merge and streaming.
 pub mod json;
@@ -64,6 +64,7 @@ pub use node::middleware::{PostWriteHook, ReadMiddleware, WriteMiddleware};
 pub use node::{CachePolicy, VirtualNode};
 pub use plugin::{PLUGINS, Plugin};
 pub use provider::{ConflictInfo, ConflictParty, ConflictResolution, Node, Nodes, Provider, ProviderId};
+pub use sandbox::{ClonerFactory, PROJECT_CLONERS, ProjectCloner};
 pub use types::{
     ExtensionCounts, FileKind, GitDirName, OsFs, PassthroughProcesses, ProcessVisibility, RealFs, TypeMap, VfsPath,
 };

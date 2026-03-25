@@ -20,7 +20,7 @@ pub struct CtlArgs {
 pub fn run(args: &CtlArgs) -> Result<()> {
     let socket_path = args.session.socket_path()?;
 
-    let req: sandbox::control::ControlRequest = match &args.request {
+    let req: sandbox::control::Request = match &args.request {
         Some(json) => serde_json::from_str(json).wrap_err("parsing control request")?,
         None => serde_json::from_reader(io::stdin()).wrap_err("parsing control request from stdin")?,
     };

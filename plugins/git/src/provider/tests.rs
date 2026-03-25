@@ -18,7 +18,7 @@ mod hunk_overlap_tests {
         history::BlameHunk {
             start_line,
             end_line,
-            commit: crate::CommitInfo {
+            commit: crate::commit::CommitInfo {
                 hash: "abc1234".into(),
                 author: "dev".into(),
                 date: "2024-01-15".into(),
@@ -131,7 +131,7 @@ mod history_filename_tests {
     fn entry(message: &str) -> history::HistoryEntry {
         history::HistoryEntry {
             oid: git2::Oid::zero(),
-            commit: crate::CommitInfo {
+            commit: crate::commit::CommitInfo {
                 hash: "abc1234".into(),
                 author: "dev".into(),
                 date: "2024-01-15".into(),

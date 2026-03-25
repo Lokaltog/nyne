@@ -87,7 +87,7 @@ impl DirectoryProvider {
             subdirs,
         };
 
-        Ok(Some(vec![self.overview.node(FILE_OVERVIEW, serialize_view(view))]))
+        Ok(Some(vec![self.overview.node(FILE_OVERVIEW, serialize_view(&view))]))
     }
 }
 

@@ -27,7 +27,7 @@ pub struct SegmentRoute {
     pub children_handler: Option<Ident>,
     pub lookups: Vec<LookupEntry>,
     pub files: Vec<FileEntry>,
-    pub sub_routes: Vec<RouteEntry>,
+    pub sub_routes: Vec<Self>,
     pub span: Span,
     /// Suppress auto-emission of a directory entry in parent readdir.
     pub no_emit: bool,
@@ -104,8 +104,7 @@ fn parse_entries(input: ParseStream<'_>) -> Result<Vec<RouteEntry>> {
 /// Parse a single route entry by lookahead: `lookup`, `file`, `children`, or a segment string literal.
 fn parse_entry(input: ParseStream<'_>) -> Result<RouteEntry> {
     // Lookahead: `lookup`, `file`, `children`, or string literal
-    if input.peek(Ident) {
-        let ident: Ident = input.fork().parse()?;
+    if let Some((ident, _)) = input.cursor().ident() {
         if ident == "lookup" {
             return Ok(RouteEntry::Lookup(parse_lookup(input)?));
         }
@@ -116,8 +115,7 @@ fn parse_entry(input: ParseStream<'_>) -> Result<RouteEntry> {
             let _: Ident = input.parse()?; // consume "children"
             let content;
             syn::parenthesized!(content in input);
-            let handler: Ident = content.parse()?;
-            return Ok(RouteEntry::Children(handler));
+            return Ok(RouteEntry::Children(content.parse()?));
         }
     }
 
@@ -125,83 +123,62 @@ fn parse_entry(input: ParseStream<'_>) -> Result<RouteEntry> {
     Ok(RouteEntry::Segment(parse_segment_route(input)?))
 }
 
+/// Parse entries inside a segment `{ ... }` block, distributing them into the route.
+fn parse_segment_children(content: ParseStream<'_>, route: &mut SegmentRoute) -> Result<()> {
+    while !content.is_empty() {
+        match parse_entry(content)? {
+            RouteEntry::Lookup(l) => route.lookups.push(l),
+            RouteEntry::File(f) => route.files.push(f),
+            RouteEntry::Segment(s) => route.sub_routes.push(s),
+            RouteEntry::Children(_) => {
+                return Err(syn::Error::new(
+                    route.span,
+                    "children() inside a segment block is redundant — use `=> handler` on the segment instead",
+                ));
+            }
+        }
+        let _ = content.parse::<Token![,]>();
+    }
+    Ok(())
+}
 /// Parse a segment route: optional `no_emit`, a pattern string, optional `=> handler`, and optional `{ ... }` children.
 fn parse_segment_route(input: ParseStream<'_>) -> Result<SegmentRoute> {
     // Optional `no_emit` keyword — suppresses directory auto-emission.
-    let no_emit = if input.peek(Ident) && input.peek2(LitStr) {
-        let ident: Ident = input.fork().parse()?;
-        if ident == "no_emit" {
-            input.parse::<Ident>()?; // consume from real stream
-            true
-        } else {
-            false
-        }
-    } else {
-        false
-    };
+    let no_emit = matches!(input.cursor().ident(), Some((ident, _)) if ident == "no_emit")
+        && input.peek2(LitStr)
+        && input.parse::<Ident>().is_ok();
 
     let pattern: LitStr = input.parse()?;
-    let parsed_pattern = parse_pattern(&pattern)?;
-    let span = pattern.span();
-    let mut children_handler = None;
-    let mut lookups = Vec::new();
-    let mut files = Vec::new();
-    let mut sub_routes = Vec::new();
+    let mut route = SegmentRoute {
+        parsed_pattern: parse_pattern(&pattern)?,
+        children_handler: None,
+        lookups: Vec::new(),
+        files: Vec::new(),
+        sub_routes: Vec::new(),
+        span: pattern.span(),
+        no_emit,
+    };
 
     // Optional `=> handler`
     if input.peek(Token![=>]) {
         input.parse::<Token![=>]>()?;
 
-        // Check for `lookup(handler)` after =>
-        if input.peek(Ident) {
-            let ident: Ident = input.fork().parse()?;
-            if ident == "lookup" {
-                // `"**" => lookup(handler)` form
-                lookups.push(parse_lookup(input)?);
-                return Ok(SegmentRoute {
-                    parsed_pattern,
-                    children_handler,
-                    lookups,
-                    files,
-                    sub_routes,
-                    span,
-                    no_emit,
-                });
-            }
+        // `"**" => lookup(handler)` form
+        if matches!(input.cursor().ident(), Some((ident, _)) if ident == "lookup") {
+            route.lookups.push(parse_lookup(input)?);
+            return Ok(route);
         }
-        children_handler = Some(input.parse::<Ident>()?);
+        route.children_handler = Some(input.parse::<Ident>()?);
     }
 
     // Optional `{ ... }` block with children
     if input.peek(Brace) {
         let content;
         braced!(content in input);
-        while !content.is_empty() {
-            let entry = parse_entry(&content)?;
-            match entry {
-                RouteEntry::Lookup(l) => lookups.push(l),
-                RouteEntry::File(f) => files.push(f),
-                RouteEntry::Segment(_) => sub_routes.push(entry),
-                RouteEntry::Children(_) => {
-                    return Err(syn::Error::new(
-                        span,
-                        "children() inside a segment block is redundant — use `=> handler` on the segment instead",
-                    ));
-                }
-            }
-            let _ = content.parse::<Token![,]>();
-        }
+        parse_segment_children(&content, &mut route)?;
     }
 
-    Ok(SegmentRoute {
-        parsed_pattern,
-        children_handler,
-        lookups,
-        files,
-        sub_routes,
-        span,
-        no_emit,
-    })
+    Ok(route)
 }
 
 /// Parse a lookup entry: either `lookup(handler)` (catch-all) or `lookup "pattern" => handler` (pattern-based).
@@ -255,28 +232,30 @@ fn parse_file(input: ParseStream<'_>) -> Result<FileEntry> {
     })
 }
 
+/// Resolve a modifier identifier to its enum variant.
+fn resolve_file_modifier(ident: &Ident) -> Result<FileModifier> {
+    match ident.to_string().as_str() {
+        "no_cache" => Ok(FileModifier::NoCache),
+        "hidden" => Ok(FileModifier::Hidden),
+        "sliceable" => Ok(FileModifier::Sliceable),
+        other => Err(syn::Error::new(
+            ident.span(),
+            format!("unknown file modifier `{other}`"),
+        )),
+    }
+}
+
 /// Parse chained `.no_cache()`, `.hidden()`, and `.sliceable()` modifiers after a `file(...)` declaration.
 fn parse_file_modifiers(input: ParseStream<'_>) -> Result<Vec<FileModifier>> {
     let mut modifiers = Vec::new();
     while input.peek(Token![.]) {
         input.parse::<Token![.]>()?;
-        let ident: Ident = input.parse()?;
-        let modifier = match ident.to_string().as_str() {
-            "no_cache" => FileModifier::NoCache,
-            "hidden" => FileModifier::Hidden,
-            "sliceable" => FileModifier::Sliceable,
-            other =>
-                return Err(syn::Error::new(
-                    ident.span(),
-                    format!("unknown file modifier `{other}`"),
-                )),
-        };
+        modifiers.push(resolve_file_modifier(&input.parse::<Ident>()?)?);
         // Consume optional empty parens: `.no_cache()`
         if input.peek(Paren) {
             let _content;
             syn::parenthesized!(_content in input);
         }
-        modifiers.push(modifier);
     }
     Ok(modifiers)
 }

@@ -43,7 +43,7 @@ pub fn companion_symbol_path(source_file: &VfsPath, fragment_path: &[String]) ->
 pub fn source_file(ctx: &RouteCtx<'_>) -> Result<VfsPath> { VfsPath::new(ctx.param("source")) }
 
 /// Check whether a companion split refers to an existing non-directory file.
-pub fn is_file_companion(split: &CompanionSplit, real_fs: &dyn RealFs) -> bool {
+fn is_file_companion(split: &CompanionSplit, real_fs: &dyn RealFs) -> bool {
     real_fs.exists(&split.source_file) && !real_fs.is_dir(&split.source_file)
 }
 
@@ -72,7 +72,7 @@ pub fn companion_children<P: Provider>(
     ctx: &RequestContext<'_>,
     split: &CompanionSplit,
 ) -> Nodes {
-    let nodes = routes.children_at(provider, ctx, &split.rest_segments(), companion_params(split))?;
+    let nodes = routes.children_at(provider, ctx, split.rest_segments(), &companion_params(split))?;
     Ok(nodes.map(|vec| stamp_companion_nodes(vec, &split.source_file, ctx)))
 }
 
@@ -87,7 +87,7 @@ pub fn companion_lookup<P: Provider>(
     split: &CompanionSplit,
     name: &str,
 ) -> Node {
-    let node = routes.lookup_at(provider, ctx, &split.rest_segments(), name, companion_params(split))?;
+    let node = routes.lookup_at(provider, ctx, split.rest_segments(), name, &companion_params(split))?;
     Ok(node.map(|n| n.with_source(split.source_file.clone(), ctx.source_generation(&split.source_file))))
 }
 

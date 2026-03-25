@@ -50,7 +50,7 @@ impl Default for FileGenerations {
 
 /// A cached content entry in the L2 cache.
 struct ContentEntry {
-    data: Arc<Vec<u8>>,
+    data: Arc<[u8]>,
     provider_id: ProviderId,
     /// Source file and its generation at cache time.
     /// `None` for entries not derived from a specific source file.
@@ -78,7 +78,7 @@ impl ContentCache {
     }
 
     /// Return the cached data for `inode` if it exists and is fresh, evicting stale entries.
-    fn get_if_fresh(&self, inode: u64) -> Option<Arc<Vec<u8>>> {
+    fn get_if_fresh(&self, inode: u64) -> Option<Arc<[u8]>> {
         {
             let entries = self.entries.read();
             let entry = entries.get(&inode)?;
@@ -94,7 +94,7 @@ impl ContentCache {
     ///
     /// Returns `None` (and evicts the entry) if the source file has
     /// been modified since the entry was cached.
-    pub(super) fn get(&self, inode: u64) -> Option<Arc<Vec<u8>>> { self.get_if_fresh(inode) }
+    pub(super) fn get(&self, inode: u64) -> Option<Arc<[u8]>> { self.get_if_fresh(inode) }
 
     /// Get the cached content size for an inode without cloning the data.
     ///
@@ -111,12 +111,12 @@ impl ContentCache {
         data: Vec<u8>,
         provider_id: ProviderId,
         source_file: Option<&VfsPath>,
-    ) -> Arc<Vec<u8>> {
+    ) -> Arc<[u8]> {
         let source_generation = source_file.map(|sf| {
             let generation = self.file_generations.get(sf);
             (sf.clone(), generation)
         });
-        let arc = Arc::new(data);
+        let arc: Arc<[u8]> = Arc::from(data);
         let result = Arc::clone(&arc);
         self.entries.write().insert(inode, ContentEntry {
             data: arc,

@@ -6,12 +6,13 @@ use std::sync::LazyLock;
 
 use color_eyre::eyre::Result;
 use convert_case::{Case, Casing};
-use lsp_types::{Position, Range};
+use lsp_types::Position;
 use nyne::templates::{TemplateEngine, TemplateHandle};
 use strum::{EnumCount, IntoEnumIterator};
 
 use super::views::{LspQueryResult, hierarchy_item, type_hierarchy_item};
 use crate::lsp::query::FileQuery;
+use crate::lsp::uri::line_range_to_lsp_range;
 
 /// Internal metadata for a single LSP feature variant.
 struct FeatureMeta {
@@ -177,37 +178,26 @@ impl LspFeature {
             Self::Implementation => LspQueryResult::Locations(fq.implementations(pos.line, pos.character)?),
             Self::Callers => {
                 let calls = fq.incoming_calls(pos.line, pos.character)?;
-                LspQueryResult::HierarchyItems(calls.iter().map(|c| hierarchy_item(&c.from)).collect())
+                LspQueryResult::HierarchyItems(calls.into_iter().map(|c| hierarchy_item(c.from)).collect())
             }
             Self::Deps => {
                 let calls = fq.outgoing_calls(pos.line, pos.character)?;
-                LspQueryResult::HierarchyItems(calls.iter().map(|c| hierarchy_item(&c.to)).collect())
+                LspQueryResult::HierarchyItems(calls.into_iter().map(|c| hierarchy_item(c.to)).collect())
             }
             Self::Supertypes => {
                 let items = fq.supertypes(pos.line, pos.character)?;
-                LspQueryResult::HierarchyItems(items.iter().map(type_hierarchy_item).collect())
+                LspQueryResult::HierarchyItems(items.into_iter().map(type_hierarchy_item).collect())
             }
             Self::Subtypes => {
                 let items = fq.subtypes(pos.line, pos.character)?;
-                LspQueryResult::HierarchyItems(items.iter().map(type_hierarchy_item).collect())
+                LspQueryResult::HierarchyItems(items.into_iter().map(type_hierarchy_item).collect())
             }
             Self::Doc => {
                 let hover = fq.hover(pos.line, pos.character)?;
                 LspQueryResult::Hover(hover)
             }
             Self::Hints => {
-                let start = u32::try_from(line_range.start).unwrap_or(u32::MAX);
-                let end = u32::try_from(line_range.end).unwrap_or(u32::MAX);
-                let range = Range {
-                    start: Position {
-                        line: start,
-                        character: 0,
-                    },
-                    end: Position {
-                        line: end,
-                        character: u32::MAX,
-                    },
-                };
+                let range = line_range_to_lsp_range(line_range);
                 LspQueryResult::InlayHints(fq.inlay_hints(range)?)
             }
         })

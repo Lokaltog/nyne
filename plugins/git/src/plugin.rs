@@ -28,8 +28,13 @@ impl Plugin for GitPlugin {
                 let repo = Arc::new(repo);
                 debug!("git repo opened at {}", ctx.overlay_root().display());
 
-                ctx.insert(ExtensionCounts(repo.extension_counts()));
-                ctx.insert(GitDirName(git_dir_component(ctx.overlay_root(), &repo.git_dir_path())));
+                match repo.extension_counts() {
+                    Ok(counts) => ctx.insert(ExtensionCounts::new(counts)),
+                    Err(e) => warn!(error = %e, "failed to read extension counts from git index"),
+                }
+                if let Some(name) = git_dir_component(ctx.overlay_root(), &repo.git_dir_path()) {
+                    ctx.insert(GitDirName(name));
+                }
                 ctx.insert(repo);
             }
             Err(e) => {

@@ -45,11 +45,11 @@ impl ResolverDepthGuard {
     /// Increment the thread-local depth counter, failing if the limit is exceeded.
     fn enter() -> Result<Self> {
         RESOLVER_DEPTH.with(|d| {
-            let current = d.get();
-            if current >= MAX_RESOLVER_DEPTH {
+            let next = d.get().checked_add(1).filter(|&n| n <= MAX_RESOLVER_DEPTH);
+            let Some(next) = next else {
                 bail!("resolver recursion depth exceeded (max {MAX_RESOLVER_DEPTH})");
-            }
-            d.set(current + 1);
+            };
+            d.set(next);
             Ok(Self)
         })
     }

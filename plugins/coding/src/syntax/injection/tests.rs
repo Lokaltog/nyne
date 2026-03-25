@@ -157,13 +157,12 @@ fn inner_decomposition_fields_pass_through() {
 /// Verifies that fragment line ranges are correct relative to the original compound source.
 #[test]
 fn line_ranges_are_correct_in_original() {
-    use nyne::types::line_of_byte;
-
     let source = load_fixture("two-blocks.md.j2");
+    let rope = crop::Rope::from(source.as_str());
     let file = decompose_j2("md", &source);
     for frag in &file {
-        let expected_start = line_of_byte(&source, frag.full_span().start);
-        let expected_end = line_of_byte(&source, frag.full_span().end) + 1;
+        let expected_start = rope.line_of_byte(frag.full_span().start);
+        let expected_end = rope.line_of_byte(frag.full_span().end) + 1;
         assert_eq!(
             frag.line_range(&source).start,
             expected_start,

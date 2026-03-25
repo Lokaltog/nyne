@@ -9,7 +9,6 @@
 
 /// Session identifier generation and validation.
 mod id;
-/// Process liveness checks and PID state queries.
 pub mod state;
 
 use std::path::{Path, PathBuf};

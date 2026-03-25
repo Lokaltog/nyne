@@ -31,7 +31,7 @@ struct FileEntry {
 /// The [`Condvar`] is signaled on every [`publish`], waking all waiting
 /// FUSE threads. Each waiter re-checks its own file's dirty flag — only
 /// the file that received the publish transitions to clean.
-pub(crate) struct DiagnosticStore {
+pub struct DiagnosticStore {
     files: Mutex<HashMap<PathBuf, FileEntry>>,
     notify: Condvar,
 }

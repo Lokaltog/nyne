@@ -22,7 +22,7 @@ use crate::services::CodingServices;
 ///
 /// Contributes `@/search/symbols/{query}` — a directory of symlinks
 /// pointing to matching symbols in the VFS. Empty directory if no match.
-pub(crate) struct WorkspaceSearchProvider {
+pub struct WorkspaceSearchProvider {
     ctx: Arc<ActivationContext>,
     routes: RouteTree<Self>,
 }
@@ -30,6 +30,9 @@ pub(crate) struct WorkspaceSearchProvider {
 /// Methods for [`WorkspaceSearchProvider`].
 impl WorkspaceSearchProvider {
     /// Unique provider identifier for workspace search.
+    ///
+    /// Manually defined like all other providers — `routes!` handles route
+    /// dispatch, not provider identity.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("workspace-search");
 
     /// Create a new workspace search provider with route tree.

@@ -7,7 +7,6 @@ use std::fmt::{self, Display, Formatter};
 use std::iter;
 use std::ops::Range;
 
-use nyne::types::line_of_byte;
 use strum::{Display as StrumDisplay, EnumString};
 
 /// Kind of a top-level source-code symbol.
@@ -194,6 +193,16 @@ impl Fragment {
         )
     }
 
+    /// Construct a docstring child fragment from an optional byte range.
+    ///
+    /// Returns `Some` if `doc_range` is present, `None` otherwise.
+    /// This is the single construction point for docstring fragments —
+    /// language extractors should use this instead of calling `structural` directly.
+    pub fn docstring_child(doc_range: Option<Range<usize>>, parent: Option<String>) -> Option<Self> {
+        let range = doc_range?;
+        Some(Self::structural("docstring", FragmentKind::Docstring, range, parent))
+    }
+
     /// Bounding box covering this fragment and all its children (docstrings,
     /// decorators, nested symbols). Derived from `byte_range` — never stale.
     pub fn full_span(&self) -> Range<usize> {
@@ -211,12 +220,18 @@ impl Fragment {
     /// Line range (0-based, exclusive end) covering this fragment and all
     /// its children. Requires the source text for byte→line conversion.
     pub fn line_range(&self, source: &str) -> Range<usize> {
+        let rope = crop::Rope::from(source);
         let span = self.full_span();
-        line_of_byte(source, span.start)..line_of_byte(source, span.end) + 1
+        rope.line_of_byte(span.start)..rope.line_of_byte(span.end) + 1
     }
 
     /// Find a child fragment by kind.
     pub fn child_of_kind(&self, kind: &FragmentKind) -> Option<&Self> { self.children.iter().find(|c| c.kind == *kind) }
+
+    /// Find a child fragment by filesystem name.
+    pub fn child_by_fs_name(&self, name: &str) -> Option<&Self> {
+        self.children.iter().find(|c| c.fs_name.as_deref() == Some(name))
+    }
 }
 
 /// A decomposed source file: a flat/tree of fragments in source order.

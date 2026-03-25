@@ -62,12 +62,10 @@ impl CompanionProvider {
     /// These are `Visibility::Hidden` so they only appear in readdir when
     /// `ProcessVisibility::All` is active.
     #[expect(clippy::unused_self, reason = "route handler called as instance method")]
-    #[expect(clippy::unnecessary_wraps, reason = "route tree requires Nodes return type")]
     fn children_companions(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let nodes: Vec<VirtualNode> = ctx
             .real_fs
-            .read_dir(ctx.path)
-            .unwrap_or_default()
+            .read_dir(ctx.path)?
             .into_iter()
             .map(|e| Self::companion_node(ctx.path, &e.name, e.file_type))
             .collect();

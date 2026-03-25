@@ -302,14 +302,8 @@ impl GitRepo {
     ///
     /// Counts ALL extensions — not filtered by any registry. Consumers who
     /// want a subset can filter the result themselves.
-    pub fn extension_counts(&self) -> Vec<(String, usize)> {
-        let paths = match self.index_paths() {
-            Ok(p) => p,
-            Err(e) => {
-                warn!(error = %e, "failed to read git index for extension counts");
-                return vec![];
-            }
-        };
+    pub fn extension_counts(&self) -> Result<Vec<(String, usize)>> {
+        let paths = self.index_paths()?;
         let mut counts: HashMap<String, usize> = HashMap::new();
         for path in &paths {
             if let Some(ext) = Path::new(path.as_str()).extension().and_then(|e| e.to_str()) {
@@ -318,7 +312,7 @@ impl GitRepo {
         }
         let mut sorted: Vec<_> = counts.into_iter().collect();
         sorted.sort_by(|a, b| b.1.cmp(&a.1));
-        sorted
+        Ok(sorted)
     }
 }
 

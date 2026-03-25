@@ -24,30 +24,31 @@ pub fn companion_name(base: &str) -> String { format!("{base}{COMPANION_SUFFIX}"
 /// Given `dir/file.rs@/symbols/Foo@`, the split produces:
 /// - `source_file` = `dir/file.rs`
 /// - `rest` = `["symbols", "Foo@"]` (raw, unstripped)
-pub struct CompanionSplit {
+///
+/// The lifetime borrows path segments from the input [`VfsPath`].
+pub struct CompanionSplit<'a> {
     /// The real file that the companion directory is associated with.
     pub source_file: VfsPath,
     /// Path components after the `@`-suffixed entry, in order.
     /// These are **not** stripped of any `@` suffix — callers decide
     /// how to interpret them (e.g., syntax strips `@` from fragment dirs).
-    pub rest: Vec<String>,
+    pub rest: Vec<&'a str>,
 }
 
 /// Route dispatch helpers for companion path splits.
-impl CompanionSplit {
-    /// Convert to route dispatch parameters: rest segments as `&str` slices
-    /// and a `RouteParams` with the `"source"` capture pre-populated.
+impl CompanionSplit<'_> {
+    /// Rest segments as a `&str` slice for route dispatch.
     ///
     /// SSOT for the repeated pattern in `companion_children` and
     /// [`companion_lookup`](crate::providers::companion_lookup).
-    pub fn rest_segments(&self) -> Vec<&str> { self.rest.iter().map(String::as_str).collect() }
+    pub fn rest_segments(&self) -> &[&str] { &self.rest }
 }
 
 /// Find the first `@`-suffixed component in `path` and split around it.
 ///
 /// Returns `None` if no component ends with `@` or if
 /// stripping the suffix would leave an empty name (bare `@`).
-pub fn split_companion_path(path: &VfsPath) -> Option<CompanionSplit> {
+pub fn split_companion_path(path: &VfsPath) -> Option<CompanionSplit<'_>> {
     let mut parent_segments: Vec<&str> = Vec::new();
 
     let mut components = path.components();
@@ -65,7 +66,8 @@ pub fn split_companion_path(path: &VfsPath) -> Option<CompanionSplit> {
     }
     source_file = source_file.join(real_name).ok()?;
 
-    let rest: Vec<String> = components.map(String::from).collect();
-
-    Some(CompanionSplit { source_file, rest })
+    Some(CompanionSplit {
+        source_file,
+        rest: components.collect(),
+    })
 }

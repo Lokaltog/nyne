@@ -21,8 +21,6 @@ macro_rules! syscall_try {
     };
 }
 
-/// Filesystem cloning strategies for overlay lowerdirs.
-mod clone;
 /// Control socket IPC between daemon and CLI commands.
 pub mod control;
 /// Mount syscall primitives for sandbox construction.
@@ -41,6 +39,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use color_eyre::eyre::{Result, WrapErr, ensure, eyre};
+use linkme::distributed_slice;
 use rustix::process::{Pid, getgid, getpid, getuid};
 use signal_hook::consts::{SIGINT, SIGTERM};
 use signal_hook::iterator::Signals;
@@ -48,6 +47,7 @@ use tracing::{debug, info};
 
 use self::namespace::Namespace;
 use self::process::{ChildGuard, ReadyPipe, fork_or_die, wait_for_exit};
+use crate::config::StorageStrategy;
 use crate::session;
 
 /// A mount path entry for FUSE + overlay mounting.
@@ -67,13 +67,13 @@ struct HostIdentity {
 }
 
 /// Configuration for mounting a FUSE daemon (no command, no sandbox).
-pub struct MountConfig {
+pub struct DaemonConfig {
     /// Mount path (single path for now).
     pub mount: MountEntry,
 }
 
 /// Construction and validation for [`MountConfig`].
-impl MountConfig {
+impl DaemonConfig {
     /// Create a new mount configuration.
     ///
     /// The mount path must be an absolute directory.
@@ -108,6 +108,26 @@ pub struct AttachConfig {
 /// any associated resources). When dropped, it triggers unmount. The sandbox
 /// holds these guards for the lifetime of the daemon.
 pub type MountFn = Box<dyn FnMut(&Path) -> Result<Box<dyn Send>> + Send>;
+/// Trait for cloning a project directory for use as an overlay lowerdir.
+///
+/// Implemented by the git plugin to provide snapshot and hardlink cloning
+/// strategies. Core discovers implementations at link time via the
+/// [`PROJECT_CLONERS`] distributed slice.
+pub trait ProjectCloner: Send + Sync {
+    /// Clone `source` into `target` using the given storage strategy.
+    fn clone_project(&self, source: &Path, target: &Path, strategy: StorageStrategy) -> Result<()>;
+}
+
+/// Factory function type for project cloners.
+pub type ClonerFactory = fn() -> Box<dyn ProjectCloner>;
+
+/// Link-time distributed slice of project cloner factories.
+///
+/// Plugin crates contribute entries via `#[distributed_slice(PROJECT_CLONERS)]`.
+/// At mount time, `prepare_project_storage` picks the first available cloner.
+#[allow(unsafe_code)]
+#[distributed_slice]
+pub static PROJECT_CLONERS: [ClonerFactory];
 
 use std::env;
 use std::path::Path;
@@ -134,7 +154,7 @@ struct MountSession {
 /// Fork a single FUSE daemon, wait for readiness, and write its session file.
 ///
 /// Returns without blocking — the daemon runs in a child process.
-fn start_one(config: MountConfig, session_id: &session::SessionId, mount_fn: MountFn) -> Result<MountSession> {
+fn start_one(config: DaemonConfig, session_id: &session::SessionId, mount_fn: MountFn) -> Result<MountSession> {
     let pipe = ReadyPipe::new().wrap_err("creating readiness pipe")?;
     let path = config.mount.path.clone();
 
@@ -199,7 +219,7 @@ fn teardown(sessions: Vec<MountSession>) {
 /// ready, the supervisor blocks until SIGINT/SIGTERM, then tears down all
 /// sessions. If any mount fails to start, already-running daemons are
 /// cleaned up before the error is propagated.
-pub fn run_mounts(mounts: Vec<(MountConfig, session::SessionId, MountFn)>) -> Result<()> {
+pub fn run_mounts(mounts: Vec<(DaemonConfig, session::SessionId, MountFn)>) -> Result<()> {
     let mut sessions = Vec::with_capacity(mounts.len());
 
     for (config, id, mount_fn) in mounts {
@@ -268,12 +288,23 @@ pub fn run_attach(config: AttachConfig) -> Result<i32> {
     Ok(exit_code)
 }
 
+/// Run a fallible closure, exiting the process on success (0) or failure (1).
+///
+/// Used by sandbox entry points (daemon, command, init) that run in forked
+/// child processes and must terminate via `exit()`.
+fn run_or_exit(label: &str, f: impl FnOnce() -> Result<()>) -> ! {
+    if let Err(e) = f() {
+        tracing::error!(process = label, error = format!("{e:?}"), "process failed");
+        exit(1);
+    }
+    exit(0);
+}
 /// FUSE daemon entry point (runs in child 1).
 ///
 /// Creates a user+mount namespace, mounts FUSE over each path,
 /// signals readiness, then blocks for shutdown.
 fn daemon_main(mounts: &[MountEntry], pipe: ReadyPipe, mut mount_fn: MountFn) {
-    let run = || -> Result<()> {
+    run_or_exit("daemon", || {
         namespace::unshare_user_mount()?;
 
         mnt::private()?;
@@ -319,13 +350,7 @@ fn daemon_main(mounts: &[MountEntry], pipe: ReadyPipe, mut mount_fn: MountFn) {
         }
 
         Ok(())
-    };
-
-    if let Err(e) = run() {
-        tracing::error!(error = format!("{e:?}"), "daemon failed");
-        exit(1);
-    }
-    exit(0);
+    });
 }
 
 /// Remap host CWD to sandbox path.
@@ -355,7 +380,7 @@ fn command_main(
     sandbox: &SandboxConfig,
     identity: HostIdentity,
 ) {
-    let run = || -> Result<()> {
+    run_or_exit("command", || {
         ns.enter()?;
         debug!("entered daemon namespace");
 
@@ -387,12 +412,7 @@ fn command_main(
 
         let exit_code = wait_for_exit(init_pid).wrap_err("waiting for init")?;
         exit(exit_code);
-    };
-
-    if let Err(e) = run() {
-        tracing::error!(error = format!("{e:?}"), command = ?command, "command failed");
-        exit(1);
-    }
+    });
 }
 
 /// Init process entry point (PID 1 in the new PID namespace).
@@ -408,7 +428,7 @@ fn init_main(
     fuse_path: &Path,
     extra_env: &HashMap<String, String>,
 ) {
-    let run = || -> Result<()> {
+    run_or_exit("init", || {
         // Remount /proc for the new PID namespace. Must happen before
         // user remap — mounting requires CAP_SYS_ADMIN in the user
         // namespace that owns the mount namespace.
@@ -440,10 +460,5 @@ fn init_main(
 
         let exit_code = process::run_init(command)?;
         exit(exit_code);
-    };
-
-    if let Err(e) = run() {
-        tracing::error!(error = format!("{e:?}"), "init failed");
-        exit(1);
-    }
+    });
 }

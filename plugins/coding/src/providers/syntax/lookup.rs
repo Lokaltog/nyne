@@ -55,9 +55,9 @@ impl SyntaxProvider {
             return Ok(None);
         }
 
-        let Some(_decomposer) = self.decomposer_for(source_file) else {
+        if self.decomposer_for(source_file).is_none() {
             return Ok(None);
-        };
+        }
         let shared = CodingServices::get(&self.ctx).decomposition.get(source_file)?;
         let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
             return Ok(None);
@@ -72,7 +72,7 @@ impl SyntaxProvider {
             query,
             new_name: new_name.to_owned(),
         };
-        Ok(Some(VirtualNode::file(name, DiffActionNode::new(name, action))))
+        Ok(Some(DiffActionNode::into_node(name, action)))
     }
 
     /// Lookup-only: `file.rs@/rename/new_name.rs.diff` → file rename preview.
@@ -106,7 +106,7 @@ impl SyntaxProvider {
             source_file: source_file.clone(),
             new_filename: new_filename.to_owned(),
         };
-        Ok(Some(VirtualNode::file(name, DiffActionNode::new(name, action))))
+        Ok(Some(DiffActionNode::into_node(name, action)))
     }
 
     /// Generate a delete preview diff for a symbol.
@@ -116,9 +116,9 @@ impl SyntaxProvider {
         fragment_path: &[String],
         _ctx: &RequestContext<'_>,
     ) -> Node {
-        let Some(_decomposer) = self.decomposer_for(source_file) else {
+        if self.decomposer_for(source_file).is_none() {
             return Ok(None);
-        };
+        }
         let shared = CodingServices::get(&self.ctx).decomposition.get(source_file)?;
         let Some(_frag) = find_fragment(&shared.decomposed, fragment_path) else {
             return Ok(None);

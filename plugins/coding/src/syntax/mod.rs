@@ -218,7 +218,7 @@ impl SyntaxRegistry {
 /// [`ConflictSet`](fragment::ConflictSet)s and delegates resolution to [`Decomposer::resolve_conflicts`]
 /// (which typically appends `~Kind` suffixes).
 pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<dyn Decomposer>) {
-    let mut name_indices: HashMap<&str, Vec<usize>> = HashMap::new();
+    let mut name_indices: HashMap<&str, Vec<usize>> = HashMap::with_capacity(fragments.len());
     for (i, frag) in fragments.iter().enumerate() {
         if let Some(fs_name) = &frag.fs_name {
             name_indices.entry(fs_name.as_str()).or_default().push(i);
@@ -245,8 +245,7 @@ pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<
         .collect();
 
     if !conflicts.is_empty() {
-        let resolutions = decomposer.resolve_conflicts(&conflicts);
-        for res in resolutions {
+        for res in decomposer.resolve_conflicts(&conflicts) {
             if let Some(frag) = fragments.get_mut(res.index) {
                 frag.fs_name = res.fs_name;
             }

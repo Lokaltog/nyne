@@ -59,3 +59,25 @@ fn relative_to(#[case] target: &str, #[case] base: &str, #[case] expected: &str)
     let base = if base.is_empty() { VfsPath::root() } else { vfs(base) };
     assert_eq!(target.relative_to(&base), std::path::PathBuf::from(expected));
 }
+
+/// Borrow<str> contract: VfsPath ordering and hashing must match str.
+#[test]
+fn borrow_str_ord_consistency() {
+    use std::borrow::Borrow;
+    use std::collections::BTreeMap;
+    use std::ops::Bound;
+
+    let mut map = BTreeMap::new();
+    let path = vfs("src/lib.rs");
+    map.insert(path.clone(), 42);
+
+    // Range query with &str bounds must find the entry.
+    let found: Vec<_> = map
+        .range::<str, _>((Bound::Included("src/lib.rs"), Bound::Included("src/lib.rs")))
+        .collect();
+    assert_eq!(found.len(), 1);
+    assert_eq!(*found[0].1, 42);
+
+    // Borrow returns the same str that VfsPath::as_str does.
+    assert_eq!(<VfsPath as Borrow<str>>::borrow(&path), path.as_str());
+}

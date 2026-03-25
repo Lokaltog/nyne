@@ -80,7 +80,6 @@ impl SyntaxProvider {
             .children
             .iter()
             .filter(|c| !matches!(c.kind, FragmentKind::CodeBlock { .. }))
-            .cloned()
             .collect();
         nodes.extend(build_fragment_nodes(
             &section_children,

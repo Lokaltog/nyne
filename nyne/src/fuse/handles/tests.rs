@@ -14,12 +14,12 @@ fn temp_file(content: &[u8]) -> File {
 #[test]
 fn write_to_buffered_handle_at_offset_zero() {
     let table = HandleTable::new();
-    let fh = table.open(1, Arc::new(b"hello".to_vec()), 0);
+    let fh = table.open(1, Arc::from(b"hello".as_slice()), 0);
 
     let written = table.write(fh, 0, b"HELLO").unwrap();
     assert_eq!(written, 5);
 
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, b"HELLO");
 }
 
@@ -27,12 +27,12 @@ fn write_to_buffered_handle_at_offset_zero() {
 #[test]
 fn append_to_buffered_handle_preserves_original() {
     let table = HandleTable::new();
-    let fh = table.open(1, Arc::new(b"hello".to_vec()), 0);
+    let fh = table.open(1, Arc::from(b"hello".as_slice()), 0);
 
     let written = table.write(fh, 5, b" world").unwrap();
     assert_eq!(written, 6);
 
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, b"hello world");
 }
 
@@ -45,7 +45,7 @@ fn write_to_direct_handle_populates_buffer_from_fd() {
     let fh = table.open_direct(1, fd, 0);
 
     // Before any write, reads come from the fd via pread.
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, original);
 
     // Append via write — should lazy-populate buffer from fd first.
@@ -53,7 +53,7 @@ fn write_to_direct_handle_populates_buffer_from_fd() {
     assert_eq!(written, 9);
 
     // Read full buffer — original content must be preserved, not zero-filled.
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, b"original content appended");
 }
 
@@ -68,7 +68,7 @@ fn overwrite_in_direct_handle_preserves_surrounding_content() {
     // Overwrite "world" with "WORLD".
     table.write(fh, 6, b"WORLD").unwrap();
 
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, b"hello WORLD");
 }
 
@@ -81,7 +81,7 @@ fn direct_handle_write_at_zero_on_empty_file() {
 
     table.write(fh, 0, b"new content").unwrap();
 
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, b"new content");
 }
 
@@ -108,13 +108,13 @@ fn append_clamps_offset_to_buffer_len() {
     let table = HandleTable::new();
     let content = b"line1\nline2\n";
     // Open with O_APPEND — kernel might send a stale offset > buffer.len().
-    let fh = table.open(1, Arc::new(content.to_vec()), libc::O_APPEND);
+    let fh = table.open(1, Arc::from(content.as_slice()), libc::O_APPEND);
 
     // Simulate kernel sending offset = 100 (stale i_size), but buffer is 12 bytes.
     // With O_APPEND, write() should clamp to buffer.len() = 12.
     table.write(fh, 100, b"line3\n").unwrap();
 
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, b"line1\nline2\nline3\n");
 }
 
@@ -129,7 +129,7 @@ fn append_direct_handle_with_stale_offset() {
     // Kernel sends stale offset (e.g. 1000) but file is only 5 bytes.
     table.write(fh, 1000, b" world").unwrap();
 
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, b"hello world");
 }
 
@@ -137,12 +137,12 @@ fn append_direct_handle_with_stale_offset() {
 #[test]
 fn non_append_write_at_offset_beyond_buffer_zero_fills() {
     let table = HandleTable::new();
-    let fh = table.open(1, Arc::new(b"abc".to_vec()), 0);
+    let fh = table.open(1, Arc::from(b"abc".as_slice()), 0);
 
     // Without O_APPEND, writing beyond buffer should zero-fill the gap.
     table.write(fh, 5, b"xy").unwrap();
 
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, b"abc\0\0xy");
 }
 
@@ -164,7 +164,7 @@ fn direct_handle_truncate_then_write_does_not_repopulate() {
     table.write(fh, 0, replacement).unwrap();
 
     // Buffer must contain ONLY the replacement — no old tail bytes.
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, replacement, "truncated direct handle leaked old file content");
 }
 
@@ -175,7 +175,7 @@ fn direct_handle_truncate_then_write_does_not_repopulate() {
 #[test]
 fn clear_dirty_respects_generation() {
     let table = HandleTable::new();
-    let fh = table.open(1, Arc::new(b"initial".to_vec()), 0);
+    let fh = table.open(1, Arc::from(b"initial".as_slice()), 0);
 
     table.write(fh, 0, b"first").unwrap();
 
@@ -212,7 +212,7 @@ fn truncate_direct_handle_to_nonzero_preserves_prefix() {
     // Write at offset 0 — should NOT re-read from fd (state is Truncated).
     table.write(fh, 0, b"HELLO").unwrap();
 
-    let data = table.read(fh, 0, 256);
+    let data = table.read(fh, 0, 256).unwrap();
     assert_eq!(data, b"HELLO");
 }
 
@@ -284,7 +284,7 @@ fn open_mode_parse() {
 #[test]
 fn release_returns_dirty_entry() {
     let table = HandleTable::new();
-    let fh = table.open(1, Arc::new(b"data".to_vec()), 0);
+    let fh = table.open(1, Arc::from(b"data".as_slice()), 0);
 
     // Not dirty initially.
     let entry_clean = table.release(fh);
@@ -292,7 +292,7 @@ fn release_returns_dirty_entry() {
     assert!(!entry_clean.unwrap().is_dirty());
 
     // Open again, write, release — should be dirty.
-    let fh2 = table.open(1, Arc::new(b"data".to_vec()), 0);
+    let fh2 = table.open(1, Arc::from(b"data".as_slice()), 0);
     table.write(fh2, 0, b"X").unwrap();
     let entry_dirty = table.release(fh2).unwrap();
     assert!(entry_dirty.is_dirty());
@@ -306,7 +306,7 @@ fn buffered_open_trunc_marks_dirty_when_content_nonempty() {
     let table = HandleTable::new();
     let fh = table.open(
         1,
-        Arc::new(b"existing content".to_vec()),
+        Arc::from(b"existing content".as_slice()),
         libc::O_WRONLY | libc::O_TRUNC,
     );
 
@@ -324,7 +324,7 @@ fn buffered_open_trunc_marks_dirty_when_content_nonempty() {
 #[test]
 fn buffered_open_trunc_on_empty_content_is_not_dirty() {
     let table = HandleTable::new();
-    let fh = table.open(1, Arc::new(Vec::new()), libc::O_WRONLY | libc::O_TRUNC);
+    let fh = table.open(1, Arc::from([]), libc::O_WRONLY | libc::O_TRUNC);
 
     let entry = table.release(fh).unwrap();
     assert!(!entry.is_dirty(), "O_TRUNC on empty content should not be dirty");
@@ -335,7 +335,7 @@ fn buffered_open_trunc_on_empty_content_is_not_dirty() {
 #[test]
 fn buffered_open_trunc_then_write_uses_truncate_mode() {
     let table = HandleTable::new();
-    let fh = table.open(1, Arc::new(b"old".to_vec()), libc::O_WRONLY | libc::O_TRUNC);
+    let fh = table.open(1, Arc::from(b"old".as_slice()), libc::O_WRONLY | libc::O_TRUNC);
 
     table.write(fh, 0, b"new content").unwrap();
 
@@ -355,7 +355,7 @@ fn buffered_open_trunc_then_write_uses_truncate_mode() {
 fn shell_redirect_trunc_open_setattr_then_write() {
     let table = HandleTable::new();
     // Step 1: ops.rs open handler passes empty content for O_TRUNC.
-    let fh = table.open(1, Arc::new(Vec::new()), libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC);
+    let fh = table.open(1, Arc::from([]), libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC);
 
     // Step 2: kernel sends setattr(size=0) for the O_TRUNC.
     table.truncate(fh, 0);
@@ -381,7 +381,7 @@ fn shell_redirect_trunc_open_setattr_then_write() {
 fn setattr_truncate_on_preloaded_handle_marks_dirty() {
     let table = HandleTable::new();
     // Open without O_TRUNC — content is in buffer.
-    let fh = table.open(1, Arc::new(b"some content".to_vec()), libc::O_RDWR);
+    let fh = table.open(1, Arc::from(b"some content".as_slice()), libc::O_RDWR);
 
     // setattr(size=0) — standalone truncation.
     table.truncate(fh, 0);

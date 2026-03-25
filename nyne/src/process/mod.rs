@@ -4,6 +4,8 @@
 //! stdio as owned file descriptors. Used by the LSP client to spawn
 //! language servers as direct children of the daemon process.
 
+use std::ffi::OsStr;
+use std::fmt::Debug;
 use std::os::fd::OwnedFd;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -44,7 +46,12 @@ impl Spawner {
     /// The child's environment is **cleared** — only the explicitly passed
     /// `env` pairs are set. Callers are responsible for building the
     /// desired environment (e.g., propagating specific host variables).
-    pub fn spawn(&self, command: &str, args: &[String], env: &[(String, String)], cwd: &Path) -> Result<SpawnedFds> {
+    pub fn spawn<A, K, V>(&self, command: &str, args: &[A], env: &[(K, V)], cwd: &Path) -> Result<SpawnedFds>
+    where
+        A: AsRef<OsStr> + Debug,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
         info!(
             command,
             ?args,

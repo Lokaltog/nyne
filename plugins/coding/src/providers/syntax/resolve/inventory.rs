@@ -71,8 +71,9 @@ impl SyntaxProvider {
 
         // Top-level fragments — all as @-suffixed directories.
         let lsp_handle = LspHandle::for_file(&self.ctx, source_file);
+        let top_level: Vec<_> = dctx.shared.decomposed.iter().collect();
         nodes.extend(build_fragment_nodes(
-            &dctx.shared.decomposed,
+            &top_level,
             &dctx.shared.source,
             source_file,
             &[],

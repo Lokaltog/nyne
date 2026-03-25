@@ -13,6 +13,7 @@ pub mod middleware;
 /// Node plugin trait for extending node construction.
 pub(crate) mod plugin;
 
+use std::fmt;
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
 
@@ -67,6 +68,7 @@ pub enum CachePolicy {
 ///
 /// Grouped behind a single `Box` to reduce per-node memory for the common
 /// case where none of these are used (directories, symlinks, simple files).
+#[derive(Default)]
 struct NodeExtensions {
     renameable: Option<Box<dyn Renameable>>,
     unlinkable: Option<Box<dyn Unlinkable>>,
@@ -77,19 +79,17 @@ struct NodeExtensions {
     plugins: Vec<Box<dyn NodePlugin>>,
     props: TypeMap,
 }
-
-impl Default for NodeExtensions {
-    fn default() -> Self {
-        Self {
-            renameable: None,
-            unlinkable: None,
-            lifecycle: None,
-            xattrable: None,
-            read_middlewares: Vec::new(),
-            write_middlewares: Vec::new(),
-            plugins: Vec::new(),
-            props: TypeMap::new(),
-        }
+impl fmt::Debug for NodeExtensions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NodeExtensions")
+            .field("renameable", &self.renameable.is_some())
+            .field("unlinkable", &self.unlinkable.is_some())
+            .field("lifecycle", &self.lifecycle.is_some())
+            .field("xattrable", &self.xattrable.is_some())
+            .field("read_middlewares", &self.read_middlewares.len())
+            .field("write_middlewares", &self.write_middlewares.len())
+            .field("plugins", &self.plugins.len())
+            .finish_non_exhaustive()
     }
 }
 

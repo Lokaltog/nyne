@@ -471,7 +471,12 @@ impl LspManager {
         ) {
             Ok(client) => {
                 let arc = Arc::new(client);
-                self.clients.write().insert(def.name().to_owned(), Arc::clone(&arc));
+                let mut clients = self.clients.write();
+                // Re-check: another thread may have spawned while we were starting ours.
+                if let Some(existing) = clients.get(def.name()) {
+                    return Some(Arc::clone(existing));
+                }
+                clients.insert(def.name().to_owned(), Arc::clone(&arc));
                 Some(arc)
             }
             Err(e) => {

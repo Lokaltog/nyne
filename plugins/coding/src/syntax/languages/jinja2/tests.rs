@@ -93,7 +93,7 @@ fn block_name_and_full_span() {
     assert_eq!(symbols.len(), 1);
     let block = &symbols[0];
     assert_eq!(block.name, "title");
-    assert_eq!(block.kind, SymbolKind::Module);
+    assert_eq!(block.kind, FragmentKind::Symbol(SymbolKind::Module));
     assert_eq!(block.full_span, 0..source.len());
     assert_eq!(block.signature, "{% block title %}");
 }
@@ -146,7 +146,7 @@ fn macro_name_kind_and_signature() {
     assert_eq!(symbols.len(), 1);
     let mac = &symbols[0];
     assert_eq!(mac.name, "render");
-    assert_eq!(mac.kind, SymbolKind::Function);
+    assert_eq!(mac.kind, FragmentKind::Symbol(SymbolKind::Function));
     assert_eq!(mac.full_span, 0..source.len());
     assert_eq!(mac.signature, "{% macro render(items) %}");
 }
@@ -177,7 +177,7 @@ fn set_variable_extracted() {
     assert_eq!(symbols.len(), 1);
     let var = &symbols[0];
     assert_eq!(var.name, "greeting");
-    assert_eq!(var.kind, SymbolKind::Variable);
+    assert_eq!(var.kind, FragmentKind::Symbol(SymbolKind::Variable));
     assert_eq!(var.full_span, 0..source.len());
 }
 
@@ -219,7 +219,7 @@ fn control_flow_inside_block_does_not_corrupt_stack(#[case] name: &str, #[case] 
     // Only the block should produce a symbol, not the inner control flow.
     assert_eq!(symbols.len(), 1);
     assert_eq!(symbols[0].name, name);
-    assert_eq!(symbols[0].kind, SymbolKind::Module);
+    assert_eq!(symbols[0].kind, FragmentKind::Symbol(SymbolKind::Module));
     assert_eq!(symbols[0].full_span, 0..source.len());
 }
 

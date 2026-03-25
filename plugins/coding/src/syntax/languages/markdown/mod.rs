@@ -76,17 +76,17 @@ struct CodeBlock {
 /// Collect all ATX headings from the markdown parse tree.
 fn collect_headings(root: TsNode<'_>, source: &[u8]) -> Vec<Heading> {
     let mut headings = Vec::new();
-    collect_headings_recursive(root, source, &mut headings);
+    collect_nodes(root, "atx_heading", &|n| parse_atx_heading(n, source), &mut headings);
     headings
 }
 
-/// Recursively collect ATX heading nodes from the tree.
-fn collect_headings_recursive(node: TsNode<'_>, source: &[u8], headings: &mut Vec<Heading>) {
-    if node.kind() == "atx_heading" {
-        headings.push(parse_atx_heading(node, source));
+/// Recursively collect nodes of a given kind from the tree.
+fn collect_nodes<T>(node: TsNode<'_>, kind: &str, parse: &impl Fn(TsNode<'_>) -> T, out: &mut Vec<T>) {
+    if node.kind() == kind {
+        out.push(parse(node));
     }
     for child in node.children() {
-        collect_headings_recursive(child, source, headings);
+        collect_nodes(child, kind, parse, out);
     }
 }
 
@@ -96,6 +96,12 @@ fn parse_atx_heading(node: TsNode<'_>, source: &[u8]) -> Heading {
     let mut name = None;
 
     for child in node.children() {
+        // Matches tree-sitter-markdown marker nodes: `atx_h1_marker` through
+        // `atx_h6_marker`. This is coupled to the grammar's node-kind naming
+        // convention, which has been stable since the grammar's 0.1 release.
+        // A lookup table or regex would add indirection without meaningful
+        // benefit — if the grammar ever renames these nodes, the decomposer
+        // would need broader changes regardless.
         if child.kind().starts_with("atx_h") && child.kind().ends_with("_marker") {
             level = child.text().len().try_into().unwrap_or(1);
         } else if child.kind() == "inline" {
@@ -113,18 +119,13 @@ fn parse_atx_heading(node: TsNode<'_>, source: &[u8]) -> Heading {
 /// Collect all fenced code blocks from the markdown parse tree.
 fn collect_code_blocks(root: TsNode<'_>, source: &str) -> Vec<CodeBlock> {
     let mut blocks = Vec::new();
-    collect_code_blocks_recursive(root, source, &mut blocks);
+    collect_nodes(
+        root,
+        "fenced_code_block",
+        &|n| parse_fenced_code_block(n, source),
+        &mut blocks,
+    );
     blocks
-}
-
-/// Recursively collect fenced code block nodes from the tree.
-fn collect_code_blocks_recursive(node: TsNode<'_>, source: &str, blocks: &mut Vec<CodeBlock>) {
-    if node.kind() == "fenced_code_block" {
-        blocks.push(parse_fenced_code_block(node, source));
-    }
-    for child in node.children() {
-        collect_code_blocks_recursive(child, source, blocks);
-    }
 }
 
 /// Parse a fenced code block node into a `CodeBlock` struct.

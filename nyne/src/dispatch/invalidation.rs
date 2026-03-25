@@ -1,6 +1,6 @@
 //! Cache invalidation and event processing for L1/L2 caches with kernel notification.
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::router::Router;
 use crate::provider::ProviderId;
@@ -49,6 +49,14 @@ pub trait KernelNotifier: Send + Sync {
     fn inval_entry(&self, parent_inode: u64, name: &str);
 }
 
+/// RAII guard that resets an [`AtomicBool`] to `false` on drop.
+///
+/// Ensures the flag is cleared even if the guarded scope panics.
+struct AtomicBoolGuard<'a>(&'a AtomicBool);
+
+impl Drop for AtomicBoolGuard<'_> {
+    fn drop(&mut self) { self.0.store(false, Ordering::Release); }
+}
 /// Cache invalidation and event processing methods.
 ///
 /// Separated from the core router to keep invalidation logic (L1/L2/kernel)
@@ -129,9 +137,11 @@ impl Router {
         // Skip provider notification if we're already inside a provider's
         // on_fs_change — prevents infinite loops from back-propagated
         // real-FS mutations.
-        if self.in_fs_change_notify.swap(true, Ordering::Relaxed) {
+        if self.in_fs_change_notify.swap(true, Ordering::Acquire) {
             return;
         }
+        // RAII guard: reset flag even if a provider panics.
+        let _guard = AtomicBoolGuard(&self.in_fs_change_notify);
 
         // Notify providers after all cache invalidation is complete.
         // Providers may return additional invalidation events for
@@ -141,8 +151,6 @@ impl Router {
                 self.process_invalidation_event(&event, notifier);
             }
         }
-
-        self.in_fs_change_notify.store(false, Ordering::Relaxed);
     }
 
     /// Evict L1 entry and kernel dentry for a skippable (gitignored /
@@ -162,7 +170,7 @@ impl Router {
     /// Performs subtree invalidation (L1 + L2 + kernel), then invalidates
     /// the parent directory so it re-resolves to pick up the new/deleted entry.
     fn handle_non_skippable_change(&self, path: &VfsPath, notifier: Option<&dyn KernelNotifier>) {
-        self.process_invalidation_event(&InvalidationEvent::Subtree { path: path.clone() }, notifier);
+        self.invalidate_subtree_with_notify(path, notifier);
 
         let Some(parent) = path.parent() else { return };
         self.invalidate_dir(&parent);

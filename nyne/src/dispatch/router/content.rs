@@ -7,8 +7,11 @@ use color_eyre::eyre::Result;
 use super::Router;
 use crate::dispatch::WriteMode;
 use crate::dispatch::context::RequestContext;
+use crate::dispatch::invalidation::InvalidationEvent;
 use crate::node::{CachePolicy, VirtualNode, WriteOutcome};
 use crate::provider::Provider;
+use crate::types::path_conventions::companion_name;
+use crate::types::vfs_path::VfsPath;
 
 /// Content I/O operations: read/write through the L2 cache and pipeline.
 impl Router {
@@ -30,7 +33,7 @@ impl Router {
         node: &VirtualNode,
         provider: &dyn Provider,
         ctx: &RequestContext<'_>,
-    ) -> Result<Arc<Vec<u8>>> {
+    ) -> Result<Arc<[u8]>> {
         let cacheable = node.cache_policy() == CachePolicy::Cache;
         if cacheable && let Some(cached) = self.content_cache.get(inode) {
             return Ok(cached);
@@ -40,7 +43,7 @@ impl Router {
         if cacheable {
             return Ok(self.content_cache.insert(inode, data, provider.id(), source_file));
         }
-        Ok(Arc::new(data))
+        Ok(Arc::from(data))
     }
 
     /// Get the L2 cached content size for an inode, if available.
@@ -58,7 +61,6 @@ impl Router {
     /// cache, and bumps the source file's generation so that sibling
     /// companion entries are lazily detected as stale on next access.
     #[allow(clippy::too_many_arguments)] // internal dispatch: inode + node + provider + write data + context
-    /// Writes content to a node, invalidating caches and bumping file generations.
     pub(crate) fn write_content(
         &self,
         inode: u64,
@@ -72,6 +74,18 @@ impl Router {
         self.content_cache.invalidate(inode);
         if let Some((source_file, _)) = node.source() {
             self.file_generations.bump(source_file);
+            // Invalidate the companion subtree synchronously so the FUSE
+            // flush handler notifies the kernel before returning to the
+            // caller — eliminates the race between write completion and
+            // async inotify-driven on_fs_change delivery.
+            if let Some(name) = source_file.name()
+                && let Ok(companion_path) = source_file
+                    .parent()
+                    .unwrap_or(VfsPath::root())
+                    .join(&companion_name(name))
+            {
+                self.events.emit(InvalidationEvent::Subtree { path: companion_path });
+            }
         }
         Ok(outcome)
     }

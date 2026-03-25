@@ -3,8 +3,6 @@
 //! Providers start with `use super::prelude::*;` instead of manually
 //! importing the 6+ types every provider needs.
 
-pub use std::sync::Arc;
-
 pub use crate::dispatch::activation::ActivationContext;
 pub use crate::dispatch::context::RequestContext;
 pub use crate::node::{CachePolicy, VirtualNode};

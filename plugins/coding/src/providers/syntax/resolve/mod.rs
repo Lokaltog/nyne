@@ -111,7 +111,7 @@ impl SyntaxProvider {
 
 /// Build virtual nodes for all fragments in a decomposition.
 pub(super) fn build_fragment_nodes(
-    fragments: &[Fragment],
+    fragments: &[&Fragment],
     source: &str,
     source_file: &VfsPath,
     parent_path: &[String],

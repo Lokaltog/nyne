@@ -3,6 +3,8 @@
 //! Provides [`GitRepo`] for git operations and `GitPlugin`
 //! which inserts the repo into the activation context's `TypeMap`.
 
+/// Git-backed project cloning for overlay lowerdirs.
+mod clone;
 /// Commit metadata types.
 mod commit;
 /// Git-aware companion provider.
@@ -18,6 +20,9 @@ pub mod repo;
 /// Working tree status types.
 mod status;
 
-pub use commit::{CommitInfo, commit_info, diff_opts};
+pub use commit::CommitInfo;
+pub use provider::CommitMtime;
+pub use provider::repo::FileViewCtx;
+pub use provider::views::{BLAME_TEMPLATE, HISTORY_LIMIT, LOG_TEMPLATE, history_filename, hunk_overlaps_range};
 pub use repo::GitRepo;
 pub use status::RepoStatus;

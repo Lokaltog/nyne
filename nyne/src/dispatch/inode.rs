@@ -12,7 +12,7 @@ use crate::types::vfs_path::VfsPath;
 /// Stores the location (directory + name + parent inode) for O(1)
 /// inode→location lookup without scanning all cached directories.
 /// The L1 cache is the source of truth for node existence and provider ownership.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(super) struct InodeEntry {
     /// Directory containing this node.
     pub(super) dir_path: VfsPath,
@@ -44,6 +44,7 @@ pub(super) struct InodeEntry {
 /// 3. **`resolve_inode` safety:** The router validates that the L1 cache
 ///    still contains a matching entry before using an `InodeEntry`.
 ///    Stale entries are detected and return `None`.
+#[derive(Debug)]
 pub(super) struct InodeMap {
     inner: RwLock<Slab<Arc<InodeEntry>>>,
 }
@@ -88,18 +89,20 @@ impl InodeMap {
     /// Used by `rename_node` to keep the inode map consistent after a
     /// filesystem rename — the inode number stays the same, but its
     /// location (directory, name, parent) changes.
-    pub(super) fn update(&self, inode: u64, dir_path: VfsPath, name: String, parent_inode: u64) {
+    pub(super) fn update(&self, inode: u64, dir_path: VfsPath, name: String, parent_inode: u64) -> bool {
         let Some(idx) = Self::inode_to_index(inode) else {
-            return;
+            return false;
         };
         let mut slab = self.inner.write();
-        if let Some(entry) = slab.get_mut(idx) {
-            *entry = Arc::new(InodeEntry {
-                dir_path,
-                name,
-                parent_inode,
-            });
-        }
+        let Some(entry) = slab.get_mut(idx) else {
+            return false;
+        };
+        *entry = Arc::new(InodeEntry {
+            dir_path,
+            name,
+            parent_inode,
+        });
+        true
     }
 
     /// Convert an inode number to a slab index, returning `None` for

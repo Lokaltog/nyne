@@ -33,7 +33,9 @@ pub struct ActivationContext {
     /// Process spawner with env isolation.
     spawner: Arc<Spawner>,
     /// Full configuration, stored for provider access.
-    config: NyneConfig,
+    config: Arc<NyneConfig>,
+    /// Display root with trailing slash — precomputed for path stripping.
+    root_prefix: String,
     /// Plugin-provided services, keyed by type.
     extensions: TypeMap,
 }
@@ -49,16 +51,19 @@ impl ActivationContext {
         root: PathBuf,
         overlay_root: PathBuf,
         real_fs: Arc<dyn RealFs>,
-        config: &NyneConfig,
+        config: Arc<NyneConfig>,
         spawner: Arc<Spawner>,
     ) -> Self {
+        let mut root_prefix = root.display().to_string();
+        root_prefix.push('/');
         Self {
             host_root,
             root,
             overlay_root,
             real_fs,
             spawner,
-            config: config.clone(),
+            config,
+            root_prefix,
             extensions: TypeMap::new(),
         }
     }
@@ -73,7 +78,7 @@ impl ActivationContext {
     pub fn host_root(&self) -> &Path { &self.host_root }
 
     /// Full configuration.
-    pub const fn config(&self) -> &NyneConfig { &self.config }
+    pub fn config(&self) -> &NyneConfig { &self.config }
 
     /// Process spawner with env isolation.
     pub const fn spawner(&self) -> &Arc<Spawner> { &self.spawner }
@@ -100,5 +105,5 @@ impl ActivationContext {
     pub fn get<T: 'static>(&self) -> Option<&T> { self.extensions.get::<T>() }
 
     /// Display root with trailing slash — for stripping absolute paths to relative.
-    pub fn root_prefix(&self) -> String { format!("{}/", self.root.display()) }
+    pub fn root_prefix(&self) -> &str { &self.root_prefix }
 }

@@ -14,6 +14,7 @@
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 // Hook input — common fields
 
@@ -51,7 +52,13 @@ impl HookInput {
         if stdin.is_empty() {
             return None;
         }
-        serde_json::from_slice(stdin).ok()
+        match serde_json::from_slice(stdin) {
+            Ok(input) => Some(input),
+            Err(e) => {
+                warn!(error = %e, "failed to parse hook input JSON");
+                None
+            }
+        }
     }
 
     /// Deserialize `tool_input` into a typed struct.
@@ -60,9 +67,7 @@ impl HookInput {
     /// This is the graceful fallback path — callers should handle `None`
     /// by skipping tool-specific logic rather than erroring.
     pub fn tool_input_as<T: DeserializeOwned>(&self) -> Option<T> {
-        self.tool_input
-            .as_ref()
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
+        self.tool_input.as_ref().and_then(|v| T::deserialize(v).ok())
     }
 }
 
@@ -253,7 +258,7 @@ impl HookOutput {
     /// Serialize to JSON bytes for script output.
     pub fn to_bytes(&self) -> Vec<u8> {
         // Serialization of a well-formed HookOutput should never fail.
-        serde_json::to_vec(self).unwrap_or_default()
+        serde_json::to_vec(self).expect("HookOutput serialization is infallible")
     }
 
     /// Empty output — no effect on the hook event.

@@ -20,13 +20,13 @@ use crate::types::vfs_path::VfsPath;
 // Shared constructors
 
 /// Shorthand: parse a string into a `VfsPath` (panics on invalid input).
-pub fn vfs(s: &str) -> VfsPath { VfsPath::new(s).unwrap() }
+pub(crate) fn vfs(s: &str) -> VfsPath { VfsPath::new(s).unwrap() }
 
 // Stub trait implementations
 
 /// Stub `RealFs` — all methods bail. Use when the test never touches the
 /// real filesystem (e.g., template rendering, snapshot assertions).
-pub struct StubFs;
+pub(crate) struct StubFs;
 
 /// Stub filesystem that rejects all operations.
 impl RealFs for StubFs {
@@ -70,8 +70,7 @@ impl RealFs for StubFs {
     fn mkdir(&self, _: &VfsPath) -> Result<()> { bail!("stub") }
 }
 
-/// Stub `EventSink` — silently discards all events.
-pub struct StubEvents;
+pub(crate) struct StubEvents;
 
 /// No-op event sink that silently discards all invalidation events.
 impl EventSink for StubEvents {
@@ -79,8 +78,7 @@ impl EventSink for StubEvents {
     fn emit(&self, _: InvalidationEvent) {}
 }
 
-/// Stub `Resolver` — all lookups bail.
-pub struct StubResolver;
+pub(crate) struct StubResolver;
 
 /// Stub resolver that rejects all lookups.
 impl Resolver for StubResolver {
@@ -93,7 +91,7 @@ impl Resolver for StubResolver {
 
 /// Build a `RequestContext` wired to stubs. Useful when the test exercises
 /// a `Readable` impl that doesn't actually touch the context.
-pub fn stub_request_context<'a>(
+pub(crate) fn stub_request_context<'a>(
     path: &'a VfsPath,
     real_fs: &'a StubFs,
     events: &'a StubEvents,
@@ -112,18 +110,18 @@ pub fn stub_request_context<'a>(
 /// Convenience bundle for tests that need a `RequestContext` at a specific path.
 ///
 /// Owns all stubs so the test only needs to keep this struct alive.
-pub struct StubRequestContext {
-    pub path: VfsPath,
-    pub real_fs: StubFs,
-    pub events: StubEvents,
-    pub resolver: StubResolver,
-    pub file_generations: FileGenerations,
+pub(crate) struct StubRequestContext {
+    pub(crate) path: VfsPath,
+    pub(crate) real_fs: StubFs,
+    pub(crate) events: StubEvents,
+    pub(crate) resolver: StubResolver,
+    pub(crate) file_generations: FileGenerations,
 }
 
 /// Convenience methods for building test request contexts.
 impl StubRequestContext {
     /// Borrow a `RequestContext` from the owned stubs.
-    pub fn ctx(&self) -> RequestContext<'_> {
+    pub(crate) fn ctx(&self) -> RequestContext<'_> {
         stub_request_context(
             &self.path,
             &self.real_fs,
@@ -138,7 +136,7 @@ impl StubRequestContext {
 ///
 /// # Panics
 /// Panics if `path` is not a valid `VfsPath`.
-pub fn stub_request_context_at(path: &str) -> StubRequestContext {
+pub(crate) fn stub_request_context_at(path: &str) -> StubRequestContext {
     StubRequestContext {
         path: vfs(path),
         real_fs: StubFs,
@@ -152,7 +150,7 @@ pub fn stub_request_context_at(path: &str) -> StubRequestContext {
 ///
 /// Panics if the file doesn't exist or can't be read — fixture absence
 /// is always a test setup bug.
-pub fn load_fixture(module: &str, name: &str) -> String {
+pub(crate) fn load_fixture(module: &str, name: &str) -> String {
     let path = format!("{}/src/{module}/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read fixture {name}: {e}"))
 }

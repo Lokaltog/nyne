@@ -85,7 +85,7 @@ fn derive_not_writable_when_base_readonly() {
 fn splice_lines_replaces_range() {
     let current = b"aaa\nbbb\nccc\nddd\n";
     let spec = SliceSpec::Range(2, 3);
-    let result = splice_lines(current, &spec, b"XXX\nYYY");
+    let result = splice_lines(current, &spec, b"XXX\nYYY").unwrap();
     assert_eq!(result, b"aaa\nXXX\nYYY\nddd\n");
 }
 
@@ -94,7 +94,7 @@ fn splice_lines_replaces_range() {
 fn splice_lines_single() {
     let current = b"aaa\nbbb\nccc\n";
     let spec = SliceSpec::Single(2);
-    let result = splice_lines(current, &spec, b"ZZZ");
+    let result = splice_lines(current, &spec, b"ZZZ").unwrap();
     assert_eq!(result, b"aaa\nZZZ\nccc\n");
 }
 
@@ -103,7 +103,7 @@ fn splice_lines_single() {
 fn splice_lines_tail() {
     let current = b"aaa\nbbb\nccc\n";
     let spec = SliceSpec::Tail(1);
-    let result = splice_lines(current, &spec, b"NEW");
+    let result = splice_lines(current, &spec, b"NEW").unwrap();
     assert_eq!(result, b"aaa\nbbb\nNEW\n");
 }
 /// Tests that the derived node is unlinkable when the base is writable.
@@ -136,6 +136,6 @@ fn derive_not_unlinkable_when_base_readonly() {
 fn splice_lines_empty_data_deletes_range() {
     let current = b"aaa\nbbb\nccc\nddd\n";
     let spec = SliceSpec::Range(2, 3);
-    let result = splice_lines(current, &spec, b"");
+    let result = splice_lines(current, &spec, b"").unwrap();
     assert_eq!(result, b"aaa\nddd\n");
 }

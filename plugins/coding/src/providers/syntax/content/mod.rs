@@ -77,9 +77,7 @@ impl Readable for SourceSlice {
             SpliceTarget::CodeBlockBody { parent_path, fs_name } => {
                 let parent = syntax::require_fragment(frags, parent_path)?;
                 let cb = parent
-                    .children
-                    .iter()
-                    .find(|c| c.fs_name.as_deref() == Some(fs_name.as_str()))
+                    .child_by_fs_name(fs_name)
                     .ok_or_else(|| eyre!("code block {fs_name:?} not found in {parent_path:?}"))?;
                 (cb.byte_range.clone(), None)
             }

@@ -56,13 +56,7 @@ fn generate_segment(seg: &SegmentRoute, ty: &syn::Type) -> Result<TokenStream> {
     let sub_route_calls: Vec<TokenStream> = seg
         .sub_routes
         .iter()
-        .filter_map(|entry| {
-            if let RouteEntry::Segment(sub) = entry {
-                Some(generate_segment(sub, ty))
-            } else {
-                None
-            }
-        })
+        .map(|sub| generate_segment(sub, ty))
         .collect::<Result<_>>()?;
 
     let no_emit_call = seg.no_emit.then(|| quote! { .no_emit() });

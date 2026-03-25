@@ -9,7 +9,7 @@ mod notify;
 /// Per-process visibility filtering for VFS entries.
 mod visibility_map;
 
-pub use attrs::file_kind_to_fuse;
+use attrs::file_kind_to_fuse;
 pub use notify::{AsyncNotifier, FuseNotifier};
 pub use visibility_map::VisibilityMap;
 
@@ -91,6 +91,13 @@ use crate::types::file_kind::FileKind;
 use crate::types::vfs_path::VfsPath;
 
 /// The FUSE filesystem handler.
+///
+/// Per-inode state (`write_locks`, `write_errors`, `atime_overrides`) is
+/// intentionally split across separate `RwLock<HashMap>`s rather than
+/// consolidated behind a single lock. Each map has a distinct access pattern:
+/// write locks are held for the duration of write pipelines, write errors are
+/// set/cleared on flush, and atime overrides are rare hook-driven updates.
+/// Separate locks avoid contention between these unrelated operations.
 pub struct NyneFs {
     router: Arc<Router>,
     handles: HandleTable,
@@ -178,10 +185,10 @@ impl NyneFs {
     ///
     /// For virtual nodes, reads through the L2 content cache.
     /// For real files, reads directly from the filesystem (no caching).
-    fn load_content(&self, ino: u64) -> Result<Arc<Vec<u8>>> {
+    fn load_content(&self, ino: u64) -> Result<Arc<[u8]>> {
         self.with_inode_io(
             ino,
-            |path| self.router.real_fs().read(path).map(Arc::new),
+            |path| self.router.real_fs().read(path).map(Arc::from),
             |node, provider, ctx| self.router.read_content(ino, node, provider, ctx),
         )
     }
@@ -357,7 +364,7 @@ impl NyneFs {
 ///
 /// This is the SSOT for error → errno conversion. All FUSE `Err` arms
 /// should use this instead of hardcoding `Errno::EIO`.
-pub fn extract_errno(e: &Report) -> Errno {
+fn extract_errno(e: &Report) -> Errno {
     for cause in e.chain() {
         if let Some(io_err) = cause.downcast_ref::<Error>() {
             // Real OS errors carry the exact errno.

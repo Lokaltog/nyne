@@ -15,6 +15,18 @@ pub struct CommitInfo {
     #[serde(skip)]
     pub epoch_secs: i64,
 }
+impl CommitInfo {
+    /// Placeholder for uncommitted (working-directory) changes.
+    pub(crate) fn uncommitted(oid: git2::Oid) -> Self {
+        Self {
+            hash: format!("{oid:.7}"),
+            author: "uncommitted".into(),
+            date: "-".into(),
+            message: "uncommitted changes".into(),
+            epoch_secs: 0,
+        }
+    }
+}
 
 /// Extract [`CommitInfo`] from a `git2::Commit` for template rendering.
 pub fn commit_info(commit: &git2::Commit<'_>, oid: Oid) -> CommitInfo {

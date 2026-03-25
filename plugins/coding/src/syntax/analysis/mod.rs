@@ -23,7 +23,7 @@ use crate::config::AnalysisConfig;
 ///
 /// Users can override this by setting `rules = []` (all rules) or listing
 /// specific rules in `[plugin.coding.analysis]`.
-pub(crate) const DEFAULT_DISABLED_RULES: &[&str] = &[
+pub const DEFAULT_DISABLED_RULES: &[&str] = &[
     "magic-string",
     "magic-number",
     "single-use-variable",
@@ -164,6 +164,7 @@ impl AnalysisEngine {
     ///
     /// Cheap to construct — just indexes rule factories into a dispatch map.
     /// Callers own the instance; no global state, no locking.
+    #[cfg(test)]
     pub fn build() -> Self {
         let rules: Vec<Arc<dyn AnalysisRule>> = ANALYSIS_RULE_FACTORIES
             .iter()

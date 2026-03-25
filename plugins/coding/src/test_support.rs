@@ -42,7 +42,7 @@ pub fn stub_activation_context() -> Arc<nyne::dispatch::activation::ActivationCo
     use crate::syntax::decomposed::DecompositionCache;
 
     let tmp = std::env::temp_dir().join("nyne-coding-test");
-    let config = nyne::config::NyneConfig::default();
+    let config = Arc::new(nyne::config::NyneConfig::default());
     let real_fs: Arc<dyn nyne::types::RealFs> = Arc::new(OsFs::new(tmp.clone()));
     let spawner = Arc::new(Spawner::new());
     let mut ctx = ActivationContext::new(
@@ -50,7 +50,7 @@ pub fn stub_activation_context() -> Arc<nyne::dispatch::activation::ActivationCo
         tmp.clone(),
         tmp.clone(),
         real_fs.clone(),
-        &config,
+        config,
         spawner.clone(),
     );
 

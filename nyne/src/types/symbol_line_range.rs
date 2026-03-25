@@ -1,10 +1,5 @@
+use std::fmt;
 use std::ops::Range;
-
-/// 0-based line number for a byte offset in source text.
-///
-/// Counts newlines preceding the offset. Single source of truth for
-/// byte-offset → line-number conversion.
-pub fn line_of_byte(source: &str, byte: usize) -> usize { source[..byte].bytes().filter(|&b| b == b'\n').count() }
 
 /// Line range metadata attached to symbol directory nodes.
 ///
@@ -35,17 +30,19 @@ impl SymbolLineRange {
 
     /// Create from a byte range in the source text.
     pub fn from_byte_range(source: &str, byte_range: &Range<usize>) -> Self {
-        let start_line = line_of_byte(source, byte_range.start);
-        let end_line = line_of_byte(source, byte_range.end) + 1;
-        Self::from_zero_based(&(start_line..end_line))
+        let rope = crop::Rope::from(source);
+        Self::from_zero_based(&(rope.line_of_byte(byte_range.start)..rope.line_of_byte(byte_range.end) + 1))
     }
 
     /// Format as a `lines:M-N` suffix string (or `lines:M` for single-line ranges).
-    pub fn as_lines_suffix(&self) -> String {
+    pub fn as_lines_suffix(&self) -> String { self.to_string() }
+}
+impl fmt::Display for SymbolLineRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.start == self.end {
-            format!("lines:{}", self.start)
+            write!(f, "lines:{}", self.start)
         } else {
-            format!("lines:{}-{}", self.start, self.end)
+            write!(f, "lines:{}-{}", self.start, self.end)
         }
     }
 }

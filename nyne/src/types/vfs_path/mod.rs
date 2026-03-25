@@ -1,9 +1,11 @@
 //! Virtual filesystem relative paths with validation and normalization.
 
+use std::borrow::Borrow;
 use std::fmt;
 use std::path::PathBuf;
 
 use color_eyre::eyre::{Result, bail};
+use smallvec::SmallVec;
 
 /// Relative path within the virtual filesystem.
 ///
@@ -133,8 +135,8 @@ impl VfsPath {
     /// Iterate over path segments. Empty iterator for root.
     pub fn components(&self) -> impl Iterator<Item = &str> { self.0.split('/').filter(|s| !s.is_empty()) }
 
-    /// Collect path segments into a `Vec` for indexed access.
-    pub fn segments(&self) -> Vec<&str> { self.components().collect() }
+    /// Collect path segments for indexed access (stack-allocated up to 8 deep).
+    pub fn segments(&self) -> SmallVec<[&str; 8]> { self.components().collect() }
 
     /// Return the file extension (part after the last `.`), or `None` if the
     /// name has no dot or this is the root path.
@@ -157,8 +159,7 @@ impl VfsPath {
     /// VfsPath::new("Makefile")?.compound_extension()       // None
     /// ```
     pub fn compound_extension(&self) -> Option<(&str, &str)> {
-        let name = self.name()?;
-        let (rest, outer) = name.rsplit_once('.')?;
+        let (rest, outer) = self.name()?.rsplit_once('.')?;
         let (_, inner) = rest.rsplit_once('.')?;
         if inner.is_empty() || outer.is_empty() {
             return None;
@@ -230,6 +231,17 @@ impl fmt::Debug for VfsPath {
 impl AsRef<str> for VfsPath {
     /// Returns the path as a string slice.
     fn as_ref(&self) -> &str { &self.0 }
+}
+
+/// Enables `BTreeMap<VfsPath, _>` range queries with `&str` keys,
+/// avoiding `VfsPath` allocation for lookup-only bounds.
+///
+/// # Safety contract
+///
+/// `VfsPath` derives `Ord`/`Hash` which delegates to `String`, matching
+/// `str`'s ordering and hashing — the `Borrow` contract is upheld.
+impl Borrow<str> for VfsPath {
+    fn borrow(&self) -> &str { &self.0 }
 }
 
 /// Unit tests.

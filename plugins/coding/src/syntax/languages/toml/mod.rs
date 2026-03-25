@@ -19,8 +19,6 @@ impl LanguageSpec for TomlLanguage {
     const IMPORT_KINDS: &'static [&'static str] = &[];
     /// Language name identifier.
     const NAME: &'static str = "TOML";
-    /// Strategy for deriving filesystem names from symbols.
-    const NAMING_STRATEGY: NamingStrategy = NamingStrategy::Identity;
     /// AST node kinds that can contain nested symbols.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
 
@@ -30,22 +28,20 @@ impl LanguageSpec for TomlLanguage {
     /// Extracts TOML tables and preamble as custom fragments.
     fn extract_custom(root: TsNode<'_>, _max_depth: usize) -> Option<Vec<Fragment>> {
         let mut fragments = Vec::new();
-        let mut cursor = root.raw().walk();
 
         // Coalesce bare top-level pairs (before any table header) into a
         // single preamble fragment. Tables are opaque sections.
         let mut preamble_start: Option<usize> = None;
         let mut preamble_end: usize = 0;
 
-        for child in root.raw().children(&mut cursor) {
-            let node = TsNode::new(child, root.source());
+        for child in root.children() {
             match child.kind() {
                 "pair" | "comment" => {
                     preamble_start.get_or_insert_with(|| child.start_byte());
-                    preamble_end = child.end_byte();
+                    preamble_end = child.byte_range().end;
                 }
                 "table" | "table_array_element" => {
-                    fragments.push(build_table_fragment(node));
+                    fragments.push(build_table_fragment(child));
                 }
                 _ => {}
             }
@@ -72,11 +68,10 @@ impl LanguageSpec for TomlLanguage {
 /// Works for `table`, `table_array_element`, and `pair` nodes — all use
 /// `bare_key`, `dotted_key`, or `quoted_key` as the name-bearing child.
 fn extract_key_name(node: TsNode<'_>) -> String {
-    let mut cursor = node.raw().walk();
-    for child in node.raw().children(&mut cursor) {
+    for child in node.children() {
         match child.kind() {
             "bare_key" | "dotted_key" | "quoted_key" => {
-                return child.utf8_text(node.source()).unwrap_or("unknown").to_owned();
+                return child.text().to_owned();
             }
             _ => {}
         }
@@ -97,15 +92,7 @@ fn build_table_fragment(node: TsNode<'_>) -> Fragment {
     let doc_range = TomlLanguage::extract_doc_range(node);
     let parent = Some(name.clone());
 
-    let mut children = Vec::new();
-    if let Some(range) = doc_range {
-        children.push(Fragment::structural(
-            "docstring",
-            FragmentKind::Docstring,
-            range,
-            parent,
-        ));
-    }
+    let children: Vec<Fragment> = Fragment::docstring_child(doc_range, parent).into_iter().collect();
 
     build_code_fragment(
         node,

@@ -5,7 +5,7 @@ use strum::Display;
 /// Controls virtual filesystem visibility for a specific process (and its descendants).
 ///
 /// Set via `nyne attach --visibility` or dynamically via
-/// [`ControlRequest::SetVisibility`](crate::sandbox::control::ControlRequest::SetVisibility).
+/// [`Request::SetVisibility`](crate::sandbox::control::Request::SetVisibility).
 ///
 /// Resolution order per FUSE request:
 /// 1. Direct PID lookup in the [`VisibilityMap`](super::VisibilityMap).

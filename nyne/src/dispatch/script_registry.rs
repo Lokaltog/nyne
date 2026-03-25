@@ -19,21 +19,23 @@ pub struct ScriptRegistry {
 /// Script discovery, registration, and execution.
 impl ScriptRegistry {
     /// Build the registry from all plugin-provided scripts.
+    #[allow(clippy::excessive_nesting)] // warn! macro expansion inside for+match
     pub(crate) fn new(ctx: &Arc<ActivationContext>) -> Self {
         let mut scripts = HashMap::new();
         for factory in PLUGINS {
             let plugin = factory();
-            match plugin.scripts(ctx) {
-                Ok(entries) =>
-                    for (address, script) in entries {
-                        assert!(
-                            scripts.insert(address.clone(), script).is_none(),
-                            "duplicate script address: {address}"
-                        );
-                    },
+            let entries = match plugin.scripts(ctx) {
+                Ok(entries) => entries,
                 Err(e) => {
                     warn!(plugin = plugin.id(), error = %e, "plugin script creation failed");
+                    continue;
                 }
+            };
+            for (address, script) in entries {
+                if scripts.insert(address.clone(), script).is_none() {
+                    continue;
+                }
+                warn!(plugin = plugin.id(), address = %address, "duplicate script address");
             }
         }
         Self { scripts }

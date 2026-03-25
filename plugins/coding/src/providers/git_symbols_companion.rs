@@ -20,10 +20,10 @@ use nyne::types::slice::{SliceSpec, parse_spec};
 use nyne::types::vfs_path::VfsPath;
 use nyne::{companion_children, companion_lookup, source_file};
 use nyne_git::names::{self, FILE_BLAME, FILE_LOG};
-use nyne_git::provider::CommitMtime;
-use nyne_git::provider::repo::FileViewCtx;
-use nyne_git::provider::views::{BLAME_TEMPLATE, HISTORY_LIMIT, LOG_TEMPLATE, history_filename, hunk_overlaps_range};
-use nyne_git::repo::GitRepo;
+use nyne_git::{
+    BLAME_TEMPLATE, CommitMtime, FileViewCtx, GitRepo, HISTORY_LIMIT, LOG_TEMPLATE, history_filename,
+    hunk_overlaps_range,
+};
 use nyne_macros::routes;
 
 use crate::providers::fragment_resolver::FragmentResolver;

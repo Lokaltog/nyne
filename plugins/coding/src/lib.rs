@@ -4,17 +4,13 @@
 //! integration, edit planning/splicing, and all providers that depend on
 //! source-code understanding.
 
-/// File editing operations: planning, splicing, and diff actions.
-pub mod edit;
+pub(crate) mod edit;
 
-/// Language Server Protocol client and integration.
-pub mod lsp;
+pub(crate) mod lsp;
 
-/// VFS providers for syntax, Claude hooks, TODO tracking, and search.
-pub mod providers;
+pub(crate) mod providers;
 
-/// Tree-sitter parsing, decomposition, and syntax registry.
-pub mod syntax;
+pub(crate) mod syntax;
 
 /// Plugin configuration types and deserialization.
 mod config;

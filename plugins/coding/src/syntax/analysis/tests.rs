@@ -230,9 +230,9 @@ fn debug_dump_tree_kinds() {
 
         let mut kinds = std::collections::BTreeSet::new();
         collect_kinds(tree.root_node(), &mut kinds);
-        eprintln!("\n=== {name} ===");
+        tracing::debug!("\n=== {name} ===");
         for kind in &kinds {
-            eprintln!("  {kind}");
+            tracing::debug!("  {kind}");
         }
     }
 }

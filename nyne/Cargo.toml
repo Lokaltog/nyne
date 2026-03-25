@@ -24,11 +24,10 @@ minijinja.workspace = true
 parking_lot.workspace = true
 strum.workspace = true
 jiff.workspace = true
-git2.workspace = true
 rustix = { workspace = true, features = ["mount", "fs", "process", "pipe", "thread", "event", "net", "system"] }
-rstest.workspace = true
 base64.workspace = true
 convert_case.workspace = true
+crop.workspace = true
 directories.workspace = true
 fuser.workspace = true
 garde.workspace = true
@@ -42,8 +41,10 @@ similar.workspace = true
 slab.workspace = true
 toml.workspace = true
 console.workspace = true
+smallvec.workspace = true
 
 [dev-dependencies]
+rstest.workspace = true
 insta = { workspace = true, features = ["toml", "yaml", "redactions"] }
 similar-asserts.workspace = true
 tempfile.workspace = true

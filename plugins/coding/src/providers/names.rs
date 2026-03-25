@@ -73,3 +73,18 @@ pub fn handle_builder() -> HandleBuilder {
     register_template_globals(b.engine_mut());
     b
 }
+/// Check whether a raw file path is a VFS virtual path (contains `@/`).
+pub fn is_vfs_path(path: &str) -> bool { path.contains(VFS_SEP) }
+
+/// Extract the real source file path from a VFS path (everything before the first `@/`).
+pub fn source_file_of(path: &str) -> &str { path.split(VFS_SEP).next().unwrap_or(path) }
+
+/// Extract the symbol name from a VFS path like `file.rs@/symbols/Foo@/body.rs`.
+pub fn symbol_from_vfs_path(path: &str) -> Option<&str> {
+    let after_symbols = path.split(VFS_SYMBOLS_SEP).nth(1)?;
+    let name = after_symbols.split(VFS_SEP).next()?;
+    if name.is_empty() { None } else { Some(name) }
+}
+
+/// Check whether a path points to a symbols OVERVIEW.md.
+pub fn is_symbols_overview(path: &str) -> bool { path.contains(VFS_SYMBOLS_SEP) && path.ends_with(FILE_OVERVIEW) }

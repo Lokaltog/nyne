@@ -32,7 +32,6 @@ pub(in crate::providers::syntax) struct RenameDiff {
 /// Methods for [`RenameDiff`].
 impl RenameDiff {
     /// Execute the LSP rename and return resolved file edits.
-    /// Execute the LSP rename and return resolved file edits.
     fn resolve(&self) -> Result<Vec<FileEditResult>> {
         let fq = self
             .query
@@ -41,8 +40,7 @@ impl RenameDiff {
 
         let pos = self.query.position();
         let edit = fq.rename(pos.line, pos.character, &self.new_name)?;
-        let resolver = self.query.path_resolver();
-        resolve_workspace_edit(&edit, resolver)
+        resolve_workspace_edit(&edit, self.query.path_resolver())
     }
 }
 
@@ -94,6 +92,7 @@ impl Renameable for SymbolRename {
 /// were renamed. The unified diff is returned without performing the rename.
 ///
 /// [`DiffAction`]: crate::edit::diff_action::DiffAction
+#[derive(Clone)]
 pub(in crate::providers::syntax) struct FileRenameDiff {
     pub handle: Arc<LspHandle>,
     pub source_file: VfsPath,
@@ -103,7 +102,6 @@ pub(in crate::providers::syntax) struct FileRenameDiff {
 /// Methods for [`FileRenameDiff`].
 impl FileRenameDiff {
     /// Call `workspace/willRenameFiles` and resolve the workspace edit.
-    /// Call workspace/willRenameFiles and resolve the workspace edit.
     fn resolve(&self) -> Result<Vec<FileEditResult>> {
         let overlay_root = self.handle.path_resolver().overlay_root();
         let old_path = overlay_root.join(self.source_file.as_str());

@@ -221,8 +221,8 @@ impl Filesystem for NyneFs {
         // Buffered path: load content into handle table.
         // Skip the read pipeline for O_TRUNC — HandleTable::open discards
         // the content anyway, so loading it is pure waste.
-        let content = if mode.truncate {
-            Arc::new(Vec::new())
+        let content: Arc<[u8]> = if mode.truncate {
+            Arc::from([])
         } else {
             fuse_try!(reply, self.load_content(ino), ino, "open failed")
         };
@@ -245,8 +245,13 @@ impl Filesystem for NyneFs {
         let (ino, fh) = (u64::from(ino), u64::from(fh));
         trace!(target: "nyne::fuse", ino, fh, offset, size, "read");
 
-        let data = self.handles.read(fh, offset, size);
-        reply.data(&data);
+        match self.handles.read(fh, offset, size) {
+            Ok(data) => reply.data(&data),
+            Err(e) => {
+                warn!(target: "nyne::fuse", ino, fh, error = %e, "read failed");
+                reply.error(Errno::EIO);
+            }
+        }
     }
 
     /// Writes data to an open file handle at the given offset.
@@ -331,7 +336,7 @@ impl Filesystem for NyneFs {
             if let Err(e) = self.flush_content(entry.inode, entry.buffer.as_bytes(), entry.write_mode()) {
                 warn!(target: "nyne::fuse", inode = entry.inode, error = %e, "flush on release failed");
                 self.write_errors.write().insert(ino, e.to_string());
-            } else if self.write_errors.read().contains_key(&ino) {
+            } else {
                 self.write_errors.write().remove(&ino);
             }
         }

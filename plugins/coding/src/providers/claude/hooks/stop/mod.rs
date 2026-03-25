@@ -58,8 +58,7 @@ impl Script for Stop {
         };
 
         let root_prefix = ctx.activation().root_prefix();
-        let changed_files =
-            find_changed_files(Path::new(transcript_path), &root_prefix, &self.config.ignore_extensions);
+        let changed_files = find_changed_files(Path::new(transcript_path), root_prefix, &self.config.ignore_extensions);
 
         if changed_files.len() < self.config.min_files {
             return Ok(HookOutput::empty());
@@ -76,28 +75,34 @@ impl Script for Stop {
 ///
 /// Returns a sorted, deduplicated list of relative file paths, excluding any
 /// whose extension appears in `ignore_extensions` (case-insensitive).
+///
+/// Performs a single pass over the transcript: when a human prompt line is
+/// encountered, accumulated paths are cleared so only changes after the
+/// final prompt survive.
 fn find_changed_files(transcript: &Path, root_prefix: &str, ignore_extensions: &[String]) -> Vec<String> {
-    let Some(prompt_offset) = find_last_prompt_offset(transcript) else {
-        return Vec::new();
-    };
-
     let Ok(file) = File::open(transcript) else {
         return Vec::new();
     };
 
     let mut files = BTreeSet::new();
-    let mut current_offset = 0u64;
+    let mut saw_prompt = false;
 
     for line in BufReader::new(file).lines() {
         let Ok(line) = line else { break };
-        let len = line.len() as u64 + 1;
-        current_offset += len;
-        if current_offset <= prompt_offset {
+
+        // Detect human prompt — reset accumulated paths so only the last
+        // turn's changes survive.
+        if line.contains("\"type\":\"user\"")
+            && line.contains("\"promptId\"")
+            && !line.contains("\"tool_result\"")
+            && !line.contains("\"isMeta\"")
+        {
+            files.clear();
+            saw_prompt = true;
             continue;
         }
 
-        // Look for assistant messages containing Edit/Write tool uses.
-        if !line.contains("\"type\":\"assistant\"") {
+        if !saw_prompt || !line.contains("\"type\":\"assistant\"") {
             continue;
         }
 
@@ -105,31 +110,6 @@ fn find_changed_files(transcript: &Path, root_prefix: &str, ignore_extensions: &
     }
 
     files.into_iter().collect()
-}
-
-/// Find the byte offset of the last human prompt in the transcript.
-///
-/// Human prompts have `"type":"user"` + `"promptId"` but NOT `"tool_result"`
-/// or `"isMeta"`.
-fn find_last_prompt_offset(transcript: &Path) -> Option<u64> {
-    let file = File::open(transcript).ok()?;
-    let mut last_offset = None;
-    let mut offset = 0u64;
-
-    for line in BufReader::new(&file).lines() {
-        let Ok(line) = line else { break };
-        let len = line.len() as u64 + 1; // +1 for newline
-        if line.contains("\"type\":\"user\"")
-            && line.contains("\"promptId\"")
-            && !line.contains("\"tool_result\"")
-            && !line.contains("\"isMeta\"")
-        {
-            last_offset = Some(offset);
-        }
-        offset += len;
-    }
-
-    last_offset
 }
 
 /// Extract file paths from Edit/Write `tool_use` blocks in a single transcript

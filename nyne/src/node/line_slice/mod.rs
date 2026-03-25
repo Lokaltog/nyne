@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Result, bail};
 
 use super::plugin::NodePlugin;
 use super::{Readable, Unlinkable, VirtualNode, Writable, WriteOutcome};
@@ -94,7 +94,7 @@ impl Writable for SlicedWritable {
         let current = self.base.require_readable()?.read(ctx)?;
         self.base
             .require_writable()?
-            .write(ctx, &splice_lines(&current, &self.spec, data))
+            .write(ctx, &splice_lines(&current, &self.spec, data)?)
     }
 }
 /// Removes a sliced line range by splicing empty data into the base node.
@@ -113,33 +113,53 @@ impl Unlinkable for SlicedUnlinkable {
         let current = self.base.require_readable()?.read(ctx)?;
         self.base
             .require_writable()?
-            .write(ctx, &splice_lines(&current, &self.spec, b""))?;
+            .write(ctx, &splice_lines(&current, &self.spec, b"")?)?;
         Ok(())
     }
 }
 
 /// Splice `new_data` into `current` at the line range specified by `spec`.
 ///
-/// Returns the full content with the targeted lines replaced.
-fn splice_lines(current: &[u8], spec: &SliceSpec, new_data: &[u8]) -> Vec<u8> {
-    let existing = String::from_utf8_lossy(current);
-    let lines: Vec<&str> = existing.lines().collect();
+/// Uses byte-level `\n` splitting (not `String::lines()`) for consistency
+/// with the read path in [`SlicedReadable::read`]. Trailing `\n` is treated
+/// as a line terminator, not a separator.
+///
+/// Returns an error if `new_data` is not valid UTF-8.
+fn splice_lines(current: &[u8], spec: &SliceSpec, new_data: &[u8]) -> Result<Vec<u8>> {
+    if str::from_utf8(new_data).is_err() {
+        bail!("line splice data is not valid UTF-8");
+    }
+
+    let has_trailing_newline = current.last() == Some(&b'\n');
+    let lines = split_lines(current);
     let range = spec.index_range(lines.len());
+    let new_lines = split_lines(new_data);
 
-    let replacement = String::from_utf8_lossy(new_data);
-    let new_lines: Vec<&str> = replacement.lines().collect();
-
-    let mut result: Vec<&str> = Vec::with_capacity(lines.len() - range.len() + new_lines.len());
+    let mut result: Vec<&[u8]> = Vec::with_capacity(lines.len() - range.len() + new_lines.len());
     result.extend_from_slice(lines.get(..range.start).unwrap_or(&[]));
     result.extend_from_slice(&new_lines);
     result.extend_from_slice(lines.get(range.end..).unwrap_or(&[]));
 
-    let mut out = result.join("\n");
-    // Preserve trailing newline if the original had one.
-    if current.last() == Some(&b'\n') {
-        out.push('\n');
+    let mut out = result.join(&b'\n');
+    if has_trailing_newline {
+        out.push(b'\n');
     }
-    out.into_bytes()
+    Ok(out)
+}
+
+/// Split bytes on `\n`, treating it as a line terminator.
+///
+/// Unlike `slice::split`, strips the trailing empty element produced by
+/// a terminating `\n`, and returns an empty vec for empty input.
+fn split_lines(data: &[u8]) -> Vec<&[u8]> {
+    if data.is_empty() {
+        return Vec::new();
+    }
+    let mut lines: Vec<&[u8]> = data.split(|&b| b == b'\n').collect();
+    if data.last() == Some(&b'\n') {
+        lines.pop();
+    }
+    lines
 }
 
 /// Unit tests.

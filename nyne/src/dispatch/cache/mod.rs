@@ -1,6 +1,7 @@
 //! L1 directory structure cache with per-directory resolve generations and invalidation.
 
 use std::collections::{BTreeMap, HashMap};
+use std::ops::Bound;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -235,14 +236,11 @@ impl DirState {
     ///
     /// - `All`: returns all entries (including `Visibility::Hidden` nodes).
     /// - `Default` / `None`: returns only nodes passing [`CachedNode::is_visible`].
-    pub(super) fn readdir_entries(
-        &self,
-        visibility: ProcessVisibility,
-    ) -> Box<dyn Iterator<Item = (&str, &CachedNode)> + '_> {
-        match visibility {
-            ProcessVisibility::All => Box::new(self.all_entries()),
-            _ => Box::new(self.visible_entries()),
-        }
+    pub(super) fn readdir_entries(&self, visibility: ProcessVisibility) -> impl Iterator<Item = (&str, &CachedNode)> {
+        self.nodes
+            .iter()
+            .filter(move |(_, cn)| matches!(visibility, ProcessVisibility::All) || cn.is_visible())
+            .map(|(name, cn)| (name.as_str(), cn))
     }
 
     /// Insert or replace a node by name (upsert).
@@ -363,7 +361,13 @@ impl L1Cache {
         }
         // Slow path: write lock to insert.
         let mut map = self.dirs.write();
-        Arc::clone(map.entry(path.clone()).or_default())
+        // Re-check after lock upgrade — another thread may have inserted.
+        if let Some(handle) = map.get(path) {
+            return Arc::clone(handle);
+        }
+        let handle: DirHandle = Arc::default();
+        map.insert(path.clone(), Arc::clone(&handle));
+        handle
     }
 
     /// Get the `DirState` for a path (read-only handle).
@@ -497,26 +501,22 @@ impl L1Cache {
     /// `prefix_successor` is the prefix string with its last byte incremented
     /// (since `/` = 0x2F, incrementing to `0` = 0x30 captures all paths that
     /// start with `prefix/`).
+    ///
+    /// Uses `&str` range bounds (via `VfsPath: Borrow<str>`) to avoid
+    /// allocating a `VfsPath` for the upper bound.
     fn range_for_prefix<'a>(
         map: &'a BTreeMap<VfsPath, DirHandle>,
         prefix: &VfsPath,
     ) -> impl Iterator<Item = (&'a VfsPath, &'a DirHandle)> {
         if prefix.is_root() {
-            // Root prefix matches everything.
-            return map.range::<VfsPath, _>(..);
+            return map.range::<str, _>(..);
         }
-        // Range: [prefix, upper_bound)
-        // prefix itself is included (exact match).
         // Children have the form "prefix/..." — the '/' separator (0x2F)
         // sorts before '0' (0x30), so appending '0' to the prefix forms
         // an exclusive upper bound that captures prefix + all children.
         let mut upper = prefix.as_str().to_owned();
         upper.push('0'); // '0' = 0x30, one past '/' = 0x2F in sort order
-        if let Ok(upper_path) = VfsPath::new(&upper) {
-            return map.range(prefix.clone()..upper_path);
-        }
-        // Fallback: scan everything (should never happen with valid paths).
-        map.range::<VfsPath, _>(..)
+        map.range::<str, _>((Bound::Included(prefix.as_str()), Bound::Excluded(upper.as_str())))
     }
 }
 

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -18,6 +19,7 @@ pub struct FileMeta {
 }
 
 /// A directory entry returned by [`RealFs::read_dir`].
+#[derive(Debug)]
 pub struct DirEntry {
     pub name: String,
     pub file_type: FileKind,
@@ -89,11 +91,11 @@ impl OsFs {
     pub const fn new(source_dir: PathBuf) -> Self { Self { source_dir } }
 
     /// Resolve a `VfsPath` to an absolute path on the real filesystem.
-    fn resolve(&self, path: &VfsPath) -> PathBuf {
+    fn resolve(&self, path: &VfsPath) -> Cow<'_, Path> {
         if path.is_root() {
-            self.source_dir.clone()
+            Cow::Borrowed(&self.source_dir)
         } else {
-            self.source_dir.join(path.as_str())
+            Cow::Owned(self.source_dir.join(path.as_str()))
         }
     }
 
@@ -129,7 +131,7 @@ impl RealFs for OsFs {
         let rd = fs::read_dir(&real_path).wrap_err_with(|| format!("failed to read_dir {}", real_path.display()))?;
         for entry in rd {
             let entry = entry.wrap_err("failed to read directory entry")?;
-            let file_type = FileKind::from_std(entry.file_type().wrap_err("failed to read file type")?);
+            let file_type = FileKind::from(entry.file_type().wrap_err("failed to read file type")?);
             entries.push(DirEntry {
                 name: entry.file_name().to_string_lossy().into_owned(),
                 file_type,
@@ -143,7 +145,7 @@ impl RealFs for OsFs {
         let real_path = self.resolve(path);
         let meta =
             fs::symlink_metadata(&real_path).wrap_err_with(|| format!("failed to stat {}", real_path.display()))?;
-        let file_type = FileKind::from_std(meta.file_type());
+        let file_type = FileKind::from(meta.file_type());
         Ok(FileMeta {
             size: meta.len(),
             mtime: meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),

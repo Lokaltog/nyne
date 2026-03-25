@@ -52,7 +52,7 @@ impl MutationOp<'_> {
 }
 
 /// Unique identifier for a provider.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ProviderId(&'static str);
 
 /// Construction and access for provider identifiers.
@@ -80,12 +80,20 @@ pub enum ConflictParty {
 }
 
 /// Describes a naming conflict between providers for a single node name.
+#[derive(Debug)]
 #[non_exhaustive]
 pub struct ConflictInfo {
-    pub name: String,
-    pub party: ConflictParty,
+    name: String,
+    party: ConflictParty,
 }
+
 impl ConflictInfo {
+    /// The conflicting node name.
+    pub fn name(&self) -> &str { &self.name }
+
+    /// The other party in the conflict.
+    pub const fn party(&self) -> &ConflictParty { &self.party }
+
     /// Build conflict infos for provider-vs-provider conflicts.
     pub fn for_providers(name: &str, pids: impl IntoIterator<Item = ProviderId>) -> Vec<Self> {
         pids.into_iter()
@@ -122,8 +130,18 @@ pub enum ConflictResolution {
     /// Retry with adjusted names (e.g., rename to avoid collision).
     Retry(Vec<VirtualNode>),
 }
+impl fmt::Debug for ConflictResolution {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Yield => write!(f, "Yield"),
+            Self::Force(nodes) => f.debug_tuple("Force").field(&nodes.len()).finish(),
+            Self::Retry(nodes) => f.debug_tuple("Retry").field(&nodes.len()).finish(),
+        }
+    }
+}
 
 /// Outcome of a provider's [`Provider::handle_mutation`] attempt.
+#[derive(Debug)]
 pub enum MutationOutcome {
     /// Provider handled the mutation (filesystem + bookkeeping).
     Handled,

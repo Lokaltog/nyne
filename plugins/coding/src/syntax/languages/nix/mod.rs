@@ -19,8 +19,6 @@ impl LanguageSpec for NixLanguage {
     const IMPORT_KINDS: &'static [&'static str] = &[];
     /// Language name identifier.
     const NAME: &'static str = "Nix";
-    /// Naming strategy for Nix symbol deduplication.
-    const NAMING_STRATEGY: NamingStrategy = NamingStrategy::Identity;
     /// Tree-sitter node kinds that support recursive decomposition in Nix.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
 
@@ -29,9 +27,8 @@ impl LanguageSpec for NixLanguage {
 
     /// Extracts Nix-specific fragments from the syntax tree.
     fn extract_custom(root: TsNode<'_>, _max_depth: usize) -> Option<Vec<Fragment>> {
-        let source = root.source_str();
         let mut fragments = Vec::new();
-        collect_nix_fragments(root, source, &mut fragments, None);
+        collect_nix_fragments(root, &mut fragments, None);
         Some(fragments)
     }
 
@@ -44,16 +41,14 @@ impl LanguageSpec for NixLanguage {
 
 /// Recursively collect fragments from a Nix AST.
 ///
-/// Walks through the tree looking for `binding` nodes (attribute assignments)
-/// and `let_expression` / `function_expression` at the top level. Bindings
-/// whose value is an `attrset_expression` are treated as sections with children.
-fn collect_nix_fragments(node: TsNode<'_>, source: &str, fragments: &mut Vec<Fragment>, parent_name: Option<&str>) {
-    let mut cursor = node.raw().walk();
-    for child in node.raw().children(&mut cursor) {
-        let child_node = TsNode::new(child, node.source());
+/// Walks through the tree looking for \`binding\` nodes (attribute assignments)
+/// and \``let_expression`\` / \``function_expression`\` at the top level. Bindings
+/// whose value is an \``attrset_expression`\` are treated as sections with children.
+fn collect_nix_fragments(node: TsNode<'_>, fragments: &mut Vec<Fragment>, parent_name: Option<&str>) {
+    for child in node.children() {
         match child.kind() {
             "binding" => {
-                fragments.push(build_binding_fragment(child_node, source, parent_name));
+                fragments.push(build_binding_fragment(child, parent_name));
             }
             // Recurse into structural nodes that contain bindings.
             "binding_set"
@@ -63,7 +58,7 @@ fn collect_nix_fragments(node: TsNode<'_>, source: &str, fragments: &mut Vec<Fra
             | "attrset_expression"
             | "rec_attrset_expression"
             | "with_expression" => {
-                collect_nix_fragments(child_node, source, fragments, parent_name);
+                collect_nix_fragments(child, fragments, parent_name);
             }
             _ => {}
         }
@@ -72,35 +67,35 @@ fn collect_nix_fragments(node: TsNode<'_>, source: &str, fragments: &mut Vec<Fra
 
 /// Extract the dotted attribute path name from a `binding` node.
 fn extract_binding_name(node: TsNode<'_>) -> String {
-    let mut cursor = node.raw().walk();
-    for child in node.raw().children(&mut cursor) {
+    for child in node.children() {
         if child.kind() == "attrpath" {
-            return child.utf8_text(node.source()).unwrap_or("unknown").to_owned();
+            return child.text().to_owned();
         }
     }
     "unknown".to_owned()
 }
 
 /// Find the value expression (RHS) of a `binding` node.
-fn binding_value_kind(node: TsNode<'_>) -> Option<&str> {
-    let mut cursor = node.raw().walk();
+fn binding_value_kind(node: TsNode<'_>) -> Option<&'static str> {
     let mut past_eq = false;
-    for child in node.raw().children(&mut cursor) {
+    for child in node.children() {
         if child.kind() == "=" {
             past_eq = true;
             continue;
         }
         if past_eq && child.kind() != ";" {
-            return Some(child.kind());
+            // Use raw() for the return — tree-sitter kind strings are 'static
+            // but TsNode::kind() elides the lifetime to &self.
+            return Some(child.raw().kind());
         }
     }
     None
 }
 
-/// Build a fragment for a Nix `binding` node (`name = value;`).
+/// Build a fragment for a Nix \`binding\` node (\`name = value;\`).
 ///
 /// If the value is an attribute set, recurse into it to create child fragments.
-fn build_binding_fragment(node: TsNode<'_>, source: &str, parent_name: Option<&str>) -> Fragment {
+fn build_binding_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragment {
     let name = extract_binding_name(node);
     let signature = node.first_line().to_owned();
     let doc_range = NixLanguage::extract_doc_range(node);
@@ -110,17 +105,9 @@ fn build_binding_fragment(node: TsNode<'_>, source: &str, parent_name: Option<&s
 
     let parent = Some(name.clone());
 
-    let mut children = Vec::new();
-    if let Some(range) = doc_range {
-        children.push(Fragment::structural(
-            "docstring",
-            FragmentKind::Docstring,
-            range,
-            parent,
-        ));
-    }
+    let mut children: Vec<Fragment> = Fragment::docstring_child(doc_range, parent).into_iter().collect();
     if is_attrset {
-        collect_nix_fragments(node, source, &mut children, Some(&name));
+        collect_nix_fragments(node, &mut children, Some(&name));
     }
 
     let kind = if is_attrset {

@@ -32,8 +32,7 @@ impl GitProvider {
         let secs = repo.file_epoch_secs(&rel);
         let fctx = FileViewCtx::new(repo, rel);
         let h = &self.handles;
-        let notes_view = NotesView(fctx.clone());
-        let notes_writable = NotesView(fctx.clone());
+        let notes = NotesView(fctx.clone());
         vec![
             h.blame
                 .node(names::FILE_BLAME, BlameView(fctx.clone()))
@@ -45,8 +44,8 @@ impl GitProvider {
                 .node(names::FILE_CONTRIBUTORS, ContributorsView(fctx))
                 .with_lifecycle(CommitMtime(secs)),
             h.notes
-                .node(names::FILE_NOTES, notes_view)
-                .with_writable(notes_writable)
+                .node(names::FILE_NOTES, notes.clone())
+                .with_writable(notes)
                 .with_lifecycle(CommitMtime(secs)),
         ]
     }

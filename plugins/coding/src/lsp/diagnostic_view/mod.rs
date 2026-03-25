@@ -8,7 +8,7 @@ use serde::Serialize;
 
 /// A diagnostic row for template rendering.
 #[derive(Debug, Clone, Serialize)]
-pub(crate) struct DiagnosticRow {
+pub struct DiagnosticRow {
     pub line: u32,
     pub col: u32,
     pub severity: &'static str,
@@ -18,7 +18,7 @@ pub(crate) struct DiagnosticRow {
 }
 
 /// Convert LSP diagnostics to template-ready rows.
-pub(crate) fn diagnostics_to_rows(diags: &[Diagnostic]) -> Vec<DiagnosticRow> {
+pub fn diagnostics_to_rows(diags: &[Diagnostic]) -> Vec<DiagnosticRow> {
     diags
         .iter()
         .map(|d| DiagnosticRow {
@@ -40,7 +40,7 @@ pub(crate) fn diagnostics_to_rows(diags: &[Diagnostic]) -> Vec<DiagnosticRow> {
 }
 
 /// Human-readable severity label.
-pub(crate) const fn severity_label(s: Option<DiagnosticSeverity>) -> &'static str {
+pub const fn severity_label(s: Option<DiagnosticSeverity>) -> &'static str {
     match s {
         Some(DiagnosticSeverity::ERROR) => "error",
         Some(DiagnosticSeverity::WARNING) => "warning",

@@ -73,7 +73,7 @@ impl FromStr for MountSpec {
 struct SessionGuard {
     _session: fuser::BackgroundSession,
     _watcher: FsWatcher,
-    _control_server: Option<sandbox::control::ControlServer>,
+    _control_server: Option<sandbox::control::Server>,
 }
 
 /// Run the mount subcommand: mount one or more directories as FUSE filesystems.
@@ -124,24 +124,7 @@ pub fn run(args: &MountArgs) -> Result<()> {
         mounts.push((id, path));
     }
 
-    // Print the mount map.
-    let term = output::term();
-    term.write_line(&format!(
-        "{}\n",
-        style(format!(
-            "Mounting {} path{}:",
-            mounts.len(),
-            if mounts.len() == 1 { "" } else { "s" }
-        ))
-        .bold()
-    ))?;
-    for (id, path) in &mounts {
-        term.write_line(&format!("  {}  →  {}", style(path.display()).green(), style(id).cyan(),))?;
-    }
-    term.write_line(&format!(
-        "\n{}",
-        style("To attach: nyne attach <id> -- <command>\nTo list:   nyne list").dim()
-    ))?;
+    print_mount_plan(&mounts)?;
 
     // Build mount entries and launch all daemons.
     let entries: Vec<_> = mounts
@@ -152,7 +135,7 @@ pub fn run(args: &MountArgs) -> Result<()> {
                 _ => Some(sandbox::resolve_persist_root(None)?),
             };
 
-            let config = sandbox::MountConfig::new(sandbox::MountEntry { path })?;
+            let config = sandbox::DaemonConfig::new(sandbox::MountEntry { path })?;
 
             let session_id = id.clone();
             let nyne_config = Arc::clone(&nyne_config);
@@ -160,7 +143,7 @@ pub fn run(args: &MountArgs) -> Result<()> {
                 build_fuse_session(
                     mount_path,
                     &session_id,
-                    &nyne_config,
+                    Arc::clone(&nyne_config),
                     persist_root.as_deref(),
                     storage_strategy,
                 )
@@ -172,6 +155,27 @@ pub fn run(args: &MountArgs) -> Result<()> {
 
     sandbox::run_mounts(entries)
 }
+/// Print the mount plan: which paths are being mounted under which IDs.
+fn print_mount_plan(mounts: &[(SessionId, PathBuf)]) -> Result<()> {
+    let term = output::term();
+    term.write_line(&format!(
+        "{}\n",
+        style(format!(
+            "Mounting {} path{}:",
+            mounts.len(),
+            if mounts.len() == 1 { "" } else { "s" }
+        ))
+        .bold()
+    ))?;
+    for (id, path) in mounts {
+        term.write_line(&format!("  {}  →  {}", style(path.display()).green(), style(id).cyan(),))?;
+    }
+    term.write_line(&format!(
+        "\n{}",
+        style("To attach: nyne attach <id> -- <command>\nTo list:   nyne list").dim()
+    ))?;
+    Ok(())
+}
 
 /// Build the FUSE session: prepare storage, activate providers, mount FUSE, and start the control server.
 ///
@@ -180,7 +184,7 @@ pub fn run(args: &MountArgs) -> Result<()> {
 fn build_fuse_session(
     mount_path: &Path,
     session_id: &SessionId,
-    nyne_config: &NyneConfig,
+    nyne_config: Arc<NyneConfig>,
     persist_root: Option<&Path>,
     storage_strategy: StorageStrategy,
 ) -> Result<Box<dyn Send>> {
@@ -220,7 +224,7 @@ fn build_fuse_session(
 
     // Git directory name comes from the git plugin via TypeMap.
     // If no git plugin is active, falls back to None (no git dir filtering).
-    let git_dir_component = activation_ctx.get::<GitDirName>().and_then(|g| g.0.clone());
+    let git_dir_component = activation_ctx.get::<GitDirName>().map(|g| g.0.clone());
     let path_filter = PathFilter::build(&storage_root, git_dir_component.clone());
 
     // Build router and FUSE handler.
@@ -232,8 +236,9 @@ fn build_fuse_session(
     // so `SetVisibility` requests from `nyne attach` take effect immediately.
     let plugin_processes = activation_ctx
         .get::<PassthroughProcesses>()
-        .map_or_else(Vec::new, |p| p.0.clone());
-    let name_rules = nyne_config
+        .map_or_else(Vec::new, |p| p.as_slice().to_vec());
+    let name_rules = activation_ctx
+        .config()
         .passthrough_processes
         .iter()
         .cloned()

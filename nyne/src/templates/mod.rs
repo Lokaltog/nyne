@@ -107,12 +107,14 @@ pub trait TemplateView: Send + Sync {
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>>;
 }
 
-/// Adapts any [`Serialize`] value into a [`TemplateView`].
-struct SerializeView<T>(T);
+/// Adapts a pre-serialized [`minijinja::Value`] into a [`TemplateView`].
+///
+/// The value is captured eagerly at construction time via [`serialize_view`],
+/// so the original `Serialize` type does not need to be `'static`.
+struct SerializeView(minijinja::Value);
 
-/// Renders by serializing the inner value directly into the template engine.
-impl<T: Serialize + Send + Sync> TemplateView for SerializeView<T> {
-    /// Renders by serializing the inner value into the template engine.
+/// Renders the pre-serialized value through the template engine.
+impl TemplateView for SerializeView {
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         Ok(engine.render_bytes(template, &self.0))
     }
@@ -126,9 +128,11 @@ impl<T: TemplateView + ?Sized> TemplateView for Arc<T> {
 
 /// Adapt any [`Serialize`] value into a [`TemplateView`].
 ///
-/// Use this for static views — structs that are pure data bags with no
-/// computation at render time.
-pub fn serialize_view(val: impl Serialize + Send + Sync + 'static) -> impl TemplateView { SerializeView(val) }
+/// Eagerly captures the value as a [`minijinja::Value`] at call time, so
+/// the input type does not need to be `'static` — borrowed views work fine.
+pub fn serialize_view<T: Serialize>(val: &T) -> impl TemplateView + use<T> {
+    SerializeView(minijinja::Value::from_serialize(val))
+}
 
 /// Single [`Readable`](crate::node::Readable) for all template-backed
 /// virtual files.

@@ -4,7 +4,11 @@ Git plugin — blame, log, status, branches, diff, history, contributors, notes,
 
 ## Cross-Crate Consumers
 
-nyne-plugin-coding depends on this crate for symbol-scoped git features (per-symbol blame/history). Public types: `GitRepo`, `FileViewCtx`, `BlameHunk`, `HistoryEntry`, template constants in `provider/views.rs`.
+nyne-plugin-coding depends on this crate for symbol-scoped git features (per-symbol blame/history). Public types are re-exported from `lib.rs` — consumers import from the crate root (e.g., `nyne_git::FileViewCtx`), never from internal module paths.
+
+## Project Cloner
+
+`clone.rs` implements `ProjectCloner` (trait defined in nyne core) for overlay lowerdir construction. Registered at link time via `#[distributed_slice(PROJECT_CLONERS)]` — core discovers it without any git-specific knowledge. Supports `Snapshot` (ODB copy of HEAD tree) and `Hardlink` (`git clone --local`) strategies.
 
 ## Graceful Degradation
 

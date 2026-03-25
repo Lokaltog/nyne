@@ -37,7 +37,7 @@ use crate::edit::plan::EditOpKind;
 use crate::services::CodingServices;
 
 /// Provider for staging and applying batch edits across symbols and files.
-pub(crate) struct BatchEditProvider {
+pub struct BatchEditProvider {
     ctx: Arc<ActivationContext>,
     /// Per-symbol staged edits.
     batches: StagingMap,

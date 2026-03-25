@@ -102,21 +102,27 @@ impl<P> RouteTree<P> {
     pub fn children(&self, provider: &P, ctx: &RequestContext<'_>) -> Nodes {
         let segments = ctx.path.segments();
         self.root
-            .dispatch_children(provider, ctx, &segments, RouteParams::default())
+            .dispatch_children(provider, ctx, &segments, &RouteParams::default())
     }
 
     /// Dispatch a lookup request for a specific name.
     pub fn lookup(&self, provider: &P, ctx: &RequestContext<'_>, name: &str) -> Node {
         let segments = ctx.path.segments();
         self.root
-            .dispatch_lookup(provider, ctx, &segments, name, RouteParams::default())
+            .dispatch_lookup(provider, ctx, &segments, name, &RouteParams::default())
     }
 
     /// Dispatch children from explicit segments with pre-populated params.
     ///
     /// Used by companion-based providers that extract the source file path
     /// before dispatching the remaining sub-path through the route tree.
-    pub fn children_at(&self, provider: &P, ctx: &RequestContext<'_>, segments: &[&str], params: RouteParams) -> Nodes {
+    pub fn children_at(
+        &self,
+        provider: &P,
+        ctx: &RequestContext<'_>,
+        segments: &[&str],
+        params: &RouteParams,
+    ) -> Nodes {
         self.root.dispatch_children(provider, ctx, segments, params)
     }
 
@@ -127,7 +133,7 @@ impl<P> RouteTree<P> {
         ctx: &RequestContext<'_>,
         segments: &[&str],
         name: &str,
-        params: RouteParams,
+        params: &RouteParams,
     ) -> Node {
         self.root.dispatch_lookup(provider, ctx, segments, name, params)
     }
@@ -155,7 +161,7 @@ fn try_match_children<P>(
     provider: &P,
     ctx: &RequestContext<'_>,
     remaining: &[&str],
-    params: RouteParams,
+    params: &RouteParams,
 ) -> Result<ControlFlow<Option<Vec<VirtualNode>>>> {
     let Some((&segment, rest)) = remaining.split_first() else {
         return Ok(ControlFlow::Continue(()));
@@ -168,7 +174,11 @@ fn try_match_children<P>(
             }
         }
         SegmentMatcher::Glob => {
-            return Ok(ControlFlow::Break(child.invoke_children(provider, ctx, params)?));
+            return Ok(ControlFlow::Break(child.invoke_children(
+                provider,
+                ctx,
+                params.clone(),
+            )?));
         }
         other => {
             let Some(capture) = other.matches(segment) else {
@@ -178,7 +188,7 @@ fn try_match_children<P>(
                 provider,
                 ctx,
                 rest,
-                apply_capture(params, capture),
+                &apply_capture(params.clone(), capture),
             )?));
         }
     }
@@ -192,7 +202,7 @@ fn try_match_lookup<P>(
     ctx: &RequestContext<'_>,
     remaining: &[&str],
     lookup_name: &str,
-    params: RouteParams,
+    params: &RouteParams,
 ) -> Result<ControlFlow<Option<VirtualNode>>> {
     let Some((&segment, rest)) = remaining.split_first() else {
         return Ok(ControlFlow::Continue(()));
@@ -220,7 +230,7 @@ fn try_match_lookup<P>(
             };
             return Ok(ControlFlow::Break((handler)(
                 provider,
-                &RouteCtx::new(ctx, params),
+                &RouteCtx::new(ctx, params.clone()),
                 lookup_name,
             )?));
         }
@@ -233,7 +243,7 @@ fn try_match_lookup<P>(
                 ctx,
                 rest,
                 lookup_name,
-                apply_capture(params, capture),
+                &apply_capture(params.clone(), capture),
             )?));
         }
     }
@@ -248,15 +258,15 @@ impl<P> RouteNode<P> {
         provider: &P,
         ctx: &RequestContext<'_>,
         remaining: &[&str],
-        params: RouteParams,
+        params: &RouteParams,
     ) -> Nodes {
         if remaining.is_empty() {
-            return self.invoke_children(provider, ctx, params);
+            return self.invoke_children(provider, ctx, params.clone());
         }
 
         // Sub-routes are sorted by precedence [DD-21]: exact > capture > rest > glob.
         for child in &self.sub_routes {
-            if let ControlFlow::Break(result) = try_match_children(child, provider, ctx, remaining, params.clone())? {
+            if let ControlFlow::Break(result) = try_match_children(child, provider, ctx, remaining, params)? {
                 return Ok(result);
             }
         }
@@ -271,15 +281,14 @@ impl<P> RouteNode<P> {
         ctx: &RequestContext<'_>,
         remaining: &[&str],
         name: &str,
-        params: RouteParams,
+        params: &RouteParams,
     ) -> Node {
         if remaining.is_empty() {
-            return self.invoke_lookup(provider, ctx, params, name);
+            return self.invoke_lookup(provider, ctx, params.clone(), name);
         }
 
         for child in &self.sub_routes {
-            if let ControlFlow::Break(result) = try_match_lookup(child, provider, ctx, remaining, name, params.clone())?
-            {
+            if let ControlFlow::Break(result) = try_match_lookup(child, provider, ctx, remaining, name, params)? {
                 return Ok(result);
             }
         }
@@ -382,16 +391,16 @@ fn try_rest_capture_core<P, R>(
     suffix: Option<&str>,
     first_segment: &str,
     rest: &[&str],
-    params: RouteParams,
-    dispatch: impl Fn(&[&str], RouteParams) -> Result<Option<R>>,
+    params: &RouteParams,
+    dispatch: impl Fn(&[&str], &RouteParams) -> Result<Option<R>>,
 ) -> Result<Option<R>> {
     let full: Vec<&str> = iter::once(first_segment).chain(rest.iter().copied()).collect();
 
     let Some(sfx) = suffix else {
         // No suffix — rest capture consumes all remaining segments
-        let mut params = params;
+        let mut params = params.clone();
         params.insert_rest(capture_name, full.iter().map(|s| (*s).to_owned()).collect());
-        return dispatch(&[], params);
+        return dispatch(&[], &params);
     };
 
     for split_pos in find_rest_splits(&full, sfx) {
@@ -399,9 +408,9 @@ fn try_rest_capture_core<P, R>(
         let remaining: Vec<&str> = full.get(split_pos + 1..).unwrap_or_default().to_vec();
 
         if remaining.is_empty() {
-            let mut next_params = params;
+            let mut next_params = params.clone();
             next_params.insert_rest(capture_name, captured);
-            return dispatch(&[], next_params);
+            return dispatch(&[], &next_params);
         }
 
         // Check if any child route can match the first remaining segment
@@ -414,7 +423,7 @@ fn try_rest_capture_core<P, R>(
         {
             let mut next_params = params.clone();
             next_params.insert_rest(capture_name, captured);
-            let result = dispatch(&remaining, next_params)?;
+            let result = dispatch(&remaining, &next_params)?;
             if result.is_some() {
                 return Ok(result);
             }
@@ -434,7 +443,7 @@ fn try_rest_capture<P>(
     suffix: Option<&str>,
     first_segment: &str,
     rest: &[&str],
-    params: RouteParams,
+    params: &RouteParams,
 ) -> Result<Option<Vec<VirtualNode>>> {
     try_rest_capture_core(
         &node.sub_routes,
@@ -458,7 +467,7 @@ fn try_rest_capture_lookup<P>(
     first_segment: &str,
     rest: &[&str],
     lookup_name: &str,
-    params: RouteParams,
+    params: &RouteParams,
 ) -> Result<Option<VirtualNode>> {
     try_rest_capture_core(
         &node.sub_routes,

@@ -6,6 +6,7 @@
 // Position conversions delegate to `crop::Rope` with the `utf16-metric` feature
 // for O(log n) line/column lookups instead of O(n) character scanning.
 
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::{Result, eyre};
@@ -81,6 +82,24 @@ pub fn byte_offset_to_position(rope: &Rope, offset: usize) -> Position {
     Position {
         line: u32::try_from(line).unwrap_or(u32::MAX),
         character: u32::try_from(character).unwrap_or(u32::MAX),
+    }
+}
+/// Convert a 0-based line range to an LSP `Range` spanning full lines.
+///
+/// Used by code actions and inlay hints that operate on a symbol's
+/// line extent rather than a precise character position.
+pub fn line_range_to_lsp_range(line_range: &Range<usize>) -> lsp_types::Range {
+    let start = u32::try_from(line_range.start).unwrap_or(u32::MAX);
+    let end = u32::try_from(line_range.end).unwrap_or(u32::MAX);
+    lsp_types::Range {
+        start: Position {
+            line: start,
+            character: 0,
+        },
+        end: Position {
+            line: end,
+            character: u32::MAX,
+        },
     }
 }
 

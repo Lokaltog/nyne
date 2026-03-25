@@ -31,7 +31,7 @@ use content::lsp::{LspFeature, LspHandles, build_diagnostics_node};
 use strum::IntoEnumIterator;
 
 /// Core syntax decomposition provider — tree-sitter parsing, symbol resolution, and LSP integration.
-pub(crate) struct SyntaxProvider {
+pub struct SyntaxProvider {
     ctx: Arc<ActivationContext>,
     overview: TemplateHandle,
     file_overview: TemplateHandle,

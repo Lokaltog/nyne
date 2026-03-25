@@ -26,8 +26,13 @@ pub fn slugify_unbounded(s: &str) -> String {
     // `chars().map().collect::<String>()` from splitting on the input directly.
     s.split(|c: char| !c.is_ascii_alphanumeric())
         .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
+        .fold(String::new(), |mut acc, part| {
+            if !acc.is_empty() {
+                acc.push(' ');
+            }
+            acc.push_str(part);
+            acc
+        })
         .to_case(Case::Kebab)
 }
 
@@ -45,8 +50,10 @@ fn truncate_at_boundary(s: &str, max_len: usize) -> String {
 /// Compute a unified diff between two strings using `similar`.
 ///
 /// Produces standard `a/`/`b/`-prefixed headers. Returns an empty string
-/// when `old` and `new` are identical.
+/// when `old` and `new` are identical. Leading `/` is stripped from `path`
+/// so that absolute paths produce valid `patch -p1` headers.
 pub fn unified_diff(old: &str, new: &str, path: &str) -> String {
+    let path = path.strip_prefix('/').unwrap_or(path);
     similar::TextDiff::from_lines(old, new)
         .unified_diff()
         .header(&format!("a/{path}"), &format!("b/{path}"))

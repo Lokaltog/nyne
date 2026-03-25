@@ -329,26 +329,20 @@ impl Router {
         // bail immediately if a second one does.
         let mut handler: Option<ProviderId> = None;
         for provider in self.registry.active_providers() {
-            match provider.handle_mutation(op, self.real_fs.as_ref()) {
-                Ok(MutationOutcome::Handled) => {
-                    if let Some(first) = &handler {
-                        bail!(
-                            "ambiguous mutation: providers [{first}, {}] both claimed {op:?}",
-                            provider.id()
-                        );
-                    }
-                    handler = Some(provider.id());
-                }
-                Ok(MutationOutcome::NotHandled) => {}
-                Err(e) => {
-                    tracing::warn!(
-                        provider = %provider.id(),
-                        ?op,
-                        error = %e,
-                        "provider handle_mutation failed"
-                    );
-                }
+            let outcome = provider
+                .handle_mutation(op, self.real_fs.as_ref())
+                .map_err(|e| e.wrap_err(format!("provider {} failed mutation {op:?}", provider.id())))?;
+
+            if !matches!(outcome, MutationOutcome::Handled) {
+                continue;
             }
+            if let Some(first) = &handler {
+                bail!(
+                    "ambiguous mutation: providers [{first}, {}] both claimed {op:?}",
+                    provider.id()
+                );
+            }
+            handler = Some(provider.id());
         }
 
         // No provider claimed — fall back to direct filesystem operation.

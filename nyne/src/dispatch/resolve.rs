@@ -4,7 +4,7 @@
 //! and provider negotiation via the conflict protocol.
 
 use std::any::Any;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
@@ -25,7 +25,7 @@ fn catch_provider_panic<R>(pid: ProviderId, op: &str, f: impl FnOnce() -> R) -> 
     match panic::catch_unwind(AssertUnwindSafe(f)) {
         Ok(result) => Some(result),
         Err(payload) => {
-            let msg = panic_message(&payload);
+            let msg = panic_message(&*payload);
             tracing::error!(provider = %pid, op, "provider panicked: {msg}");
             None
         }
@@ -41,7 +41,7 @@ fn catch_provider<T>(pid: ProviderId, op: &str, f: impl FnOnce() -> Result<Optio
 }
 
 /// Extract a human-readable message from a panic payload.
-fn panic_message(payload: &Box<dyn Any + Send>) -> String {
+fn panic_message(payload: &(dyn Any + Send)) -> String {
     if let Some(s) = payload.downcast_ref::<&str>() {
         (*s).to_owned()
     } else if let Some(s) = payload.downcast_ref::<String>() {
@@ -87,9 +87,12 @@ impl OwnedNode {
             .into_iter()
             .filter_map(|(name, entries)| {
                 let all_dirs = entries.iter().all(|(_, is_dir)| *is_dir);
-                let mut pids: Vec<ProviderId> = entries.into_iter().map(|(pid, _)| pid).collect();
-                pids.sort_by_key(ProviderId::as_str);
-                pids.dedup();
+                let pids: Vec<ProviderId> = entries
+                    .into_iter()
+                    .map(|(pid, _)| pid)
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect();
                 // Multiple providers for the same name is only a conflict if
                 // at least one is not a directory (dirs merge naturally).
                 (pids.len() > 1 && !all_dirs).then(|| (name.to_owned(), pids))

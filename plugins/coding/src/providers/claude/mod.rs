@@ -106,7 +106,7 @@ nyne_skills! {
 }
 
 /// Provider for Claude Code integration -- hooks, settings, and tool dispatch.
-pub(crate) struct ClaudeProvider {
+pub struct ClaudeProvider {
     ctx: Arc<ActivationContext>,
     routes: RouteTree<Self>,
     templates: Arc<TemplateEngine>,
@@ -145,12 +145,12 @@ impl ClaudeProvider {
                 "agents" {
                     file("nyne.md",
                         TemplateContent::new(&agent_templates, agent_nyne_key,
-                            serialize_view(agent_skill_view.clone()))),
+                            serialize_view(&agent_skill_view))),
                 }
                 "output-styles" {
                     file("principal-swe.md",
                         TemplateContent::new(&style_templates, output_style_key,
-                            serialize_view(skill_view.clone()))),
+                            serialize_view(&skill_view))),
                 }
             }
             no_emit "@" {
@@ -202,7 +202,7 @@ impl ClaudeProvider {
         TemplateContent::new(
             &self.templates,
             tmpl,
-            serialize_view(SkillView {
+            serialize_view(&SkillView {
                 source_dir: self.ctx.root().display().to_string(),
                 ext: dominant_ext(&self.ctx),
             }),
@@ -226,14 +226,14 @@ impl Provider for ClaudeProvider {
     ) -> Result<ConflictResolution> {
         // Force our virtual nodes over real files for nyne-managed paths.
         let dominated_by_real = conflicts.iter().any(|c| {
-            matches!(c.party, ConflictParty::RealFile) && (c.name == SETTINGS_FILE || c.name == OUTPUT_STYLE_FILE)
+            matches!(c.party(), ConflictParty::RealFile) && (c.name() == SETTINGS_FILE || c.name() == OUTPUT_STYLE_FILE)
         });
         if dominated_by_real {
             // Re-invoke route handlers so the virtual content wins.
             let nodes: Vec<VirtualNode> = conflicts
                 .iter()
-                .filter(|c| matches!(c.party, ConflictParty::RealFile))
-                .filter_map(|c| self.routes.rebuild_node(&self, ctx, &c.name).transpose())
+                .filter(|c| matches!(c.party(), ConflictParty::RealFile))
+                .filter_map(|c| self.routes.rebuild_node(&self, ctx, c.name()).transpose())
                 .collect::<Result<_>>()?;
             return Ok(ConflictResolution::Force(nodes));
         }
@@ -294,7 +294,7 @@ impl ClaudeProvider {
 ///
 /// Respects both the master `claude.enabled` toggle (returns empty if disabled)
 /// and individual `claude.hooks.*` toggles.
-pub(crate) fn script_entries(config: &CodingConfig) -> Vec<ScriptEntry> {
+pub fn script_entries(config: &CodingConfig) -> Vec<ScriptEntry> {
     use std::sync::Arc;
 
     if !config.claude.enabled {

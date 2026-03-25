@@ -68,14 +68,7 @@ fn build_symbol_fragment<L: LanguageSpec>(
     let mut children = Vec::new();
     let parent = Some(name.clone());
 
-    if let Some(range) = L::extract_doc_range(node) {
-        children.push(Fragment::structural(
-            "docstring",
-            FragmentKind::Docstring,
-            range,
-            parent.clone(),
-        ));
-    }
+    children.extend(Fragment::docstring_child(L::extract_doc_range(node), parent.clone()));
 
     if let Some(range) = wrapper_info
         .decorator_range

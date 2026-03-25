@@ -19,8 +19,6 @@ impl LanguageSpec for FennelLanguage {
     const IMPORT_KINDS: &'static [&'static str] = &[];
     /// Language name identifier.
     const NAME: &'static str = "Fennel";
-    /// Naming strategy for Fennel symbol deduplication.
-    const NAMING_STRATEGY: NamingStrategy = NamingStrategy::Identity;
     /// Tree-sitter node kinds that support recursive decomposition in Fennel.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
     /// Splice mode for Fennel source editing.
@@ -31,9 +29,8 @@ impl LanguageSpec for FennelLanguage {
 
     /// Extracts Fennel-specific fragments from the syntax tree.
     fn extract_custom(root: TsNode<'_>, _max_depth: usize) -> Option<Vec<Fragment>> {
-        let source = root.source_str();
         let mut fragments = Vec::new();
-        collect_fennel_fragments(root, source, &mut fragments, None);
+        collect_fennel_fragments(root, &mut fragments, None);
         Some(fragments)
     }
 
@@ -48,44 +45,41 @@ impl LanguageSpec for FennelLanguage {
 ///
 /// Top-level forms (`fn_form`, `lambda_form`, `local_form`, `var_form`,
 /// `macro_form`) are extracted as symbols.
-fn collect_fennel_fragments(node: TsNode<'_>, source: &str, fragments: &mut Vec<Fragment>, parent_name: Option<&str>) {
-    let mut cursor = node.raw().walk();
-    for child in node.raw().children(&mut cursor) {
-        let child_node = TsNode::new(child, node.source());
+fn collect_fennel_fragments(node: TsNode<'_>, fragments: &mut Vec<Fragment>, parent_name: Option<&str>) {
+    for child in node.children() {
         match child.kind() {
             "fn_form" | "lambda_form" => {
-                fragments.push(build_fn_fragment(child_node, source, parent_name));
+                fragments.push(build_fn_fragment(child, parent_name));
             }
-            "local_form" | "var_form" if !is_require_binding(child_node) =>
-                if let Some(frag) = build_binding_fragment(child_node, source, parent_name) {
+            "local_form" | "var_form" if !is_require_binding(child) =>
+                if let Some(frag) = build_binding_fragment(child, parent_name) {
                     fragments.push(frag);
                 },
             "macro_form" => {
-                fragments.push(build_macro_fragment(child_node, source, parent_name));
+                fragments.push(build_macro_fragment(child, parent_name));
             }
             // Recurse into structural containers.
             "program" => {
-                collect_fennel_fragments(child_node, source, fragments, parent_name);
+                collect_fennel_fragments(child, fragments, parent_name);
             }
             _ => {}
         }
     }
 }
 
-/// Extract the function name from a `fn_form` or `lambda_form` node.
+/// Extract the function name from a \``fn_form`\` or \``lambda_form`\` node.
 ///
-/// The name is the first `symbol` or `multi_symbol` child after the keyword.
+/// The name is the first \`symbol\` or \``multi_symbol`\` child after the keyword.
 fn extract_fn_name(node: TsNode<'_>) -> String {
-    let mut cursor = node.raw().walk();
     let mut past_keyword = false;
-    for child in node.raw().children(&mut cursor) {
+    for child in node.children() {
         if child.kind() == "symbol" && !past_keyword {
             // First symbol is the keyword ("fn", "lambda") — skip it.
             past_keyword = true;
             continue;
         }
         if past_keyword && (child.kind() == "symbol" || child.kind() == "multi_symbol") {
-            return child.utf8_text(node.source()).unwrap_or("anonymous").to_owned();
+            return child.text().to_owned();
         }
         // If we hit arguments before finding a name, it's anonymous.
         if child.kind() == "sequence_arguments" {
@@ -96,44 +90,35 @@ fn extract_fn_name(node: TsNode<'_>) -> String {
 }
 
 /// Build a fragment for a `fn_form` or `lambda_form`.
-fn build_fn_fragment(node: TsNode<'_>, _source: &str, parent_name: Option<&str>) -> Fragment {
+fn build_fn_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragment {
     build_fennel_fragment(node, extract_fn_name(node), SymbolKind::Function, parent_name)
 }
 
-/// Extract the binding name from a `local_form` or `var_form` node.
+/// Extract the binding name from a \``local_form`\` or \``var_form`\` node.
 ///
-/// The name is in the `binding_pair` → `symbol_binding` child.
+/// The name is in the \``binding_pair`\` → \``symbol_binding`\` child.
 fn extract_binding_name(node: TsNode<'_>) -> Option<String> {
-    let mut cursor = node.raw().walk();
-    let binding_pair = node.raw().children(&mut cursor).find(|c| c.kind() == "binding_pair")?;
-    let mut inner_cursor = binding_pair.walk();
-    let symbol = binding_pair
-        .children(&mut inner_cursor)
-        .find(|c| c.kind() == "symbol_binding")?;
-    Some(symbol.utf8_text(node.source()).unwrap_or("unknown").to_owned())
+    let binding_pair = node.children().find(|c| c.kind() == "binding_pair")?;
+    let symbol = binding_pair.children().find(|c| c.kind() == "symbol_binding")?;
+    Some(symbol.text().to_owned())
 }
 
-/// Check if a `local_form` or `var_form` is a require binding.
+/// Check if a \``local_form`\` or \``var_form`\` is a require binding.
 ///
-/// Matches `(local name (require :module))` — the binding pair's value
-/// is a list whose first symbol is `require`.
+/// Matches \`(local name (require :module))\` — the binding pair's value
+/// is a list whose first symbol is \`require\`.
 fn is_require_binding(node: TsNode<'_>) -> bool {
-    let mut cursor = node.raw().walk();
-    let Some(binding_pair) = node.raw().children(&mut cursor).find(|c| c.kind() == "binding_pair") else {
+    let Some(binding_pair) = node.children().find(|c| c.kind() == "binding_pair") else {
         return false;
     };
-    let mut inner = binding_pair.walk();
     binding_pair
-        .children(&mut inner)
+        .children()
         .filter(|c| c.kind() != "symbol_binding")
-        .any(|value| {
-            let text = value.utf8_text(node.source()).unwrap_or("");
-            text.starts_with("(require ")
-        })
+        .any(|value| value.text().starts_with("(require "))
 }
 
 /// Build a fragment for a `local_form` or `var_form`.
-fn build_binding_fragment(node: TsNode<'_>, _source: &str, parent_name: Option<&str>) -> Option<Fragment> {
+fn build_binding_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Option<Fragment> {
     Some(build_fennel_fragment(
         node,
         extract_binding_name(node)?,
@@ -142,26 +127,25 @@ fn build_binding_fragment(node: TsNode<'_>, _source: &str, parent_name: Option<&
     ))
 }
 
-/// Extract the macro name from a `macro_form` node.
+/// Extract the macro name from a \``macro_form`\` node.
 ///
-/// The name is the second `symbol` child (first is the "macro" keyword).
+/// The name is the second \`symbol\` child (first is the "macro" keyword).
 fn extract_macro_name(node: TsNode<'_>) -> String {
-    let mut cursor = node.raw().walk();
     let mut past_keyword = false;
-    for child in node.raw().children(&mut cursor) {
+    for child in node.children() {
         if child.kind() == "symbol" {
             if !past_keyword {
                 past_keyword = true;
                 continue;
             }
-            return child.utf8_text(node.source()).unwrap_or("unknown").to_owned();
+            return child.text().to_owned();
         }
     }
     "unknown".to_owned()
 }
 
 /// Build a fragment for a `macro_form`.
-fn build_macro_fragment(node: TsNode<'_>, _source: &str, parent_name: Option<&str>) -> Fragment {
+fn build_macro_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragment {
     build_fennel_fragment(node, extract_macro_name(node), SymbolKind::Macro, parent_name)
 }
 
@@ -175,15 +159,7 @@ fn build_fennel_fragment(node: TsNode<'_>, name: String, kind: SymbolKind, paren
     let doc_range = FennelLanguage::extract_doc_range(node);
     let parent = Some(name.clone());
 
-    let mut children = Vec::new();
-    if let Some(range) = doc_range {
-        children.push(Fragment::structural(
-            "docstring",
-            FragmentKind::Docstring,
-            range,
-            parent,
-        ));
-    }
+    let children: Vec<Fragment> = Fragment::docstring_child(doc_range, parent).into_iter().collect();
 
     build_code_fragment(
         node,

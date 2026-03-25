@@ -34,6 +34,7 @@ pub fn splice_validate_write(
 /// (which additionally validates and writes back) and diff previews (which
 /// only need the modified text for diffing).
 #[must_use]
+#[cfg(test)]
 pub fn splice_content(source: &str, byte_range: Range<usize>, new_content: &str) -> String {
     let mut rope = Rope::from(source);
     rope.replace(byte_range, new_content);

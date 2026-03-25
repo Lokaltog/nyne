@@ -40,7 +40,7 @@ use rustix::mount::MountFlags;
 use rustix::process;
 use tracing::{debug, info};
 
-use super::{clone, mnt, namespace, paths};
+use super::{PROJECT_CLONERS, mnt, namespace, paths};
 use crate::config::{BindMount, StorageStrategy};
 
 /// Size limit for structural tmpfs mounts (newroot, /tmp).
@@ -133,7 +133,11 @@ pub fn prepare_project_storage(path: &Path, persist_root: Option<&Path>, strateg
 
             // Clone project into a stable lower dir for use as overlayfs lowerdir.
             let lower = paths::lower_base(&cache_dir, pid).join(paths::relative_to_root(path));
-            clone::clone_project(path, &lower, strategy)?;
+            PROJECT_CLONERS
+                .first()
+                .map(|f| f())
+                .wrap_err("no project cloner registered — is the git plugin linked?")?
+                .clone_project(path, &lower, strategy)?;
 
             // Make the clone read-only: bind onto self to create a mount point,
             // then remount RO. Defense-in-depth — overlayfs never writes to

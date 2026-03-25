@@ -1,7 +1,7 @@
 use std::time::SystemTime;
 
 use clap::Args;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Result, eyre};
 
 use super::output::{self, Term, style};
 use crate::sandbox;
@@ -51,11 +51,11 @@ fn list_sessions(term: &Term, registry: &SessionRegistry) -> Result<()> {
 fn list_processes(term: &Term, id: &str) -> Result<()> {
     let socket_path = session::control_socket(id)?;
 
-    let req = sandbox::control::ControlRequest::ListProcesses;
+    let req = sandbox::control::Request::ListProcesses;
     let resp = sandbox::control::send_request(&socket_path, &req)?;
 
     match resp {
-        sandbox::control::ControlResponse::Processes { list } => {
+        sandbox::control::Response::Processes { list } => {
             if list.is_empty() {
                 term.write_line(
                     &style(format!("No attached processes for session {id:?}."))
@@ -71,24 +71,22 @@ fn list_processes(term: &Term, id: &str) -> Result<()> {
                     .to_string(),
             )?;
             for proc in &list {
-                let duration = SystemTime::now().duration_since(proc.start_time).unwrap_or_default();
-                let duration_str = humantime::format_duration(duration).to_string();
-                let start_str = humantime::format_rfc3339_seconds(proc.start_time).to_string();
+                let elapsed = SystemTime::now().duration_since(proc.start_time).unwrap_or_default();
 
                 term.write_line(&format!(
                     "{:<8} {:<24} {:<12} {}",
                     proc.pid,
                     style(&proc.command).cyan(),
-                    duration_str,
-                    style(start_str).dim(),
+                    humantime::format_duration(elapsed),
+                    style(humantime::format_rfc3339_seconds(proc.start_time)).dim(),
                 ))?;
             }
         }
-        sandbox::control::ControlResponse::Error { message } => {
-            return Err(color_eyre::eyre::eyre!("daemon error: {message}"));
+        sandbox::control::Response::Error { message } => {
+            return Err(eyre!("daemon error: {message}"));
         }
         other => {
-            return Err(color_eyre::eyre::eyre!("unexpected response from daemon: {other:?}"));
+            return Err(eyre!("unexpected response from daemon: {other:?}"));
         }
     }
 

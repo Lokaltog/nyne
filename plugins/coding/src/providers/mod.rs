@@ -1,13 +1,13 @@
 //! Provider implementations that depend on code analysis.
 
 /// Shared resolver for lazily accessing decomposed source files.
-pub(crate) mod fragment_resolver;
+pub mod fragment_resolver;
 /// VFS name constants for coding-provided virtual paths.
-pub(crate) mod names;
+pub mod names;
 /// Common imports re-exported for use across coding providers.
-pub(crate) mod prelude;
+pub mod prelude;
 /// Provider utilities for nyne-coding.
-pub(crate) mod util;
+pub mod util;
 
 /// Batch editing provider — tracks staged edit operations and applies them atomically.
 pub mod batch;
@@ -15,7 +15,7 @@ pub mod batch;
 pub mod claude;
 /// Symbol-scoped git features — per-symbol blame, log, and history.
 #[cfg(feature = "git-symbols")]
-pub(crate) mod git_symbols_companion;
+pub mod git_symbols_companion;
 /// Syntax decomposition provider — tree-sitter parsing, symbol resolution, and content access.
 pub mod syntax;
 /// TODO/FIXME provider — scans source files for TODO markers.

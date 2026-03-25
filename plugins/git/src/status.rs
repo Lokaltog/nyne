@@ -22,16 +22,16 @@ pub struct RepoStatus {
 /// Upstream tracking relationship.
 #[derive(serde::Serialize)]
 pub struct TrackingInfo {
-    pub remote: String,
-    pub ahead: usize,
-    pub behind: usize,
+    pub(crate) remote: String,
+    pub(crate) ahead: usize,
+    pub(crate) behind: usize,
 }
 
 /// A single file with a status label (e.g. "modified", "deleted").
 #[derive(serde::Serialize)]
 pub struct StatusEntry {
-    pub path: String,
-    pub label: &'static str,
+    pub(crate) path: String,
+    pub(crate) label: &'static str,
 }
 
 /// Status-related methods on [`GitRepo`].

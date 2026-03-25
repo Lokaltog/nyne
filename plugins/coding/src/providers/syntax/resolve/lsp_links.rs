@@ -138,8 +138,7 @@ impl SyntaxProvider {
                 .unwrap_or_else(|| fallback_line_link(rel_path, target.line, base));
 
             let link_name = target_link_name(target);
-            if !seen.contains(&link_name) {
-                seen.insert(link_name.clone());
+            if seen.insert(link_name.clone()) {
                 nodes.push(VirtualNode::symlink(link_name, symlink_target));
             }
         }

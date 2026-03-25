@@ -40,7 +40,7 @@ impl Plugin for CodingPlugin {
 
         // Contribute LSP server commands to the passthrough set so those
         // processes see only the real filesystem (not virtual content).
-        ctx.insert(PassthroughProcesses(
+        ctx.insert(PassthroughProcesses::new(
             lsp_registry.server_commands().map(str::to_owned).collect(),
         ));
 

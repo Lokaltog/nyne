@@ -41,6 +41,6 @@ fn overview_rendering(#[case] dir_name: &str, #[case] files: Vec<FileEntry>, #[c
         files,
         subdirs,
     };
-    let output = String::from_utf8(h.render_view(&serialize_view(view)).expect("render")).expect("utf8");
+    let output = String::from_utf8(h.render_view(&serialize_view(&view)).expect("render")).expect("utf8");
     insta::assert_snapshot!(format!("overview_{dir_name}"), output);
 }

@@ -3,7 +3,7 @@
 use std::ops::Range as StdRange;
 
 use color_eyre::eyre::{Result, eyre};
-use lsp_types::{CodeAction, Position, Range};
+use lsp_types::CodeAction;
 use nyne::dispatch::context::RequestContext;
 use nyne::node::VirtualNode;
 use nyne::text;
@@ -12,6 +12,7 @@ use crate::edit::diff_action::{DiffAction, DiffActionNode};
 use crate::edit::plan::FileEditResult;
 use crate::lsp::edit::resolve_workspace_edit;
 use crate::lsp::handle::SymbolQuery;
+use crate::lsp::uri::line_range_to_lsp_range;
 
 /// Maximum length for the kebab-case slug derived from a code action title.
 const ACTION_SLUG_MAX_LEN: usize = 60;
@@ -34,21 +35,12 @@ pub(in crate::providers::syntax) fn resolve_code_actions(
         return Vec::new();
     };
 
-    let start = u32::try_from(line_range.start).unwrap_or(u32::MAX);
-    let end = u32::try_from(line_range.end).unwrap_or(u32::MAX);
-    let range = Range {
-        start: Position {
-            line: start,
-            character: 0,
-        },
-        end: Position {
-            line: end,
-            character: u32::MAX,
-        },
-    };
-
-    let Ok(actions) = fq.code_actions(range) else {
-        return Vec::new();
+    let actions = match fq.code_actions(line_range_to_lsp_range(line_range)) {
+        Ok(actions) => actions,
+        Err(err) => {
+            tracing::debug!(?err, "code action query failed");
+            return Vec::new();
+        }
     };
 
     actions
@@ -103,8 +95,11 @@ impl CodeActionDiff {
         if self.action.edit.is_some() {
             return Some(self.action.clone());
         }
-        let fq = self.query.file_query()?;
-        fq.resolve_code_action(self.action.clone()).ok()
+        self.query
+            .file_query()?
+            .resolve_code_action(self.action.clone())
+            .inspect_err(|err| tracing::debug!(?err, "code action resolution failed"))
+            .ok()
     }
 }
 

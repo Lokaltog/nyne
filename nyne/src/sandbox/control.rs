@@ -34,7 +34,7 @@ pub const NYNE_CONTROL_SOCKET_ENV: &str = "NYNE_CONTROL_SOCKET";
 /// Inbound message types for the control socket.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
-pub enum ControlRequest {
+pub enum Request {
     Exec {
         address: String,
         stdin: String,
@@ -59,7 +59,7 @@ pub enum ControlRequest {
 /// Outbound message types from the control socket.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
-pub enum ControlResponse {
+pub enum Response {
     ExecOk { data: String },
     ExecErr { error: String },
     Registered,
@@ -101,19 +101,25 @@ pub struct NameVisibility {
     pub visibility: ProcessVisibility,
 }
 
-/// Handle to a running control server. Removes the socket on drop.
-pub struct ControlServer {
+/// Handle to a running control server. Joins the IPC thread and removes the socket on drop.
+pub struct Server {
     socket_path: PathBuf,
+    handle: Option<thread::JoinHandle<()>>,
 }
 
 /// Removes the Unix domain socket file on drop.
-impl Drop for ControlServer {
-    /// Cleans up resources.
+impl Drop for Server {
+    /// Removes the socket file and joins the IPC thread for graceful shutdown.
     fn drop(&mut self) {
         if let Err(e) = fs::remove_file(&self.socket_path)
             && e.kind() != io::ErrorKind::NotFound
         {
             warn!(path = %self.socket_path.display(), error = %e, "failed to remove control socket");
+        }
+        if let Some(handle) = self.handle.take()
+            && let Err(e) = handle.join()
+        {
+            warn!("control IPC thread panicked: {e:?}");
         }
     }
 }
@@ -127,7 +133,7 @@ pub fn start_server(
     registry: Arc<ScriptRegistry>,
     ctx: Arc<ActivationContext>,
     visibility: Arc<VisibilityMap>,
-) -> Result<ControlServer> {
+) -> Result<Server> {
     if socket_path.exists() {
         fs::remove_file(socket_path)
             .wrap_err_with(|| format!("removing stale control socket: {}", socket_path.display()))?;
@@ -141,13 +147,14 @@ pub fn start_server(
     let processes: ProcessTable = Arc::new(Mutex::new(Vec::new()));
     let path_for_thread = socket_path.to_path_buf();
 
-    thread::Builder::new()
+    let handle = thread::Builder::new()
         .name("control-ipc".into())
         .spawn(move || server_loop(&path_for_thread, &listener, &registry, &ctx, &processes, &visibility))
         .wrap_err("spawning control IPC thread")?;
 
-    Ok(ControlServer {
+    Ok(Server {
         socket_path: socket_path.to_path_buf(),
+        handle: Some(handle),
     })
 }
 
@@ -164,7 +171,7 @@ fn server_loop(
         match stream {
             Ok(stream) =>
                 if let Err(e) = handle_connection(stream, registry, activation, processes, visibility) {
-                    debug!(error = format!("{e:#}"), "control request failed");
+                    warn!(error = format!("{e:#}"), "control request failed");
                 },
             Err(e) => {
                 debug!(path = %path.display(), error = %e, "control listener stopped");
@@ -186,7 +193,18 @@ fn handle_connection(
     let mut line = String::new();
     reader.read_line(&mut line).wrap_err("reading request")?;
 
-    let req: ControlRequest = serde_json::from_str(&line).wrap_err("parsing request")?;
+    let req: Request = match serde_json::from_str(&line) {
+        Ok(req) => req,
+        Err(e) => {
+            let response = Response::Error {
+                message: format!("{e:#}"),
+            };
+            let mut writer = stream;
+            serde_json::to_writer(&mut writer, &response).wrap_err("writing error response")?;
+            writer.write_all(b"\n")?;
+            return Err(e).wrap_err("parsing request");
+        }
+    };
     let response = dispatch(req, registry, activation, processes, visibility);
 
     let mut writer = stream;
@@ -198,36 +216,31 @@ fn handle_connection(
 
 /// Route a control request to the appropriate handler.
 fn dispatch(
-    req: ControlRequest,
+    req: Request,
     registry: &ScriptRegistry,
     activation: &ActivationContext,
     processes: &ProcessTable,
     visibility: &VisibilityMap,
-) -> ControlResponse {
+) -> Response {
     match req {
-        ControlRequest::Exec { address, stdin } => handle_exec(&address, &stdin, registry, activation),
-        ControlRequest::Register { pid, command } => handle_register(pid, command, processes),
-        ControlRequest::Unregister { pid } => handle_unregister(pid, processes),
-        ControlRequest::SetVisibility {
+        Request::Exec { address, stdin } => handle_exec(&address, &stdin, registry, activation),
+        Request::Register { pid, command } => handle_register(pid, command, processes),
+        Request::Unregister { pid } => handle_unregister(pid, processes),
+        Request::SetVisibility {
             pid,
             name,
             visibility: vis,
         } => handle_set_visibility(pid, name, vis, processes, visibility),
-        ControlRequest::ListProcesses => handle_list(processes),
+        Request::ListProcesses => handle_list(processes),
     }
 }
 
 /// Decode base64 stdin, execute the addressed script, and return the result.
-fn handle_exec(
-    address: &str,
-    stdin_b64: &str,
-    registry: &ScriptRegistry,
-    activation: &ActivationContext,
-) -> ControlResponse {
+fn handle_exec(address: &str, stdin_b64: &str, registry: &ScriptRegistry, activation: &ActivationContext) -> Response {
     let stdin = match BASE64.decode(stdin_b64) {
         Ok(bytes) => bytes,
         Err(e) => {
-            return ControlResponse::Error {
+            return Response::Error {
                 message: format!("decoding stdin: {e}"),
             };
         }
@@ -241,20 +254,20 @@ fn handle_exec(
         Ok(stdout) => {
             let response = String::from_utf8_lossy(&stdout);
             trace!(target: "wire", address, %response, "exec response");
-            ControlResponse::ExecOk {
+            Response::ExecOk {
                 data: BASE64.encode(&stdout),
             }
         }
         Err(e) => {
             let msg = format!("{e:#}");
             error!(address, error = %msg, "script execution failed");
-            ControlResponse::ExecErr { error: msg }
+            Response::ExecErr { error: msg }
         }
     }
 }
 
 /// Register a process in the attached process table, replacing any prior entry for the same PID.
-fn handle_register(pid: i32, command: String, processes: &ProcessTable) -> ControlResponse {
+fn handle_register(pid: i32, command: String, processes: &ProcessTable) -> Response {
     let mut table = processes.lock();
     // Remove any existing entry for this PID (re-registration).
     table.retain(|p| p.pid != pid);
@@ -264,14 +277,14 @@ fn handle_register(pid: i32, command: String, processes: &ProcessTable) -> Contr
         command,
         start_time: SystemTime::now(),
     });
-    ControlResponse::Registered
+    Response::Registered
 }
 
 /// Remove a process from the attached process table.
-fn handle_unregister(pid: i32, processes: &ProcessTable) -> ControlResponse {
+fn handle_unregister(pid: i32, processes: &ProcessTable) -> Response {
     processes.lock().retain(|p| p.pid != pid);
     info!(pid, "client detached");
-    ControlResponse::Unregistered
+    Response::Unregistered
 }
 
 /// Set or query visibility rules for a PID or process name.
@@ -281,16 +294,16 @@ fn handle_set_visibility(
     vis: ProcessVisibility,
     processes: &ProcessTable,
     map: &VisibilityMap,
-) -> ControlResponse {
+) -> Response {
     match (pid, name) {
         (Some(_), Some(_)) => {
-            return ControlResponse::Error {
+            return Response::Error {
                 message: "specify either 'pid' or 'name', not both".into(),
             };
         }
         (Some(pid), None) => {
             if !processes.lock().iter().any(|p| p.pid == pid) {
-                return ControlResponse::Error {
+                return Response::Error {
                     message: format!(
                         "PID {pid} is not a registered process (use ListProcesses to see registered PIDs)"
                     ),
@@ -308,7 +321,7 @@ fn handle_set_visibility(
         }
     }
 
-    ControlResponse::Visibility {
+    Response::Visibility {
         rules: build_visibility_rules(processes, map),
     }
 }
@@ -340,15 +353,15 @@ fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> Visi
 }
 
 /// Return all attached processes, pruning dead PIDs in the process.
-fn handle_list(processes: &ProcessTable) -> ControlResponse {
+fn handle_list(processes: &ProcessTable) -> Response {
     let mut table = processes.lock();
     // Prune dead PIDs while we're at it.
     table.retain(|p| state::is_pid_alive(p.pid));
-    ControlResponse::Processes { list: table.clone() }
+    Response::Processes { list: table.clone() }
 }
 
 /// Send a control request and receive the response.
-pub fn send_request(socket_path: &Path, req: &ControlRequest) -> Result<ControlResponse> {
+pub fn send_request(socket_path: &Path, req: &Request) -> Result<Response> {
     let mut stream = UnixStream::connect(socket_path)
         .wrap_err_with(|| format!("connecting to control socket: {}", socket_path.display()))?;
 
@@ -365,14 +378,14 @@ pub fn send_request(socket_path: &Path, req: &ControlRequest) -> Result<ControlR
 
 /// Execute a script via the control socket. Returns stdout bytes.
 pub fn exec_script(socket_path: &Path, address: &str, stdin: &[u8]) -> Result<Vec<u8>> {
-    let req = ControlRequest::Exec {
+    let req = Request::Exec {
         address: address.to_owned(),
         stdin: BASE64.encode(stdin),
     };
 
     match send_request(socket_path, &req)? {
-        ControlResponse::ExecOk { data } => BASE64.decode(&data).wrap_err("decoding response data"),
-        ControlResponse::ExecErr { error } => Err(eyre!("script error: {error}")),
+        Response::ExecOk { data } => BASE64.decode(&data).wrap_err("decoding response data"),
+        Response::ExecErr { error } => Err(eyre!("script error: {error}")),
         other => Err(eyre!("unexpected response to exec request: {other:?}")),
     }
 }

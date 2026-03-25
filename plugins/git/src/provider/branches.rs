@@ -99,11 +99,11 @@ pub(super) fn branch_segments_at_prefix(repo: &Arc<GitRepo>, prefix: &str) -> No
                 let node = VirtualNode::directory(segment).with_lifecycle(CommitMtime(head_mtime));
                 if let Some((_, full_name)) = leaf_branches.iter().find(|(s, _)| *s == segment) {
                     let branch_name = (*full_name).to_owned();
-                    node.with_renameable(BranchRename {
+                    node.with_unlinkable(BranchRemove {
                         repo: Arc::clone(repo),
                         branch_name: branch_name.clone(),
                     })
-                    .with_unlinkable(BranchRemove {
+                    .with_renameable(BranchRename {
                         repo: Arc::clone(repo),
                         branch_name,
                     })

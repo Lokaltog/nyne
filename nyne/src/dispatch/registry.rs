@@ -66,7 +66,7 @@ impl ProviderRegistry {
         root: &Path,
         overlay_root: &Path,
         real_fs: Arc<dyn RealFs>,
-        config: &NyneConfig,
+        config: Arc<NyneConfig>,
         spawner: Arc<Spawner>,
     ) -> (Self, Arc<ActivationContext>) {
         let mut ctx = ActivationContext::new(

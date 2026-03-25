@@ -86,10 +86,11 @@ fn template_view_serialize() {
         items: Vec<String>,
     }
 
-    let view = serialize_view(StaticView {
+    let data = StaticView {
         name: "static".into(),
         items: vec!["x".into(), "y".into()],
-    });
+    };
+    let view = serialize_view(&data);
     let result = view.render(&engine, "test").unwrap();
     insta::assert_snapshot!(String::from_utf8(result).unwrap());
 }
@@ -159,7 +160,7 @@ fn template_content_construction() {
     let _content = TemplateContent::new(
         &engine,
         "test",
-        serialize_view(V {
+        serialize_view(&V {
             name: "content".into(),
             items: vec!["a".into()],
         }),
@@ -192,7 +193,7 @@ fn template_content_readable_integration() {
     let content = TemplateContent::new(
         &engine,
         "test",
-        serialize_view(V {
+        serialize_view(&V {
             name: "readable".into(),
             items: vec!["one".into(), "two".into()],
         }),

@@ -75,7 +75,7 @@ struct LocationRow {
 /// Methods for [`LocationsView`].
 impl LocationsView {
     /// Build a locations view from raw LSP locations.
-    pub fn from_locations(locs: &[Location], resolver: &LspPathResolver) -> Self {
+    pub(super) fn from_locations(locs: &[Location], resolver: &LspPathResolver) -> Self {
         Self {
             locations: locs
                 .iter()
@@ -101,7 +101,7 @@ pub(super) struct HoverView {
 /// Methods for [`HoverView`].
 impl HoverView {
     /// Create a hover view from an optional LSP hover response.
-    pub fn new(hover: Option<&Hover>) -> Self {
+    pub(super) fn new(hover: Option<&Hover>) -> Self {
         Self {
             content: hover.map(|h| extract_hover_content(&h.contents)).unwrap_or_default(),
         }
@@ -129,9 +129,9 @@ pub(super) struct HierarchyRow {
 }
 
 /// Extract a `HierarchyRow` from a `CallHierarchyItem`.
-pub(super) fn hierarchy_item(item: &CallHierarchyItem) -> HierarchyRow {
+pub(super) fn hierarchy_item(item: CallHierarchyItem) -> HierarchyRow {
     HierarchyRow {
-        name: item.name.clone(),
+        name: item.name,
         kind: "",
         file: uri_to_file_path(&item.uri),
         line: item.selection_range.start.line + 1,
@@ -139,9 +139,9 @@ pub(super) fn hierarchy_item(item: &CallHierarchyItem) -> HierarchyRow {
 }
 
 /// Extract a `HierarchyRow` from a `TypeHierarchyItem`.
-pub(super) fn type_hierarchy_item(item: &TypeHierarchyItem) -> HierarchyRow {
+pub(super) fn type_hierarchy_item(item: TypeHierarchyItem) -> HierarchyRow {
     HierarchyRow {
-        name: item.name.clone(),
+        name: item.name,
         kind: lsp_symbol_kind_label(item.kind),
         file: uri_to_file_path(&item.uri),
         line: item.selection_range.start.line + 1,
@@ -166,7 +166,7 @@ struct InlayHintRow {
 /// Methods for [`InlayHintsRenderView`].
 impl InlayHintsRenderView {
     /// Build an inlay hints view from raw LSP hints.
-    pub fn from_hints(raw: &[InlayHint]) -> Self {
+    pub(super) fn from_hints(raw: &[InlayHint]) -> Self {
         Self {
             hints: raw
                 .iter()
@@ -213,7 +213,7 @@ impl LspQueryResult {
     /// Paths from LSP responses (overlay-rooted) are rewritten to FUSE paths
     /// for user-facing display.
     /// Render this result into template bytes via the appropriate view struct.
-    pub fn render_view(self, engine: &TemplateEngine, template: &str, resolver: &LspPathResolver) -> Vec<u8> {
+    pub(super) fn render_view(self, engine: &TemplateEngine, template: &str, resolver: &LspPathResolver) -> Vec<u8> {
         match self {
             Self::Locations(locs) => engine.render_bytes(template, &LocationsView::from_locations(&locs, resolver)),
             Self::HierarchyItems(items) => {
@@ -236,7 +236,7 @@ impl LspQueryResult {
     /// Paths from LSP responses (overlay-rooted) are rewritten to FUSE paths
     /// so that symlink resolution can match against `fuse_root`.
     /// Extract raw targets for symlink directory population.
-    pub fn into_targets(self, resolver: &LspPathResolver) -> Vec<LspTarget> {
+    pub(super) fn into_targets(self, resolver: &LspPathResolver) -> Vec<LspTarget> {
         match self {
             Self::Locations(locs) => locs
                 .iter()
