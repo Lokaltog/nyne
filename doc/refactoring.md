@@ -26,8 +26,6 @@ Never do step 1 and "plan to do step 2 later." All four steps happen in one logi
 
 ## DRY and Reuse
 
-SSOT rules are in `CLAUDE.md` (root) — that's the authoritative source for extraction thresholds and duplication policy. The guidance below covers refactoring-specific nuance only.
-
 - **Check before building.** Before writing any new utility, parameter type, or helper — search the codebase for existing abstractions that do the same thing. Extend what exists rather than creating a parallel version.
 - **Build abstractions first, wire consumers second.** When a change touches multiple commands, implement the shared component first with tests, then integrate it into each consumer. Never implement the same pattern inline across multiple commands and "extract later."
 - **Name and test abstractions independently.** A shared component must have a clear name, a documented contract, and its own tests — not just tests through its consumers.

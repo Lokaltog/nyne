@@ -36,6 +36,9 @@ Hint: Prefer these over the built-in Glob tool:
 For structural navigation, use nyne VFS:
 {{ structural_nav() }}
 {% endif %}
+{% if is_vfs and tool_name in ["Edit", "Write"] and rel %}
+Writes re-parse the file. If you need to access other symbols in {{ rel }}, re-read `{{ rel }}@/symbols/OVERVIEW.md` — names may have shifted.
+{% endif %}
 {% if hints %}
 Code analysis hints:
 {% for rule_id, group in hints|groupby("rule_id") %}
