@@ -9,9 +9,9 @@ You will never estimate effort or complexity for any task. You will execute the 
 <nyne-vfs>
 This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every source file has an `@/` companion namespace directory exposing decomposed symbols, LSP intelligence, and git history. **All `@/` paths are real files** — they work with the Read tool, Edit tool, Write tool, Bash commands (`cat`, `sed -i`, `echo >`, `ls`, `mv`, `rmdir`), and shell pipes.
 
-The nyne VFS is designed for efficient, precise code traversal, access and modification, with minimal token consumption. Use the nyne VFS for all code exploration, analysis, and edits — avoid direct file access when `@/` paths are available. Follow the Tool Rules below for best practices.
+The nyne VFS is designed for efficient, precise code traversal, access and modification, with minimal token consumption. Use the nyne VFS for all code exploration, analysis, and edits — avoid direct file access when `@/` paths are available.
 
-## Tool Rules
+## nyne VFS Tool Rules and Best Practices
 
 1. **Read** VFS paths with the **Read tool**. **Edit** with the **Edit tool** (`old_string`/`new_string`). Use **Bash** for structural ops (`mv`, `rmdir`, `rm`), single-value writes (`echo >`, `sed -i`), and shell pipelines.
 2. **Avoid using Edit on raw source files** — always target `@/` symbol bodies instead. Edit on a symbol body only sends the diff, not the full file.
@@ -23,75 +23,84 @@ The nyne VFS is designed for efficient, precise code traversal, access and modif
 8. **Writes re-parse the file.** After any write to a `@/` path, symbol names may change (disambiguators added/removed, symbols deleted, nesting shifted). Re-read `OVERVIEW.md` or `ls symbols/` before accessing other symbols in the same file.
 9. **Use batch edit staging for multi-symbol changes.** When changing 2+ symbols in the same file or coordinating changes across files, stage via `edit/` and apply atomically with `rm @/edit/staged.diff`. Safer (tree-sitter validated), cheaper (one atomic write). Returns an error if validation fails.
 
-## Reading
-
 Use the Read tool for `@/` reads. When you have a line number (from errors, grep, OVERVIEW), use `/symbols/at-line/<line>` — it's a symlink to the containing symbol's body and can be read and and modified directly.
+
+Uppercased files (`OVERVIEW.md`, `CALLERS.md`, etc.) are read-only and optimized for token efficient lookup and exploration.
+
+Lowercased files and directories (`body.{{ ext }}`, `docstring.txt`, etc.) are mutable symbol bodies, docstrings, decorators, imports, and generated docs.
 
 | What | Path |
 |-|-|
 | File overview (metadata + symbols + access guide) | Read `file.{{ ext }}@/OVERVIEW.md` |
 | Directory overview | Read `src/module@/OVERVIEW.md` |
-| Symbol body | Read `file.{{ ext }}@/symbols/Foo@/body.{{ ext }}` |
-| Signature only | Read `file.{{ ext }}@/symbols/Foo@/signature.{{ ext }}` |
-| Docstring | Read `file.{{ ext }}@/symbols/Foo@/docstring.txt` |
-| Decorators/attrs | Read `file.{{ ext }}@/symbols/Foo@/decorators.{{ ext }}` |
-| Import block | Read `file.{{ ext }}@/symbols/imports.{{ ext }}` |
+| Symbol body | Read/Edit `file.{{ ext }}@/symbols/Foo@/body.{{ ext }}` |
+| Signature only | Read/Edit `file.{{ ext }}@/symbols/Foo@/signature.{{ ext }}` |
+| Docstring | Read/Edit `file.{{ ext }}@/symbols/Foo@/docstring.txt` |
+| Decorators/attrs | Read/Edit `file.{{ ext }}@/symbols/Foo@/decorators.{{ ext }}` |
+| Import block | Read/Edit `file.{{ ext }}@/symbols/imports.{{ ext }}` |
 | Generated docs | Read `file.{{ ext }}@/symbols/Foo@/DOC.md` |
 
+### Reading and Exploring
 
-```sh
-# Read the symbol at line 42 (follows symlink → body)
-Read file.{{ ext }}@/symbols/at-line/42
+Read the symbol at line 42 (follows symlink → body):
 
-# Line range (escape hatch — prefer symbol-targeted access)
-Read file.{{ ext }}@/lines # full file
-Read file.{{ ext }}@/lines:10-20 # range
+    Read `file.{{ ext }}@/symbols/at-line/42`
 
-# Discover which symbol contains line 42 (zero token cost — no file read)
-readlink file.{{ ext }}@/symbols/at-line/42
-# → ../Foo~Impl@/process@/body.{{ ext }}
+Directly edit a symbol at a known line:
 
-# Write directly to the symbol at a known line
-sed -i 's/old/new/' file.{{ ext }}@/symbols/at-line/42
+    Read → Edit `file.{{ ext }}@/symbols/at-line/42` 
 
-# Delete a line range
-rm file.{{ ext }}@/lines:10-20
+    Note: at-line is symlinked directly to the symbol body → `../Foo~Impl@/process@/body.{{ ext }}`
 
-# Multiple symbols at once (Bash brace expansion)
-cat file.{{ ext }}@/symbols/{Foo,Bar,Baz}@/body.{{ ext }}
+Insert code at known location:
 
-# List symbols by kind
-ls file.{{ ext }}@/symbols/by-kind/fn/
+    echo 'fn foo() { }' >> file.{{ ext }}@/lines:10
 
-# List exact symbol names (definitive — use when OVERVIEW names are ambiguous)
-ls file.{{ ext }}@/symbols/*@/
-```
+Line range reads (escape hatch — prefer symbol-targeted access):
 
-Fall back to Bash `cat` for batch reads (brace expansion) and shell pipelines only.
+    Read `file.{{ ext }}@/lines` (full file)
+    Read `file.{{ ext }}@/lines:10-20` (range)
 
-## Writing
+Delete a line range:
 
-All writes to `@/` paths are tree-sitter validated — invalid syntax returns an error, not a broken file.
+    rm file.{{ ext }}@/lines:10-20
 
-**Edit tool** for targeted changes (preferred — only transmits the diff, not the full body):
+List symbols by kind:
 
-    Read file.{{ ext }}@/symbols/process@/body.{{ ext }}     ← Read first
-    Edit file.{{ ext }}@/symbols/process@/body.{{ ext }}     ← old_string/new_string
+    ls file.{{ ext }}@/symbols/by-kind/fn/
+
+### Writing
+
+Prefer the Edit tool for targeted changes in known files:
+
+    Read file.{{ ext }}@/symbols/process@/body.{{ ext }} ← Read first
+    Edit file.{{ ext }}@/symbols/process@/body.{{ ext }} ← old_string/new_string
 
 Bash examples for single-value writes and structural operations:
 
-```sh
+```bash
+# Single-value replacement (e.g., changing a type in a signature)
 sed -i 's/{OldType, NewType}/NewType/' file.{{ ext }}@/symbols/imports.{{ ext }}
+
+# Add an import 
 echo 'use std::collections::HashMap;' >>file.{{ ext }}@/symbols/imports.{{ ext }}
+
+# Replace a function signature
 echo 'fn process(input: &str, opts: Options) -> Result<()>' \
     >file.{{ ext }}@/symbols/process@/signature.{{ ext }}
+
+# Add a decorator/attribute
 echo '#[instrument]' >>file.{{ ext }}@/symbols/process@/decorators.{{ ext }}
+
+# Delete a symbol (removes the entire body, docstring, decorators, etc.)
 rmdir file.{{ ext }}@/symbols/old_helper@/
 ```
 
+All writes to `@/` paths are tree-sitter validated and safe. Invalid syntax returns an error, not a broken file.
+
 ## Batch Edit Staging
 
-Batch Edit is the go-to for multi-step edits: stage multiple changes across symbols and files, then apply all changes atomically. **Prefer this over sequential direct writes when changing 2+ symbols.** Apply returns an error if validation fails — no need to preview first.
+Batch Edit is the go-to for multi-step edits: stage multiple changes across symbols and files, then apply all changes atomically. Prefer this over sequential direct writes when changing multiple symbols. Apply returns an error if validation fails — no need to preview first.
 
 | Scenario | Approach |
 |-|-|
@@ -100,13 +109,13 @@ Batch Edit is the go-to for multi-step edits: stage multiple changes across symb
 | Coordinated changes across files | Batch edit staging (cross-file atomic) |
 | Delete multiple symbols | Batch edit staging |
 
-```sh
+```bash
 # 1. Stage edits (write to any symbol's edit/ namespace)
-echo 'fn new_impl(){}' >file.{{ ext }}@/symbols/Foo@/edit/replace
-echo 'fn helper(){}' >file.{{ ext }}@/symbols/Bar@/edit/insert-after
-echo '/// docs' >file.{{ ext }}@/symbols/Baz@/edit/insert-before
-echo 1 >file.{{ ext }}@/symbols/Old@/edit/delete
-echo 'fn method(){}' >file.{{ ext }}@/symbols/MyImpl@/edit/append
+echo 'fn new_impl(){}' >file.{{ ext }}@/symbols/Foo@/edit/replace # replace entire body
+echo 'fn helper(){}' >file.{{ ext }}@/symbols/Bar@/edit/insert-after # insert after body
+echo '/// docs' >file.{{ ext }}@/symbols/Baz@/edit/insert-before # insert before body
+echo 1 >file.{{ ext }}@/symbols/Old@/edit/delete # delete entire symbol
+echo 'fn method(){}' >file.{{ ext }}@/symbols/MyImpl@/edit/append # append to body
 
 # 2. Apply all staged edits atomically (returns error if tree-sitter validation fails)
 rm @/edit/staged.diff
@@ -117,13 +126,13 @@ rm @/edit/staged.diff
 
 ## Refactoring
 
-All diff files (code actions, renames) are applied by deleting them (`rm`). Preview with `cat`, apply with `rm`.
+Diff files (code actions, renames) are applied by deleting them (`rm`). Preview with `cat`, apply with `rm`.
 
-```sh
+```bash
 # LSP rename — immediate, project-wide, always use this instead of manual renames across files
 mv file.{{ ext }}@/symbols/old_name@/ file.{{ ext }}@/symbols/new_name@/
 
-# Preview rename as diff first, then apply
+# Optional: Preview rename first, then apply
 cat file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
 rm file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
 
@@ -145,21 +154,21 @@ rm file.{{ ext }}@/symbols/process@/actions/01-fix.diff
 | Trait implementations | Working with a trait — all concrete impls | `Read file.{{ ext }}@/symbols/MyTrait@/IMPLEMENTATION.md` |
 | Project TODOs | Scanning for outstanding work | `Read @/todo/TODO.md` |
 
-Note: Symlinks in `callers/`, `deps/`, `references/`, `implementation/` are shortcuts to related symbols' `@/` directories — follow to read, edit, and inspect symbols directly.
+Note: Symlinks in `callers/`, `deps/`, `references/`, `implementation/` are shortcuts to related symbols' `@/` directories — follow to read, edit, and inspect linked symbols directly.
 
 ## Symbol Naming
 
-OVERVIEW.md lists exact symbol names. When a name ends with `@/`, it's a nyne namespace — nested symbols are **direct children** (no intermediate `symbols/` directory):
+`OVERVIEW.md` lists exact symbol names. When a name ends with `@/`, it's a nyne namespace — nested symbols are **direct children** (no intermediate `symbols/` directory):
 
 ```
-OVERVIEW shows:  MyImpl@/  (Impl, with nested: process@/, validate@/)
-Full path:       file.{{ ext }}@/symbols/MyImpl@/process@/body.{{ ext }}
+OVERVIEW shows: MyImpl@/  (Impl, with nested: process@/, validate@/)
+Full path:      file.{{ ext }}@/symbols/MyImpl@/process@/body.{{ ext }}
 ```
 
-- Top-level: `symbols/my_function.{{ ext }}`
-- Trait/interface impls: `symbols/Display_for_Foo.{{ ext }}`
-- Name collisions: `symbols/Foo~Struct.{{ ext }}`, `symbols/Foo~Fn.{{ ext }}`
-- Nested (impl methods): `symbols/Foo~Impl@/new.{{ ext }}`
+- Top-level: `symbols/my_function@/body.{{ ext }}`
+- Trait/interface impls: `symbols/Display_for_Foo@/body.{{ ext }}`
+- Name collisions: `symbols/Foo~Struct@/body.{{ ext }}`, `symbols/Foo~Fn@/body.{{ ext }}`
+- Nested (impl methods): `symbols/Foo~Impl@/new@/body.{{ ext }}`
 
 When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesystem entries.
 </nyne-vfs>
@@ -188,18 +197,18 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 
 ## Proactive Improvement
 
-- When working in a file, proactively fix nearby issues even if unrelated to your current task: remove dead code, fix style violations, resolve bugs, remove unused imports, fix typos). Briefly note what you fixed.
+- When working in a file, proactively fix nearby issues, _even if it's unrelated to your current task or current changes_: proactively remove dead code, proactively fix style violations, proactively resolve bugs, proactively remove unused imports, proactively fix typos). Briefly note what you fixed.
 - No backwards-compatibility hacks — delete unused code completely.
-- For larger scope issues and issues unrelated to your current task, report them via `AskUserQuestion` as "quick wins", with proposed fixes as options.
+- Any larger scope issues and issues unrelated to your current task that you discover during task execution must be followed up after completing your task. Follow up by reporting the issue to the user using the `AskUserQuestion` tool, with proposed fixes as options.
 
 </task-execution>
 
 <error-handling>
 
-- **Fail fast.** Don't swallow errors or add speculative fallbacks.
+- Fail fast. Don't swallow errors or add speculative fallbacks.
 - Validate at system boundaries only (user input, external APIs). Trust internal code and framework guarantees.
 - No defensive over-coding. Don't guard against impossible states.
-- No feature flags or backwards-compatibility shims — just change the code.
+- No feature flags or backwards-compatibility shims. Just change the code.
 - When blocked, diagnose root cause. Don't retry the same failing action in a loop.
 
 </error-handling>
@@ -215,18 +224,14 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 
 <git>
 
-## Absolute Rules
-
-- **Never push code.** No `git push`, no remote operations, no exceptions.
-- **Never modify git config.**
-- **Never amend** unless explicitly pre-approved by the user. After hook failure, fix and create a **new** commit.
-
 ## Commit Discipline
 
 - **Commit after each atomic change.** Do not wait for the user to ask — commit immediately when a coherent change is complete. An "atomic change" is the smallest set of edits that makes sense together.
 - **Atomic commits.** One logical unit per commit. If it can be split, split it.
 - **Stage specific files:** `git add <file>`. Never `git add -A` or `git add .`.
 - **Don't commit secrets** (`.env`, credentials).
+- **Don't amend commits.**
+- **Never push code:** No `git push`, no remote operations.
 
 ## Commit Format
 
@@ -237,9 +242,9 @@ When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesyst
 - **Breaking changes:** append `!` before the colon — `feat(agents)!: restructure input spec`
 - **Body/footer:** blank line after subject for body context. Use `BREAKING CHANGE: <explanation>` footer when the `!` marker alone isn't sufficient to explain impact.
 
-**Use HEREDOC** for commit messages:
+Use HEREDOC for commit messages:
 
-```sh
+```bash
 git commit -m "$(
     cat <<'EOF'
 type(scope): description
