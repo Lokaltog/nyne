@@ -13,6 +13,8 @@ struct GoLsp;
 impl LspSpec for GoLsp {
     const EXTENSIONS: &'static [&'static str] = &["go"];
 
+    fn language_id(_ext: &str) -> &'static str { "go" }
+
     fn servers() -> Vec<LspServerDef> {
         vec![LspServerDef::new("gopls")
             .detect(|root| root.join("go.mod").exists())]

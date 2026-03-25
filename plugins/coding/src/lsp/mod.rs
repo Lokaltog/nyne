@@ -217,3 +217,7 @@ fn warn_duplicate_lsp_ext(ext: &str, existing: &[LspServerDef], lang_def: &LspLa
         "multiple LSP specs register the same extension — servers will be merged",
     );
 }
+
+/// Unit tests.
+#[cfg(test)]
+mod tests;
