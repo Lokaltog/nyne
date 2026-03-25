@@ -214,7 +214,14 @@ impl EditPlan {
         Self::check_conflicts(&resolved)?;
 
         // Sort by byte_range.start descending for bottom-up application.
-        resolved.sort_by(|a, b| b.byte_range.start.cmp(&a.byte_range.start));
+        // Secondary key: non-empty before empty (zero-width) so that after
+        // `.rev()` in `apply`, zero-width insertions come first at each offset.
+        resolved.sort_by(|a, b| {
+            b.byte_range
+                .start
+                .cmp(&a.byte_range.start)
+                .then_with(|| a.byte_range.is_empty().cmp(&b.byte_range.is_empty()))
+        });
 
         Ok(resolved)
     }
@@ -222,7 +229,15 @@ impl EditPlan {
     /// Check for overlapping edit ranges.
     fn check_conflicts(edits: &[ResolvedEdit]) -> Result<()> {
         let mut sorted: Vec<&ResolvedEdit> = edits.iter().collect();
-        sorted.sort_by_key(|e| e.byte_range.start);
+        // Stable order: by start ascending, then empty (zero-width) before
+        // non-empty so that insertions at the boundary of a replace are
+        // correctly adjacent rather than hidden by sort instability.
+        sorted.sort_by(|a, b| {
+            a.byte_range
+                .start
+                .cmp(&b.byte_range.start)
+                .then_with(|| a.byte_range.is_empty().cmp(&b.byte_range.is_empty()).reverse())
+        });
 
         for pair in sorted.windows(2) {
             let &[a, b] = pair else { continue };

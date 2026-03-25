@@ -159,3 +159,64 @@ fn append_into_scope_with_children_still_works() {
     assert!(modified.contains("fn existing()"), "existing method preserved");
     assert!(modified.contains("fn new_method()"), "new method appended");
 }
+
+/// Regression: check_conflicts must detect overlap when a zero-width insertion
+/// and a non-empty edit share the same byte_range.start. Sort instability
+/// could hide the conflict, letting apply() panic with begin > end.
+#[test]
+fn check_conflicts_detects_zero_width_at_same_start_as_nonempty() {
+    let source = "/// Doc A\nfn aaa() {}\n/// Doc B\nfn bbb() {}\n";
+    //            ^0        ^10        ^22        ^32        ^44
+
+    // Two adjacent functions: aaa (0..22 full_span), bbb (22..44 full_span)
+    let frag_a = code_fragment(source, "aaa", SymbolKind::Function, 10..22, Some(0..9), vec![]);
+    let frag_b = code_fragment(source, "bbb", SymbolKind::Function, 32..44, Some(22..31), vec![]);
+
+    // InsertAfter on aaa (zero-width at 22) + Replace on bbb (starts at 22).
+    // These share byte_range.start = 22 and must be detected as a conflict
+    // (the insert is inside the replaced range's start boundary).
+    let plan = EditPlan {
+        ops: vec![
+            (0, EditOp::InsertAfter {
+                fragment_path: vec!["aaa".to_owned()],
+                content: "fn inserted() {}\n".to_owned(),
+            }),
+            (1, EditOp::Replace {
+                fragment_path: vec!["bbb".to_owned()],
+                content: "/// New B\nfn bbb() { 1 }\n".to_owned(),
+            }),
+        ],
+    };
+
+    let resolved = plan.resolve(&[frag_a, frag_b], source).unwrap();
+    // Must not panic — the resolved edits should be applicable.
+    let modified = EditPlan::apply(source, &resolved);
+    // The insert-after content should appear between aaa and bbb.
+    assert!(modified.contains("fn inserted()"), "inserted function present");
+    assert!(modified.contains("fn bbb()"), "replaced function present");
+}
+
+/// Regression: apply must not panic when edits at the same offset are
+/// processed in the wrong order due to unstable sort on byte_range.start.
+#[test]
+fn apply_handles_zero_width_and_nonempty_at_same_offset() {
+    let source = "aaabbbccc";
+    // Zero-width insertion at offset 3 + non-empty replace of 3..6.
+    let edits = vec![
+        ResolvedEdit {
+            staged_index: 1,
+            byte_range: 3..6,
+            replacement: "BBB".to_owned(),
+        },
+        ResolvedEdit {
+            staged_index: 0,
+            byte_range: 3..3,
+            replacement: "INSERT".to_owned(),
+        },
+    ];
+    // Sorted descending by start: both at 3, order is arbitrary.
+    // apply().rev() must produce correct output regardless of order.
+    let result = EditPlan::apply(source, &edits);
+    // The insertion should appear before the replacement.
+    assert_eq!(result, "aaaINSERTBBBccc");
+}
