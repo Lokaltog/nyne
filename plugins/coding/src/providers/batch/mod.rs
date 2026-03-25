@@ -21,7 +21,6 @@ use staging::{StagedBatch, StagingKey};
 /// to the provider.
 type StagingMap = Arc<RwLock<HashMap<StagingKey, StagedBatch>>>;
 
-use color_eyre::eyre::eyre;
 use nyne::dispatch::invalidation::InvalidationEvent;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
@@ -35,8 +34,7 @@ use super::names::{FILE_STAGED_DIFF, SUBDIR_EDIT, SUBDIR_STAGED};
 use super::prelude::*;
 use crate::edit::diff_action::DiffActionNode;
 use crate::edit::plan::EditOpKind;
-use crate::syntax::SyntaxRegistry;
-use crate::syntax::decomposed::DecompositionCache;
+use crate::services::CodingServices;
 
 /// Provider for staging and applying batch edits across symbols and files.
 pub(crate) struct BatchEditProvider {
@@ -83,15 +81,10 @@ impl BatchEditProvider {
     }
 
     /// Check whether a source file has syntax support (decomposable).
-    #[expect(clippy::expect_used, reason = "programming error if coding plugin not activated")]
     fn has_syntax_support(&self, source_file: &VfsPath) -> bool {
-        source_file.extension().is_some_and(|ext| {
-            self.ctx
-                .get::<Arc<SyntaxRegistry>>()
-                .expect("coding plugin not activated")
-                .get(ext)
-                .is_some()
-        })
+        source_file
+            .extension()
+            .is_some_and(|ext| CodingServices::get(&self.ctx).syntax.get(ext).is_some())
     }
 
     /// Check whether any batches are staged.
@@ -263,10 +256,8 @@ impl Writable for StagingWriter {
     /// Decompose at write time, resolve the anchor, and stage the resulting action.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         // Decompose at write time — validates against current source state.
-        let parsed = self
-            .ctx
-            .get::<DecompositionCache>()
-            .ok_or_else(|| eyre!("coding plugin not activated"))?
+        let parsed = CodingServices::get(&self.ctx)
+            .decomposition
             .get(&self.key.source_file)?;
 
         let action = resolve_anchor(self.anchor, &self.key.fragment_path, data, &parsed.decomposed)?;

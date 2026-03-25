@@ -1,8 +1,8 @@
 //! Analysis rule: detect TODO and FIXME comments.
 
 use super::kinds;
-use crate::config::CodingConfig;
 use crate::providers::todo::parse_tag_suffix;
+use crate::services::CodingServices;
 use crate::syntax::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 use crate::syntax::parser::TsNode;
 
@@ -21,9 +21,8 @@ impl AnalysisRule for TodoFixme {
     fn check(&self, node: TsNode<'_>, context: &AnalysisContext<'_>) -> Option<Hint> {
         let text = node.text();
 
-        let (marker, detail) = context
-            .activation
-            .get::<CodingConfig>()?
+        let (marker, detail) = CodingServices::get(context.activation)
+            .config
             .todo
             .tags
             .iter()

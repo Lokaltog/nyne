@@ -15,13 +15,13 @@ use nyne::templates::TemplateEngine;
 use nyne::types::vfs_path::VfsPath;
 
 use crate::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
-use crate::lsp::manager::LspManager;
 use crate::providers::claude::hook_schema::{
     BashToolInput, EditToolInput, HookInput, HookOutput, ReadToolInput, WriteToolInput,
 };
 use crate::providers::names::{self, FILE_OVERVIEW};
+use crate::services::CodingServices;
 use crate::syntax::analysis::{AnalysisContext, AnalysisEngine, HintView};
-use crate::syntax::decomposed::{DecomposedSource, DecompositionCache};
+use crate::syntax::decomposed::DecomposedSource;
 
 /// Minimum combined old+new line count to trigger SSOT reminder on Edit.
 const SSOT_LINE_THRESHOLD: usize = 10;
@@ -55,15 +55,8 @@ impl Script for PostToolUse {
         let tool_name = input.tool_name.as_deref().unwrap_or("");
         let root = ctx.activation().root_prefix();
 
-        let analysis = run_analysis_for_tool(
-            ctx.activation()
-                .get::<Arc<AnalysisEngine>>()
-                .ok_or_else(|| color_eyre::eyre::eyre!("coding plugin not activated"))?,
-            ctx,
-            &input,
-            tool_name,
-            &root,
-        );
+        let services = CodingServices::get(ctx.activation());
+        let analysis = run_analysis_for_tool(&services.analysis, ctx, &input, tool_name, &root);
 
         // Narrow hints/diagnostics to the changed region for Edit calls.
         let changed = analysis
@@ -284,22 +277,15 @@ fn run_analysis_for_tool(
         return empty;
     };
 
-    let activation = ctx.activation();
-    #[expect(
-        clippy::expect_used,
-        reason = "returns Vec, not Result — programming error if missing"
-    )]
-    let cache = activation
-        .get::<DecompositionCache>()
-        .expect("coding plugin not activated");
+    let services = CodingServices::get(ctx.activation());
 
     // The Edit/Write tool writes directly to the real filesystem, bypassing
     // the FUSE mount. The inotify watcher will eventually invalidate, but
     // it's async — by the time this hook runs the cache still holds the
     // pre-edit parse tree. Invalidate explicitly so we analyze fresh content.
-    cache.invalidate(&vfs_path);
+    services.decomposition.invalidate(&vfs_path);
 
-    let Ok(decomposed) = cache.get(&vfs_path) else {
+    let Ok(decomposed) = services.decomposition.get(&vfs_path) else {
         return empty;
     };
 
@@ -312,7 +298,7 @@ fn run_analysis_for_tool(
 
     let analysis_ctx = AnalysisContext {
         source: &decomposed.source,
-        activation,
+        activation: ctx.activation(),
     };
 
     let hints = engine.analyze(tree, &analysis_ctx).iter().map(HintView::from).collect();
@@ -343,13 +329,10 @@ fn fetch_diagnostics_for_tool(
         return Vec::new();
     };
 
-    let activation = ctx.activation();
-    let Some(manager) = activation.get::<Arc<LspManager>>() else {
-        return Vec::new();
-    };
+    let services = CodingServices::get(ctx.activation());
 
-    let lsp_file = activation.overlay_root().join(&rel);
-    manager.ensure_document_open(&lsp_file, ext);
+    let lsp_file = ctx.activation().overlay_root().join(&rel);
+    services.lsp.ensure_document_open(&lsp_file, ext);
 
     // The FUSE write handler writes through to the overlay, but LSP
     // invalidation is triggered by the inotify watcher on the overlay —
@@ -357,9 +340,9 @@ fn fetch_diagnostics_for_tool(
     // have fired yet, so the LSP server still has stale content and the
     // DiagnosticStore isn't marked dirty. Explicitly invalidate to send
     // `didChange` now and mark the store dirty for the blocking wait.
-    manager.invalidate_file(&lsp_file);
+    services.lsp.invalidate_file(&lsp_file);
 
-    let Some(fq) = manager.file_query(&lsp_file, ext) else {
+    let Some(fq) = services.lsp.file_query(&lsp_file, ext) else {
         return Vec::new();
     };
 

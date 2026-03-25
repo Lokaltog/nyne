@@ -23,7 +23,7 @@ impl SyntaxProvider {
 
         let mut nodes = Vec::new();
 
-        let resolver = self.resolver_for(source_file)?;
+        let resolver = self.resolver_for(source_file);
 
         // OVERVIEW.md
         nodes.push(self.overview.node(FILE_OVERVIEW, OverviewContent {

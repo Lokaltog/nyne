@@ -7,7 +7,7 @@ mod lsp_links;
 
 use std::sync::Arc;
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::Result;
 use nyne::dispatch::activation::ActivationContext;
 use nyne::dispatch::context::RequestContext;
 use nyne::node::VirtualNode;
@@ -19,7 +19,8 @@ use super::content::{FileOverviewContent, FragmentResolver, LinesContent, LinesW
 use crate::edit::diff_action::DiffActionNode;
 use crate::lsp::handle::LspHandle;
 use crate::providers::names::{COMPANION_SUFFIX, FILE_BODY, FILE_OVERVIEW, SUBDIR_SYMBOLS, companion_name};
-use crate::syntax::decomposed::{DecomposedSource, DecompositionCache};
+use crate::services::CodingServices;
+use crate::syntax::decomposed::DecomposedSource;
 use crate::syntax::find_fragment;
 use crate::syntax::fragment::{Fragment, FragmentKind};
 
@@ -43,42 +44,25 @@ impl DecompositionContext {
 
 /// Decomposition context construction and resolver factory.
 impl SyntaxProvider {
-    /// Build a `DecompositionContext` for a source file, returning `None` if
-    /// the file has no registered decomposer.
-    /// Build a decomposition context for a source file, returning None if unsupported.
+    /// Build a decomposition context for a source file, returning `None` if unsupported.
     pub(super) fn decomposition_context(&self, source_file: &VfsPath) -> Result<Option<DecompositionContext>> {
         let Some(decomposer) = self.decomposer_for(source_file) else {
             return Ok(None);
         };
-        let shared = self
-            .ctx
-            .get::<DecompositionCache>()
-            .ok_or_else(|| eyre!("coding plugin not activated"))?
-            .get(source_file)?;
+        let shared = CodingServices::get(&self.ctx).decomposition.get(source_file)?;
         let ext = decomposer.file_extension();
         Ok(Some(DecompositionContext { shared, ext }))
     }
 
     /// Build a [`FragmentResolver`] for lazy decomposition of a source file.
-    /// Build a fragment resolver for lazy decomposition of a source file.
-    pub(super) fn resolver_for(&self, source_file: &VfsPath) -> Result<FragmentResolver> {
-        let cache = self
-            .ctx
-            .get::<DecompositionCache>()
-            .ok_or_else(|| eyre!("coding plugin not activated"))?
-            .clone();
-        Ok(FragmentResolver::new(cache, source_file.clone()))
+    pub(super) fn resolver_for(&self, source_file: &VfsPath) -> FragmentResolver {
+        let cache = CodingServices::get(&self.ctx).decomposition.clone();
+        FragmentResolver::new(cache, source_file.clone())
     }
 }
 
 /// Companion root resolution and node building.
 impl SyntaxProvider {
-    /// Resolve the companion root: emit the `symbols/` directory and
-    /// the `lines` file if the source file has a registered syntax.
-    #[expect(
-        clippy::expect_used,
-        reason = "returns Option, not Result — programming error if missing"
-    )]
     /// Resolve the companion root: emit symbols directory and file-level nodes.
     pub(super) fn resolve_companion_root(
         &self,
@@ -94,7 +78,7 @@ impl SyntaxProvider {
 
         // File-level OVERVIEW.md — richer view with metadata + symbol table.
         {
-            let resolver = self.resolver_for(source_file).expect("coding plugin not activated");
+            let resolver = self.resolver_for(source_file);
             let filename = source_file.name().unwrap_or("unknown").to_owned();
             let language = decomposer.language_name().to_owned();
             nodes.push(self.file_overview.node(FILE_OVERVIEW, FileOverviewContent {
@@ -116,7 +100,7 @@ impl SyntaxProvider {
         .with_writable(LinesWrite {
             source_file: source_file.clone(),
             decomposer: Arc::clone(decomposer),
-            resolver: self.resolver_for(source_file).expect("coding plugin not activated"),
+            resolver: self.resolver_for(source_file),
         })
         .sliceable();
         nodes.push(lines_node);

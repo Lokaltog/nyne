@@ -16,6 +16,7 @@ use super::names;
 use super::prelude::*;
 use super::util::dominant_ext;
 use crate::config::CodingConfig;
+use crate::services::CodingServices;
 
 /// Typed serde schemas for hook inputs and outputs.
 pub mod hook_schema;
@@ -215,9 +216,7 @@ impl Provider for ClaudeProvider {
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
     /// Activate only when Claude integration is enabled in config.
-    fn should_activate(&self, _ctx: &ActivationContext) -> bool {
-        self.ctx.get::<CodingConfig>().is_none_or(|c| c.claude.enabled)
-    }
+    fn should_activate(&self, _ctx: &ActivationContext) -> bool { CodingServices::get(&self.ctx).config.claude.enabled }
 
     /// Handle conflicts by merging with existing `.claude` directories.
     fn on_conflict(

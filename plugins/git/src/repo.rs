@@ -9,7 +9,7 @@ use color_eyre::eyre::{Result, WrapErr, eyre};
 use nyne::err::io_err;
 use nyne::types::vfs_path::VfsPath;
 use parking_lot::Mutex;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::commit::diff_opts;
 
@@ -266,10 +266,22 @@ impl GitRepo {
     /// HEAD commit timestamp as seconds since epoch, or 0 for unborn branches.
     pub(crate) fn head_epoch_secs(&self) -> i64 {
         let repo = self.lock();
-        repo.head()
-            .ok()
-            .and_then(|h| h.peel_to_commit().ok())
-            .map_or(0, |c| c.time().seconds())
+        let head = match repo.head() {
+            Ok(h) => h,
+            // UnbornBranch = fresh repo with no commits yet — 0 is correct.
+            Err(e) if e.code() == git2::ErrorCode::UnbornBranch => return 0,
+            Err(e) => {
+                warn!(error = %e, "failed to read HEAD");
+                return 0;
+            }
+        };
+        match head.peel_to_commit() {
+            Ok(c) => c.time().seconds(),
+            Err(e) => {
+                warn!(error = %e, "failed to peel HEAD to commit");
+                0
+            }
+        }
     }
 
     /// All file paths in the git index.
@@ -291,8 +303,12 @@ impl GitRepo {
     /// Counts ALL extensions — not filtered by any registry. Consumers who
     /// want a subset can filter the result themselves.
     pub fn extension_counts(&self) -> Vec<(String, usize)> {
-        let Ok(paths) = self.index_paths() else {
-            return vec![];
+        let paths = match self.index_paths() {
+            Ok(p) => p,
+            Err(e) => {
+                warn!(error = %e, "failed to read git index for extension counts");
+                return vec![];
+            }
         };
         let mut counts: HashMap<String, usize> = HashMap::new();
         for path in &paths {

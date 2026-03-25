@@ -16,6 +16,7 @@ use crate::lsp::LspRegistry;
 use crate::lsp::manager::LspManager;
 use crate::lsp::path::LspPathResolver;
 use crate::providers::claude;
+use crate::services::CodingServices;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::analysis::AnalysisEngine;
 use crate::syntax::decomposed::DecompositionCache;
@@ -31,7 +32,6 @@ impl Plugin for CodingPlugin {
     /// Registers syntax, LSP, analysis, and decomposition services into the context.
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
         let syntax = SyntaxRegistry::global();
-        ctx.insert(Arc::clone(&syntax));
 
         let coding_config = CodingConfig::from_plugin_table(&ctx.config().plugin);
         let sandbox_env = ctx.config().sandbox.env.clone();
@@ -40,8 +40,9 @@ impl Plugin for CodingPlugin {
 
         // Contribute LSP server commands to the passthrough set so those
         // processes see only the real filesystem (not virtual content).
-        let lsp_commands: Vec<String> = lsp_registry.server_commands().map(str::to_owned).collect();
-        ctx.insert(PassthroughProcesses(lsp_commands));
+        ctx.insert(PassthroughProcesses(
+            lsp_registry.server_commands().map(str::to_owned).collect(),
+        ));
 
         let lsp_path_resolver = LspPathResolver::new(ctx.root().to_owned(), ctx.overlay_root().to_owned());
         let lsp = Arc::new(LspManager::new(
@@ -55,19 +56,16 @@ impl Plugin for CodingPlugin {
 
         // Eagerly spawn LSP servers in the background so they're warm
         // by the time workspace-wide queries (e.g. symbol search) arrive.
-        let lsp_bg = Arc::clone(&lsp);
-        thread::Builder::new()
-            .name("lsp-eager-spawn".into())
-            .spawn(move || lsp_bg.spawn_all_applicable())
-            .ok();
+        {
+            let lsp = Arc::clone(&lsp);
+            thread::Builder::new()
+                .name("lsp-eager-spawn".into())
+                .spawn(move || lsp.spawn_all_applicable())
+                .ok();
+        }
 
-        ctx.insert(lsp);
-
-        let decomp_cache = DecompositionCache::new(Arc::clone(ctx.real_fs()), Arc::clone(&syntax));
-        ctx.insert(decomp_cache);
-
+        let decomposition = DecompositionCache::new(Arc::clone(ctx.real_fs()), Arc::clone(&syntax));
         let analysis = Arc::new(AnalysisEngine::build_filtered(&coding_config.analysis));
-        ctx.insert(analysis);
 
         info!(
             languages = syntax.extensions().len(),
@@ -76,17 +74,20 @@ impl Plugin for CodingPlugin {
             "coding plugin activated",
         );
 
-        ctx.insert(coding_config);
+        ctx.insert(CodingServices {
+            syntax,
+            lsp,
+            decomposition,
+            analysis,
+            config: coding_config,
+        });
 
         Ok(())
     }
 
     /// Returns Claude hook script entries based on plugin configuration.
     fn scripts(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<ScriptEntry>> {
-        let coding_config = ctx
-            .get::<CodingConfig>()
-            .ok_or_else(|| color_eyre::eyre::eyre!("coding plugin not activated"))?;
-        Ok(claude::script_entries(coding_config))
+        Ok(claude::script_entries(&CodingServices::get(ctx).config))
     }
 
     /// Returns the fully resolved coding plugin configuration as TOML.

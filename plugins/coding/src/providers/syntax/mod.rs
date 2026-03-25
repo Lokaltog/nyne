@@ -11,9 +11,8 @@ use super::fragment_resolver::FragmentResolver;
 use super::names::{self, FILE_DIAGNOSTICS, FILE_HINTS, SUBDIR_AT_LINE, SUBDIR_SYMBOLS, companion_name};
 use super::prelude::*;
 use crate::lsp::handle::LspHandle;
-use crate::lsp::manager::LspManager;
+use crate::services::CodingServices;
 use crate::syntax::SyntaxRegistry;
-use crate::syntax::decomposed::DecompositionCache;
 use crate::syntax::spec::Decomposer;
 use crate::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC};
 
@@ -116,16 +115,8 @@ impl SyntaxProvider {
         }
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "returns &SyntaxRegistry, not Result — programming error if missing"
-    )]
     /// Return a reference to the syntax registry.
-    fn registry(&self) -> &SyntaxRegistry {
-        self.ctx
-            .get::<Arc<SyntaxRegistry>>()
-            .expect("coding plugin not activated")
-    }
+    fn registry(&self) -> &SyntaxRegistry { &CodingServices::get(&self.ctx).syntax }
 
     /// Return the decomposer for a source file, if supported.
     fn decomposer_for(&self, source_file: &VfsPath) -> Option<&Arc<dyn Decomposer>> {
@@ -133,16 +124,8 @@ impl SyntaxProvider {
     }
 
     /// Build the file-level HINTS.md node (lookup-only).
-    #[expect(
-        clippy::expect_used,
-        reason = "returns Option, not Result — programming error if missing"
-    )]
     fn build_hints_node(&self, source_file: &VfsPath) -> Option<VirtualNode> {
-        let cache = self
-            .ctx
-            .get::<DecompositionCache>()
-            .expect("coding plugin not activated")
-            .clone();
+        let cache = CodingServices::get(&self.ctx).decomposition.clone();
         // Only produce hints for files with a parse tree.
         cache.get(source_file).ok()?.tree.as_ref()?;
         let resolver = FragmentResolver::new(cache, source_file.clone());
@@ -299,8 +282,7 @@ impl Provider for SyntaxProvider {
         let old_path = overlay_root.join(from.as_str());
         let new_path = overlay_root.join(to.as_str());
 
-        #[expect(clippy::expect_used, reason = "programming error if missing")]
-        let lsp = self.ctx.get::<Arc<LspManager>>().expect("coding plugin not activated");
+        let lsp = &CodingServices::get(&self.ctx).lsp;
 
         // Ask the LSP server for import-path updates BEFORE the rename.
         lsp.will_rename_file(&old_path, &new_path);
@@ -314,30 +296,21 @@ impl Provider for SyntaxProvider {
         Ok(MutationOutcome::Handled)
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "returns Vec, not Result — programming error if missing"
-    )]
     /// Invalidate decomposition and LSP caches for changed source files.
     fn on_fs_change(&self, changed: &[VfsPath]) -> Vec<InvalidationEvent> {
+        let services = CodingServices::get(&self.ctx);
         changed
             .iter()
             .filter(|p| self.decomposer_for(p).is_some())
             .filter_map(|p| {
                 // Evict the cached decomposition for the changed file.
-                self.ctx
-                    .get::<DecompositionCache>()
-                    .expect("coding plugin not activated")
-                    .invalidate(p);
+                services.decomposition.invalidate(p);
 
                 // Notify the LSP server: sends didChange for open documents
                 // (keeping them open with incremented version) and invalidates
                 // the LSP result cache. On file deletion, falls back to didClose.
                 let lsp_file = self.ctx.overlay_root().join(p.as_str());
-                self.ctx
-                    .get::<Arc<LspManager>>()
-                    .expect("coding plugin not activated")
-                    .invalidate_file(&lsp_file);
+                services.lsp.invalidate_file(&lsp_file);
                 let name = p.name()?;
                 let parent = p.parent().unwrap_or(VfsPath::root());
                 let companion = companion_name(name);

@@ -20,7 +20,7 @@ use crate::providers::claude::hook_schema::{
 };
 use crate::providers::claude::settings::RAW_FILE_GRACE_SECS;
 use crate::providers::names;
-use crate::syntax::decomposed::DecompositionCache;
+use crate::services::CodingServices;
 use crate::syntax::find_fragment_at_line;
 use crate::syntax::fragment::Fragment;
 use crate::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, fragment_list};
@@ -126,15 +126,7 @@ impl PreToolUse {
         let Ok(vfs_path) = VfsPath::new(rel) else {
             return HookOutput::empty();
         };
-        #[expect(
-            clippy::expect_used,
-            reason = "returns Vec<u8>, not Result — programming error if missing"
-        )]
-        let Ok(decomposed) = activation
-            .get::<DecompositionCache>()
-            .expect("coding plugin not activated")
-            .get(&vfs_path)
-        else {
+        let Ok(decomposed) = CodingServices::get(activation).decomposition.get(&vfs_path) else {
             return HookOutput::empty();
         };
         if decomposed.decomposed.is_empty() {

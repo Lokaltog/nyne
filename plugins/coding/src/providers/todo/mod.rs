@@ -19,8 +19,7 @@ use serde::Serialize;
 
 use super::names::{self, DIR_TODO};
 use super::prelude::*;
-use crate::config::CodingConfig;
-use crate::syntax::SyntaxRegistry;
+use crate::services::CodingServices;
 
 /// Given text immediately after a tag keyword (e.g. the `": fix this"` in
 /// `TODO: fix this`), skip an optional `(annotation)` and require a colon.
@@ -68,10 +67,7 @@ struct TodoIndex {
 impl TodoProvider {
     /// Create a new TODO provider with route tree and scanner.
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
-        let tags = ctx
-            .get::<CodingConfig>()
-            .map(|c| c.todo.tags.clone())
-            .unwrap_or_default();
+        let tags = CodingServices::get(&ctx).config.todo.tags.clone();
         let scanner = TodoScanner::new(&tags);
 
         let mut b = names::handle_builder();
@@ -101,10 +97,6 @@ impl TodoProvider {
     }
 
     /// Ensure the index is populated, scanning lazily on first access.
-    #[expect(
-        clippy::expect_used,
-        reason = "returns (), not Result — programming error if missing"
-    )]
     fn ensure_index(&self, ctx: &RequestContext<'_>) {
         // Fast path: already populated.
         if self.index.read().is_some() {
@@ -113,13 +105,9 @@ impl TodoProvider {
 
         // Discover files from git index.
         let files = self.discover_files();
-        let entries_by_tag = self.scanner.scan_all(
-            &files,
-            ctx.real_fs,
-            self.ctx
-                .get::<Arc<SyntaxRegistry>>()
-                .expect("coding plugin not activated"),
-        );
+        let entries_by_tag = self
+            .scanner
+            .scan_all(&files, ctx.real_fs, &CodingServices::get(&self.ctx).syntax);
 
         let mut index = self.index.write();
         // Double-check after acquiring write lock.
@@ -133,10 +121,6 @@ impl TodoProvider {
 
     /// Get the list of files to scan from the git index.
     #[cfg(feature = "git-symbols")]
-    #[expect(
-        clippy::expect_used,
-        reason = "returns Vec, not Result — programming error if missing"
-    )]
     fn discover_files(&self) -> Vec<VfsPath> {
         let Some(repo) = self.ctx.get::<Arc<nyne_git::GitRepo>>() else {
             return Vec::new();
@@ -145,10 +129,7 @@ impl TodoProvider {
             return Vec::new();
         };
 
-        let syntax = self
-            .ctx
-            .get::<Arc<SyntaxRegistry>>()
-            .expect("coding plugin not activated");
+        let syntax = &CodingServices::get(&self.ctx).syntax;
         paths
             .into_iter()
             .filter_map(|p| {
@@ -225,7 +206,7 @@ impl Provider for TodoProvider {
 
     /// Activate when the workspace is a git repository.
     fn should_activate(&self, ctx: &ActivationContext) -> bool {
-        if !ctx.get::<CodingConfig>().is_some_and(|c| c.todo.enabled) {
+        if !CodingServices::get(ctx).config.todo.enabled {
             return false;
         }
         #[cfg(feature = "git-symbols")]

@@ -9,6 +9,7 @@ use git2::Oid;
 use nyne::dispatch::context::RequestContext;
 use nyne::node::Readable;
 use nyne::types::SymbolLineRange;
+use tracing::warn;
 
 use crate::repo::GitRepo;
 use crate::{CommitInfo, commit_info, diff_opts};
@@ -96,12 +97,24 @@ impl GitRepo {
         range: &SymbolLineRange,
         limit: usize,
     ) -> Result<Vec<HistoryEntry>> {
+        // Collect candidate entries, then release the lock so other
+        // threads can access the repo between the walk and filter steps.
+        let all = {
+            let repo = self.lock();
+            walk_file_commits(&repo, rel_path, super::log::LOG_LIMIT, commit_entry)?
+        };
+
+        // Filter by line range (re-acquires lock for diff checks).
         let repo = self.lock();
-        // Cap at the same safety limit as full history.
-        let all = walk_file_commits(&repo, rel_path, super::log::LOG_LIMIT, commit_entry)?;
         let filtered: Vec<_> = all
             .into_iter()
-            .filter(|entry| commit_touches_range(&repo, entry.oid, rel_path, range).unwrap_or(false))
+            .filter(|entry| match commit_touches_range(&repo, entry.oid, rel_path, range) {
+                Ok(touches) => touches,
+                Err(e) => {
+                    warn!(oid = %entry.oid, path = rel_path, error = %e, "commit range check failed");
+                    false
+                }
+            })
             .take(limit)
             .collect();
         Ok(filtered)
@@ -113,9 +126,13 @@ impl GitRepo {
     pub fn file_epoch_secs(&self, rel_path: &str) -> i64 {
         let result = {
             let repo = self.lock();
-            walk_file_commits(&repo, rel_path, 1, |c, _| c.time().seconds())
-                .ok()
-                .and_then(|mut v| v.pop())
+            match walk_file_commits(&repo, rel_path, 1, |c, _| c.time().seconds()) {
+                Ok(mut v) => v.pop(),
+                Err(e) => {
+                    warn!(path = rel_path, error = %e, "revwalk failed for file epoch");
+                    None
+                }
+            }
         };
         result.unwrap_or_else(|| self.head_epoch_secs())
     }
@@ -134,10 +151,12 @@ impl GitRepo {
 
     /// Unique authors sorted by commit count for a given file.
     pub(super) fn contributors(&self, rel_path: &str) -> Result<Vec<Contributor>> {
-        let repo = self.lock();
-        let authors = walk_file_commits(&repo, rel_path, usize::MAX, |commit, _| {
-            commit.author().name().unwrap_or("unknown").to_owned()
-        })?;
+        let authors = {
+            let repo = self.lock();
+            walk_file_commits(&repo, rel_path, usize::MAX, |commit, _| {
+                commit.author().name().unwrap_or("unknown").to_owned()
+            })?
+        };
 
         let mut counts: HashMap<String, usize> = HashMap::new();
         for author in authors {
@@ -154,9 +173,13 @@ impl GitRepo {
 
     /// Collect git notes from commits that touched `rel_path`.
     pub(super) fn file_notes(&self, rel_path: &str, limit: usize) -> Result<Vec<NoteEntry>> {
-        let repo = self.lock();
-        let commits = walk_file_commits(&repo, rel_path, limit, |commit, oid| (oid, commit_info(commit, oid)))?;
+        // Walk commits under lock, then release before note lookup.
+        let commits = {
+            let repo = self.lock();
+            walk_file_commits(&repo, rel_path, limit, |commit, oid| (oid, commit_info(commit, oid)))?
+        };
 
+        let repo = self.lock();
         let mut entries = Vec::new();
         for (oid, info) in commits {
             let note = match repo.find_note(None, oid) {

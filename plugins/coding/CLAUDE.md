@@ -7,9 +7,11 @@ Coding plugin — syntax decomposition, LSP integration, AI-assisted editing, de
 - **nyne** (core): Provider trait, dispatch types, templates, node abstractions
 - **nyne-plugin-git** (non-optional): `GitRepo` accessed via TypeMap for symbol-scoped git features
 
-## TypeMap Contributions
+## CodingServices
 
-During `activate()`, inserts: `Arc<SyntaxRegistry>`, `Arc<LspManager>`, `DecompositionCache`, `Arc<AnalysisEngine>`, `PassthroughProcesses`.
+`services.rs` — consolidated bundle of all plugin services. During `activate()`, a single `CodingServices` struct is inserted into the TypeMap containing: `Arc<SyntaxRegistry>`, `Arc<LspManager>`, `DecompositionCache`, `Arc<AnalysisEngine>`, `CodingConfig`. All provider code retrieves services via `CodingServices::get(ctx)` — **never** access individual types from the TypeMap directly.
+
+`PassthroughProcesses` is still inserted separately (consumed by core, not by plugin providers).
 
 ## Config
 

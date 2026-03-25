@@ -7,7 +7,8 @@ use nyne::templates::{TemplateEngine, TemplateView};
 use serde::Serialize;
 
 use crate::providers::fragment_resolver::FragmentResolver;
-use crate::syntax::analysis::{AnalysisContext, AnalysisEngine, Hint, HintView};
+use crate::services::CodingServices;
+use crate::syntax::analysis::{AnalysisContext, Hint, HintView};
 
 /// View for the file-level `HINTS.md` — runs analysis at read time.
 pub(in crate::providers::syntax) struct HintsContent {
@@ -28,13 +29,7 @@ impl TemplateView for HintsContent {
         let hints = shared
             .tree
             .as_ref()
-            .map(|tree| {
-                #[expect(clippy::expect_used, reason = "plugin activation invariant")]
-                self.activation
-                    .get::<Arc<AnalysisEngine>>()
-                    .expect("coding plugin not activated")
-                    .analyze(tree, &ctx)
-            })
+            .map(|tree| CodingServices::get(&self.activation).analysis.analyze(tree, &ctx))
             .unwrap_or_default();
 
         let (hint_rows, collapsed, suggestions) = build_view(&hints);

@@ -13,10 +13,10 @@ use nyne::node::VirtualNode;
 use nyne::provider::{Node, Nodes, Provider, ProviderId};
 use nyne::types::vfs_path::VfsPath;
 
-use crate::config::CodingConfig;
 use crate::lsp::manager::LspManager;
 use crate::lsp::uri::uri_to_file_path;
 use crate::providers::names::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
+use crate::services::CodingServices;
 
 /// Workspace symbol search provider.
 ///
@@ -92,9 +92,7 @@ impl Provider for WorkspaceSearchProvider {
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
     /// Activate when LSP workspace symbol search is available.
-    fn should_activate(&self, ctx: &ActivationContext) -> bool {
-        ctx.get::<CodingConfig>().is_some_and(|c| c.lsp.enabled)
-    }
+    fn should_activate(&self, ctx: &ActivationContext) -> bool { CodingServices::get(ctx).config.lsp.enabled }
 
     /// Dispatch children through the route tree.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes { self.routes.children(&self, ctx) }

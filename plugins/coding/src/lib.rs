@@ -22,6 +22,9 @@ mod config;
 /// Plugin registration and lifecycle implementation.
 mod plugin;
 
+/// Consolidated plugin services bundle.
+pub(crate) mod services;
+
 /// Shared test utilities and stub contexts.
 #[cfg(test)]
 pub(crate) mod test_support;

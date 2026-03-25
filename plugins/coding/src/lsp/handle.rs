@@ -18,6 +18,7 @@ use super::client::LspClient;
 use super::manager::LspManager;
 use super::query::FileQuery;
 use super::uri::byte_offset_to_position;
+use crate::services::CodingServices;
 
 /// Handle to LSP capabilities and queries for a single source file.
 pub struct LspHandle {
@@ -40,21 +41,20 @@ impl LspHandle {
     /// document is opened in the LSP server (`textDocument/didOpen`) —
     /// accessing a companion directory is the semantic equivalent of
     /// "opening" the file in an editor.
-    #[expect(clippy::expect_used, reason = "programming error if coding plugin not activated")]
     pub(crate) fn for_file(ctx: &ActivationContext, source_file: &VfsPath) -> Option<Arc<Self>> {
         let ext = source_file.extension()?;
-        let manager = ctx.get::<Arc<LspManager>>().expect("coding plugin not activated");
-        let client = manager.client_for_ext(ext)?;
+        let services = CodingServices::get(ctx);
+        let client = services.lsp.client_for_ext(ext)?;
         // Use overlay_root — LSP servers run as daemon children and see
         // the overlay merged path, not the FUSE mount.
         let lsp_file = ctx.overlay_root().join(source_file.as_str());
 
         // Ensure the document is opened in the LSP server. This is
         // idempotent — only the first call per file sends the notification.
-        manager.ensure_document_open(&lsp_file, ext);
+        services.lsp.ensure_document_open(&lsp_file, ext);
 
         Some(Arc::new(Self {
-            manager: Arc::clone(manager),
+            manager: Arc::clone(&services.lsp),
             client,
             lsp_file,
             ext: ext.to_owned(),

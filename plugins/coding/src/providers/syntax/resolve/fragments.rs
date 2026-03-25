@@ -31,7 +31,7 @@ impl SyntaxProvider {
         let mut nodes = Vec::new();
 
         // Shared resolver — single source of truth for cache + file identity.
-        let resolver = self.resolver_for(source_file)?;
+        let resolver = self.resolver_for(source_file);
 
         // The fragment's full definition (decorators + docstring + signature + body).
         // Byte range is resolved lazily at read time by SourceSlice.
@@ -119,7 +119,7 @@ impl SyntaxProvider {
             return Ok(None);
         };
 
-        let resolver = self.resolver_for(source_file)?;
+        let resolver = self.resolver_for(source_file);
 
         let nodes: Vec<VirtualNode> = parent_frag
             .children

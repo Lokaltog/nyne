@@ -12,17 +12,13 @@ use crate::providers::names::{COMPANION_SUFFIX, SUBDIR_SYMBOLS, companion_name};
 use crate::providers::syntax::SyntaxProvider;
 use crate::providers::syntax::content::actions;
 use crate::providers::syntax::content::lsp::{LspTarget, query_lsp_targets};
-use crate::syntax::decomposed::DecompositionCache;
+use crate::services::CodingServices;
 use crate::syntax::find_fragment_at_line;
 
 /// Build a companion `VfsPath` to a specific symbol in a decomposed target file.
 ///
 /// Returns `None` if the target can't be decomposed or the fragment isn't found,
 /// in which case the caller should fall back to a line-slice link.
-#[expect(
-    clippy::expect_used,
-    reason = "programming error if DecompositionCache missing after activation"
-)]
 fn resolve_symbol_link(
     provider: &SyntaxProvider,
     target_vfs: &VfsPath,
@@ -31,12 +27,7 @@ fn resolve_symbol_link(
     base: &VfsPath,
 ) -> Option<PathBuf> {
     provider.decomposer_for(target_vfs)?;
-    let target_shared = provider
-        .ctx
-        .get::<DecompositionCache>()
-        .expect("coding plugin not activated")
-        .get(target_vfs)
-        .ok()?;
+    let target_shared = CodingServices::get(&provider.ctx).decomposition.get(target_vfs).ok()?;
     let frag_path = find_fragment_at_line(&target_shared.decomposed, target_line as usize, &target_shared.source)?;
     let mut to = VfsPath::new(&format!("{}/{SUBDIR_SYMBOLS}", companion_name(rel_path))).ok()?;
     for name in &frag_path {
