@@ -8,8 +8,14 @@ struct TypeScriptLsp;
 impl LspSpec for TypeScriptLsp {
     /// File extensions handled by the TypeScript LSP.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
-    /// LSP language identifier for TypeScript.
-    const LANGUAGE_ID: &'static str = "typescript";
+
+    /// LSP language identifier: `"typescript"` for `.ts`, `"typescriptreact"` for `.tsx`.
+    fn language_id(ext: &str) -> &'static str {
+        match ext {
+            "tsx" => "typescriptreact",
+            _ => "typescript",
+        }
+    }
 
     /// Returns the typescript-language-server definition for Node.js projects.
     fn servers() -> Vec<LspServerDef> {

@@ -8,8 +8,9 @@ struct PythonLsp;
 impl LspSpec for PythonLsp {
     /// File extensions handled by the Python LSP.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
+
     /// LSP language identifier for Python.
-    const LANGUAGE_ID: &'static str = "python";
+    fn language_id(_ext: &str) -> &'static str { "python" }
 
     /// Returns the basedpyright server definition for Python projects.
     fn servers() -> Vec<LspServerDef> {

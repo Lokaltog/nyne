@@ -112,10 +112,11 @@ pub trait LspSpec: Send + Sync + 'static {
 
     /// LSP language identifier sent in `textDocument/didOpen`.
     ///
-    /// Must match the identifier expected by LSP servers (e.g., `"rust"`,
-    /// `"python"`, `"typescript"`). See the LSP specification's
+    /// Takes the file extension because some languages need different IDs
+    /// per extension (e.g., `"ts"` → `"typescript"`, `"tsx"` →
+    /// `"typescriptreact"`). See the LSP specification's
     /// "Text Document Language Identifiers" for canonical values.
-    const LANGUAGE_ID: &'static str;
+    fn language_id(ext: &str) -> &'static str;
 
     /// Default LSP server definitions for this language.
     ///
@@ -132,7 +133,7 @@ pub trait LspSpec: Send + Sync + 'static {
 /// `LanguageSpec` to `Decomposer`.
 pub struct LspLanguageDef {
     pub(crate) extensions: &'static [&'static str],
-    pub(crate) language_id: &'static str,
+    pub(crate) language_id: fn(&str) -> &'static str,
     pub(crate) servers: Vec<LspServerDef>,
 }
 
@@ -142,7 +143,7 @@ impl LspLanguageDef {
     pub(crate) fn from_spec<S: LspSpec>() -> Self {
         Self {
             extensions: S::EXTENSIONS,
-            language_id: S::LANGUAGE_ID,
+            language_id: S::language_id,
             servers: S::servers(),
         }
     }

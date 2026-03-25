@@ -204,7 +204,7 @@ fn register_ext(
     }
 
     entry.extend(lang_def.servers.iter().cloned());
-    language_ids.insert(ext.to_owned(), lang_def.language_id);
+    language_ids.insert(ext.to_owned(), (lang_def.language_id)(ext));
 }
 
 /// Emit a warning when multiple LSP specs register the same file extension.

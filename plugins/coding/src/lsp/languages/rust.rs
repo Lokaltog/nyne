@@ -8,8 +8,9 @@ struct RustLsp;
 impl LspSpec for RustLsp {
     /// File extensions handled by the Rust LSP.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
+
     /// LSP language identifier for Rust.
-    const LANGUAGE_ID: &'static str = "rust";
+    fn language_id(_ext: &str) -> &'static str { "rust" }
 
     /// Returns the rust-analyzer server definition for Cargo projects.
     fn servers() -> Vec<LspServerDef> {
