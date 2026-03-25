@@ -14,6 +14,9 @@ impl LspSpec for TypeScriptLsp {
     /// Returns the typescript-language-server definition for Node.js projects.
     fn servers() -> Vec<LspServerDef> {
         vec![
+            LspServerDef::new("tsgo")
+                .args(&["--lsp", "--stdio"])
+                .detect(|root| root.join("package.json").exists()),
             LspServerDef::new("typescript-language-server")
                 .args(&["--stdio"])
                 .detect(|root| root.join("package.json").exists()),
