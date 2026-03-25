@@ -12,7 +12,7 @@ use super::resolve::fragment_body_path;
 use crate::edit::diff_action::DiffActionNode;
 use crate::lsp::handle::LspHandle;
 use crate::providers::names::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
-use crate::syntax::decomposed::DecompositionCache;
+use crate::services::CodingServices;
 use crate::syntax::{find_fragment, find_nearest_fragment_at_line};
 
 /// Symbol lookup methods for [`SyntaxProvider`].
@@ -28,11 +28,7 @@ impl SyntaxProvider {
         let Some(stem) = name.strip_suffix(&suffix) else {
             return Ok(None);
         };
-        let shared = self
-            .ctx
-            .get::<DecompositionCache>()
-            .ok_or_else(|| eyre!("coding plugin not activated"))?
-            .get(source_file)?;
+        let shared = CodingServices::get(&self.ctx).decomposition.get(source_file)?;
         // Verify the fragment actually exists at the top level.
         let exists = shared.decomposed.iter().any(|f| f.fs_name.as_deref() == Some(stem));
         if !exists {
@@ -62,11 +58,7 @@ impl SyntaxProvider {
         let Some(_decomposer) = self.decomposer_for(source_file) else {
             return Ok(None);
         };
-        let shared = self
-            .ctx
-            .get::<DecompositionCache>()
-            .ok_or_else(|| eyre!("coding plugin not activated"))?
-            .get(source_file)?;
+        let shared = CodingServices::get(&self.ctx).decomposition.get(source_file)?;
         let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
             return Ok(None);
         };
@@ -127,11 +119,7 @@ impl SyntaxProvider {
         let Some(_decomposer) = self.decomposer_for(source_file) else {
             return Ok(None);
         };
-        let shared = self
-            .ctx
-            .get::<DecompositionCache>()
-            .ok_or_else(|| eyre!("coding plugin not activated"))?
-            .get(source_file)?;
+        let shared = CodingServices::get(&self.ctx).decomposition.get(source_file)?;
         let Some(_frag) = find_fragment(&shared.decomposed, fragment_path) else {
             return Ok(None);
         };
@@ -155,15 +143,11 @@ impl SyntaxProvider {
             .parse()
             .ok()
             .filter(|&n| n > 0)
-            .ok_or_else(|| color_eyre::eyre::eyre!("at-line: expected positive integer, got {name:?}"))?;
+            .ok_or_else(|| eyre!("at-line: expected positive integer, got {name:?}"))?;
         let Some(decomposer) = self.decomposer_for(source_file) else {
             return Ok(None);
         };
-        let shared = self
-            .ctx
-            .get::<DecompositionCache>()
-            .ok_or_else(|| eyre!("coding plugin not activated"))?
-            .get(source_file)?;
+        let shared = CodingServices::get(&self.ctx).decomposition.get(source_file)?;
         let ext = decomposer.file_extension();
 
         // at-line/ uses 1-based lines; fragment functions use 0-based.

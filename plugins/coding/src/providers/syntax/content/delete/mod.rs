@@ -2,14 +2,14 @@
 
 use std::sync::Arc;
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::Result;
 use nyne::dispatch::activation::ActivationContext;
 use nyne::dispatch::context::RequestContext;
 use nyne::types::vfs_path::VfsPath;
 
 use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOp, EditOutcome, EditPlan, FileEditResult, ValidationResult};
-use crate::syntax::decomposed::DecompositionCache;
+use crate::services::CodingServices;
 use crate::syntax::fragment::Fragment;
 
 /// Delete a symbol from its source file.
@@ -32,11 +32,7 @@ pub(in crate::providers::syntax) struct SymbolDelete {
 impl SymbolDelete {
     /// Decompose the source file and return its fragments.
     fn fragments(&self) -> Result<(String, Vec<Fragment>)> {
-        let parsed = self
-            .ctx
-            .get::<DecompositionCache>()
-            .ok_or_else(|| eyre!("coding plugin not activated"))?
-            .get(&self.source_file)?;
+        let parsed = CodingServices::get(&self.ctx).decomposition.get(&self.source_file)?;
         Ok((parsed.source.clone(), parsed.decomposed.clone()))
     }
 }
@@ -73,9 +69,9 @@ impl DiffAction for SymbolDelete {
     fn on_applied(&self, _ctx: &RequestContext<'_>) -> Result<()> {
         // Invalidate the decomposition cache so subsequent reads
         // (OVERVIEW, body, docstring, etc.) re-decompose from disk.
-        if let Some(cache) = self.ctx.get::<DecompositionCache>() {
-            cache.invalidate(&self.source_file);
-        }
+        CodingServices::get(&self.ctx)
+            .decomposition
+            .invalidate(&self.source_file);
         Ok(())
     }
 }

@@ -13,7 +13,7 @@ use super::StagingMap;
 use super::staging::StagingKey;
 use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOutcome, EditPlan, FileEditResult, ValidationResult};
-use crate::syntax::decomposed::DecompositionCache;
+use crate::services::CodingServices;
 
 /// `DiffAction` for a single symbol's staged edits.
 ///
@@ -39,10 +39,8 @@ impl DiffAction for SymbolPreview {
             return Ok(Vec::new());
         }
 
-        let parsed = self
-            .ctx
-            .get::<DecompositionCache>()
-            .ok_or_else(|| eyre!("coding plugin not activated"))?
+        let parsed = CodingServices::get(&self.ctx)
+            .decomposition
             .get(&self.key.source_file)?;
 
         let plan = batch.to_edit_plan();
@@ -110,12 +108,7 @@ impl DiffAction for CrossFilePreview {
 
         let mut results = Vec::new();
         for (source_file, plans) in &by_file {
-            let Ok(parsed) = self
-                .ctx
-                .get::<DecompositionCache>()
-                .ok_or_else(|| color_eyre::eyre::eyre!("coding plugin not activated"))?
-                .get(source_file)
-            else {
+            let Ok(parsed) = CodingServices::get(&self.ctx).decomposition.get(source_file) else {
                 continue;
             };
 
