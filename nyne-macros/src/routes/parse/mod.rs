@@ -80,7 +80,7 @@ pub enum LookupEntry {
     CatchAll { handler: Ident },
     /// `lookup "{name}.ext" => handler` — matches names with prefix/suffix stripping,
     /// injecting the captured value into route params.
-    Pattern { parsed: ParsedPattern, handler: Ident },
+    Pattern { pattern: ParsedPattern, handler: Ident },
 }
 
 /// A static file declaration: `file("name", readable_expr)` with optional modifiers.
@@ -183,7 +183,7 @@ fn parse_entries(input: ParseStream<'_>) -> Result<Vec<RouteEntry>> {
 /// (`lookup`, `file`, `children`) from segment routes (string literals). This avoids
 /// consuming tokens before knowing which entry type we're parsing.
 fn parse_entry(input: ParseStream<'_>) -> Result<RouteEntry> {
-    // Lookahead: `lookup`, `file`, `children`, or string literal
+    // Lookahead: `lookup`, `file`, `children`, `no_emit`, or string literal
     if let Some((ident, _)) = input.cursor().ident() {
         if ident == "lookup" {
             return Ok(RouteEntry::Lookup(parse_lookup(input)?));
@@ -197,9 +197,16 @@ fn parse_entry(input: ParseStream<'_>) -> Result<RouteEntry> {
             syn::parenthesized!(content in input);
             return Ok(RouteEntry::Children(content.parse()?));
         }
+        // `no_emit` is a valid segment route prefix — fall through to parse_segment_route.
+        if ident != "no_emit" {
+            return Err(syn::Error::new(
+                ident.span(),
+                format!("unknown route entry kind `{ident}`"),
+            ));
+        }
     }
 
-    // Must be a segment route
+    // Must be a segment route (string literal or `no_emit "pattern" ...`)
     Ok(RouteEntry::Segment(parse_segment_route(input)?))
 }
 
@@ -241,9 +248,12 @@ fn parse_segment_children(content: ParseStream<'_>, route: &mut SegmentRoute) ->
 /// - The optional `{ ... }` block contains nested entries (sub-segments, lookups, files).
 fn parse_segment_route(input: ParseStream<'_>) -> Result<SegmentRoute> {
     // Optional `no_emit` keyword — suppresses directory auto-emission.
-    let no_emit = matches!(input.cursor().ident(), Some((ident, _)) if ident == "no_emit")
-        && input.peek2(LitStr)
-        && input.parse::<Ident>().is_ok();
+    let no_emit = if matches!(input.cursor().ident(), Some((ident, _)) if ident == "no_emit") && input.peek2(LitStr) {
+        let _ = input.parse::<Ident>(); // consume "no_emit" (cursor confirmed it exists)
+        true
+    } else {
+        false
+    };
 
     let pattern: LitStr = input.parse()?;
     let mut route = SegmentRoute {
@@ -297,26 +307,26 @@ fn parse_lookup(input: ParseStream<'_>) -> Result<LookupEntry> {
         Ok(LookupEntry::CatchAll { handler })
     } else {
         // `lookup "pattern" => handler`
-        let pattern: LitStr = input.parse()?;
-        let parsed = parse_pattern(&pattern)?;
+        let lit: LitStr = input.parse()?;
+        let pattern = parse_pattern(&lit)?;
         let ParsedPattern::Capture {
             ref prefix, ref suffix, ..
-        } = parsed
+        } = pattern
         else {
             return Err(syn::Error::new(
-                pattern.span(),
+                lit.span(),
                 "lookup pattern must be a capture (e.g., \"{name}.ext\" or \"PREFIX:{name}\")",
             ));
         };
         if prefix.is_none() && suffix.is_none() {
             return Err(syn::Error::new(
-                pattern.span(),
+                lit.span(),
                 "lookup pattern capture must have a prefix or suffix (e.g., \"{}.ext\" or \"BLAME.md:{}\")",
             ));
         }
         input.parse::<Token![=>]>()?;
         let handler: Ident = input.parse()?;
-        Ok(LookupEntry::Pattern { parsed, handler })
+        Ok(LookupEntry::Pattern { pattern, handler })
     }
 }
 
@@ -388,8 +398,14 @@ fn parse_file_modifiers(input: ParseStream<'_>) -> Result<Vec<FileModifier>> {
 /// - Empty capture name (`{}`).
 /// - Unclosed `{` or unopened `}`.
 fn validate_braces(s: &str, lit: &LitStr) -> syn::Result<Option<(usize, usize)>> {
-    let open_count = s.chars().filter(|&c| c == '{').count();
-    let close_count = s.chars().filter(|&c| c == '}').count();
+    // Single-pass scan collecting counts and first positions of `{` and `}`.
+    let (open_count, close_count, open_pos, close_pos) =
+        s.char_indices()
+            .fold((0u32, 0u32, None, None), |(oc, cc, op, cp), (i, ch)| match ch {
+                '{' => (oc + 1, cc, op.or(Some(i)), cp),
+                '}' => (oc, cc + 1, op, cp.or(Some(i))),
+                _ => (oc, cc, op, cp),
+            });
 
     if open_count == 0 && close_count == 0 {
         return Ok(None);
@@ -408,11 +424,7 @@ fn validate_braces(s: &str, lit: &LitStr) -> syn::Result<Option<(usize, usize)>>
         ));
     }
 
-    // At this point we have at most one of each
-    let open = s.find('{');
-    let close = s.find('}');
-
-    match (open, close) {
+    match (open_pos, close_pos) {
         (Some(o), Some(c)) => {
             if c < o {
                 return Err(syn::Error::new(
@@ -436,7 +448,7 @@ fn validate_braces(s: &str, lit: &LitStr) -> syn::Result<Option<(usize, usize)>>
             lit.span(),
             "unopened `}` in pattern — expected `{name}`",
         )),
-        (None, None) => Ok(None), // already handled above, but for completeness
+        (None, None) => unreachable!("both counts are non-zero but neither char was found"),
     }
 }
 

@@ -41,20 +41,32 @@ fn validate_entries(entries: &[RouteEntry]) -> Result<()> {
     )
 }
 
+/// Per-level accumulator for segment validation.
+///
+/// Tracks the spans of pattern kinds seen so far at a single nesting level,
+/// enabling duplicate/ambiguity detection across sibling segments.
+struct ValidationState {
+    exact_names: HashMap<String, Span>,
+    capture_span: Option<Span>,
+    rest_span: Option<Span>,
+    glob_span: Option<Span>,
+}
 /// Validate a list of segment routes for duplicates and ambiguous patterns.
 ///
-/// Initializes per-kind tracking state (exact name set, capture/rest/glob spans) and
-/// validates each segment against it. This enforces the rule that at any given nesting
-/// level there can be at most one capture, one rest capture, and one glob — but any
-/// number of distinct exact segments.
+/// Initializes per-kind tracking state and validates each segment against it.
+/// This enforces the rule that at any given nesting level there can be at most
+/// one capture, one rest capture, and one glob — but any number of distinct
+/// exact segments.
 fn validate_segments(segments: &[&SegmentRoute]) -> Result<()> {
-    let mut exact_names: HashMap<String, Span> = HashMap::new();
-    let mut capture_span: Option<Span> = None;
-    let mut rest_span: Option<Span> = None;
-    let mut glob_span: Option<Span> = None;
+    let mut state = ValidationState {
+        exact_names: HashMap::new(),
+        capture_span: None,
+        rest_span: None,
+        glob_span: None,
+    };
 
     for seg in segments {
-        validate_segment(seg, &mut exact_names, &mut capture_span, &mut rest_span, &mut glob_span)?;
+        validate_segment(seg, &mut state)?;
     }
     Ok(())
 }
@@ -71,30 +83,24 @@ fn validate_segments(segments: &[&SegmentRoute]) -> Result<()> {
 ///
 /// Lookup patterns are not validated here; they are checked during parsing to ensure
 /// they are `Capture` variants with at least a prefix or suffix.
-fn validate_segment(
-    seg: &SegmentRoute,
-    exact_names: &mut HashMap<String, Span>,
-    capture_span: &mut Option<Span>,
-    rest_span: &mut Option<Span>,
-    glob_span: &mut Option<Span>,
-) -> Result<()> {
+fn validate_segment(seg: &SegmentRoute, state: &mut ValidationState) -> Result<()> {
     match &seg.parsed_pattern {
         ParsedPattern::Exact(name) => {
-            if let Some(&first) = exact_names.get(name.as_str()) {
+            if let Some(&first) = state.exact_names.get(name.as_str()) {
                 let mut err = syn::Error::new(seg.span, format!("duplicate exact segment \"{name}\" at this level"));
                 err.combine(syn::Error::new(first, "first defined here"));
                 return Err(err);
             }
-            exact_names.insert(name.clone(), seg.span);
+            state.exact_names.insert(name.clone(), seg.span);
         }
         ParsedPattern::Capture { .. } => {
-            reject_duplicate(capture_span, seg.span, "captures")?;
+            reject_duplicate(&mut state.capture_span, seg.span, "captures")?;
         }
         ParsedPattern::RestCapture { .. } => {
-            reject_duplicate(rest_span, seg.span, "rest captures")?;
+            reject_duplicate(&mut state.rest_span, seg.span, "rest captures")?;
         }
         ParsedPattern::Glob => {
-            reject_duplicate(glob_span, seg.span, "globs")?;
+            reject_duplicate(&mut state.glob_span, seg.span, "globs")?;
         }
     }
 

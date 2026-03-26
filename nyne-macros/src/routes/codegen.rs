@@ -5,7 +5,7 @@
 //! function that emits the corresponding builder method — the structure of this module
 //! directly mirrors the structure of the AST types.
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::Result;
 
@@ -29,6 +29,7 @@ pub fn generate(input: &RoutesInput) -> Result<TokenStream> {
             use ::nyne::dispatch::routing::builder::{RouteTreeBuilder, RouteNodeBuilder};
             use ::nyne::dispatch::routing::ctx::RouteCtx;
             use ::nyne::dispatch::routing::params::RouteParams;
+            use ::nyne::dispatch::routing::tree::{IntoNode, IntoNodes};
             use ::nyne::node::VirtualNode;
             use ::nyne::provider::{Node, Nodes};
 
@@ -50,15 +51,25 @@ fn generate_entries(entries: &[RouteEntry], ty: &syn::Type) -> Result<Vec<TokenS
     for entry in entries {
         let tokens = match entry {
             RouteEntry::Segment(seg) => generate_segment(seg, ty)?,
-            RouteEntry::Children(handler) => quote! {
-                .children(|p: &#ty, ctx: &RouteCtx<'_>| p.#handler(ctx))
-            },
-            RouteEntry::Lookup(lookup) => generate_root_lookup(lookup, ty)?,
+            RouteEntry::Children(handler) => {
+                let head = children_closure_head(ty);
+                quote! { .children(#head p.#handler(ctx)) }
+            }
+            RouteEntry::Lookup(lookup) => generate_root_lookup(lookup, ty),
             RouteEntry::File(file) => generate_file(file),
         };
         calls.push(tokens);
     }
     Ok(calls)
+}
+/// Emit the parameter list for a `.children(...)` closure: `|p: &Ty, ctx: &RouteCtx<'_>|`.
+fn children_closure_head(ty: &syn::Type) -> TokenStream {
+    quote! { |p: &#ty, ctx: &RouteCtx<'_>| }
+}
+
+/// Emit the parameter list for a `.lookup(...)` closure: `|p: &Ty, ctx: &RouteCtx<'_>, name: &str|`.
+fn lookup_closure_head(ty: &syn::Type) -> TokenStream {
+    quote! { |p: &#ty, ctx: &RouteCtx<'_>, name: &str| }
 }
 
 /// Generate a `.route(...)` builder call for a single segment.
@@ -71,7 +82,8 @@ fn generate_segment(seg: &SegmentRoute, ty: &syn::Type) -> Result<TokenStream> {
     let builder_ctor = pattern_to_builder(&seg.parsed_pattern);
 
     let children_call = seg.children_handler.as_ref().map(|handler| {
-        quote! { .children(|p: &#ty, ctx: &RouteCtx<'_>| ::nyne::dispatch::routing::tree::IntoNodes::into_nodes(p.#handler(ctx))) }
+        let head = children_closure_head(ty);
+        quote! { .children(#head IntoNodes::into_nodes(p.#handler(ctx))) }
     });
 
     let lookup_call = generate_lookup_closure(&seg.lookups, ty)?;
@@ -150,8 +162,8 @@ fn generate_lookup_closure(lookups: &[LookupEntry], ty: &syn::Type) -> Result<Op
                 }
                 catch_all = Some(handler);
             }
-            LookupEntry::Pattern { parsed, handler, .. } => {
-                pattern_arms.push(generate_lookup_pattern_arm(parsed, handler)?);
+            LookupEntry::Pattern { pattern, handler, .. } => {
+                pattern_arms.push(generate_lookup_pattern_arm(pattern, handler));
             }
         }
     }
@@ -160,19 +172,21 @@ fn generate_lookup_closure(lookups: &[LookupEntry], ty: &syn::Type) -> Result<Op
     if pattern_arms.is_empty()
         && let Some(handler) = catch_all
     {
+        let head = lookup_closure_head(ty);
         return Ok(Some(
-            quote! { .lookup(|p: &#ty, ctx: &RouteCtx<'_>, name: &str| ::nyne::dispatch::routing::tree::IntoNode::into_node(p.#handler(ctx, name))) },
+            quote! { .lookup(#head IntoNode::into_node(p.#handler(ctx, name))) },
         ));
     }
 
     let fallback = if let Some(handler) = catch_all {
-        quote! { ::nyne::dispatch::routing::tree::IntoNode::into_node(p.#handler(ctx, name)) }
+        quote! { IntoNode::into_node(p.#handler(ctx, name)) }
     } else {
         quote! { Ok(None) }
     };
 
+    let head = lookup_closure_head(ty);
     Ok(Some(quote! {
-        .lookup(|p: &#ty, ctx: &RouteCtx<'_>, name: &str| {
+        .lookup(#head {
             #(#pattern_arms)*
             #fallback
         })
@@ -181,22 +195,19 @@ fn generate_lookup_closure(lookups: &[LookupEntry], ty: &syn::Type) -> Result<Op
 
 /// Generate an `if let` arm that strips a prefix/suffix from the lookup name and dispatches.
 ///
-/// Produces an `if let Some(__captured) = name.strip_prefix(...).and_then(...)` block
-/// that extracts the captured portion of a lookup name. When matched, it clones the
-/// current route params, inserts the captured value under the pattern's capture name,
-/// and calls the handler with the augmented context.
+/// Produces an `if let Some(_nyne_captured) = name.strip_prefix(...).and_then(...)`
+/// block that extracts the captured portion of a lookup name. When matched, it clones
+/// the current route params, inserts the captured value under the pattern's capture
+/// name, and calls the handler with the augmented context.
 ///
-/// The guard `!__captured.is_empty()` prevents matching when the capture group would be
-/// empty (e.g., a bare prefix with nothing after it), which would be ambiguous.
+/// The guard `!_nyne_captured.is_empty()` prevents matching when the capture group
+/// would be empty (e.g., a bare prefix with nothing after it), which would be ambiguous.
 ///
 /// The pattern is pre-validated during parsing to be a `Capture` with at least a prefix
 /// or suffix — the `Exact`/`Glob`/`RestCapture` cases are internal errors.
-fn generate_lookup_pattern_arm(pattern: &ParsedPattern, handler: &syn::Ident) -> Result<TokenStream> {
+fn generate_lookup_pattern_arm(pattern: &ParsedPattern, handler: &syn::Ident) -> TokenStream {
     let ParsedPattern::Capture { name, prefix, suffix } = pattern else {
-        return Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "internal: lookup pattern must be a Capture variant",
-        ));
+        unreachable!("lookup pattern must be a Capture variant (validated during parsing)");
     };
 
     // Build the match expression: strip prefix then suffix (or just one).
@@ -207,23 +218,25 @@ fn generate_lookup_pattern_arm(pattern: &ParsedPattern, handler: &syn::Ident) ->
         (Some(pfx), None) => quote! { name.strip_prefix(#pfx) },
         (None, Some(sfx)) => quote! { name.strip_suffix(#sfx) },
         (None, None) => {
-            return Err(syn::Error::new(
-                proc_macro2::Span::call_site(),
-                "internal: lookup capture pattern must have a prefix or suffix",
-            ));
+            unreachable!("lookup capture pattern must have a prefix or suffix (validated during parsing)");
         }
     };
 
-    Ok(quote! {
-        if let Some(__captured) = #strip_expr {
-            if !__captured.is_empty() {
-                let mut __params = ctx.route_params().clone();
-                __params.insert_single(#name, __captured.to_owned());
-                let __rctx = RouteCtx::new(ctx.request(), __params);
-                return ::nyne::dispatch::routing::tree::IntoNode::into_node(p.#handler(&__rctx));
+    let mixed = Span::mixed_site();
+    let captured = Ident::new("_nyne_captured", mixed);
+    let params = Ident::new("_nyne_params", mixed);
+    let rctx = Ident::new("_nyne_rctx", mixed);
+
+    quote! {
+        if let Some(#captured) = #strip_expr {
+            if !#captured.is_empty() {
+                let mut #params = ctx.route_params().clone();
+                #params.insert_single(#name, #captured.to_owned());
+                let #rctx = RouteCtx::new(ctx.request(), #params);
+                return IntoNode::into_node(p.#handler(&#rctx));
             }
         }
-    })
+    }
 }
 
 /// Convert an `Option<String>` reference to its token stream representation.
@@ -244,19 +257,15 @@ fn option_to_tokens(opt: Option<&String>) -> TokenStream {
 /// [`generate_lookup_closure`]), root lookups appear as standalone `.lookup()`
 /// calls on the top-level builder. A catch-all directly delegates to the handler;
 /// a pattern-based lookup wraps the pattern arm with an `Ok(None)` fallback.
-fn generate_root_lookup(lookup: &LookupEntry, ty: &syn::Type) -> Result<TokenStream> {
+fn generate_root_lookup(lookup: &LookupEntry, ty: &syn::Type) -> TokenStream {
+    let head = lookup_closure_head(ty);
     match lookup {
-        LookupEntry::CatchAll { handler } => Ok(quote! {
-            .lookup(|p: &#ty, ctx: &RouteCtx<'_>, name: &str| ::nyne::dispatch::routing::tree::IntoNode::into_node(p.#handler(ctx, name)))
-        }),
-        LookupEntry::Pattern { parsed, handler, .. } => {
-            let arm = generate_lookup_pattern_arm(parsed, handler)?;
-            Ok(quote! {
-                .lookup(|p: &#ty, ctx: &RouteCtx<'_>, name: &str| {
-                    #arm
-                    Ok(None)
-                })
-            })
+        LookupEntry::CatchAll { handler } => quote! {
+            .lookup(#head IntoNode::into_node(p.#handler(ctx, name)))
+        },
+        LookupEntry::Pattern { pattern, handler, .. } => {
+            let arm = generate_lookup_pattern_arm(pattern, handler);
+            quote! { .lookup(#head { #arm Ok(None) }) }
         }
     }
 }
