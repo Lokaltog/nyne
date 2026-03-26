@@ -23,6 +23,10 @@ Modules may only import from their own tier or lower.
 
 Prefer re-exports from `mod.rs`. Reaching into implementation submodules of another module is a layering violation.
 
+## Multi-Provider Capability Merge
+
+When multiple providers emit a node with the same name, the dispatch layer merges their capabilities via `VirtualNode::merge_capabilities_from()`. Non-contested capabilities (different slots) are combined. Contested capabilities (same slot from 2+ providers) use the existing `on_conflict` protocol (yield/force). This enables plugin composition: e.g. SyntaxProvider emits `Foo@/` with `Unlinkable`, LspProvider emits `Foo@/` with `Renameable` → merged node gets both.
+
 ## CLI Output
 
 All CLI terminal output goes through `cli::output` — the SSOT for terminal access. Import `Term`, `style`, and `term()` from `super::output`, never use `println!` or import `console::` directly in CLI modules.

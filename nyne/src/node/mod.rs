@@ -544,4 +544,60 @@ mod tests {
         assert_eq!(node.visibility(), Visibility::Hidden);
         assert_eq!(node.name(), "symbols");
     }
+
+    /// Merge takes capabilities from other when self lacks them.
+    #[test]
+    fn merge_fills_missing_capabilities() {
+        let mut base = VirtualNode::directory("Foo@")
+            .with_unlinkable(StubUnlinkable);
+        let other = VirtualNode::directory("Foo@")
+            .with_renameable(StubRenameable);
+
+        let contested = base.merge_capabilities_from(other);
+
+        assert!(contested.is_empty(), "no contested caps");
+        assert!(base.renameable().is_some(), "renameable merged in");
+        assert!(base.unlinkable().is_some(), "unlinkable preserved");
+    }
+
+    /// Merge reports contested capabilities when both nodes have the same slot.
+    #[test]
+    fn merge_reports_contested_capabilities() {
+        let mut base = VirtualNode::directory("Foo@")
+            .with_renameable(StubRenameable);
+        let other = VirtualNode::directory("Foo@")
+            .with_renameable(StubRenameable);
+
+        let contested = base.merge_capabilities_from(other);
+
+        assert_eq!(contested, vec!["renameable"]);
+        // base keeps its own renameable (first-writer-wins for contested slots)
+        assert!(base.renameable().is_some());
+    }
+
+    /// Merge combines inline fields (readable, writable) and extension fields.
+    #[test]
+    fn merge_combines_inline_and_extension_capabilities() {
+        let mut base = VirtualNode::file("test", StaticContent(b"base"));
+        let other = VirtualNode::directory("test")
+            .with_unlinkable(StubUnlinkable)
+            .with_renameable(StubRenameable);
+
+        let contested = base.merge_capabilities_from(other);
+
+        assert!(contested.is_empty());
+        assert!(base.readable().is_some(), "readable preserved from base");
+        assert!(base.unlinkable().is_some(), "unlinkable merged from other");
+        assert!(base.renameable().is_some(), "renameable merged from other");
+    }
+
+    struct StubRenameable;
+    impl Renameable for StubRenameable {
+        fn rename(&self, _ctx: &crate::dispatch::context::RenameContext<'_>) -> color_eyre::eyre::Result<()> { Ok(()) }
+    }
+
+    struct StubUnlinkable;
+    impl Unlinkable for StubUnlinkable {
+        fn unlink(&self, _ctx: &crate::dispatch::context::RequestContext<'_>) -> color_eyre::eyre::Result<()> { Ok(()) }
+    }
 }
