@@ -128,8 +128,9 @@ impl FragmentView {
     }
 }
 
-/// Build a minijinja `Value` list of `FragmentView` objects, skipping
-/// code blocks, structural fragments (docstrings, imports, decorators),
+/// Build a minijinja `Value` list of `FragmentView` objects.
+///
+/// Skips code blocks, structural fragments (docstrings, imports, decorators),
 /// and fragments without a filesystem name (hidden by conflict resolution).
 pub fn fragment_list(fragments: &[Fragment], shared: &Arc<DecomposedSource>) -> Value {
     Value::from(

@@ -9,7 +9,7 @@ use nyne::provider::Nodes;
 use nyne::types::vfs_path::VfsPath;
 use nyne_source::providers::names::{COMPANION_SUFFIX, SUBDIR_SYMBOLS, companion_name};
 use nyne_source::services::SourceServices;
-use nyne_source::syntax::find_fragment_at_line;
+use nyne_source::syntax::{find_fragment, find_fragment_at_line};
 
 use crate::lsp::handle::LspHandle;
 use crate::providers::content::{LspTarget, actions, query_lsp_targets};
@@ -93,7 +93,7 @@ pub fn resolve_lsp_symlink_dir(
         return Ok(None);
     };
     let shared = services.decomposition.get(source_file)?;
-    let Some(frag) = nyne_source::syntax::find_fragment(&shared.decomposed, fragment_path) else {
+    let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
         return Ok(None);
     };
 
@@ -152,17 +152,13 @@ fn build_target_nodes(ctx: &ActivationContext, targets: &[LspTarget], root: &Pat
 ///
 /// Eagerly fetches code actions from the LSP server and builds
 /// `.diff` file nodes for each one.
-pub fn resolve_actions_dir(
-    ctx: &Arc<ActivationContext>,
-    source_file: &VfsPath,
-    fragment_path: &[String],
-) -> Nodes {
+pub fn resolve_actions_dir(ctx: &Arc<ActivationContext>, source_file: &VfsPath, fragment_path: &[String]) -> Nodes {
     let services = SourceServices::get(ctx);
     let Some(_decomposer) = services.syntax.decomposer_for(source_file) else {
         return Ok(None);
     };
     let shared = services.decomposition.get(source_file)?;
-    let Some(frag) = nyne_source::syntax::find_fragment(&shared.decomposed, fragment_path) else {
+    let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
         return Ok(None);
     };
 

@@ -10,7 +10,7 @@ pub mod activation;
 pub mod context;
 /// Cache invalidation traits, events, and kernel notification.
 pub mod invalidation;
-/// Resolver trait for virtual path-to-node resolution with recursion guard.
+/// Virtual path-to-node resolution with recursion guard.
 pub mod resolver;
 /// Hierarchical route tree matching and dispatch for provider namespaces.
 pub mod routing;

@@ -137,19 +137,18 @@ impl DiffAction for CrossFilePreview {
 
     /// Return a summary header with total action and file counts.
     fn header_lines(&self) -> Vec<String> {
-        let (action_count, file_count) = {
-            let map = self.batches.read();
-            let mut actions = 0;
-            let mut seen_files = HashSet::new();
-            for (key, batch) in map.iter() {
-                if batch.is_empty() {
-                    continue;
-                }
-                actions += batch.actions().count();
-                seen_files.insert(&key.source_file);
+        let map = self.batches.read();
+        let mut actions = 0;
+        let mut seen_files = HashSet::new();
+        for (key, batch) in map.iter() {
+            if batch.is_empty() {
+                continue;
             }
-            (actions, seen_files.len())
-        };
+            actions += batch.actions().count();
+            seen_files.insert(&key.source_file);
+        }
+        let (action_count, file_count) = (actions, seen_files.len());
+        drop(map);
         vec![format!(
             "Batch edit: {action_count} action(s) across {file_count} file(s)"
         )]

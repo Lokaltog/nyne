@@ -548,10 +548,8 @@ mod tests {
     /// Merge takes capabilities from other when self lacks them.
     #[test]
     fn merge_fills_missing_capabilities() {
-        let mut base = VirtualNode::directory("Foo@")
-            .with_unlinkable(StubUnlinkable);
-        let other = VirtualNode::directory("Foo@")
-            .with_renameable(StubRenameable);
+        let mut base = VirtualNode::directory("Foo@").with_unlinkable(StubUnlinkable);
+        let other = VirtualNode::directory("Foo@").with_renameable(StubRenameable);
 
         let contested = base.merge_capabilities_from(other);
 
@@ -563,10 +561,8 @@ mod tests {
     /// Merge reports contested capabilities when both nodes have the same slot.
     #[test]
     fn merge_reports_contested_capabilities() {
-        let mut base = VirtualNode::directory("Foo@")
-            .with_renameable(StubRenameable);
-        let other = VirtualNode::directory("Foo@")
-            .with_renameable(StubRenameable);
+        let mut base = VirtualNode::directory("Foo@").with_renameable(StubRenameable);
+        let other = VirtualNode::directory("Foo@").with_renameable(StubRenameable);
 
         let contested = base.merge_capabilities_from(other);
 

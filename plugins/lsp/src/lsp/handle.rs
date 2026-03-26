@@ -51,7 +51,8 @@ impl LspHandle {
     /// "opening" the file in an editor.
     pub(crate) fn for_file(ctx: &ActivationContext, source_file: &VfsPath) -> Option<Arc<Self>> {
         let ext = source_file.extension()?;
-        let lsp = ctx.get::<Arc<LspManager>>()?.clone();
+        let lsp = Arc::clone(ctx.get::<Arc<LspManager>>()?);
+
         let client = lsp.client_for_ext(ext)?;
         // Use overlay_root — LSP servers run as daemon children and see
         // the overlay merged path, not the FUSE mount.

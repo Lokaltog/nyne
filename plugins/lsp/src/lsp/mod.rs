@@ -57,6 +57,7 @@ impl LspRegistry {
     /// (defaults, user, project) because `deep_merge` concatenates arrays.
     /// Later entries override earlier ones (per field), and disabled
     /// entries are filtered out.
+    #[expect(clippy::excessive_nesting, reason = "entry > extensions > ext is inherent")]
     pub(crate) fn build_with_config(config: &LspConfig) -> Self {
         let syntax = SyntaxRegistry::global();
         let resolved = Self::resolve_servers(&config.servers);
@@ -76,11 +77,9 @@ impl LspRegistry {
 
             let def = LspServerDef::from_entry(entry);
 
-            let supported_exts = extensions.iter().filter(|e| syntax.get(e.as_str()).is_some());
-            for ext in supported_exts {
+            for ext in extensions.iter().filter(|e| syntax.get(e.as_str()).is_some()) {
                 servers.entry(ext.clone()).or_default().push(def.clone());
-                let id = entry.language_ids.as_ref().and_then(|ids| ids.resolve(ext));
-                if let Some(id) = id {
+                if let Some(id) = entry.language_ids.as_ref().and_then(|ids| ids.resolve(ext)) {
                     language_ids.entry(ext.clone()).or_insert_with(|| id.to_owned());
                 }
             }

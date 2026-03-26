@@ -4,7 +4,7 @@
 //! edit planning/splicing, and all providers that depend on
 //! source-code understanding.
 
-/// Batch edit staging, splice application, and diff-based code actions.
+/// Batch edit staging and diff-based code actions.
 pub mod edit;
 
 /// FUSE providers that expose decomposed source code.

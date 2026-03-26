@@ -23,10 +23,10 @@ use crate::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC};
 pub trait FileRenameHook: Send + Sync {
     /// Called **before** the actual file rename. The implementation may
     /// apply workspace edits (e.g. import-path updates) in response.
-    fn will_rename(&self, old: &std::path::Path, new: &std::path::Path) -> eyre::Result<()>;
+    fn will_rename(&self, old: &Path, new: &Path) -> eyre::Result<()>;
 
     /// Called **after** the file rename has completed on disk.
-    fn did_rename(&self, old: &std::path::Path, new: &std::path::Path);
+    fn did_rename(&self, old: &Path, new: &Path);
 }
 
 /// Content reading, writing, and rendering for decomposed symbols.
@@ -99,6 +99,8 @@ impl SyntaxProvider {
     }
 }
 
+use std::path::Path;
+
 use nyne::{companion_children, companion_lookup, source_file};
 
 /// Route tree handler methods — thin wrappers that extract params and
@@ -110,6 +112,7 @@ impl SyntaxProvider {
     }
 
     /// Lookup a child node in the companion root.
+    #[expect(clippy::unused_self, clippy::unnecessary_wraps, reason = "route handler signature")]
     const fn lookup_companion_root(&self, _ctx: &RouteCtx<'_>, _name: &str) -> Node {
         // `lines` is in children (resolved); `lines:M-N` via LineSlice plugin derivation.
         Ok(None)
