@@ -1,9 +1,20 @@
-//! Analysis rule: detect structs with too many methods.
+//! Analysis rule: detect impl/class blocks with too many methods.
+//!
+//! Triggers when an `impl` block (Rust), class body, or equivalent contains
+//! more than `MAX_METHODS` (15) function definitions. Large impl blocks
+//! suggest the type has too many responsibilities.
+//!
+//! **Why it matters:** Types with many methods are hard to understand and
+//! test. Consider splitting into focused traits/interfaces, using extension
+//! traits, or decomposing into helper types.
+//!
+//! **Example trigger:** An `impl Foo` block with 16+ methods will trigger.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "too-many-methods";
 /// Maximum methods in an impl/class block before triggering.
 const MAX_METHODS: usize = 15;

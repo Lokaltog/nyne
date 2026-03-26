@@ -30,5 +30,8 @@ impl Plugin for CorePlugin {
 
 #[allow(unsafe_code)]
 #[distributed_slice(PLUGINS)]
-/// Core plugin factory registered in the global plugin slice.
+/// Core plugin factory registered in the global [`PLUGINS`](crate::plugin::PLUGINS) distributed slice.
+///
+/// Discovered at link time alongside external plugin crates — the dispatch
+/// layer treats core providers identically to plugin-contributed providers.
 static CORE_PLUGIN: PluginFactory = || Box::new(CorePlugin);

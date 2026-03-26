@@ -119,8 +119,13 @@ impl OwnedNode {
 }
 
 /// A single provider's force response in a naming conflict.
+///
+/// When a provider returns [`ConflictResolution::Force`], it supplies
+/// replacement nodes that should shadow any competing entries.
 struct ForceResponse {
+    /// The provider that issued the force.
     provider_id: ProviderId,
+    /// Replacement nodes the provider wants to own under the contested name.
     nodes: Vec<VirtualNode>,
 }
 

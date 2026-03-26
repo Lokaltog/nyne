@@ -1,4 +1,10 @@
 //! Tree-sitter parsing utilities and code fragment construction.
+//!
+//! Provides [`TsNode`] (an ergonomic wrapper around `tree_sitter::Node`),
+//! shared helpers for collecting byte ranges (doc comments, imports,
+//! decorators), and [`TreeSitterParser`] which encapsulates the thread-safe
+//! parse-and-decompose pipeline. Language decomposers depend on this module
+//! for all tree-sitter interaction.
 
 use std::ops::Range;
 use std::str::from_utf8;
@@ -301,14 +307,17 @@ pub struct TreeSitterParser {
 
 /// Core parsing and decomposition methods for `TreeSitterParser`.
 impl TreeSitterParser {
-    /// Create a new parser for the given tree-sitter language.
+    /// Create a new tree-sitter parser for the given language grammar.
+    ///
+    /// The parser is wrapped in a `Mutex` so the same `TreeSitterParser`
+    /// instance can be used from multiple threads (tree-sitter parsers
+    /// themselves are not `Sync`).
     ///
     /// # Panics
     ///
     /// Panics if the language cannot be set (indicates a build/version
-    /// mismatch).
+    /// mismatch between the linked grammar and the tree-sitter runtime).
     #[allow(clippy::expect_used)] // language is a linked grammar, failure = build mismatch
-    /// Creates a new tree-sitter parser for the given language grammar.
     pub fn new(language: &tree_sitter::Language) -> Self {
         let mut parser = tree_sitter::Parser::new();
         parser

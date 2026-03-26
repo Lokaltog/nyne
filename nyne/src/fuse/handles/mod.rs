@@ -149,6 +149,7 @@ impl ContentBuffer {
         }
     }
 
+    /// Returns the byte length of the buffer contents.
     fn len(&self) -> usize { self.as_bytes().len() }
 
     /// Clone the buffer contents to a `Vec<u8>`.

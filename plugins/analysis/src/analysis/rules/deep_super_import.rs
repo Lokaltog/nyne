@@ -6,6 +6,7 @@
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "deep-super-import";
 /// Analysis rule that detects deep `super::` import chains.
 struct DeepSuperImport;

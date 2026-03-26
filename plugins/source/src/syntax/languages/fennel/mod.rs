@@ -116,7 +116,9 @@ fn extract_binding_name(node: TsNode<'_>) -> Option<String> {
 /// Check if a \``local_form`\` or \``var_form`\` is a require binding.
 ///
 /// Matches \`(local name (require :module))\` — the binding pair's value
-/// is a list whose first symbol is \`require\`.
+/// is a list whose first symbol is \`require\`. These are excluded from
+/// fragment extraction because they are effectively import statements,
+/// not user-defined symbols.
 fn is_require_binding(node: TsNode<'_>) -> bool {
     let Some(binding_pair) = node.children().into_iter().find(|c| c.kind() == "binding_pair") else {
         return false;

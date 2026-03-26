@@ -1,4 +1,9 @@
 //! Prelude of common imports for language decomposer implementations.
+//!
+//! Re-exports the types and helpers every `LanguageSpec` impl needs:
+//! fragment types, naming/conflict strategies, parser utilities, spec traits,
+//! and the `register_syntax!` / `symbol_map!` macros. Language modules use
+//! `use super::prelude::*;` to get a consistent import set.
 
 pub(super) use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata, SymbolKind};
 pub(super) use crate::syntax::fs_mapping::{ConflictStrategy, NamingStrategy};

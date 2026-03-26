@@ -1,4 +1,12 @@
-//! Registry of activated providers and scripts.
+//! Registry of activated providers, built via the two-phase plugin lifecycle.
+//!
+//! Plugins are discovered from the [`PLUGINS`](crate::plugin::PLUGINS) distributed slice
+//! at mount time. Phase 1 lets each plugin insert shared services into a mutable
+//! [`ActivationContext`]. Phase 2 freezes the context and asks each plugin to
+//! create its providers, retaining only those that pass activation checks.
+//!
+//! The resulting [`ProviderRegistry`] is immutable and shared across all FUSE
+//! threads for the lifetime of the mount.
 
 use std::path::Path;
 

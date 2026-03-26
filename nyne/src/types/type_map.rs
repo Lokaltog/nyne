@@ -1,13 +1,24 @@
 //! `TypeId`-keyed heterogeneous map for typed property storage.
+//!
+//! Uses type erasure (`Box<dyn Any>`) so that plugins can attach arbitrary
+//! data to nodes and contexts without the core library knowing concrete
+//! types at compile time. The `TypeId` key guarantees that `get::<T>` only
+//! succeeds when a `T` was previously inserted — no stringly-typed lookups,
+//! no downcast guesswork.
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 
 /// A `TypeId`-keyed heterogeneous map.
 ///
-/// Stores at most one value per type. Used by [`VirtualNode`](crate::node::VirtualNode)
-/// for provider-specific properties and by [`PipelineContext`](crate::dispatch::context::PipelineContext)
+/// Stores at most one value per concrete type. Used by
+/// [`VirtualNode`](crate::node::VirtualNode) for provider-specific properties
+/// and by [`PipelineContext`](crate::dispatch::context::PipelineContext)
 /// for middleware-to-middleware communication.
+///
+/// Values must be `Send + Sync + 'static`, so the map itself is safe to share
+/// across threads behind an `Arc`. The map is **not** internally synchronized —
+/// callers must provide their own locking if concurrent mutation is needed.
 #[derive(Default)]
 pub struct TypeMap {
     inner: HashMap<TypeId, Box<dyn Any + Send + Sync>>,

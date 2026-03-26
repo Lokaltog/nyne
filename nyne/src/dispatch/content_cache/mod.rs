@@ -1,5 +1,10 @@
 //! L2 content cache for file data and generated content.
 //!
+//! Caches the byte content of virtual files by inode, avoiding redundant
+//! re-generation on repeated reads. Each entry records its source file
+//! generation at cache time; when the source is modified, the entry is
+//! automatically evicted on next access (lazy invalidation).
+//!
 //! Includes [`FileGenerations`] — a monotonic per-file generation counter
 //! used by both L1 and L2 caches to detect staleness after writes.
 

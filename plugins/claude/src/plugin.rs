@@ -13,9 +13,15 @@ use crate::provider::{ClaudeProvider, script_entries};
 /// Entry point for the claude plugin.
 struct ClaudePlugin;
 
+/// Plugin lifecycle for Claude Code integration.
+///
+/// Registers hook scripts (pre/post tool use, session start, stop, statusline)
+/// and creates the [`ClaudeProvider`] which contributes the `.claude/` virtual
+/// directory with settings, skills, and system prompt.
 impl Plugin for ClaudePlugin {
     fn id(&self) -> &'static str { "claude" }
 
+    /// Register hook scripts based on per-hook toggle configuration.
     fn scripts(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<ScriptEntry>> {
         Ok(script_entries(&Config::from_plugin_config(ctx.plugin_config("claude"))))
     }

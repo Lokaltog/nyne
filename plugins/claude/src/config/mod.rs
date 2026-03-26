@@ -13,6 +13,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[allow(clippy::struct_field_names)] // hook_config is the natural TOML key
+/// Configuration for the Claude Code integration plugin.
+///
+/// Deserialized from `[plugin.claude]` in the nyne config file.
+/// Controls the master enable/disable toggle, per-hook toggles,
+/// and hook-specific behavior settings.
 pub struct Config {
     /// Master toggle — `false` disables the entire `.claude/` directory
     /// and all associated hooks/scripts.
@@ -28,6 +33,7 @@ pub struct Config {
     pub hook_config: HookConfig,
 }
 
+/// Defaults: enabled with all hooks active and builtin hook behavior.
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -38,6 +44,7 @@ impl Default for Config {
     }
 }
 
+/// Deserialization methods for [`Config`].
 impl Config {
     /// Deserialize from the plugin config section, falling back to defaults.
     pub fn from_plugin_config(section: Option<&serde_json::Value>) -> Self {

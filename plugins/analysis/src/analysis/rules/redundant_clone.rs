@@ -1,9 +1,27 @@
-//! Analysis rule: detect redundant clones.
+//! Analysis rule: detect redundant `.clone()` and `.to_string()` calls.
+//!
+//! Triggers when `.clone()` or `.to_string()` is called on a value that is
+//! only used once afterward — meaning the clone was unnecessary since the
+//! original could have been moved or borrowed instead.
+//!
+//! **Why it matters:** Redundant clones waste allocations and obscure ownership
+//! semantics. Removing them makes the code faster and ownership flow clearer.
+//!
+//! **Example trigger:**
+//! ```rust
+//! let name = user.name.clone();
+//! println!("{name}"); // name used once — clone was unnecessary
+//! ```
+//!
+//! **Caveat:** Disabled by default (`DEFAULT_DISABLED_RULES`) because
+//! tree-sitter analysis cannot track borrow-checker semantics. The clone
+//! may be required to satisfy lifetime constraints invisible to this rule.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "redundant-clone";
 /// Analysis rule that detects redundant clone calls.
 struct RedundantClone;

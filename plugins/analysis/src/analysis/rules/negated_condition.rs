@@ -1,9 +1,30 @@
-//! Analysis rule: detect negated conditions.
+//! Analysis rule: detect negated conditions with else branches.
+//!
+//! Triggers on `if !condition { A } else { B }` patterns, suggesting the
+//! condition be flipped to `if condition { B } else { A }` for readability.
+//!
+//! **Why it matters:** Negated conditions force readers to mentally invert
+//! the logic. Putting the positive case first follows the "happy path first"
+//! principle and reduces cognitive load.
+//!
+//! **Example trigger:**
+//! ```rust
+//! if !user.is_active() {
+//!     show_error();
+//! } else {
+//!     process(user);
+//! }
+//! // Prefer: if user.is_active() { process(user); } else { show_error(); }
+//! ```
+//!
+//! **Caveat:** Only triggers when there is an else branch. Standalone
+//! `if !cond { .. }` (guard clauses) are fine.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "negated-condition";
 /// Analysis rule that detects negated conditions with else branches.
 struct NegatedCondition;

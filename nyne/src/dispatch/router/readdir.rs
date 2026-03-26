@@ -1,4 +1,8 @@
-//! Directory listing operations.
+//! Directory listing and parent inode navigation.
+//!
+//! Handles both virtual (provider-emitted + real merged) and passthrough (real-only)
+//! directory listings. Every response includes synthetic `.` and `..` entries with
+//! correct parent inode numbers for POSIX compliance.
 
 use super::{ReaddirEntry, Router};
 use crate::types::ProcessVisibility;

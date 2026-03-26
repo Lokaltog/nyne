@@ -1,4 +1,11 @@
 //! VFS path naming conventions — companion suffix, companion split, fragment parsing.
+//!
+//! Every real file `foo.rs` has a hidden companion directory `foo.rs@/` (the
+//! `@` suffix is [`COMPANION_SUFFIX`]). This module is the SSOT for that
+//! naming convention: constructing companion names, stripping the suffix,
+//! splitting a full VFS path into its real-file prefix and companion-relative
+//! remainder ([`CompanionSplit`]), and detecting whether a raw string is a
+//! VFS path at all.
 
 use crate::types::VfsPath;
 

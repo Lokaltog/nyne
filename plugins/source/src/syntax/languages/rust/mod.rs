@@ -127,7 +127,11 @@ fn impl_block_name(node: TsNode<'_>) -> String {
     }
 }
 
-/// Flatten a type to a simple text representation for use in names.
+/// Flatten a type to a filesystem-safe name by stripping generics and path separators.
+///
+/// Replaces `::` with `_` and removes `<`, `>`, `,`, and spaces so that
+/// `std::collections::HashMap<K, V>` becomes `std_collections_HashMapKV`.
+/// Used by [`impl_block_name`] to derive fragment names for impl blocks.
 fn flatten_type_text(raw: &str) -> String { raw.replace("::", "_").replace(['<', '>', ',', ' '], "") }
 
 register_syntax!(RustLanguage);

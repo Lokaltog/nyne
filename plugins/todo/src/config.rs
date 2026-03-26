@@ -1,4 +1,10 @@
 //! TODO/FIXME comment aggregation configuration.
+//!
+//! Deserialized from `[plugin.todo]` in the nyne config file. Controls
+//! which tags are scanned (e.g. `TODO`, `FIXME`, `HACK`, `XXX`), the
+//! maximum number of entries surfaced, and file extensions to exclude.
+//! Tags are ordered by priority — the first tag in the list appears
+//! first in the overview.
 
 use nyne::config::deserialize_plugin_config;
 use nyne::default_true;
@@ -35,6 +41,7 @@ impl Default for Config {
     }
 }
 
+/// Deserialization methods for [`Config`].
 impl Config {
     /// Deserialize from the plugin config section, falling back to defaults.
     pub fn from_plugin_config(section: Option<&serde_json::Value>) -> Self {

@@ -1,4 +1,10 @@
 //! Repository status: branch, tracking, dirty state, recent commits.
+//!
+//! Defines [`RepoStatus`] for full working-tree snapshots and the
+//! [`StatusQueries`] extension trait on [`GitRepo`]. The status query
+//! operates on real filesystem paths (pre-mount) to avoid FUSE recursion.
+//! Results are classified into staged, modified, untracked, and conflicted
+//! buckets for template rendering in `STATUS.md`.
 
 use color_eyre::eyre::Result;
 use tracing::warn;
@@ -47,7 +53,14 @@ pub trait StatusQueries {
     fn status(&self) -> Result<RepoStatus>;
 }
 
+/// [`StatusQueries`] implementation for [`GitRepo`].
+///
+/// Queries the real filesystem directly (pre-mount paths) to avoid FUSE
+/// recursion. Classifies each entry into staged, modified, untracked, or
+/// conflicted buckets for template rendering.
 impl StatusQueries for GitRepo {
+    /// Snapshot the full repository status: branch, tracking, stashes,
+    /// recent commits, and per-file index/workdir state.
     fn status(&self) -> Result<RepoStatus> {
         let branch = self.head_branch();
         let mut repo = self.lock();

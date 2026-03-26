@@ -32,6 +32,10 @@ use crate::session::state;
 use crate::types::ProcessVisibility;
 
 /// Environment variable set inside the sandbox pointing to the control socket.
+///
+/// Injected by `command_main` so that `nyne exec` (and other CLI commands
+/// running inside the sandbox) can locate the daemon's Unix domain socket
+/// for IPC without path discovery.
 pub const NYNE_CONTROL_SOCKET_ENV: &str = "NYNE_CONTROL_SOCKET";
 
 /// Inbound message types for the control socket.
@@ -145,7 +149,13 @@ pub struct Server {
     handle: Option<thread::JoinHandle<()>>,
 }
 
-/// Removes the Unix domain socket file on drop.
+/// Clean shutdown on drop: signal the server loop, join the IPC thread, and remove the socket.
+///
+/// Dropping the `shutdown_wr` pipe fd triggers `POLLHUP` in the server
+/// loop, causing it to break out of its accept loop. The thread is then
+/// joined to ensure all in-flight requests complete. Finally, the Unix
+/// domain socket file is removed from disk (ignoring `NotFound` in case
+/// it was already cleaned up).
 impl Drop for Server {
     /// Signals the server loop to exit, joins the IPC thread, and removes the socket file.
     fn drop(&mut self) {
@@ -168,9 +178,18 @@ impl Drop for Server {
 }
 
 /// Shared state for tracking attached processes.
+///
+/// A `Mutex<Vec<AttachedProcess>>` shared between the server loop thread
+/// and request handlers. Entries are added on `Register`, removed on
+/// `Unregister`, and pruned of dead PIDs on `ListProcesses`.
 type ProcessTable = Arc<Mutex<Vec<AttachedProcess>>>;
 
 /// Start the control server on the given socket path.
+///
+/// Removes any stale socket file, binds a new `UnixListener`, and spawns
+/// the `control-ipc` thread running [`server_loop`]. Shutdown is coordinated
+/// via a pipe — dropping the returned [`Server`] closes the write end,
+/// which triggers `POLLHUP` in the server loop and causes it to exit.
 pub fn start_server(
     socket_path: &Path,
     registry: Arc<ScriptRegistry>,
@@ -372,6 +391,14 @@ fn handle_unregister(pid: i32, processes: &ProcessTable) -> Response {
 }
 
 /// Set or query visibility rules for a PID or process name.
+///
+/// Three target modes:
+/// - `Pid { pid }` — set visibility for a specific registered PID (errors if
+///   the PID is not in the process table)
+/// - `Name { name }` — set a name-based rule matching process comm names
+/// - `Query {}` — return current rules without modifying anything
+///
+/// Always returns the full visibility rules snapshot in the response.
 fn handle_set_visibility(
     target: VisibilityTarget,
     vis: ProcessVisibility,
@@ -405,6 +432,12 @@ fn handle_set_visibility(
 }
 
 /// Snapshot all active visibility rules (per-PID and per-name) into a response struct.
+///
+/// Joins the process table with the visibility map's explicit PID entries
+/// to produce per-PID rules (only includes PIDs that have an explicit
+/// override). Name-based rules are collected separately from the map's
+/// dynamic name rules. The result is a complete snapshot suitable for
+/// the `Visibility` response variant.
 fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> VisibilityRules {
     let table = processes.lock();
     let pid_entries: HashMap<u32, _> = map.explicit_pid_entries().into_iter().collect();
@@ -431,6 +464,10 @@ fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> Visi
 }
 
 /// Return all attached processes, pruning dead PIDs in the process.
+///
+/// Opportunistically removes entries for PIDs that no longer exist
+/// (checked via `/proc/<pid>` presence). This keeps the table clean
+/// without requiring explicit unregister calls from crashed clients.
 fn handle_list(processes: &ProcessTable) -> Response {
     let mut table = processes.lock();
     // Prune dead PIDs while we're at it.
@@ -439,6 +476,11 @@ fn handle_list(processes: &ProcessTable) -> Response {
 }
 
 /// Send a control request and receive the response.
+///
+/// Opens a new Unix stream connection to the control socket, writes the
+/// request as newline-delimited JSON, shuts down the write half (signaling
+/// end of request), and reads back a single JSON response line. Each
+/// request uses a fresh connection — no persistent state between calls.
 pub fn send_request(socket_path: &Path, req: &Request) -> Result<Response> {
     let mut stream = UnixStream::connect(socket_path)
         .wrap_err_with(|| format!("connecting to control socket: {}", socket_path.display()))?;
@@ -455,6 +497,11 @@ pub fn send_request(socket_path: &Path, req: &Request) -> Result<Response> {
 }
 
 /// Execute a script via the control socket. Returns stdout bytes.
+///
+/// Convenience wrapper around [`send_request`] for the `Exec` request type.
+/// Encodes `stdin` as base64, sends the request, and decodes the base64
+/// response back to raw bytes. Used by `nyne exec` to dispatch provider
+/// scripts through the daemon's script registry.
 pub fn exec_script(socket_path: &Path, address: &str, stdin: &[u8]) -> Result<Vec<u8>> {
     let req = Request::Exec {
         address: address.to_owned(),

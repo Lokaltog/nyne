@@ -1,6 +1,4 @@
-//! Event sinks for invalidation event collection and processing.
-
-//! Event sink implementations for invalidation event collection.
+//! Concrete [`EventSink`] implementations for invalidation event collection.
 //!
 //! Two concrete [`EventSink`] implementations are provided:
 //!

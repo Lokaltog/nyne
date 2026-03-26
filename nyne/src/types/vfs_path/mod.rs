@@ -1,4 +1,10 @@
 //! Virtual filesystem relative paths with validation and normalization.
+//!
+//! [`VfsPath`] is the canonical path type inside the VFS layer. It exists so
+//! that code handling virtual paths can rely on structural invariants (no `..`,
+//! no double slashes, no absolute prefixes) without re-validating at every
+//! call site. Raw `&str` / `PathBuf` are used only at system boundaries
+//! (FUSE, real-fs I/O); everything in between speaks `VfsPath`.
 
 use std::borrow::Borrow;
 use std::path::PathBuf;

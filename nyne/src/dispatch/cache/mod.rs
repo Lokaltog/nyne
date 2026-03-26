@@ -1,4 +1,29 @@
 //! L1 directory structure cache with per-directory resolve generations and invalidation.
+//!
+//! The L1 cache stores the structural layout of the virtual filesystem: which
+//! directories exist, what entries they contain, and which provider owns each
+//! entry. It does **not** store file content (that is the L2 content cache's job).
+//!
+//! Key design concepts:
+//!
+//! - **Resolve generations**: Each directory tracks a monotonically increasing
+//!   generation counter. When providers populate a directory (resolve), entries
+//!   are stamped with the current generation. A subsequent resolve bumps the
+//!   generation and sweeps entries from prior generations, ensuring stale entries
+//!   from removed or renamed source symbols are cleaned up automatically.
+//!
+//! - **Node sources**: Each cached entry records how it was created ([`NodeSource`]),
+//!   which determines both readdir visibility and whether the entry participates
+//!   in generation-based sweeping.
+//!
+//! - **Source file tracking**: Directories can be associated with a source file
+//!   and its generation, enabling staleness detection when the underlying file
+//!   is modified (e.g., after a write to a `.rs` file, the companion `@/`
+//!   directory is marked stale and re-resolved on next access).
+//!
+//! - **Prefix-based invalidation**: The cache supports invalidating entire
+//!   subtrees by path prefix, which is essential for efficient cache coherence
+//!   when a source file changes (all derived companion directories are invalidated).
 
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound;

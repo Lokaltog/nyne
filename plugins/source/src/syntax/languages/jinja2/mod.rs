@@ -268,7 +268,9 @@ fn is_end_tag_text(node: tree_sitter::Node<'_>, source: &str) -> bool {
 /// Check if a control node is an extends or import directive.
 ///
 /// These are preamble directives that should be collected into a single
-/// preamble fragment rather than decomposed individually.
+/// preamble fragment rather than decomposed individually. The whitespace
+/// control characters (`-`, `+`) used in Jinja2 trim modes
+/// (e.g. `{%- extends ... -%}`) are stripped before keyword matching.
 fn is_preamble_directive(node: tree_sitter::Node<'_>, source: &str) -> bool {
     let text = source.get(node.byte_range()).unwrap_or_default().trim();
     if !text.starts_with("{%") {
@@ -300,6 +302,10 @@ fn extract_identifier(node: tree_sitter::Node<'_>, source: &str) -> (String, usi
 }
 
 /// Depth-first search for the first `identifier` node.
+///
+/// Uses raw `tree_sitter::Node` rather than `TsNode` because the Jinja2
+/// parser operates on raw tree-sitter types directly (the `TsNode` wrapper
+/// is designed for inner-language decomposition).
 fn find_first_identifier(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {

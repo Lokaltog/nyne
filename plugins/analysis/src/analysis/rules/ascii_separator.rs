@@ -1,9 +1,26 @@
-//! Analysis rule: detect ASCII art separators.
+//! Analysis rule: detect ASCII art separators in comments.
+//!
+//! Triggers on comment nodes containing lines made entirely of repeated
+//! characters like `=`, `-`, `*`, or `#` (at least 10 consecutive), or
+//! "header separator" patterns where text is flanked by runs of separator
+//! characters (at least 5 per side).
+//!
+//! **Why it matters:** ASCII art separators add visual noise without semantic
+//! value. Doc comments on functions or section headers are more searchable
+//! and tooling-friendly.
+//!
+//! **Example triggers:**
+//! ```text
+//! // ========================================
+//! // ---------- Section Header ----------
+//! # ************************************
+//! ```
 
 use super::kinds::{self, strip_comment_prefix};
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for the ASCII separator rule, used in config and hint output.
 pub const ID: &str = "ascii-separator";
 /// Minimum consecutive separator characters for a pure separator line.
 const MIN_PURE_RUN: usize = 3;

@@ -32,6 +32,12 @@ pub struct ScriptRegistry {
 impl ScriptRegistry {
     /// Build the registry from all plugin-provided scripts.
     #[allow(clippy::excessive_nesting)] // warn! macro expansion inside for+match
+    /// Build the registry from all plugin-provided scripts.
+    ///
+    /// Iterates the [`PLUGINS`](crate::plugin::PLUGINS) distributed slice, calling
+    /// each plugin's [`scripts`](crate::plugin::Plugin::scripts) method. Duplicate
+    /// addresses are logged as warnings; the last registration wins (`HashMap`
+    /// insert semantics).
     pub(crate) fn new(ctx: &Arc<ActivationContext>) -> Self {
         let mut scripts = HashMap::new();
         for factory in PLUGINS {

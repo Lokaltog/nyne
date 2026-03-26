@@ -1,4 +1,15 @@
 //! Process primitives: fork, pipe, exec, child lifecycle.
+//!
+//! Low-level building blocks used by the sandbox module's entry points
+//! (`daemon_main`, `command_main`, `init_main`). Includes:
+//!
+//! - [`ReadyPipe`] — cross-fork readiness signaling via `pipe2(O_CLOEXEC)`
+//! - [`fork_or_die`] / [`exec`] — fork+exec with error propagation
+//! - [`ChildGuard`] — RAII kill-on-drop for child processes
+//! - [`run_init`] — PID 1 init loop with signal forwarding and zombie reaping
+//!
+//! All functions assume a single-threaded context (post-fork child) unless
+//! documented otherwise.
 #![allow(unsafe_code)]
 
 use std::ffi::OsString;
@@ -127,6 +138,11 @@ pub(super) fn exec(command: &[OsString]) -> Result<()> {
 }
 
 /// Wait for a child process to exit and return its exit code.
+///
+/// Loops on `waitpid` (blocking, no `NOHANG`) to handle non-terminal
+/// statuses (stopped/continued) that can occur with job control. Returns
+/// the exit code directly, or `128 + signal` if the child was killed by
+/// a signal (following the shell convention).
 pub(super) fn wait_for_exit(pid: Pid) -> Result<i32> {
     loop {
         let result = waitpid(Some(pid), WaitOptions::empty()).wrap_err("waitpid")?;
@@ -168,6 +184,11 @@ impl ChildGuard {
 }
 
 /// Kills and reaps the child process if the guard was not defused.
+///
+/// This is a safety net for the case where the parent panics between
+/// forking and reaching explicit cleanup (e.g., `wait_for_exit` or
+/// `terminate`). Logs a warning when triggered, since drop-based cleanup
+/// indicates an abnormal code path.
 impl Drop for ChildGuard {
     /// Cleans up resources.
     fn drop(&mut self) {
@@ -179,6 +200,10 @@ impl Drop for ChildGuard {
 }
 
 /// Send SIGTERM to a child and wait for it to exit.
+///
+/// If the child has already exited (`ESRCH`), returns silently — this is
+/// expected when the child exits between the kill check and the actual
+/// signal delivery. Used by [`ChildGuard`] drop and explicit termination.
 fn kill_and_reap(pid: Pid) {
     debug!(pid = pid.as_raw_pid(), "sending SIGTERM to child");
     if let Err(e) = kill_process(pid, Signal::TERM) {
@@ -215,6 +240,21 @@ pub(super) fn set_env(key: &str, value: &str) {
 }
 
 /// PID 1 init process: fork the command, forward signals, and reap orphans on exit.
+///
+/// Runs as PID 1 in the sandbox's PID namespace. Responsibilities:
+///
+/// 1. Fork the user's command as a child process
+/// 2. Register async-signal-safe signal forwarders for SIGINT/SIGTERM
+///    (forwarded directly to the command child via `kill(2)`)
+/// 3. Wait specifically for the command child (not any orphan) to exit
+/// 4. Drain zombie orphans via `waitpid(None, NOHANG)` before returning
+///
+/// When PID 1 exits, the kernel SIGKILLs all remaining processes in the
+/// namespace and reparents them to the host init for final cleanup.
+///
+/// Signal forwarding uses `signal_hook::low_level::register` (unsafe)
+/// because `signal_hook`'s safe API installs `SA_RESTART` handlers, which
+/// causes `waitpid` to restart automatically and never return `EINTR`.
 pub(super) fn run_init(command: &[OsString]) -> Result<i32> {
     let command_pid = fork_or_die(|| {
         if let Err(e) = exec(command) {

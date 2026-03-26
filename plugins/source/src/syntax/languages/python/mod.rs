@@ -116,6 +116,12 @@ impl LanguageSpec for PythonLanguage {
 }
 
 /// Extract the byte range of decorator nodes within a `decorated_definition`.
+///
+/// Unlike Rust attributes (which are preceding siblings), Python decorators
+/// are *children* of the `decorated_definition` wrapper node. This function
+/// scans those children to find the first and last `decorator` node and
+/// returns the spanning range. The range is used to create a `Decorator`
+/// child fragment in the VFS.
 fn extract_decorator_range_from_decorated(decorated_node: TsNode<'_>) -> Option<Range<usize>> {
     let mut first: Option<usize> = None;
     let mut last_end: Option<usize> = None;
@@ -131,6 +137,14 @@ fn extract_decorator_range_from_decorated(decorated_node: TsNode<'_>) -> Option<
 }
 
 /// Extract the docstring range from inside a function/class body (PEP 257).
+///
+/// Python docstrings are the first expression statement in a function or
+/// class body, provided that expression is a triple-quoted string literal.
+/// Comments before the first statement are skipped (they are not docstrings).
+///
+/// Returns the byte range of the enclosing `expression_statement` node
+/// (not the string node itself), matching the convention used by
+/// `extract_file_doc_range` for consistency in splice operations.
 fn extract_body_docstring_range(node: TsNode<'_>) -> Option<Range<usize>> {
     let body = node.body()?;
     let first_stmt = body
@@ -148,6 +162,11 @@ fn extract_body_docstring_range(node: TsNode<'_>) -> Option<Range<usize>> {
 }
 
 /// Build a variable fragment from an assignment node.
+///
+/// `assignment` is the inner `assignment` node (provides `left` field for
+/// the variable name). `range_node` is the outer node whose byte range
+/// becomes the fragment span -- this may be the same node, or the enclosing
+/// `expression_statement` when the assignment is wrapped.
 fn build_assignment_fragment(
     assignment: TsNode<'_>,
     range_node: TsNode<'_>,
@@ -173,7 +192,11 @@ fn build_assignment_fragment(
     ))
 }
 
-/// Skip valid Python string prefix characters.
+/// Skip valid Python string prefix characters (`r`, `b`, `u`, and combinations).
+///
+/// Python allows 1- or 2-character prefixes before the quote delimiter
+/// (e.g. `r"..."`, `rb"..."`, `Rb"..."`). This strips those so downstream
+/// functions can check for triple-quote delimiters directly.
 fn skip_string_prefix(s: &str) -> &str {
     let bytes = s.as_bytes();
     let prefix_len = match bytes {
@@ -203,6 +226,13 @@ fn strip_triple_quotes(s: &str) -> (&str, &str) {
 }
 
 /// Dedent a Python docstring following PEP 257 conventions.
+///
+/// The first line is always stripped of leading whitespace independently.
+/// For subsequent lines, the minimum indentation across all non-empty lines
+/// is removed uniformly. Trailing blank lines are stripped.
+///
+/// This matches the algorithm described in PEP 257's "Handling Docstring
+/// Indentation" section and produces clean output for VFS `docstring.txt`.
 fn dedent_docstring(content: &str) -> String {
     if content.is_empty() {
         return String::new();

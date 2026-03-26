@@ -1,9 +1,28 @@
-//! Analysis rule: detect unnecessary else blocks.
+//! Analysis rule: detect unnecessary else blocks after early returns.
+//!
+//! Triggers when an `if` block ends with `return`, `continue`, `break`, or
+//! `throw`, making the `else` block unnecessary — the code after the `if`
+//! is only reachable on the false branch anyway.
+//!
+//! **Why it matters:** Unnecessary else blocks add indentation and hide the
+//! "happy path." Removing them flattens control flow and follows the
+//! guard-clause pattern.
+//!
+//! **Example trigger:**
+//! ```rust
+//! if error {
+//!     return Err(..);
+//! } else {
+//!     // unnecessary — remove else, dedent body
+//!     process();
+//! }
+//! ```
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "unnecessary-else";
 /// Analysis rule that detects unnecessary else blocks.
 struct UnnecessaryElse;

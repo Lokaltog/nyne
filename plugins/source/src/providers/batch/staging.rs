@@ -25,7 +25,11 @@ pub(super) struct StagingKey {
     pub fragment_path: Vec<String>,
 }
 
-/// A single staged edit action.
+/// A single staged edit action within a [`StagedBatch`].
+///
+/// Wraps an [`EditOp`] which carries the operation kind (replace, delete,
+/// insert-before, insert-after, append), target fragment path, and content.
+/// Indexed by a `u32` key inside the parent batch's `BTreeMap`.
 pub(super) struct StagedAction {
     /// The edit operation (SSOT for kind, content, and fragment path).
     pub op: EditOp,
@@ -45,7 +49,12 @@ impl StagedAction {
 /// reassigns contiguous indices.
 const INDEX_STEP: u32 = 10;
 
-/// All staged edits for a single symbol.
+/// All staged edits for a single symbol, keyed by [`StagingKey`].
+///
+/// Actions are stored in a `BTreeMap<u32, StagedAction>` for stable ordering.
+/// New actions receive indices at [`INDEX_STEP`] increments (10, 20, 30, ...),
+/// leaving gaps for reordering. When gap space is exhausted, [`renumber`](Self::renumber)
+/// reassigns contiguous indices. Converted to an [`EditPlan`] for preview/apply.
 pub(super) struct StagedBatch {
     /// Ordered list of staged actions, keyed by staged index.
     actions: BTreeMap<u32, StagedAction>,

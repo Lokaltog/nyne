@@ -10,11 +10,22 @@ use std::path::{Path, PathBuf};
 
 use rustix::process::Pid;
 
-/// Path to the current process UID mapping file.
+/// Path to the current process UID mapping file (`/proc/self/uid_map`).
+///
+/// Written after `unshare(CLONE_NEWUSER)` to establish the uid mapping
+/// between the new user namespace and its parent. Format: `"<inner> <outer> <count>"`.
 pub(super) const UID_MAP: &str = "/proc/self/uid_map";
-/// Path to the current process GID mapping file.
+/// Path to the current process GID mapping file (`/proc/self/gid_map`).
+///
+/// Must be written after denying `setgroups` (kernel requirement).
+/// Format: `"<inner> <outer> <count>"`.
 pub(super) const GID_MAP: &str = "/proc/self/gid_map";
-/// Path to the current process setgroups control file.
+/// Path to the current process setgroups control file (`/proc/self/setgroups`).
+///
+/// Writing `"deny"` to this file is a kernel prerequisite for writing
+/// `gid_map` in an unprivileged user namespace. This prevents the
+/// unprivileged process from calling `setgroups(2)` to drop supplementary
+/// groups (a privilege escalation vector).
 pub(super) const SETGROUPS: &str = "/proc/self/setgroups";
 
 /// `/proc/<pid>/ns/user`
@@ -28,10 +39,16 @@ fn proc_pid(pid: Pid) -> PathBuf { Path::new("/proc").join(pid.to_string()) }
 
 /// Strip the leading `/` to make an absolute path relative to some root.
 ///
+/// Used to translate host absolute paths (e.g., `/home/user/.config`) into
+/// paths joinable with a newroot prefix (e.g., `newroot.join("home/user/.config")`).
 /// Returns the path unchanged if it has no root prefix.
 pub(super) fn relative_to_root(path: &Path) -> &Path { path.strip_prefix("/").unwrap_or(path) }
 
 /// Temporary root for `pivot_root`: `/tmp/nyne-root-<pid>`.
+///
+/// A tmpfs is mounted here as the scaffold for the sandbox filesystem.
+/// After `pivot_root`, this becomes `/` and the old root is detached.
+/// PID-suffixed to avoid collisions between concurrent sandbox instances.
 pub(super) fn newroot(pid: Pid) -> PathBuf { PathBuf::from(format!("/tmp/nyne-root-{pid}")) }
 
 /// Fixed mount point for the FUSE filesystem inside the sandbox.

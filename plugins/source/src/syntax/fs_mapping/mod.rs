@@ -1,4 +1,12 @@
 //! Filesystem naming strategies and conflict resolution for fragments.
+//!
+//! After decomposition, each fragment has a logical `name` (e.g. `"Foo"`,
+//! `"Getting Started"`) but no filesystem-safe identifier. This module
+//! assigns `fs_name` values via a [`NamingStrategy`] (identity for code,
+//! slugified for documents) and then resolves collisions via a
+//! [`ConflictStrategy`] (`~Kind` suffixes for code, numeric suffixes for
+//! documents). The `fs_name` is what appears as the directory name in the
+//! VFS `symbols/` namespace.
 
 use std::collections::HashMap;
 

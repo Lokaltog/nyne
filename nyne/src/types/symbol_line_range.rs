@@ -41,6 +41,8 @@ impl SymbolLineRange {
         Self::from_zero_based(&(rope.line_of_byte(byte_range.start)..rope.line_of_byte(byte_range.end) + 1))
     }
 }
+/// Formats as `lines:N` (single line) or `lines:M-N` (range), matching the
+/// VFS path convention for line-range access (e.g., `file.rs@/lines:10-20`).
 impl fmt::Display for SymbolLineRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.start == self.end {

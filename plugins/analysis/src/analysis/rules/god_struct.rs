@@ -1,9 +1,23 @@
-//! Analysis rule: detect god structs.
+//! Analysis rule: detect god structs with too many fields.
+//!
+//! Triggers when a struct/class definition has more than `MAX_FIELDS` (12)
+//! field declarations. God structs accumulate unrelated state and become
+//! difficult to construct, test, and evolve.
+//!
+//! **Why it matters:** A struct with many fields typically violates the Single
+//! Responsibility Principle. Splitting into focused sub-structs or using the
+//! builder pattern improves maintainability.
+//!
+//! **Example trigger:** A struct with 13+ fields will trigger this rule.
+//!
+//! **Cross-language:** Counts `field_declaration`, `field_definition`,
+//! `property_declaration`, etc. across Rust, TypeScript, Python, Go, and Java.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "god-struct";
 /// Maximum fields before triggering.
 const MAX_FIELDS: usize = 10;

@@ -1,9 +1,26 @@
-//! Analysis rule: detect repeated field accesses.
+//! Analysis rule: detect repeated field access chains that should use a local binding.
+//!
+//! Triggers when `MIN_REPETITIONS` (3) or more consecutive statements share
+//! the same field-access prefix (e.g. `self.config.timeout`), suggesting the
+//! prefix should be bound to a local variable.
+//!
+//! **Why it matters:** Repeated long access chains add visual noise and make
+//! refactoring harder. A local binding like `let cfg = &self.config;` reduces
+//! repetition and clarifies intent.
+//!
+//! **Example trigger:**
+//! ```rust
+//! self.config.timeout = Duration::from_secs(30);
+//! self.config.retries = 3;
+//! self.config.verbose = true;
+//! // Prefer: let cfg = &mut self.config;
+//! ```
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "repeated-field-access";
 /// Minimum consecutive sibling statements sharing the same field-access prefix.
 const MIN_REPETITIONS: usize = 3;

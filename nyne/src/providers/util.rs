@@ -1,4 +1,8 @@
-//! Utilities for companion directory path manipulation.
+//! Shared utilities for core providers.
+//!
+//! Helpers for formatting language distribution and selecting dominant file
+//! extensions from [`ExtensionCounts`](crate::types::ExtensionCounts). Used
+//! by the directory and nyne providers to populate template views.
 
 /// Fallback file extension when no dominant language is detected.
 const FALLBACK_EXT: &str = "ext";

@@ -1,3 +1,6 @@
+//! Fragment directory resolution — builds the per-symbol `Foo@/` directory
+//! with body, meta-files, code blocks, and child symbol entries.
+
 use nyne::prelude::*;
 
 use super::{build_fragment_nodes, code_block_extension};

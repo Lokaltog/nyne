@@ -1,4 +1,8 @@
-//! Commit information and diff options helpers.
+//! Commit metadata extraction and diff option helpers.
+//!
+//! Provides [`CommitInfo`] for extracting author, date, hash, and message from
+//! `git2::Commit` objects for template rendering. Also provides [`diff_opts`]
+//! for creating single-file-scoped `DiffOptions`.
 
 use nyne::text;
 use serde::Serialize;
@@ -14,6 +18,7 @@ pub struct CommitInfo {
     #[serde(skip)]
     pub epoch_secs: i64,
 }
+/// Factory methods for [`CommitInfo`].
 impl CommitInfo {
     /// Placeholder for uncommitted (working-directory) changes.
     pub(crate) fn uncommitted(oid: git2::Oid) -> Self {

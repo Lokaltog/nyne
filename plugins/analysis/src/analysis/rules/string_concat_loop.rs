@@ -1,9 +1,25 @@
-//! Analysis rule: detect string concatenation in loops.
+//! Analysis rule: detect string concatenation inside loops.
+//!
+//! Triggers when a loop body contains `+=` with a string operand or
+//! `x = x + "..."` reassignment patterns. Repeated string concatenation
+//! causes O(n^2) allocation behavior.
+//!
+//! **Why it matters:** Each string concatenation allocates a new buffer and
+//! copies all previous content. Use a `String` with `.push_str()` or a
+//! `Vec` with `.join()` for O(n) behavior.
+//!
+//! **Example trigger:**
+//! ```python
+//! result = ""
+//! for line in lines:
+//!     result += line + "\n"  # O(n^2) — use "".join(lines) instead
+//! ```
 
 use super::kinds::{self, node_str};
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "string-concat-loop";
 /// Analysis rule that detects string concatenation in loops.
 struct StringConcatLoop;

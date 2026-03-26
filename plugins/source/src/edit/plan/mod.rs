@@ -1,4 +1,9 @@
-//! File edit operations and planning.
+//! Edit plan resolution and application.
+//!
+//! An [`EditPlan`] collects staged [`EditOp`]s for a single source file,
+//! resolves them to concrete byte ranges via the fragment tree, checks for
+//! conflicts, and applies them in reverse order to avoid offset invalidation.
+//! Tree-sitter validation ensures the result parses cleanly before write-back.
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -68,6 +73,11 @@ pub struct ResolvedEdit {
     /// Replacement content (empty string for deletions).
     pub replacement: String,
 }
+/// Ordering support for resolved edits.
+///
+/// Edits are sorted ascending by byte offset for conflict detection, then
+/// reversed (descending) for bottom-up application so that earlier byte
+/// ranges are not invalidated by later splices.
 impl ResolvedEdit {
     /// Ascending order: by `byte_range.start`, then zero-width (insertions)
     /// before non-empty (replacements/deletions). This ensures insertions at
@@ -287,6 +297,7 @@ pub struct FileEditResult {
     /// Tree-sitter validation result for the modified content.
     pub validation: ValidationResult,
 }
+/// Constructors for [`FileEditResult`].
 impl FileEditResult {
     /// Create a result with [`ValidationResult::Skipped`] — used for LSP resource
     /// operations and resolved text edits where tree-sitter validation is not applicable.

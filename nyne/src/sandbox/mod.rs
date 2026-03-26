@@ -51,6 +51,11 @@ use crate::config::StorageStrategy;
 use crate::session;
 
 /// A mount path entry for FUSE + overlay mounting.
+///
+/// Each entry represents a single project directory that the daemon will
+/// serve via FUSE. Currently one mount per daemon, but the `[MountEntry]`
+/// slice pattern in internal APIs allows future multi-mount expansion
+/// without API changes.
 pub struct MountEntry {
     /// Absolute path to the directory to mount.
     pub path: PathBuf,
@@ -67,6 +72,11 @@ struct HostIdentity {
 }
 
 /// Configuration for mounting a FUSE daemon (no command, no sandbox).
+///
+/// Used by `run_mounts` to fork and start FUSE daemons. The daemon runs
+/// in its own user+mount namespace and serves FUSE until a shutdown signal
+/// arrives. Sandbox isolation (`pivot_root`, bind mounts) is handled
+/// separately by the command child via [`AttachConfig`].
 pub struct DaemonConfig {
     /// Mount path (single path for now).
     pub mount: MountEntry,
@@ -76,7 +86,8 @@ pub struct DaemonConfig {
 impl DaemonConfig {
     /// Create a new mount configuration.
     ///
-    /// The mount path must be an absolute directory.
+    /// Validates that the mount path is an absolute directory. Returns an
+    /// error if the path is relative or does not point to an existing directory.
     pub fn new(mount: MountEntry) -> Result<Self> {
         ensure!(
             mount.path.is_absolute(),
@@ -89,6 +100,12 @@ impl DaemonConfig {
 }
 
 /// Configuration for attaching to a running nyne daemon's namespace.
+///
+/// Passed to [`run_attach`], which forks a command child that enters the
+/// daemon's user+mount namespace, builds an isolated root via `pivot_root`,
+/// and execs the user's command inside the sandbox. The sandbox configuration
+/// (hostname, bind mounts, env vars) is carried here so the command child
+/// has everything it needs without additional IPC.
 pub struct AttachConfig {
     /// Daemon PID to attach to.
     pub daemon_pid: i32,
@@ -145,6 +162,12 @@ use signal_hook::flag::register_conditional_default;
 use crate::config::SandboxConfig;
 
 /// Owns a running FUSE daemon and its session file.
+///
+/// Created by [`start_one`] after the daemon signals readiness. The
+/// [`ChildGuard`] ensures the daemon child is killed on drop (e.g., if
+/// a subsequent mount fails during multi-mount startup). The session file
+/// is written to `$XDG_RUNTIME_DIR/nyne/` so `nyne attach` can discover
+/// running daemons by session ID.
 struct MountSession {
     daemon: ChildGuard,
     session_path: PathBuf,
@@ -236,6 +259,14 @@ pub fn run_mounts(mounts: Vec<(DaemonConfig, session::SessionId, MountFn)>) -> R
 }
 
 /// Attach to a running daemon and execute a command inside its namespace.
+///
+/// Forks a command child that enters the daemon's user+mount namespace,
+/// builds an isolated root filesystem via `pivot_root`, creates PID and
+/// UTS namespaces, then execs the user's command as PID 1's child. The
+/// parent suppresses SIGINT (so Ctrl+C goes to the command child's process
+/// group) and waits for the child to exit.
+///
+/// Returns the command's exit code (0-255), or 128+signal if killed.
 pub fn run_attach(config: AttachConfig) -> Result<i32> {
     let daemon_pid =
         Pid::from_raw(config.daemon_pid).ok_or_else(|| eyre!("invalid daemon PID: {}", config.daemon_pid))?;
@@ -366,6 +397,11 @@ fn sandbox_cwd(cwd: &Path, fuse_path: &Path) -> PathBuf {
 }
 
 /// Bundled paths for the command child process.
+///
+/// Groups the host-side paths needed by [`command_main`] to set up the
+/// sandbox: the original working directory (for CWD remapping), the FUSE
+/// mount path (for overlay setup and `pivot_root`), and the optional
+/// control socket path (injected as an env var for `nyne exec`).
 struct CommandPaths<'a> {
     cwd: &'a Path,
     fuse_path: &'a Path,
@@ -373,6 +409,17 @@ struct CommandPaths<'a> {
 }
 
 /// Command child entry point: enter the daemon namespace, set up the sandbox, and fork init.
+///
+/// Runs in the forked child from [`run_attach`]. Sequence:
+/// 1. Enter the daemon's user+mount namespace via `setns`
+/// 2. Build the isolated root filesystem (`overlay::setup`)
+/// 3. Create UTS namespace and set hostname (requires `CAP_SYS_ADMIN`)
+/// 4. Create PID namespace (`unshare_pid`)
+/// 5. Inject control socket env var if present
+/// 6. Fork the init process (becomes PID 1 in the new PID namespace)
+/// 7. Wait for init to exit and propagate its exit code
+///
+/// This function never returns — it calls `exit()` via [`run_or_exit`].
 fn command_main(
     ns: Namespace,
     paths: &CommandPaths<'_>,

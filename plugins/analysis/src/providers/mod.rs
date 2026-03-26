@@ -1,3 +1,8 @@
+//! Provider registration for the analysis plugin.
+//!
+//! Re-exports the [`AnalysisProvider`] which contributes `ANALYSIS.md` nodes
+//! to symbol fragment directories in the VFS.
+
 mod analysis;
 
 use nyne::dispatch::routing::ctx::RouteCtx;
@@ -19,9 +24,13 @@ pub struct AnalysisProvider {
     routes: RouteTree<Self>,
 }
 
+/// Construction, routing, and fragment resolution for [`AnalysisProvider`].
 impl AnalysisProvider {
+    /// Provider identifier registered with the dispatch layer.
     const PROVIDER_ID: ProviderId = ProviderId::new("analysis");
 
+    /// Create a new analysis provider, compiling the Jinja template and
+    /// building the route tree for `symbols/{..path}@/ANALYSIS.md`.
     pub fn new(ctx: Arc<ActivationContext>) -> Self {
         let mut builder = handle_builder();
         nyne::register_globals!(builder.engine_mut(), FILE_ANALYSIS,);
@@ -40,6 +49,10 @@ impl AnalysisProvider {
         }
     }
 
+    /// Contribute an `ANALYSIS.md` node to a symbol fragment directory.
+    ///
+    /// Returns `None` if the file has no decomposer or the fragment path
+    /// doesn't resolve, so analysis nodes only appear for supported languages.
     fn children_fragment(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let sf = source_file(ctx)?;
         let path = ctx.params("path");
@@ -61,9 +74,12 @@ impl AnalysisProvider {
         Ok(Some(vec![node]))
     }
 
+    /// Shorthand to retrieve [`SourceServices`] from the activation context.
     fn services(&self) -> &SourceServices { SourceServices::get(&self.ctx) }
 }
 
+/// [`Provider`] implementation that routes companion-path requests to the
+/// analysis route tree, contributing `ANALYSIS.md` to symbol directories.
 impl Provider for AnalysisProvider {
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 

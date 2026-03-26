@@ -1,9 +1,30 @@
-//! Analysis rule: suggest manual map patterns.
+//! Analysis rule: detect manual map patterns replaceable with combinators.
+//!
+//! Triggers on `match` expressions with exactly two arms where one matches
+//! `Some(x)` and wraps the body in `Some(...)`, and the other matches `None`
+//! and returns `None`. This is the manual equivalent of `.map()`.
+//!
+//! **Why it matters:** `option.map(|x| transform(x))` is shorter, idiomatic,
+//! and composes with other combinators. The manual pattern adds boilerplate
+//! without benefit.
+//!
+//! **Example trigger:**
+//! ```rust
+//! match value {
+//!     Some(x) => Some(x.to_string()),
+//!     None => None,
+//! }
+//! // Prefer: value.map(|x| x.to_string())
+//! ```
+//!
+//! **Caveat:** Only detects the exact Some/None pattern — does not flag
+//! Ok/Err variants or more complex transformations.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "manual-map";
 /// Analysis rule that detects manual map patterns.
 struct ManualMap;

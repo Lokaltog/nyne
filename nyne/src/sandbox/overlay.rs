@@ -44,9 +44,26 @@ use super::{PROJECT_CLONERS, mnt, namespace, paths};
 use crate::config::{BindMount, StorageStrategy};
 
 /// Size limit for structural tmpfs mounts (newroot, /tmp).
+///
+/// Set conservatively small — these tmpfs instances only hold directory
+/// stubs for mount points and the isolated `/tmp`. The actual project
+/// data lives on the FUSE mount or overlay, not on these tmpfs instances.
 const TMPFS_SIZE: &str = "2G";
 
 /// Build the isolated sandbox root filesystem and mount FUSE at `/code`.
+///
+/// Called by the command child after entering the daemon's namespace. The
+/// sequence is order-sensitive:
+///
+/// 1. Clone the FUSE mount into a detached mount tree (survives namespace transitions)
+/// 2. Create a private mount namespace (no nested user ns, avoids mount locking)
+/// 3. Detach FUSE from the project dir so bind mounts copy host fs, not FUSE
+/// 4. Build newroot (tmpfs scaffold, host bind mounts, XDG dirs)
+/// 5. Bind-mount the nyne binary for PATH resolution inside the sandbox
+/// 6. Apply user-configured bind mounts (while host paths are still visible)
+/// 7. `pivot_root` into newroot
+/// 8. Attach the FUSE clone at `/code`
+/// 9. Remount root tmpfs read-only (layered mounts keep their own flags)
 pub(super) fn setup(fuse_path: &Path, bind_mounts: &[BindMount]) -> Result<()> {
     let base_dirs = BaseDirs::new();
 
@@ -161,6 +178,14 @@ pub fn prepare_project_storage(path: &Path, persist_root: Option<&Path>, strateg
     Ok(merged)
 }
 /// Populate the new root with bind-mounted host entries, isolated `/tmp`, and XDG dirs.
+///
+/// Creates a tmpfs at `newroot` as the scaffold, then layers on:
+/// 1. Selective host `/` bind mounts (skipping entries handled elsewhere)
+/// 2. A fresh tmpfs `/tmp` (prevents temp file leakage to/from host)
+/// 3. XDG directories (config, cache, data, state) as RW bind mounts
+///
+/// If `base_dirs` is `None` (XDG dirs unavailable), the home directory
+/// step is skipped entirely — no home is visible inside the sandbox.
 fn build_newroot(newroot: &Path, base_dirs: Option<&BaseDirs>) -> Result<()> {
     dirs(&[newroot])?;
     mnt::tmpfs(newroot, TMPFS_SIZE)?;
@@ -292,6 +317,12 @@ fn bind_xdg_dirs(newroot: &Path, base_dirs: &BaseDirs) -> Result<()> {
 }
 
 /// Apply user-configured bind mounts into the new root before pivot.
+///
+/// Must be called before `pivot_root` — the source paths reference the
+/// host filesystem which becomes inaccessible after pivot. For each bind
+/// mount, creates the appropriate mount point (directory or empty file,
+/// matching the source type), performs the recursive bind, and optionally
+/// remounts with user-specified flags (e.g., read-only).
 fn apply_bind_mounts(newroot: &Path, bind_mounts: &[BindMount]) -> Result<()> {
     for bm in bind_mounts {
         let dst = newroot.join(paths::relative_to_root(&bm.target));
@@ -325,6 +356,11 @@ fn apply_bind_mounts(newroot: &Path, bind_mounts: &[BindMount]) -> Result<()> {
 }
 
 /// Create upper/work dirs in `slot` and mount overlayfs at `target`.
+///
+/// The `slot` directory provides persistent storage for the overlay's
+/// `upper` (captured writes) and `work` (kernel scratch space) dirs.
+/// Both are created with `create_dir_all` so the slot can be a fresh
+/// path on first use.
 fn mount_overlay_slot(target: &Path, lower: &Path, slot: &Path) -> Result<()> {
     let upper = slot.join("upper");
     let work = slot.join("work");
@@ -341,6 +377,12 @@ fn dirs(dir_paths: &[&Path]) -> Result<()> {
 }
 
 /// Collect deduplicated XDG base directories that exist on disk.
+///
+/// Gathers config, cache, data, `data_local`, and state directories from
+/// the `directories` crate. Deduplication is necessary because `data_dir()`
+/// and `data_local_dir()` resolve to the same path on Linux
+/// (`$XDG_DATA_HOME`). Only directories that actually exist are returned,
+/// avoiding mount failures on missing paths.
 fn collect_xdg_dirs(base_dirs: &BaseDirs) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 

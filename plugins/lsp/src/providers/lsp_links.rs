@@ -1,3 +1,11 @@
+//! LSP symlink directory resolution and target construction.
+//!
+//! Bridges LSP query results (locations, call hierarchy items) with the VFS
+//! symlink model. Each LSP target is reverse-mapped to a symbol in the target
+//! file via tree-sitter decomposition, producing symlinks like
+//! `callers/init-lib.rs:42` that point to `lib.rs@/symbols/init@/body.rs`.
+//! Falls back to line-slice links when decomposition is unavailable.
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

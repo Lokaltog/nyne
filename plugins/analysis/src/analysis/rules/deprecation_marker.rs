@@ -1,9 +1,24 @@
 //! Analysis rule: detect deprecation markers in comments.
+//!
+//! Triggers on comments containing patterns like `DEPRECATED`, `LEGACY`,
+//! `@deprecated`, `HACK:`, `TECH DEBT`, and similar markers that indicate
+//! code slated for removal or rewrite.
+//!
+//! **Why it matters:** Deprecation markers often linger indefinitely. Surfacing
+//! them as analysis hints keeps them visible for cleanup or migration planning.
+//!
+//! **Example triggers:**
+//! ```text
+//! // DEPRECATED: use new_api() instead
+//! // HACK: workaround for upstream bug #123
+//! // TODO(tech-debt): remove after v2 migration
+//! ```
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "deprecation-marker";
 /// Patterns that indicate deprecated, legacy, or deferred code.
 ///

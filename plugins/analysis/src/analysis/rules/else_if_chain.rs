@@ -1,9 +1,31 @@
-//! Analysis rule: detect else-if chains.
+//! Analysis rule: detect long else-if chains.
+//!
+//! Triggers when an `if` expression has `MIN_ELSE_IFS` (3) or more `else if`
+//! branches, suggesting a `match`/`switch` expression or dispatch table would
+//! be clearer.
+//!
+//! **Why it matters:** Long else-if chains are hard to scan, easy to mis-order,
+//! and lack exhaustiveness checking. A `match` expression (or pattern matching
+//! equivalent) makes the dispatch structure explicit.
+//!
+//! **Example trigger:**
+//! ```rust
+//! if kind == "a" {
+//!     ..
+//! } else if kind == "b" {
+//!     ..
+//! } else if kind == "c" {
+//!     ..
+//! } else if kind == "d" {
+//!     ..
+//! } // 3 else-ifs — triggers
+//! ```
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "else-if-chain";
 /// Minimum else-if branches to trigger (3 = if + 3 else-ifs = 4 total).
 const MIN_ELSE_IFS: usize = 3;

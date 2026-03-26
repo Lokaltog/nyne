@@ -11,9 +11,14 @@ use crate::provider::TodoProvider;
 /// Entry point for the todo plugin.
 struct TodoPlugin;
 
+/// Plugin lifecycle for TODO/FIXME comment aggregation.
+///
+/// Creates a [`TodoProvider`] that scans source files for configured tag
+/// markers and exposes them as virtual files under `@/todo/`.
 impl Plugin for TodoPlugin {
     fn id(&self) -> &'static str { "todo" }
 
+    /// Create the TODO provider with the resolved configuration.
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
         let config = Config::from_plugin_config(ctx.plugin_config("todo"));
         info!("todo plugin activated");

@@ -98,7 +98,9 @@ pub trait CommitMtimeExt {
     fn with_mtime(self, epoch_secs: i64) -> Self;
 }
 
+/// Blanket [`CommitMtimeExt`] implementation for [`VirtualNode`].
 impl CommitMtimeExt for VirtualNode {
+    /// Attach a [`CommitMtime`] lifecycle so the node reports the commit timestamp as mtime.
     fn with_mtime(self, epoch_secs: i64) -> Self { self.with_lifecycle(CommitMtime(epoch_secs)) }
 }
 

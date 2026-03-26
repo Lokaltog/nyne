@@ -1,9 +1,27 @@
-//! Analysis rule: detect unwrap chains.
+//! Analysis rule: detect chained `.unwrap()` calls on method results.
+//!
+//! Triggers when a single expression or statement contains `MIN_UNWRAPS` (2)
+//! or more `.unwrap()` calls. Chained unwraps create multiple potential panic
+//! points with no context about which one failed.
+//!
+//! **Why it matters:** Each `.unwrap()` is a potential panic site. Chaining
+//! them makes stack traces ambiguous — use `.expect("context")` or proper
+//! error handling with `?` to provide meaningful failure messages.
+//!
+//! **Example trigger:**
+//! ```rust
+//! let value = map.get("key").unwrap().parse::<i32>().unwrap();
+//! // Prefer: let value = map.get("key")?.parse::<i32>()?;
+//! ```
+//!
+//! **Caveat:** Disabled by default (`DEFAULT_DISABLED_RULES`) because
+//! `.unwrap()` is idiomatic in tests and prototyping code.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "unwrap-chain";
 /// Minimum `.unwrap()` calls to trigger (in a single statement or consecutive).
 const MIN_UNWRAPS: usize = 2;

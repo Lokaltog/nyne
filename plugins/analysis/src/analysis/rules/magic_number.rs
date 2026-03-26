@@ -1,9 +1,28 @@
-//! Analysis rule: detect magic numbers.
+//! Analysis rule: detect magic numbers outside constant contexts.
+//!
+//! Triggers on numeric literals that appear outside constant declarations,
+//! enum variants, default trait implementations, and similar safe contexts.
+//! Trivial values (0, 1, 2) are excluded.
+//!
+//! **Why it matters:** Magic numbers obscure intent. A named constant like
+//! `MAX_RETRIES` is self-documenting, greppable, and changeable in one place.
+//!
+//! **Example trigger:**
+//! ```rust
+//! if retries > 3 {
+//!     ..
+//! } // What does 3 mean? Use MAX_RETRIES.
+//! ```
+//!
+//! **Caveat:** Disabled by default (`DEFAULT_DISABLED_RULES`) because numeric
+//! literals in array sizes, bit shifts, and math expressions are often
+//! intentional and produce false positives.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "magic-number";
 /// Node kinds for numeric literals (cross-language).
 const NUMBER_KINDS: &[&str] = &[

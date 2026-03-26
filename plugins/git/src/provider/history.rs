@@ -1,4 +1,13 @@
 //! History data types and git querying — blame hunks, commits, contributors, notes.
+//!
+//! Defines the [`HistoryQueries`] extension trait on [`GitRepo`] providing
+//! blame, file history, contributor ranking, and git notes. All queries
+//! operate on pre-mount real paths. History walks are capped at
+//! [`MAX_REVWALK`] to prevent unbounded traversal on repositories with
+//! deep commit histories.
+//!
+//! [`HistoryVersionContent`] provides readable blob content at arbitrary
+//! commits, enabling the `file.rs@/history/` VFS directory.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -109,6 +118,11 @@ pub trait HistoryQueries {
     fn set_note(&self, rel_path: &str, message: &str) -> Result<()>;
 }
 
+/// [`HistoryQueries`] implementation for [`GitRepo`].
+///
+/// All methods operate on the real filesystem (pre-mount paths) to avoid
+/// FUSE recursion. History walks are capped at [`MAX_REVWALK`] iterations
+/// to prevent unbounded traversal on large repositories.
 impl HistoryQueries for GitRepo {
     /// Collect blame hunks for a file, including uncommitted changes.
     ///

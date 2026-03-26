@@ -1,4 +1,9 @@
 //! `nyne config` — display the effective configuration.
+//!
+//! Loads the full config stack (defaults, user config file, plugin defaults) and
+//! pretty-prints the result as TOML. This gives users a single command to verify
+//! exactly what the daemon will use, including plugin-specific defaults that are
+//! not present in their config file.
 
 use clap::Args;
 use color_eyre::eyre::Result;

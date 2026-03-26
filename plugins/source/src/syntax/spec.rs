@@ -1,4 +1,12 @@
 //! Language specification trait and generic decomposer.
+//!
+//! [`LanguageSpec`] is the central abstraction for adding languages: a pure
+//! trait of constants and methods encoding tree-sitter node mappings,
+//! doc-comment conventions, and extraction logic. [`CodeDecomposer<L>`]
+//! bridges any `LanguageSpec` impl into the [`Decomposer`] trait consumed
+//! by the rest of the system. Also provides shared helpers for common
+//! patterns (preceding-sibling doc/decorator extraction, line-comment
+//! stripping/wrapping, child-node visibility extraction).
 
 use std::marker::PhantomData;
 use std::ops::Range;

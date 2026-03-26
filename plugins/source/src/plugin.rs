@@ -24,6 +24,7 @@ pub struct SourcePlugin;
 /// single [`SourceServices`] inserted into the `TypeMap`. The `providers`
 /// phase then creates provider instances that read from that bundle.
 impl Plugin for SourcePlugin {
+    /// Returns the unique identifier for this plugin (`"source"`).
     fn id(&self) -> &'static str { "source" }
 
     /// Constructs and registers all source services into the activation context.
@@ -59,6 +60,10 @@ impl Plugin for SourcePlugin {
         serde_json::to_value(&resolved).ok()
     }
 
+    /// Returns the default configuration for the source plugin as a TOML table.
+    ///
+    /// Used by the config system to populate missing fields before
+    /// [`resolved_config`] is called.
     fn default_config(&self) -> Option<toml::Table> { toml::Table::try_from(SourceConfig::default()).ok() }
 
     /// Instantiates all source plugin providers from the activated context.

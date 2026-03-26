@@ -1,4 +1,9 @@
-//! Content I/O operations.
+//! Content I/O operations: read and write through L2 cache and middleware pipeline.
+//!
+//! Read operations check the [`ContentCache`](super::super::content_cache::ContentCache)
+//! (L2) before invoking the full pipeline. Write operations always run the pipeline,
+//! then invalidate the L2 entry and bump source file generations so sibling nodes
+//! detect staleness on their next access.
 
 use super::Router;
 use crate::dispatch::WriteMode;

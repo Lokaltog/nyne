@@ -1,9 +1,27 @@
-//! Analysis rule: detect type names in variable names.
+//! Analysis rule: detect type names encoded in variable names.
+//!
+//! Triggers on `let` bindings whose names contain type-related fragments like
+//! `_string`, `_vec`, `_map`, `_list`, `_hash`, `_array`, etc. The type
+//! system already provides this information.
+//!
+//! **Why it matters:** Names like `name_string` or `users_vec` are redundant
+//! when the type is visible. Prefer semantic names (`name`, `users`) that
+//! describe purpose rather than encoding the container type.
+//!
+//! **Example trigger:**
+//! ```rust
+//! let user_string = user.to_string();
+//! // Prefer: let display_name = user.to_string();
+//! ```
+//!
+//! **Caveat:** Disabled by default (`DEFAULT_DISABLED_RULES`) because some
+//! codebases use type-encoding as a disambiguation convention.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "type-in-variable-name";
 /// Type-related suffixes/infixes that indicate encoding the type in the name.
 const TYPE_FRAGMENTS: &[&str] = &[

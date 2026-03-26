@@ -1,9 +1,23 @@
 //! Analysis rule: detect functions with too many local variables.
+//!
+//! Triggers when a function body contains more than `MAX_LOCALS` (10)
+//! `let`/`var`/`const` binding declarations. Functions with many locals
+//! typically do too much and should be decomposed.
+//!
+//! **Why it matters:** High local variable count correlates with excessive
+//! function complexity. Extract sub-functions, use structs to group related
+//! state, or restructure the algorithm.
+//!
+//! **Example trigger:** A function with 11+ `let` bindings will trigger.
+//!
+//! **Note:** Counts bindings recursively into nested blocks (e.g. `if` bodies)
+//! but not into nested closures or function definitions.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "too-many-locals";
 /// Maximum local variable bindings before triggering.
 const MAX_LOCALS: usize = 10;

@@ -136,6 +136,12 @@ fn unwrap_export(node: TsNode<'_>) -> TsNode<'_> {
 }
 
 /// Extract the variable name from a `lexical_declaration` via `variable_declarator`.
+///
+/// TypeScript `const`/`let`/`var` declarations have the AST shape
+/// `lexical_declaration > variable_declarator(name: identifier)`. This
+/// navigates that structure to find the identifier. Falls back to
+/// `"anonymous"` for destructuring patterns or other edge cases where
+/// the `name` field is absent.
 fn extract_variable_name(node: TsNode<'_>) -> String {
     for child in node.children() {
         if child.kind() == "variable_declarator"
@@ -148,6 +154,11 @@ fn extract_variable_name(node: TsNode<'_>) -> String {
 }
 
 /// Strip `JSDoc` `/** ... */` markers and leading ` * ` from each line.
+///
+/// Handles both single-line (`/** text */`) and multi-line `JSDoc` blocks.
+/// Each intermediate line's leading ` * ` or bare `*` prefix is removed.
+/// The result is trimmed of surrounding whitespace to produce clean
+/// content for `docstring.txt` in the VFS.
 fn strip_jsdoc(raw: &str) -> String {
     let inner = raw
         .strip_prefix("/**")

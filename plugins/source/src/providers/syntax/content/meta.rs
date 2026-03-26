@@ -30,11 +30,13 @@ use crate::syntax::{self};
 #[derive(Clone, Debug)]
 pub(in crate::providers::syntax) struct FragmentPath(pub Arc<[String]>);
 
+/// Construction for [`FragmentPath`].
 impl FragmentPath {
     /// Create a new `FragmentPath` from a slice of path segments.
     pub fn new(segments: &[String]) -> Self { Self(Arc::from(segments)) }
 }
 
+/// Deref to `[String]` so callers can slice and iterate path segments directly.
 impl Deref for FragmentPath {
     type Target = [String];
 

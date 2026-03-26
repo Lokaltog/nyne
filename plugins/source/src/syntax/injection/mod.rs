@@ -3,6 +3,14 @@
 //! An `InjectionDecomposer` parses the outer template language (e.g. Jinja2),
 //! extracts content regions, decomposes them with the inner language's
 //! decomposer, and remaps byte ranges back to original-file coordinates.
+//!
+//! The pipeline for a compound file like `schema.sql.j2`:
+//! 1. Parse with the outer grammar (Jinja2) to identify content vs directives.
+//! 2. Concatenate content regions into a virtual byte space.
+//! 3. Run the inner decomposer (SQL) on the concatenated content.
+//! 4. Remap all resulting fragments' byte offsets back to real-file coordinates
+//!    via [`SpanMap`](super::span_map::SpanMap).
+//! 5. Merge Jinja2 structural symbols and remapped inner fragments.
 
 use std::sync::Arc;
 

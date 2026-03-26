@@ -1,4 +1,10 @@
 //! Built-in language decomposers.
+//!
+//! Each submodule implements [`LanguageSpec`](super::spec::LanguageSpec) for one
+//! language and registers itself via [`register_syntax!`](super::register_syntax).
+//! Adding a new language requires: a `LanguageSpec` impl, a `register_syntax!`
+//! call, and a tree-sitter grammar dependency. See `prelude` for the shared
+//! import set used by all language modules.
 
 /// Common imports shared across language decomposers.
 ///

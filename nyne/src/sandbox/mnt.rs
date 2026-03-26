@@ -25,6 +25,10 @@ use crate::err::ErrnoExt;
 /// Mount a tmpfs at `target` with the given size limit.
 #[allow(clippy::expect_used)] // paths cannot contain NUL bytes
 /// Mount a tmpfs at the given path with the specified size limit.
+///
+/// The `size` parameter is passed directly as the `size=` mount option
+/// (e.g., `"64m"`). The target directory must already exist. Used for
+/// the newroot scaffold and the isolated `/tmp` inside the sandbox.
 pub(super) fn tmpfs(target: &Path, size: &str) -> Result<()> {
     let data = CString::new(format!("size={size}")).expect("mount data contains no NUL");
     syscall_try!(
@@ -37,6 +41,10 @@ pub(super) fn tmpfs(target: &Path, size: &str) -> Result<()> {
 }
 
 /// Mount a proc filesystem at the given path.
+///
+/// Mounts a new `procfs` instance. In the sandbox, `/proc` is initially
+/// bind-mounted from the host (for `uid_map` writes), then remounted by
+/// the PID namespace init process to reflect the sandbox's PID namespace.
 pub(super) fn proc(target: &Path) -> Result<()> {
     syscall_try!(
         mount("proc", target, "proc", MountFlags::empty(), None),
@@ -50,6 +58,11 @@ pub(super) fn proc(target: &Path) -> Result<()> {
 /// Mount an overlayfs at `target` with the given layer paths.
 #[allow(clippy::expect_used)] // paths cannot contain NUL bytes
 /// Mount an overlayfs at `target` with the given lower, upper, and work directories.
+///
+/// Overlayfs presents a unified view: reads fall through to `lower` (the
+/// immutable clone), writes are captured in `upper` (persistent across
+/// sessions), and `work` is used internally by the kernel for atomic
+/// copy-up operations. All four directories must already exist.
 pub(super) fn overlay(target: &Path, lower: &Path, upper: &Path, work: &Path) -> Result<()> {
     let opts = format!(
         "lowerdir={},upperdir={},workdir={}",

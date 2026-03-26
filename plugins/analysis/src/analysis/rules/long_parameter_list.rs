@@ -1,8 +1,25 @@
 //! Analysis rule: detect long parameter lists.
+//!
+//! Triggers when a function has more than `MAX_PARAMS` (5) parameters.
+//! Long parameter lists make call sites hard to read and are fragile
+//! when evolving APIs.
+//!
+//! **Why it matters:** Functions with many parameters often need a builder,
+//! options struct, or decomposition into smaller functions. Call sites
+//! become unreadable and parameter ordering errors are easy to introduce.
+//!
+//! **Example trigger:**
+//! ```rust
+//! fn create_user(name: &str, email: &str, age: u32, role: Role, active: bool, verified: bool) {
+//!     ..
+//! }
+//! // Prefer: fn create_user(opts: CreateUserOpts) { .. }
+//! ```
 
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "long-parameter-list";
 /// Maximum parameter count before triggering a hint.
 const MAX_PARAMS: usize = 5;

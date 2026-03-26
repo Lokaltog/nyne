@@ -1,4 +1,9 @@
 //! Shared value types and context structs.
+//!
+//! This module centralizes lightweight data types that cross crate boundaries
+//! via [`TypeMap`]. Types here belong to the core library so plugins can
+//! produce and consume them without depending on each other — the core acts
+//! as the neutral schema layer.
 
 /// Filesystem entry kind enum (file, directory, symlink).
 pub mod file_kind;

@@ -1,9 +1,25 @@
 //! Analysis rule: detect deeply nested generic types.
+//!
+//! Triggers when a type annotation nests generic parameters deeper than
+//! `MAX_TYPE_DEPTH` (3), e.g. `HashMap<String, Vec<Option<Arc<Mutex<T>>>>>`.
+//!
+//! **Why it matters:** Deeply nested generics are hard to read and often signal
+//! that a type alias or newtype wrapper would improve clarity.
+//!
+//! **Example trigger:**
+//! ```rust
+//! fn process(data: HashMap<String, Vec<Option<Result<T, E>>>>) { .. }
+//! // Prefer: type DataMap = HashMap<String, Vec<Option<Result<T, E>>>>;
+//! ```
+//!
+//! **Caveat:** Skips type alias declarations (`type Foo = ...`) since those
+//! are themselves the fix for this smell.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "deeply-nested-type";
 /// Maximum nesting depth for generic type parameters.
 const MAX_TYPE_DEPTH: usize = 3;

@@ -76,6 +76,12 @@ fn extract_binding_name(node: TsNode<'_>) -> String {
 }
 
 /// Find the value expression (RHS) of a `binding` node.
+///
+/// Nix bindings have the shape `name = value;`. The tree-sitter grammar
+/// does not expose `=` or `;` as named fields, so this walks children
+/// sequentially, skipping past the `=` token to find the value node.
+/// Returns the node kind (e.g. `"attrset_expression"`) to determine
+/// whether the binding should be treated as a section with children.
 fn binding_value_kind(node: TsNode<'_>) -> Option<&'static str> {
     let mut past_eq = false;
     for child in node.children() {

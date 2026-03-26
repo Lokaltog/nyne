@@ -57,9 +57,17 @@ impl LanguageSpec for MarkdownLanguage {
 }
 
 /// A heading extracted from the parse tree.
+///
+/// Intermediate representation used between tree-sitter parsing and
+/// hierarchical section construction. The `level` determines nesting
+/// depth, `name` becomes the fragment name, and `start_byte` marks
+/// where this section begins in the source.
 struct Heading {
+    /// ATX heading level (1-6).
     level: u8,
+    /// Heading text content (inline text after `#` markers).
     name: String,
+    /// Byte offset of the heading node in the source.
     start_byte: usize,
 }
 
@@ -176,6 +184,15 @@ fn build_section_fragments(headings: &[Heading], code_blocks: &[CodeBlock], sour
 }
 
 /// Recursively build nested section fragments from a heading level.
+///
+/// Finds the minimum heading level in the slice, then groups headings at
+/// that level into sibling sections. Headings between two same-level
+/// siblings become children of the preceding section (recursion handles
+/// their nesting). Each section's byte range extends from its heading to
+/// the start of the next same-or-higher-level heading (or `section_end_byte`).
+///
+/// Code blocks are assigned to the innermost section that contains them,
+/// excluding those already inside a child section.
 fn build_sections_at_level(
     headings: &[Heading],
     code_blocks: &[CodeBlock],

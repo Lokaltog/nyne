@@ -1,4 +1,28 @@
-//! Analysis rule: detect excessive code nesting.
+//! Analysis rule: detect excessive code nesting depth.
+//!
+//! Triggers when an `if`/`for`/`while`/`match`/`loop` node is nested deeper
+//! than `MAX_DEPTH` (4) levels. Each enclosing control-flow construct
+//! increments the depth counter.
+//!
+//! **Why it matters:** Deeply nested code is hard to follow, test, and modify.
+//! Extract inner branches into helper functions or use early returns to
+//! flatten control flow.
+//!
+//! **Example trigger:**
+//! ```rust
+//! if a {
+//!     if b {
+//!         for x in xs {
+//!             if c {
+//!                 match d { .. } // depth 5 — triggers
+//!             }
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! **Cross-language:** Works across Rust, Python, TypeScript, Go, and more —
+//! `NESTING_KINDS` maps control-flow node kinds from multiple grammars.
 
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
@@ -29,6 +53,7 @@ const NESTING_KINDS: &[&str] = &[
     "try_statement",
 ];
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "deep-nesting";
 /// Analysis rule that detects excessive code nesting depth.
 struct DeepNesting;

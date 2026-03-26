@@ -1,4 +1,12 @@
 //! Content splicing — replacing byte ranges in source files.
+//!
+//! The core splice operation reads source text, replaces a byte range with new
+//! content via a `crop::Rope`, validates the result with a caller-supplied closure
+//! (typically tree-sitter parsing), and writes back atomically. If the source was
+//! already invalid before the splice, validation is skipped so edits to broken
+//! files are always allowed. Helper functions provide line-start/end offset
+//! calculation, indentation detection, and delete-range extension for whitespace
+//! cleanup.
 
 use std::io::ErrorKind;
 use std::ops::Range;

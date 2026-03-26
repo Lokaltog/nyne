@@ -1,4 +1,13 @@
 //! TODO scanner — Aho-Corasick automaton for tag detection.
+//!
+//! [`TodoScanner`] pre-compiles configured tags (TODO, FIXME, HACK, etc.)
+//! into an Aho-Corasick automaton for efficient multi-pattern scanning.
+//! Matches are filtered to only those occurring inside comments, using
+//! tree-sitter comment node ranges when available and falling back to a
+//! line-prefix heuristic (`//`, `#`, `--`, etc.) for unsupported languages.
+//!
+//! **Limitation:** The prefix heuristic cannot detect markers inside block
+//! comments (`/* ... */`) that start mid-line.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};

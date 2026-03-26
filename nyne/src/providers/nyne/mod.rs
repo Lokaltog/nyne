@@ -121,9 +121,15 @@ impl Provider for NyneProvider {
 
 #[derive(Serialize, Clone)]
 /// Guide view — project info and language distribution.
+///
+/// Serialized once at activation time (project metadata doesn't change
+/// during a mount) and reused for every `GUIDE.md` render.
 struct GuideView {
+    /// Absolute path to the mounted project directory.
     source_dir: String,
+    /// Comma-separated language list, ordered by frequency.
     languages: String,
+    /// Dominant file extension for code-block fence tags (e.g., `"rs"`).
     ext: String,
 }
 
@@ -133,7 +139,9 @@ struct GuideView {
 /// `ActivationContext`, so it always reflects the actual activation
 /// state without duplicating each provider's `should_activate()` logic.
 struct StatusView {
+    /// Shared activation context for querying active providers at render time.
     ctx: Arc<ActivationContext>,
+    /// Mount start time — used to compute uptime in the rendered output.
     start_time: Instant,
 }
 

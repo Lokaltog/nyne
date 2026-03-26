@@ -1,9 +1,26 @@
 //! Analysis rule: detect TODO and FIXME comments.
+//!
+//! Triggers on comment nodes containing `TODO:` or `FIXME:` markers (requires
+//! a colon after the keyword to avoid false positives on prose discussion).
+//!
+//! **Why it matters:** TODO/FIXME markers represent deferred work that should
+//! be tracked. Surfacing them as hints keeps them visible in analysis output
+//! and prevents them from being forgotten.
+//!
+//! **Example triggers:**
+//! ```text
+//! // TODO: handle the error case properly
+//! // FIXME: this panics on empty input
+//! ```
+//!
+//! **Caveat:** Prose mentions like "the todo list" without a colon are
+//! intentionally excluded to avoid false positives.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "todo-fixme";
 /// Analysis rule that detects TODO and FIXME comments.
 struct TodoFixme;

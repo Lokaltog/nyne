@@ -1,5 +1,10 @@
 //! Slice specification parsing for list-like virtual files.
 //!
+//! Sliced paths use a colon suffix on the filename: `lines:10-20`, `LOG.md:-5`.
+//! The suffix is parsed into a [`SliceSpec`] which expresses the selection in
+//! 1-based inclusive indices (matching `sed`/`awk` conventions). Sliced paths
+//! are lookup-only — they never appear in readdir listings.
+//!
 //! Re-used by `node::line_slice` (core) and plugin providers.
 
 use std::ops::Range;

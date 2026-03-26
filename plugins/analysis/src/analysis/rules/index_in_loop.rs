@@ -1,9 +1,28 @@
-//! Analysis rule: detect array indexing in loops.
+//! Analysis rule: detect array indexing inside loops.
+//!
+//! Triggers when a loop body contains array subscript expressions like
+//! `items[i]` where `i` is the loop variable. Direct indexing risks
+//! out-of-bounds panics and obscures iteration intent.
+//!
+//! **Why it matters:** Iterator-based patterns (`.iter()`, `.enumerate()`,
+//! `for item in &items`) are bounds-safe and more idiomatic. Index-based
+//! loops often signal C-style thinking that misses language ergonomics.
+//!
+//! **Example trigger:**
+//! ```rust
+//! for i in 0..items.len() {
+//!     process(items[i]); // triggers — prefer `for item in &items`
+//! }
+//! ```
+//!
+//! **Caveat:** Disabled by default (`DEFAULT_DISABLED_RULES`) because index
+//! access is sometimes intentional (parallel arrays, sliding windows).
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "index-in-loop";
 /// Analysis rule that detects array indexing inside loops.
 struct IndexInLoop;

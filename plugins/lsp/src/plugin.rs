@@ -101,6 +101,7 @@ impl Plugin for LspPlugin {
 
     fn default_config(&self) -> Option<toml::Table> { toml::Table::try_from(Config::default()).ok() }
 
+    /// Return the resolved LSP config as JSON for `nyne config` output.
     fn resolved_config(&self, config: &NyneConfig) -> Option<serde_json::Value> {
         let cfg = self
             .resolved
@@ -117,19 +118,25 @@ impl Plugin for LspPlugin {
 /// `SyntaxProvider` can coordinate file renames with the LSP server.
 struct LspFileRenameHook(Arc<LspManager>);
 
+/// Delegates file rename lifecycle events to [`LspManager`].
 impl FileRenameHook for LspFileRenameHook {
+    /// Compute and apply import-path updates before the rename.
     fn will_rename(&self, old: &Path, new: &Path) -> eyre::Result<()> {
         self.0.will_rename_file(old, new);
         Ok(())
     }
 
+    /// Notify the LSP server that the rename has completed.
     fn did_rename(&self, old: &Path, new: &Path) { self.0.did_rename_file(old, new); }
 }
 
 /// Fragment node hook that attaches LSP `Renameable` to symbol directory nodes.
 struct LspFragmentNodeHook;
 
+/// Attaches LSP [`SymbolRename`] capability to symbol directory nodes at construction time.
 impl FragmentNodeHook for LspFragmentNodeHook {
+    /// If an LSP server is available, bind a [`SymbolQuery`] at the symbol's
+    /// name offset and attach it as a [`Renameable`] on the node.
     fn augment(
         &self,
         node: VirtualNode,

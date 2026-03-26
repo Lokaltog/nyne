@@ -1,9 +1,27 @@
-//! Analysis rule: detect boolean parameters.
+//! Analysis rule: detect boolean function parameters.
+//!
+//! Triggers when a function declares a parameter with a boolean type (`bool`,
+//! `boolean`, `Bool`). Boolean parameters create unclear call sites —
+//! `process(true, false)` says nothing about intent.
+//!
+//! **Why it matters:** Boolean parameters reduce readability at call sites and
+//! make future extension difficult. An enum with descriptive variants
+//! communicates intent and is extensible.
+//!
+//! **Example trigger:**
+//! ```rust
+//! fn connect(host: &str, use_tls: bool) { .. }
+//! // Prefer: fn connect(host: &str, tls: TlsMode) { .. }
+//! ```
+//!
+//! **Caveat:** Disabled by default (in `DEFAULT_DISABLED_RULES`) because many
+//! codebases use boolean parameters pervasively.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "boolean-parameter";
 /// Analysis rule that detects boolean function parameters.
 struct BooleanParameter;

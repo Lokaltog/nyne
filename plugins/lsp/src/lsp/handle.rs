@@ -6,6 +6,17 @@
 //
 // Created at resolve time, stored inside Readable impls, queried at read time.
 
+//! Per-file and per-symbol LSP query handles.
+//!
+//! [`LspHandle`] is the resolve-time entry point: it acquires the appropriate
+//! LSP client for a source file's extension and caches the overlay-rooted
+//! path for downstream queries. [`SymbolQuery`] narrows the scope to a
+//! single symbol position, enabling position-sensitive LSP features (hover,
+//! references, rename, etc.).
+//!
+//! These handles are lightweight and clone-friendly -- multiple `VirtualNode`
+//! readables for the same symbol share cloned `SymbolQuery` instances.
+
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 

@@ -32,6 +32,7 @@ pub const SCRIPT_NS_PROVIDER: &str = "provider";
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ScriptAddress(String);
 
+/// Validation and conversion for script addresses.
 impl ScriptAddress {
     /// Create a new script address, validating that it contains exactly three
     /// dot-separated non-empty segments.

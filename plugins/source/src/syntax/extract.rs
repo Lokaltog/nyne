@@ -1,4 +1,9 @@
 //! Standard fragment extraction pipeline for trait-based language decomposers.
+//!
+//! This is the default extraction path used by languages that implement
+//! [`LanguageSpec`](super::spec::LanguageSpec) with `map_symbol_kind` and
+//! optional `extract_extra`. Languages that override `extract_custom` (e.g.
+//! Markdown, Nix, TOML, Fennel) bypass this module entirely.
 
 use super::fragment::{Fragment, FragmentKind};
 use super::parser::{CodeFragmentSpec, TsNode, build_code_fragment};

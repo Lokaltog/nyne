@@ -1,4 +1,18 @@
-//! Linux namespace creation and entry.
+//! Linux namespace creation and entry (user, mount, PID, UTS).
+//!
+//! Provides safe wrappers around `unshare(2)` and `setns(2)` for the
+//! four namespace types used by the sandbox:
+//!
+//! - **User namespace** — grants `CAP_SYS_ADMIN` for unprivileged mount
+//!   operations, then remaps back to the real uid/gid after mounts complete.
+//! - **Mount namespace** — isolates the sandbox's mount table from the host.
+//! - **PID namespace** — gives the command its own PID 1 (init) for clean
+//!   signal forwarding and zombie reaping.
+//! - **UTS namespace** — sets a distinct hostname for shell prompt display.
+//!
+//! All `unshare` calls go through a single safe wrapper that asserts
+//! `UnshareFlags::FILES` is never used (the only flag that would create
+//! cross-thread UB).
 
 use std::fs as stdfs;
 use std::os::fd::{AsFd, OwnedFd};
@@ -40,6 +54,10 @@ pub(super) struct Namespace {
 
 impl Namespace {
     /// Open namespace file descriptors for the given pid.
+    ///
+    /// Opens `/proc/<pid>/ns/user` and `/proc/<pid>/ns/mnt` as read-only fds.
+    /// These fds are passed to [`enter`](Self::enter) to join the target
+    /// process's user and mount namespaces via `setns(2)`.
     pub(super) fn open_from_pid(pid: Pid) -> Result<Self> {
         debug!(pid = pid.as_raw_pid(), "opening namespace fds");
 
@@ -63,6 +81,13 @@ impl Namespace {
     }
 
     /// Enter this namespace (user first, then mount).
+    ///
+    /// Order matters: the user namespace must be entered before the mount
+    /// namespace because `setns(CLONE_NEWNS)` requires `CAP_SYS_ADMIN` in
+    /// the target mount namespace's owning user namespace. Entering the user
+    /// namespace first grants the necessary capability.
+    ///
+    /// Consumes `self` — the namespace fds are closed after entry.
     pub(super) fn enter(self) -> Result<()> {
         debug!("entering user namespace");
         syscall_try!(

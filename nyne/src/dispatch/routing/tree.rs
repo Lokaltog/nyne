@@ -131,6 +131,10 @@ impl<P> RouteTree<P> {
     }
 
     /// Dispatch a lookup request for a specific name.
+    ///
+    /// Walks the tree matching path segments from the request context, then
+    /// invokes the appropriate lookup handler at the target node. Static files
+    /// are checked before dynamic handlers.
     pub fn lookup(&self, provider: &P, ctx: &RequestContext<'_>, name: &str) -> Node {
         let segments = ctx.path.segments();
         self.root
@@ -151,7 +155,11 @@ impl<P> RouteTree<P> {
         self.root.dispatch_children(provider, ctx, segments, params)
     }
 
-    /// Dispatch lookup from explicit segments with pre-populated params.
+    /// Dispatch a lookup from explicit segments with pre-populated params.
+    ///
+    /// Like [`lookup`](Self::lookup), but accepts pre-split segments and existing
+    /// captures. Used by companion-based providers that parse the source file
+    /// path before dispatching the remaining sub-path through the route tree.
     pub fn lookup_at(
         &self,
         provider: &P,
@@ -202,7 +210,13 @@ enum MatchResult {
     Lookup(Option<VirtualNode>),
 }
 
+/// Unwrap helpers for mode-specific match results.
+///
+/// These are type-safe extractors that panic via `unreachable!` if called
+/// on the wrong variant — this is safe because the caller always knows
+/// which dispatch mode was used to produce the result.
 impl MatchResult {
+    /// Extract the children result, panicking if this is a lookup result.
     fn into_children(self) -> Option<Vec<VirtualNode>> {
         match self {
             Self::Children(v) => v,
@@ -210,6 +224,7 @@ impl MatchResult {
         }
     }
 
+    /// Extract the lookup result, panicking if this is a children result.
     fn into_lookup(self) -> Option<VirtualNode> {
         match self {
             Self::Lookup(v) => v,

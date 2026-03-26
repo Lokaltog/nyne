@@ -1,9 +1,29 @@
-//! Analysis rule: detect single-use variables.
+//! Analysis rule: detect single-use variables that could be inlined.
+//!
+//! Triggers on `let` bindings where the variable is used exactly once in the
+//! immediately following statement and nowhere else. The binding adds an
+//! unnecessary indirection.
+//!
+//! **Why it matters:** Single-use variables add a name without aiding
+//! readability. Inlining the expression reduces line count and makes data
+//! flow more direct. Exception: when the variable name documents a complex
+//! expression.
+//!
+//! **Example trigger:**
+//! ```rust
+//! let path = format!("{}/config.toml", dir);
+//! std::fs::read_to_string(path)?;
+//! // Prefer: std::fs::read_to_string(format!("{}/config.toml", dir))?;
+//! ```
+//!
+//! **Caveat:** Disabled by default (`DEFAULT_DISABLED_RULES`) because
+//! descriptive variable names often improve readability even when used once.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "single-use-variable";
 /// Analysis rule that detects single-use variables.
 struct SingleUseVariable;

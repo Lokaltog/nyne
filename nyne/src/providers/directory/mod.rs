@@ -110,8 +110,11 @@ struct FileEntry {
 /// View model for the directory overview template.
 #[derive(Serialize)]
 struct DirOverviewView {
+    /// Name of the directory (last path component).
     dir_name: String,
+    /// Regular files in the directory, sorted alphabetically.
     files: Vec<FileEntry>,
+    /// Subdirectory names, sorted alphabetically.
     subdirs: Vec<String>,
 }
 

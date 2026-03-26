@@ -1,3 +1,6 @@
+//! Symbol inventory resolution — `symbols/` root, `by-kind/` filtering,
+//! and top-level file nodes (imports, file docstring, OVERVIEW.md).
+
 use nyne::prelude::*;
 
 use super::{build_fragment_nodes, fragment_body_path};

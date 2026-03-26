@@ -104,6 +104,8 @@ fn list_processes(term: &Term, id: &str) -> Result<()> {
             .to_string(),
     )?;
     for proc in &list {
+        // unwrap_or_default handles clock skew: if start_time is somehow in the
+        // future (e.g., NTP adjustment), we show zero duration rather than failing.
         let elapsed = SystemTime::now().duration_since(proc.start_time).unwrap_or_default();
 
         term.write_line(&format!(

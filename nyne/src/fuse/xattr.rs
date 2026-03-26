@@ -1,4 +1,18 @@
 //! Extended attribute operations for error reporting and metadata.
+//!
+//! Handles `getxattr`, `listxattr`, and `setxattr` FUSE callbacks. Two layers
+//! of xattrs are merged:
+//!
+//! - **FUSE-level:** `user.error` — stores the last write-pipeline failure message
+//!   per inode, enabling `PostToolUse` hooks to surface validation errors to agents.
+//!   Managed internally by the flush/release path, not writable via `setxattr`.
+//! - **Provider-level:** arbitrary attributes exposed through the node's
+//!   [`Xattrable`](crate::node::Xattrable) capability. Providers use these for
+//!   node-specific metadata (e.g., staging state for batch edits).
+//!
+//! The xattr size-query protocol (`size == 0` → return length) is handled by
+//! [`reply_xattr_data`], which all three handlers share. Event draining after
+//! `setxattr` is owned by the FUSE layer (see `ops.rs` module docs).
 
 use std::ffi::OsStr;
 

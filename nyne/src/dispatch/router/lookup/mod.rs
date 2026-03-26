@@ -1,4 +1,12 @@
 //! Resolution and name lookup operations.
+//!
+//! The core resolution pipeline populates the L1 directory cache and services
+//! individual name lookups. Resolution has five stages: cache check, provider
+//! resolution (via [`resolve_directory`](super::super::resolve::resolve_directory)),
+//! plugin derivation, provider lookup, and real-filesystem fallback.
+//!
+//! All cache locks are acquired and released within individual method calls --
+//! callers never hold locks across calls into this module.
 
 use std::collections::HashSet;
 

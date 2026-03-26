@@ -1,4 +1,10 @@
 //! Claude Code user settings and configuration.
+//!
+//! Manages the `settings.json` file that Claude Code reads on startup.
+//! Layers three sources: nyne-managed defaults (environment variables,
+//! denied tools, hook registrations), user `settings.local.json`, and
+//! dynamically injected hook scripts. The [`HOOK_REGISTRY`] is the single
+//! source of truth for hook event names, matchers, and script paths.
 
 use std::path::Path;
 

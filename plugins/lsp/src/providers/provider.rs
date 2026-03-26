@@ -20,7 +20,9 @@ use nyne_source::services::SourceServices;
 use nyne_source::syntax::{SyntaxRegistry, find_fragment};
 use strum::IntoEnumIterator;
 
+/// Virtual file name for file-level LSP diagnostics.
 const FILE_DIAGNOSTICS: &str = "DIAGNOSTICS.md";
+/// Subdirectory name for LSP code actions under a symbol's companion directory.
 const SUBDIR_ACTIONS: &str = "actions";
 
 use crate::lsp::handle::LspHandle;
@@ -40,7 +42,9 @@ pub struct LspProvider {
     routes: RouteTree<Self>,
 }
 
+/// Construction, template registration, and service access.
 impl LspProvider {
+    /// Unique provider identifier for the LSP provider.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("lsp");
 
     /// Create a new LSP provider, registering all LSP templates.
@@ -109,6 +113,7 @@ impl LspProvider {
 
 /// Route tree handler methods.
 impl LspProvider {
+    /// Lookup entries at the companion root (e.g., `file.rs@/DIAGNOSTICS.md`).
     fn lookup_companion_root(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         let sf = source_file(ctx)?;
 
@@ -273,6 +278,7 @@ impl LspProvider {
 
 /// [`Provider`] implementation for [`LspProvider`].
 impl Provider for LspProvider {
+    /// Return the LSP provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
     /// Dispatch children through the companion route tree.

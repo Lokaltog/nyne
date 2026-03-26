@@ -4,6 +4,20 @@
 // construction. Each method is a cached LSP query — SSOT for key
 // format and caching discipline.
 
+//! Cached LSP query handle scoped to a single file.
+//!
+//! [`FileQuery`] wraps an [`LspClient`] and a file path, providing
+//! cache-aware query methods for all file-level LSP operations.
+//! Each method constructs the appropriate [`CacheKey`] and delegates
+//! through [`LspManager::cached_query`], so callers never build keys
+//! or manage cache lifetimes manually.
+//!
+//! Positional queries (goto, hover, references) are generated via the
+//! [`cached_pos_query!`] macro to eliminate per-method boilerplate.
+//! Non-positional queries (diagnostics, rename, code actions) are
+//! implemented directly with per-method caching rationale documented
+//! inline.
+
 use std::path::Path;
 use std::sync::Arc;
 

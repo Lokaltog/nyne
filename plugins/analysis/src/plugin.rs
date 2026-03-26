@@ -12,6 +12,12 @@ use crate::providers::AnalysisProvider;
 /// Entry point for the analysis plugin.
 struct AnalysisPlugin;
 
+/// Plugin lifecycle for the analysis engine.
+///
+/// During activation, reads `[plugin.analysis]` config, builds a filtered
+/// [`AnalysisEngine`] respecting enabled/disabled rules, and inserts it into
+/// the `TypeMap` as `Arc<AnalysisEngine>`. The provider phase creates an
+/// [`AnalysisProvider`] that contributes `ANALYSIS.md` to symbol directories.
 impl Plugin for AnalysisPlugin {
     fn id(&self) -> &'static str { "analysis" }
 

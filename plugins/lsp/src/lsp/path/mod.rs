@@ -5,6 +5,14 @@
 // are rewritten to the display root (`/code` in sandbox). This module is the
 // single source of truth for all display ↔ overlay path conversions.
 
+//! Path rewriting between FUSE display root and overlay storage root.
+//!
+//! LSP servers run as daemon children and see the overlay filesystem,
+//! while users and the VFS agent see FUSE mount paths.
+//! [`LspPathResolver`] is the single source of truth for translating
+//! between these two path spaces, preventing FUSE re-entrancy and
+//! ensuring LSP responses render with user-visible paths.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

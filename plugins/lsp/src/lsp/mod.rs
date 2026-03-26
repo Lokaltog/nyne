@@ -50,6 +50,7 @@ pub struct LspRegistry {
     language_ids: HashMap<String, String>,
 }
 
+/// Construction, lookup, and introspection for the extension-indexed server registry.
 impl LspRegistry {
     /// Build the registry from the merged config server list.
     ///

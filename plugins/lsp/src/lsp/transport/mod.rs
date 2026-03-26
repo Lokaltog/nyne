@@ -5,6 +5,17 @@
 // `read_response` handles these by sending back empty success responses,
 // preventing deadlocks where the server blocks waiting for an acknowledgement.
 
+//! JSON-RPC transport layer for LSP communication.
+//!
+//! Implements the base protocol: Content-Length framed messages over a
+//! byte stream. The transport is symmetric -- [`read_message`] and
+//! [`write_message`] work for both client-to-server and server-to-client
+//! directions.
+//!
+//! [`parse_response_result`] is the SSOT for extracting results from
+//! JSON-RPC responses, shared by both the synchronous initialization
+//! path and the async reader thread.
+
 use std::io::{BufRead, Write};
 
 use color_eyre::eyre::{Result, eyre};

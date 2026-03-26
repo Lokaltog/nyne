@@ -1,9 +1,20 @@
 //! Analysis rule: detect overly long match expressions.
+//!
+//! Triggers when a `match`/`switch` expression has more than `MAX_ARMS` (12)
+//! arms or cases. Long match expressions are hard to review and often signal
+//! a missing abstraction (dispatch table, visitor pattern, or enum method).
+//!
+//! **Why it matters:** Each arm is an independent code path that needs
+//! testing. Extract common patterns, use trait dispatch, or split into
+//! sub-matches to keep match expressions manageable.
+//!
+//! **Example trigger:** A `match` with 13+ arms will trigger this rule.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "long-match";
 /// Maximum match arms/cases before triggering.
 const MAX_ARMS: usize = 8;

@@ -1,9 +1,29 @@
-//! Analysis rule: detect magic strings.
+//! Analysis rule: detect magic strings outside constant contexts.
+//!
+//! Triggers on string literals (4+ characters) outside constant declarations,
+//! attribute annotations, and other safe contexts. Short strings, format
+//! templates, file paths, and URLs are excluded as they are rarely "magic."
+//!
+//! **Why it matters:** Repeated string literals across a codebase lead to
+//! typo-driven bugs and make refactoring fragile. Named constants centralize
+//! the definition and enable IDE-assisted renaming.
+//!
+//! **Example trigger:**
+//! ```rust
+//! if role == "admin" {
+//!     ..
+//! } // Prefer: const ADMIN_ROLE: &str = "admin";
+//! ```
+//!
+//! **Caveat:** Disabled by default (`DEFAULT_DISABLED_RULES`) because string
+//! literals in logging, error messages, and test assertions are common and
+//! produce high false-positive rates.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "magic-string";
 /// Additional safe parents specific to string literals.
 const STRING_SAFE_PARENTS: &[&str] = &[

@@ -1,5 +1,3 @@
-//! Bidirectional inode number <-> VFS location mapping with growth-only semantics.
-
 //! Bidirectional inode number to VFS location mapping with growth-only semantics.
 //!
 //! FUSE identifies every file and directory by a 64-bit inode number.

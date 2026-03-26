@@ -1,9 +1,29 @@
-//! Analysis rule: detect empty catch blocks.
+//! Analysis rule: detect empty catch/rescue blocks.
+//!
+//! Triggers on `catch`, `except`, `rescue`, or `on` blocks that contain no
+//! statements (only whitespace or comments). Empty exception handlers silently
+//! swallow errors, making failures invisible.
+//!
+//! **Why it matters:** Swallowed exceptions hide bugs and make debugging
+//! extremely difficult. At minimum, log the error or add a comment explaining
+//! why ignoring it is intentional.
+//!
+//! **Example trigger:**
+//! ```python
+//! try:
+//!     risky_operation()
+//! except Exception:
+//!     pass  # this is fine — but an empty block is not
+//! ```
+//!
+//! **Cross-language:** Works for Rust (`catch_clause` is rare), Python
+//! (`except_clause`), TypeScript/Java (`catch_clause`), Ruby (`rescue`).
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "empty-catch";
 /// Analysis rule that detects empty catch blocks.
 struct EmptyCatch;

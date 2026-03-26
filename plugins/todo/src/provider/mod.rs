@@ -1,4 +1,10 @@
 //! TODO/FIXME provider — scans source files for TODO markers.
+//!
+//! Exposes a virtual `@/todo/` directory tree with per-tag subdirectories
+//! (e.g. `@/todo/TODO/`, `@/todo/FIXME/`) and a `TODO.md` overview.
+//! Each entry is a symlink back to the source file at the marker line.
+//! The index is lazily populated on first access and invalidated when
+//! scanned files change on disk.
 
 /// TODO entry -- a single TODO marker in source code.
 mod entry;
@@ -263,6 +269,7 @@ struct EntryView {
     text: String,
 }
 
+/// Convert a [`TodoEntry`] to a serializable [`EntryView`] for template rendering.
 impl From<&TodoEntry> for EntryView {
     fn from(entry: &TodoEntry) -> Self {
         Self {

@@ -6,6 +6,7 @@
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "large-closure";
 /// Maximum closure body lines before triggering.
 const MAX_CLOSURE_LINES: usize = 15;

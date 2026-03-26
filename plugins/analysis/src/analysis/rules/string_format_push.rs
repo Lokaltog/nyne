@@ -1,9 +1,26 @@
-//! Analysis rule: detect string formatting before push.
+//! Analysis rule: detect `format!()` used only as a `push_str` argument.
+//!
+//! Triggers on macro invocations like `s.push_str(&format!("x={x}"))` where
+//! `write!(s, "x={x}")` would avoid an intermediate allocation.
+//!
+//! **Why it matters:** `format!()` allocates a temporary `String` that is
+//! immediately consumed by `push_str` and dropped. `write!` or `write_fmt`
+//! writes directly into the target buffer, saving one allocation per call.
+//!
+//! **Example trigger:**
+//! ```rust
+//! output.push_str(&format!("count: {}", n));
+//! // Prefer: write!(output, "count: {}", n).unwrap();
+//! ```
+//!
+//! **Caveat:** Only detects the `format!(...)` inside `push_str()` pattern.
+//! Does not flag standalone `format!` or other allocation-then-consume patterns.
 
 use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
+/// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "string-format-push";
 /// Analysis rule that detects format! used as `push_str` argument.
 struct StringFormatPush;

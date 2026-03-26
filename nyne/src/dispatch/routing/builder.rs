@@ -58,20 +58,29 @@ impl<P: Send + Sync + 'static> RouteTreeBuilder<P> {
     }
 
     /// Add a child route at the root level.
+    ///
+    /// This is the primary way to attach segment-matched sub-trees. Each child
+    /// is a [`RouteNodeBuilder`] configured with a segment matcher and handlers.
     #[must_use]
     pub fn route(mut self, child: RouteNodeBuilder<P>) -> Self {
         self.root.sub_routes.push(child);
         self
     }
 
-    /// Set children handler at root level.
+    /// Set the readdir (children) handler at the root level.
+    ///
+    /// Invoked when the VFS path resolves to the root of this route tree.
+    /// Returns directory entries visible at the top level of the provider's namespace.
     #[must_use]
     pub fn children(mut self, handler: impl Fn(&P, &RouteCtx<'_>) -> Nodes + Send + Sync + 'static) -> Self {
         self.root.children_handler = Some(Box::new(handler));
         self
     }
 
-    /// Set lookup handler at root level.
+    /// Set the single-name lookup handler at the root level.
+    ///
+    /// Invoked when the VFS looks up a specific name within the root of this
+    /// route tree. Returns the matching node or `None` if unrecognized.
     #[must_use]
     pub fn lookup(mut self, handler: impl Fn(&P, &RouteCtx<'_>, &str) -> Node + Send + Sync + 'static) -> Self {
         self.root.lookup_handler = Some(Box::new(handler));
@@ -105,30 +114,53 @@ impl<P: Send + Sync + 'static> RouteNodeBuilder<P> {
         self
     }
 
-    /// Exact segment match.
+    /// Create a node that matches a single exact path segment (e.g., `"symbols"`).
+    ///
+    /// Exact nodes auto-emit a directory entry in the parent's readdir by default.
+    /// Call [`no_emit`](Self::no_emit) to suppress this for lookup-only routes.
     pub fn exact(name: &'static str) -> Self { Self::new(SegmentMatcher::Exact(name)) }
 
-    /// Single-segment capture with optional prefix and/or suffix.
+    /// Create a node that captures a single path segment into a named parameter.
+    ///
+    /// The captured value is accessible via [`RouteCtx::param`]. Optional `prefix`
+    /// and `suffix` are stripped before storing (e.g., `prefix: Some("@")` matches
+    /// `"@foo"` and captures `"foo"`).
     pub fn capture(name: &'static str, prefix: Option<&'static str>, suffix: Option<&'static str>) -> Self {
         Self::new(SegmentMatcher::Capture { name, prefix, suffix })
     }
 
-    /// Rest capture (1+ segments).
+    /// Create a node that greedily captures one or more remaining path segments.
+    ///
+    /// The captured segments are accessible via [`RouteCtx::params`] as a `Vec`.
+    /// Uses the rightmost-suffix algorithm [DD-19] to find split points when
+    /// subsequent route levels need to match after the rest-capture.
     pub fn rest_capture(name: &'static str, suffix: Option<&'static str>) -> Self {
         Self::new(SegmentMatcher::RestCapture { name, suffix })
     }
 
-    /// Glob match.
+    /// Create a catch-all glob node that matches any single segment.
+    ///
+    /// Glob nodes have the lowest precedence and act as fallback routes
+    /// when no exact, capture, or rest-capture matches. They do not emit
+    /// directory entries and do not capture the matched segment name.
     pub fn glob() -> Self { Self::new(SegmentMatcher::Glob) }
 
-    /// Set children handler.
+    /// Set the handler invoked for readdir (children) requests at this node.
+    ///
+    /// The handler receives the provider state and route context, and returns
+    /// the list of virtual nodes to expose as directory entries. Static files
+    /// and auto-emitted sub-route directories are merged into the result.
     #[must_use]
     pub fn children(mut self, handler: impl Fn(&P, &RouteCtx<'_>) -> Nodes + Send + Sync + 'static) -> Self {
         self.children_handler = Some(Box::new(handler));
         self
     }
 
-    /// Set lookup handler.
+    /// Set the handler invoked for single-name lookup requests at this node.
+    ///
+    /// The handler receives the provider state, route context, and the name
+    /// being looked up. It returns `Ok(Some(node))` for a match or `Ok(None)`
+    /// to indicate no match. Static files are checked before invoking this handler.
     #[must_use]
     pub fn lookup(mut self, handler: impl Fn(&P, &RouteCtx<'_>, &str) -> Node + Send + Sync + 'static) -> Self {
         self.lookup_handler = Some(Box::new(handler));
@@ -150,7 +182,10 @@ impl<P: Send + Sync + 'static> RouteNodeBuilder<P> {
         self
     }
 
-    /// Add a sub-route.
+    /// Add a child sub-route nested under this node.
+    ///
+    /// Sub-routes are sorted by segment precedence at build time (exact before
+    /// capture before rest-capture before glob), ensuring deterministic dispatch.
     #[must_use]
     pub fn route(mut self, child: Self) -> Self {
         self.sub_routes.push(child);

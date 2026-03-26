@@ -1,4 +1,8 @@
-//! TODO entry — a single TODO marker in source code.
+//! TODO entry — a single TODO marker found in source code.
+//!
+//! [`TodoEntry`] captures the tag, file path, line number, and comment text.
+//! Entries are surfaced as symlinks in the VFS: `@/todo/TODO/src__main.rs:42--fix-bug`
+//! pointing back to the source file at the marker's line via `at-line/`.
 
 use std::path::PathBuf;
 use std::sync::Arc;
