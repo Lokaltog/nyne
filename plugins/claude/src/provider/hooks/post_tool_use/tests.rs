@@ -29,7 +29,11 @@ fn source_rel_path_cases(#[case] file_path: &str, #[case] tool_name: &str, #[cas
         "Edit" | "Write" => file_tool_input(file_path),
         _ => bash_input(),
     };
-    assert_eq!(source_rel_path(&input, tool_name, "/code/").as_deref(), expected);
+    let edit = input.tool_input_as::<EditToolInput>();
+    assert_eq!(
+        source_rel_path(edit.as_ref(), &input, tool_name, "/code/").as_deref(),
+        expected
+    );
 }
 
 /// Builds a `HookInput` for an Edit tool with old/new string replacement.
@@ -98,8 +102,9 @@ fn changed_line_range_includes_edit(
     #[case] max_line: usize,
 ) {
     let input = edit_input(old, new);
+    let edit = input.tool_input_as::<EditToolInput>();
     let decomposed = make_decomposed(source);
-    let range = changed_line_range(&input, "Edit", &decomposed).expect("should return Some");
+    let range = changed_line_range(edit.as_ref(), &decomposed).expect("should return Some");
     assert!(
         range.start <= min_line,
         "start {range:?} should include line {min_line}"
@@ -109,28 +114,25 @@ fn changed_line_range_includes_edit(
 
 /// Verifies that changed_line_range returns None for ambiguous or non-Edit inputs.
 #[rstest]
-#[case::write("old", "new", false, "Write", "new\n")]
-#[case::empty_new("deleted", "", false, "Edit", "fn foo() {}\n")]
-#[case::replace_all("old", "new", true, "Edit", "new and new\n")]
-#[case::ambiguous("x", "val", false, "Edit", "let a = val;\nlet b = val;\n")]
-fn changed_line_range_returns_none(
-    #[case] old: &str,
-    #[case] new: &str,
-    #[case] replace_all: bool,
-    #[case] tool_name: &str,
-    #[case] source: &str,
-) {
-    let input = if replace_all {
-        serde_json::from_value(json!({
-            "tool_name": "Edit",
-            "tool_input": { "file_path": "/code/src/lib.rs", "old_string": old, "new_string": new, "replace_all": true }
-        }))
-        .unwrap()
-    } else {
-        edit_input(old, new)
-    };
+#[case::write(None, "new\n")]
+#[case::empty_new(Some(("deleted", "", false)), "fn foo() {}\n")]
+#[case::replace_all(Some(("old", "new", true)), "new and new\n")]
+#[case::ambiguous(Some(("x", "val", false)), "let a = val;\nlet b = val;\n")]
+fn changed_line_range_returns_none(#[case] edit_args: Option<(&str, &str, bool)>, #[case] source: &str) {
+    let input: Option<HookInput> = edit_args.map(|(old, new, repl)| {
+        if repl {
+            serde_json::from_value(json!({
+                "tool_name": "Edit",
+                "tool_input": { "file_path": "/code/src/lib.rs", "old_string": old, "new_string": new, "replace_all": true }
+            }))
+            .unwrap()
+        } else {
+            edit_input(old, new)
+        }
+    });
+    let edit = input.as_ref().and_then(|i| i.tool_input_as::<EditToolInput>());
     let decomposed = make_decomposed(source);
-    assert!(changed_line_range(&input, tool_name, &decomposed).is_none());
+    assert!(changed_line_range(edit.as_ref(), &decomposed).is_none());
 }
 
 /// Verifies that hints are filtered to the given line range.

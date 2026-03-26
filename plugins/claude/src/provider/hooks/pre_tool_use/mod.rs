@@ -16,6 +16,7 @@ use nyne_source::services::SourceServices;
 use nyne_source::syntax::find_fragment_at_line;
 use nyne_source::syntax::fragment::Fragment;
 use nyne_source::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, fragment_list};
+use serde::Serialize;
 
 use crate::config::PreToolHookConfig;
 use crate::provider::hook_schema::{
@@ -31,6 +32,20 @@ const PARTIAL_DENY: &str = "hooks/pre-tool-use/deny";
 const PARTIAL_HINT: &str = "hooks/pre-tool-use/hint";
 /// Partial template key for grep symbol hint.
 const PARTIAL_GREP: &str = "hooks/pre-tool-use/grep";
+/// Mode for the pre-tool-use hook template dispatch.
+///
+/// Determines both the Jinja partial to render and the output type
+/// (deny vs context hint). Serializes to lowercase for template matching.
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase")]
+enum PreToolMode {
+    /// Suggest VFS alternatives without blocking the tool call.
+    Hint,
+    /// Block the tool call (e.g., broad raw-file reads).
+    Deny,
+    /// Suggest LSP-powered analysis for grep-like searches.
+    Grep,
+}
 
 /// `PreToolUse` hook script implementation.
 ///
@@ -89,16 +104,12 @@ impl PreToolUse {
         let Some((kind, symbol)) = extract_symbol_from_grep(&pattern) else {
             return HookOutput::empty();
         };
-        let mode = "grep";
-        let rendered = self
-            .engine
-            .render(TMPL_PRE, &minijinja::context! { mode, kind, symbol });
-        let trimmed = rendered.trim();
-        if trimmed.is_empty() {
-            HookOutput::empty()
-        } else {
-            HookOutput::context("PreToolUse", trimmed.to_owned()).to_bytes()
-        }
+        super::render_context(
+            &self.engine,
+            TMPL_PRE,
+            &minijinja::context! { mode => PreToolMode::Grep, kind, symbol },
+            "PreToolUse",
+        )
     }
 
     /// File access interception — computes decomposition context, picks hint vs deny.
@@ -188,9 +199,13 @@ impl PreToolUse {
                 .is_some_and(|l| l.cast_signed() <= policy.narrow_read_limit());
             let threshold = policy.deny_lines_threshold();
             let under_threshold = threshold < 0 || i64::try_from(total_lines).unwrap_or(i64::MAX) < threshold;
-            if narrow || under_threshold { "hint" } else { "deny" }
+            if narrow || under_threshold {
+                PreToolMode::Hint
+            } else {
+                PreToolMode::Deny
+            }
         } else {
-            "hint"
+            PreToolMode::Hint
         };
 
         let config = minijinja::Value::from_serialize(&policy);
@@ -204,7 +219,7 @@ impl PreToolUse {
         }
 
         match mode {
-            "deny" => HookOutput::deny(trimmed.to_owned()).to_bytes(),
+            PreToolMode::Deny => HookOutput::deny(trimmed.to_owned()).to_bytes(),
             _ => HookOutput::context("PreToolUse", trimmed.to_owned()).to_bytes(),
         }
     }

@@ -14,11 +14,14 @@ mod statusline;
 /// Stop hook -- SSOT/DRY review after turns with code changes.
 mod stop;
 
+use nyne::templates::TemplateEngine;
 pub(in crate::provider) use post_tool_use::PostToolUse;
 pub(in crate::provider) use pre_tool_use::PreToolUse;
 pub(in crate::provider) use session_start::SessionStart;
 pub(in crate::provider) use statusline::Statusline;
 pub(in crate::provider) use stop::Stop;
+
+use crate::provider::hook_schema::HookOutput;
 
 /// Shared partial template key for VFS hint macros.
 ///
@@ -31,6 +34,24 @@ const PARTIAL_VFS_HINTS: &str = "hooks/vfs-hints";
 /// provides Jinja macros for rendering VFS path suggestions and symbol
 /// navigation hints.
 const PARTIAL_VFS_HINTS_SRC: &str = include_str!("templates/vfs-hints.j2");
+/// Render a hook template and wrap non-empty output as a context message.
+///
+/// Shared epilogue for hook `exec` methods: render → trim → empty-check →
+/// `HookOutput::context(event_name, trimmed).to_bytes()`.
+pub(super) fn render_context(
+    engine: &TemplateEngine,
+    tmpl: &str,
+    view: &impl serde::Serialize,
+    event_name: &'static str,
+) -> Vec<u8> {
+    let rendered = engine.render(tmpl, view);
+    let trimmed = rendered.trim();
+    if trimmed.is_empty() {
+        HookOutput::empty()
+    } else {
+        HookOutput::context(event_name, trimmed.to_owned()).to_bytes()
+    }
+}
 
 pub(super) use nyne::{is_vfs_path, source_file_of};
 pub(super) use nyne_source::providers::names::{is_symbols_overview, symbol_from_vfs_path};
