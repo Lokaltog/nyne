@@ -265,9 +265,7 @@ impl HookOutput {
 
     /// Serialize to JSON bytes for script output.
     #[expect(clippy::expect_used, reason = "HookOutput serialization is infallible")]
-    pub fn to_bytes(&self) -> Vec<u8> {
-        serde_json::to_vec(self).expect("HookOutput serialization is infallible")
-    }
+    pub fn to_bytes(&self) -> Vec<u8> { serde_json::to_vec(self).expect("HookOutput serialization is infallible") }
 
     /// Empty output — no effect on the hook event.
     pub const fn empty() -> Vec<u8> { Vec::new() }

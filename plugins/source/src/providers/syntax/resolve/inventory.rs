@@ -79,6 +79,7 @@ impl SyntaxProvider {
             source_file,
             &[],
             &self.ctx,
+            self.fragment_hook.as_deref(),
         ));
 
         Ok(Some(nodes))

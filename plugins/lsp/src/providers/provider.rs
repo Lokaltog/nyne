@@ -31,7 +31,7 @@ const SUBDIR_ACTIONS: &str = "actions";
 
 use crate::lsp::handle::LspHandle;
 use crate::lsp::manager::LspManager;
-use crate::providers::content::rename::{FileRenameDiff, RenameDiff, SymbolRename};
+use crate::providers::content::rename::{FileRenameDiff, RenameDiff};
 use crate::providers::content::{LspFeature, LspHandles, build_diagnostics_node, build_lsp_symbol_nodes};
 use crate::providers::lsp_links;
 
@@ -98,7 +98,7 @@ impl LspProvider {
                     lookup(lookup_file_rename_preview),
                 }
 
-                "symbols" => children_symbols_lsp {
+                "symbols" {
                     "{..path}@" => children_fragment_lsp {
                         lookup(lookup_fragment_lsp),
 
@@ -119,39 +119,6 @@ impl LspProvider {
 
 /// Route tree handler methods.
 impl LspProvider {
-    /// Emit fragment directories with LSP `Renameable` attached.
-    ///
-    /// Emits minimal directory nodes matching the names `SyntaxProvider` produces.
-    /// The dispatch layer merges capabilities: `SyntaxProvider`'s props/unlinkable
-    /// combine with `LspProvider`'s `Renameable` into a single merged node.
-    // FIXME: this re-iterates the decomposition to emit duplicate directory nodes
-    // purely to attach Renameable. The dispatch capability merge makes it work, but
-    // a cleaner solution would let providers attach capabilities to existing nodes
-    // without re-emitting them (e.g. a `contribute_capabilities(path, name)` hook).
-    fn children_symbols_lsp(&self, ctx: &RouteCtx<'_>) -> Nodes {
-        let sf = source_file(ctx)?;
-        let shared = self.services().decomposition.get(&sf)?;
-        let Some(lsp_handle) = LspHandle::for_file(&self.ctx, &sf) else {
-            return Ok(None);
-        };
-
-        let nodes: Vec<VirtualNode> = shared
-            .decomposed
-            .iter()
-            .filter_map(|frag| {
-                let fs_name = frag.fs_name.as_deref()?;
-                let query = lsp_handle.at(&shared.source, frag.name_byte_offset);
-                Some(VirtualNode::directory(companion_name(fs_name)).with_renameable(SymbolRename { query }))
-            })
-            .collect();
-
-        if nodes.is_empty() {
-            return Ok(None);
-        }
-        Ok(Some(nodes))
-    }
-
-    /// Lookup DIAGNOSTICS.md at the companion root level.
     fn lookup_companion_root(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         let sf = source_file(ctx)?;
 

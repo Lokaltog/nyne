@@ -16,8 +16,8 @@ use nyne::node::VirtualNode;
 use nyne::types::SymbolLineRange;
 use nyne::types::vfs_path::VfsPath;
 
-use super::SyntaxProvider;
 use super::content::{FileOverviewContent, FragmentResolver, LinesContent, LinesWrite, delete};
+use super::{FragmentNodeHook, SyntaxProvider};
 use crate::edit::diff_action::DiffActionNode;
 use crate::providers::names::{COMPANION_SUFFIX, FILE_BODY, FILE_OVERVIEW, SUBDIR_SYMBOLS, companion_name};
 use crate::services::SourceServices;
@@ -120,6 +120,7 @@ pub(super) fn build_fragment_nodes(
     source_file: &VfsPath,
     parent_path: &[String],
     activation: &Arc<ActivationContext>,
+    hook: Option<&dyn FragmentNodeHook>,
 ) -> Vec<VirtualNode> {
     fragments
         .iter()
@@ -136,6 +137,10 @@ pub(super) fn build_fragment_nodes(
                 source_file: source_file.clone(),
                 fragment_path: frag_path,
             }));
+
+            if let Some(hook) = hook {
+                node = hook.augment(node, activation, source_file, source, frag.name_byte_offset);
+            }
 
             Some(node)
         })

@@ -70,6 +70,7 @@ impl SyntaxProvider {
             source_file,
             fragment_path,
             &self.ctx,
+            self.fragment_hook.as_deref(),
         ));
 
         // code/ directory if this fragment has code block children.

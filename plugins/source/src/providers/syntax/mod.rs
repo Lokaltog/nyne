@@ -29,6 +29,24 @@ pub trait FileRenameHook: Send + Sync {
     fn did_rename(&self, old: &Path, new: &Path);
 }
 
+/// Hook for augmenting fragment directory nodes with additional capabilities.
+///
+/// Implementations are looked up from the [`ActivationContext`] `TypeMap`
+/// during provider construction. When present, the syntax provider calls
+/// this hook for each fragment node so downstream plugins can attach
+/// capabilities (e.g. `Renameable`) without re-emitting duplicate nodes.
+pub trait FragmentNodeHook: Send + Sync {
+    /// Augment a fragment directory node with additional capabilities.
+    fn augment(
+        &self,
+        node: VirtualNode,
+        activation: &ActivationContext,
+        source_file: &VfsPath,
+        source: &str,
+        name_byte_offset: usize,
+    ) -> VirtualNode;
+}
+
 /// Content reading, writing, and rendering for decomposed symbols.
 mod content;
 /// Symbol lookup by shorthand, line number, and rename preview.
@@ -49,6 +67,7 @@ pub struct SyntaxProvider {
     overview: TemplateHandle,
     file_overview: TemplateHandle,
     rename_hook: Option<Arc<dyn FileRenameHook>>,
+    fragment_hook: Option<Arc<dyn FragmentNodeHook>>,
     routes: RouteTree<Self>,
 }
 
@@ -63,6 +82,7 @@ impl SyntaxProvider {
         let engine = b.finish();
         Self {
             rename_hook: ctx.get::<Arc<dyn FileRenameHook>>().cloned(),
+            fragment_hook: ctx.get::<Arc<dyn FragmentNodeHook>>().cloned(),
             ctx,
             overview: TemplateHandle::new(&engine, overview_key),
             file_overview: TemplateHandle::new(&engine, file_overview_key),

@@ -8,17 +8,21 @@ use color_eyre::eyre::{self, Result};
 use linkme::distributed_slice;
 use nyne::config::NyneConfig;
 use nyne::dispatch::activation::ActivationContext;
+use nyne::node::VirtualNode;
 use nyne::plugin::{PLUGINS, Plugin, PluginFactory};
 use nyne::provider::Provider;
 use nyne::types::PassthroughProcesses;
-use nyne_source::providers::syntax::FileRenameHook;
+use nyne::types::vfs_path::VfsPath;
+use nyne_source::providers::syntax::{FileRenameHook, FragmentNodeHook};
 use nyne_source::syntax::SyntaxRegistry;
 use tracing::info;
 
 use crate::config::LspConfig;
 use crate::lsp::LspRegistry;
+use crate::lsp::handle::LspHandle;
 use crate::lsp::manager::LspManager;
 use crate::lsp::path::LspPathResolver;
+use crate::providers::content::rename::SymbolRename;
 use crate::providers::provider::LspProvider;
 use crate::providers::workspace_search::WorkspaceSearchProvider;
 
@@ -72,8 +76,13 @@ impl Plugin for LspPlugin {
 
         // Insert the FileRenameHook so SyntaxProvider can coordinate
         // file renames with the LSP server.
-        let hook: Arc<dyn FileRenameHook> = Arc::new(LspFileRenameHook(Arc::clone(&lsp)));
-        ctx.insert(hook);
+        let rename_hook: Arc<dyn FileRenameHook> = Arc::new(LspFileRenameHook(Arc::clone(&lsp)));
+        ctx.insert(rename_hook);
+
+        // Insert the FragmentNodeHook so SyntaxProvider can attach
+        // LSP Renameable to fragment directory nodes at construction time.
+        let fragment_hook: Arc<dyn FragmentNodeHook> = Arc::new(LspFragmentNodeHook);
+        ctx.insert(fragment_hook);
 
         info!("lsp plugin activated");
 
@@ -109,6 +118,26 @@ impl FileRenameHook for LspFileRenameHook {
     }
 
     fn did_rename(&self, old: &Path, new: &Path) { self.0.did_rename_file(old, new); }
+}
+
+/// Fragment node hook that attaches LSP `Renameable` to symbol directory nodes.
+struct LspFragmentNodeHook;
+
+impl FragmentNodeHook for LspFragmentNodeHook {
+    fn augment(
+        &self,
+        node: VirtualNode,
+        activation: &ActivationContext,
+        source_file: &VfsPath,
+        source: &str,
+        name_byte_offset: usize,
+    ) -> VirtualNode {
+        let Some(handle) = LspHandle::for_file(activation, source_file) else {
+            return node;
+        };
+        let query = handle.at(source, name_byte_offset);
+        node.with_renameable(SymbolRename { query })
+    }
 }
 
 /// Link-time registration of the LSP plugin into the global `PLUGINS` slice.
