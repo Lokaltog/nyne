@@ -28,7 +28,7 @@ pub(super) struct SymbolLspView {
     pub query: SymbolQuery,
     pub feature: LspFeature,
     pub resolver: FragmentResolver,
-    pub fragment_path: Vec<String>,
+    pub fragment_path: Arc<[String]>,
 }
 
 /// [`TemplateView`] implementation for [`SymbolLspView`].

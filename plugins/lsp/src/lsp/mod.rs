@@ -120,13 +120,8 @@ impl LspRegistry {
     /// Used to build the passthrough process set — these processes must see
     /// only the real filesystem so they index the actual source, not virtual
     /// content.
-    pub(crate) fn server_commands(&self) -> impl Iterator<Item = &str> {
-        self.servers
-            .values()
-            .flatten()
-            .map(LspServerDef::command_str)
-            .collect::<HashSet<_>>()
-            .into_iter()
+    pub(crate) fn server_commands(&self) -> HashSet<&str> {
+        self.servers.values().flatten().map(LspServerDef::command_str).collect()
     }
 }
 

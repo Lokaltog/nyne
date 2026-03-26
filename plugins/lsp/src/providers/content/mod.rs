@@ -52,7 +52,7 @@ pub(crate) fn build_lsp_symbol_nodes(
     name_byte_offset: usize,
     lsp_handles: &LspHandles,
     resolver: &FragmentResolver,
-    fragment_path: &[String],
+    fragment_path: &Arc<[String]>,
 ) -> Vec<VirtualNode> {
     let sym = handle.at(source, name_byte_offset);
     let caps = handle.capabilities();
@@ -69,7 +69,7 @@ pub(crate) fn build_lsp_symbol_nodes(
             query: sym.clone(),
             feature,
             resolver: resolver.clone(),
-            fragment_path: fragment_path.to_vec(),
+            fragment_path: Arc::clone(fragment_path),
         }));
         if let Some(dir) = feature.dir_name() {
             nodes.push(VirtualNode::directory(dir));

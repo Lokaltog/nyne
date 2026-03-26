@@ -1,7 +1,7 @@
 //! Plugin registration and lifecycle implementation.
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::thread;
 
 use color_eyre::eyre::{self, Result};
@@ -28,9 +28,12 @@ use crate::providers::workspace_search::WorkspaceSearchProvider;
 
 /// Entry point for the LSP plugin, implementing the [`Plugin`] trait.
 ///
-/// Unit struct that anchors plugin lifecycle methods. Registered into the
-/// global plugin slice at link time via [`LSP_PLUGIN`].
-struct LspPlugin;
+/// Registered into the global plugin slice at link time via [`LSP_PLUGIN`].
+/// Caches the resolved [`LspConfig`] from `activate` so `resolved_config`
+/// can return it without re-parsing.
+struct LspPlugin {
+    resolved: OnceLock<LspConfig>,
+}
 
 /// Two-phase lifecycle for the LSP plugin.
 ///
@@ -46,13 +49,14 @@ impl Plugin for LspPlugin {
 
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
         let lsp_config = LspConfig::from_plugin_config(ctx.plugin_config("lsp"));
+        let _ = self.resolved.set(lsp_config.clone());
         let sandbox_env = ctx.config().sandbox.env.clone();
         let lsp_registry = LspRegistry::build_with_config(&lsp_config);
 
         // Contribute LSP server commands to the passthrough set so those
         // processes see only the real filesystem (not virtual content).
         ctx.insert(PassthroughProcesses::new(
-            lsp_registry.server_commands().map(str::to_owned).collect(),
+            lsp_registry.server_commands().into_iter().map(str::to_owned).collect(),
         ));
 
         let lsp = Arc::new(LspManager::new(
@@ -101,7 +105,12 @@ impl Plugin for LspPlugin {
     fn default_config(&self) -> Option<toml::Table> { toml::Table::try_from(LspConfig::default()).ok() }
 
     fn resolved_config(&self, config: &NyneConfig) -> Option<serde_json::Value> {
-        serde_json::to_value(LspConfig::from_plugin_config(config.plugin.get("lsp"))).ok()
+        let cfg = self
+            .resolved
+            .get()
+            .cloned()
+            .unwrap_or_else(|| LspConfig::from_plugin_config(config.plugin.get("lsp")));
+        serde_json::to_value(cfg).ok()
     }
 }
 
@@ -146,4 +155,8 @@ impl FragmentNodeHook for LspFragmentNodeHook {
 /// which is enough for `linkme` to include this static in the final binary.
 #[allow(unsafe_code)]
 #[distributed_slice(PLUGINS)]
-static LSP_PLUGIN: PluginFactory = || Box::new(LspPlugin);
+static LSP_PLUGIN: PluginFactory = || {
+    Box::new(LspPlugin {
+        resolved: OnceLock::new(),
+    })
+};

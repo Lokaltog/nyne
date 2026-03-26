@@ -18,10 +18,10 @@ use nyne::provider::{Node, Nodes, Provider, ProviderId};
 use nyne::templates::TemplateHandle;
 use nyne::types::path_conventions::split_companion_path;
 use nyne::types::vfs_path::VfsPath;
-use nyne::{companion_children, companion_lookup, source_file};
+use nyne::{SUBDIR_SYMBOLS, companion_children, companion_lookup, companion_name, source_file};
 use nyne_source::edit::diff_action::DiffActionNode;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
-use nyne_source::providers::names::{SUBDIR_SYMBOLS, companion_name, handle_builder};
+use nyne_source::providers::names::handle_builder;
 use nyne_source::services::SourceServices;
 use nyne_source::syntax::{SyntaxRegistry, find_fragment};
 use strum::IntoEnumIterator;
@@ -180,6 +180,7 @@ impl LspProvider {
         };
 
         let resolver = FragmentResolver::new(services.decomposition.clone(), sf);
+        let fragment_path: Arc<[String]> = path.into();
 
         let mut nodes = build_lsp_symbol_nodes(
             &lsp_handle,
@@ -187,7 +188,7 @@ impl LspProvider {
             frag.name_byte_offset,
             &self.lsp,
             &resolver,
-            path,
+            &fragment_path,
         );
 
         // Code actions directory — only if the server supports it.

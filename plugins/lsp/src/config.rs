@@ -119,17 +119,17 @@ impl ServerEntry {
 pub struct LspConfig {
     /// Whether LSP integration is enabled at all.
     #[serde(default = "default_true")]
-    pub enabled: bool,
+    pub(crate) enabled: bool,
 
     /// Cache TTL for LSP query results.
     #[serde(default = "default_lsp_cache_ttl")]
     #[serde(with = "humantime_serde")]
-    pub cache_ttl: Duration,
+    pub(crate) cache_ttl: Duration,
 
     /// Timeout for waiting on LSP diagnostics after a write.
     #[serde(default = "default_diagnostics_timeout")]
     #[serde(with = "humantime_serde")]
-    pub diagnostics_timeout: Duration,
+    pub(crate) diagnostics_timeout: Duration,
 
     /// Timeout for individual LSP request-response cycles.
     ///
@@ -138,16 +138,16 @@ pub struct LspConfig {
     /// `send_request` calls including the initialize handshake.
     #[serde(default = "default_response_timeout")]
     #[serde(with = "humantime_serde")]
-    pub response_timeout: Duration,
+    pub(crate) response_timeout: Duration,
 
     /// LSP server definitions — built-in defaults, user overrides, and
     /// custom additions merged by `name`.
     #[serde(default = "default_servers")]
-    pub servers: Vec<ServerEntry>,
+    pub(crate) servers: Vec<ServerEntry>,
 
     /// Maximum number of results returned by workspace symbol search.
     #[serde(default = "default_workspace_symbol_limit")]
-    pub workspace_symbol_limit: usize,
+    pub(crate) workspace_symbol_limit: usize,
 }
 impl LspConfig {
     /// Deserialize from the plugin config section, falling back to defaults.

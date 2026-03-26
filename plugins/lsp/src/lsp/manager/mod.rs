@@ -8,7 +8,7 @@
 //! Servers are spawned lazily on first access for a file extension, but can
 //! also be warmed eagerly at activation via [`LspManager::spawn_all_applicable`].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -122,7 +122,7 @@ impl LspManager {
     ///
     /// Delegates to the underlying `LspRegistry` -- avoids rebuilding the
     /// registry when only the command list is needed.
-    pub(crate) fn server_commands(&self) -> impl Iterator<Item = &str> { self.registry.server_commands() }
+    pub(crate) fn server_commands(&self) -> HashSet<&str> { self.registry.server_commands() }
 
     /// Whether an extension has both LSP and syntax (tree-sitter) support.
     ///
