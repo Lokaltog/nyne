@@ -11,23 +11,20 @@ Source plugin — syntax decomposition, batch editing, developer-experience feat
 
 `SourceServices` and selected types are `pub` for downstream plugin crates (`nyne-plugin-claude`). Public surface:
 
-- `services::SourceServices` — bundle of syntax, decomposition, analysis services
-- `syntax::` — `SyntaxRegistry`, `DecomposedSource`, `Fragment`, `find_fragment_at_line`, `AnalysisEngine`, `AnalysisContext`, `HintView`, `fragment_list`, template partials
+- `services::SourceServices` — bundle of syntax and decomposition services
+- `syntax::` — `SyntaxRegistry`, `TsNode`, `DecomposedSource`, `Fragment`, `find_fragment_at_line`, `fragment_list`, template partials
 - `providers::names` — VFS name constants, `symbol_from_vfs_path`, `is_symbols_overview`
+- `providers::syntax::FileRenameHook` — trait for external file-rename coordination (implemented by LSP plugin)
 
 ## SourceServices
 
-`services.rs` — consolidated bundle of all plugin services. During `activate()`, a single `SourceServices` struct is inserted into the TypeMap containing: `Arc<SyntaxRegistry>`, `DecompositionCache`, `Arc<AnalysisEngine>`, `CodingConfig`. Internal provider code retrieves services via `SourceServices::get(ctx)`. External plugins use `SourceServices::try_get(ctx)` for optional access.
+`services.rs` — consolidated bundle of all plugin services. During `activate()`, a single `SourceServices` struct is inserted into the TypeMap containing: `Arc<SyntaxRegistry>`, `DecompositionCache`, `SourceConfig`. Internal provider code retrieves services via `SourceServices::get(ctx)`.
 
 ## Config
 
 Plugin config: `[plugin.source]` in `~/.config/nyne/config.toml` or project-level `.nyne/config.toml` / `.nyne.toml` / `nyne.toml`.
 
 Config is multi-tier: plugin defaults → user config → project config. Merged via `deep_merge` (arrays concatenated, objects recursive-merged). Plugin defaults are provided by `SourcePlugin::default_config()`.
-
-- `config/mod.rs`: `CodingConfig` — deserialized via `CodingConfig::from_plugin_config()`
-- `[plugin.source.analysis]`: `enabled` (bool), `rules` (optional list — `None` = all except `DEFAULT_DISABLED_RULES`)
-- `DEFAULT_DISABLED_RULES` in `syntax/analysis/mod.rs` is the SSOT for default-excluded rules
 
 ## routes! Macro
 
