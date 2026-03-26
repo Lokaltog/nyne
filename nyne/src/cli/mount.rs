@@ -45,7 +45,10 @@ const FUSE_THREADS: usize = 4;
 pub struct MountArgs {
     /// Directories to mount. Defaults to the current directory if omitted.
     ///
-    /// Optional `id:` prefix sets the session ID.
+    /// Optional `id:` prefix sets the session ID. The prefix is recognized only
+    /// when it contains no `/` and both sides of the colon are non-empty, so
+    /// absolute paths like `/home/user` are never misparsed. If a directory name
+    /// contains a colon, use an absolute or `./`-relative path to avoid ambiguity.
     ///
     /// Examples:
     ///   nyne mount
@@ -61,6 +64,27 @@ pub struct MountArgs {
 /// a bare path (`/path/to/project`) or an `id:path` pair (`myid:/path/to/project`).
 /// When no explicit ID is given, one is derived from the directory name at
 /// mount time.
+///
+/// # `id:` prefix heuristic
+///
+/// The parser splits on the *first* colon and treats the left side as a session
+/// ID only when **all** of the following hold:
+///
+/// - The prefix is non-empty.
+/// - The prefix contains no `/` (avoids misinterpreting absolute paths like
+///   `/home/user`).
+/// - The remainder after the colon is non-empty.
+///
+/// Everything else is treated as a bare path. This means:
+///
+/// - Windows-style paths (`C:\Users\...`) where the drive letter has no `/`
+///   will be misparsed as `id = "C"`, `path = "\Users\..."`. This is harmless
+///   on the Linux-only platforms nyne supports.
+/// - Paths containing a colon in a directory name (e.g., `my:project/src`)
+///   will be split: `id = "my"`, `path = "project/src"`. Use `./<path>` or an
+///   absolute path to avoid ambiguity.
+/// - A bare colon (`:`) or trailing colon (`foo:`) yields a bare path (no ID)
+///   because one side of the split is empty.
 #[derive(Debug, Clone)]
 pub struct MountSpec {
     explicit_id: Option<String>,

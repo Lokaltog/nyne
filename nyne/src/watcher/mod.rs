@@ -291,7 +291,11 @@ fn to_vfs_path(watch_root: &Path, path: &Path) -> Option<VfsPath> {
         // directory (e.g., chmod) should not nuke the entire cache.
         return None;
     }
-    VfsPath::new(relative.to_str()?).ok()
+    let Some(s) = relative.to_str() else {
+        trace!(path = %path.display(), "skipping non-UTF-8 path");
+        return None;
+    };
+    VfsPath::new(s).ok()
 }
 
 /// Returns whether a filesystem event kind affects content or structure.

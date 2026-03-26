@@ -189,6 +189,10 @@ fn format_tokens(bytes: usize) -> String {
 /// Extract the first non-empty trimmed line from a string.
 ///
 /// Registered as a minijinja filter (`first_line`).
+///
+/// Returns `String` because minijinja's `Function` trait requires `Rv: FunctionResult`
+/// with no input lifetime threading (`Args: for<'a> FunctionArgs<'a>`), so the return
+/// type cannot borrow from the input `&str`. `Cow<str>` would still allocate here.
 fn first_line(s: &str) -> String {
     s.lines()
         .map(str::trim)
