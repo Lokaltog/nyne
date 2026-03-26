@@ -53,14 +53,20 @@ impl LanguageSpec for TypeScriptLanguage {
     fn unwrap_wrapper(node: TsNode<'_>) -> Option<(TsNode<'_>, WrapperInfo)> {
         match node.kind() {
             Self::EXPORT_STATEMENT => {
-                let inner = node.children().find(|c| Self::map_symbol_kind(c.kind()).is_some())?;
+                let inner = node
+                    .children()
+                    .into_iter()
+                    .find(|c| Self::map_symbol_kind(c.kind()).is_some())?;
                 Some((inner, WrapperInfo {
                     visibility: Some("export".to_owned()),
                     decorator_range: None,
                 }))
             }
             "expression_statement" => {
-                let inner = node.children().find(|c| Self::map_symbol_kind(c.kind()).is_some())?;
+                let inner = node
+                    .children()
+                    .into_iter()
+                    .find(|c| Self::map_symbol_kind(c.kind()).is_some())?;
                 Some((inner, WrapperInfo::default()))
             }
             _ => None,
@@ -85,7 +91,7 @@ impl LanguageSpec for TypeScriptLanguage {
 
     /// Extracts the `JSDoc` or line comment range for a symbol.
     fn extract_doc_range(node: TsNode<'_>) -> Option<Range<usize>> {
-        extract_preceding_doc_range(unwrap_export(node)?, "comment", &["/**", "///", "//"], &[])
+        extract_preceding_doc_range(unwrap_export(node), "comment", &["/**", "///", "//"], &[])
     }
 
     /// Strips doc comment prefix from a line.
@@ -113,20 +119,21 @@ impl LanguageSpec for TypeScriptLanguage {
 
     /// Extracts the decorator range preceding a node.
     fn extract_decorator_range(node: TsNode<'_>) -> Option<Range<usize>> {
-        extract_preceding_decorator_range(unwrap_export(node)?, "decorator")
+        extract_preceding_decorator_range(unwrap_export(node), "decorator")
     }
-}
-
-/// Check whether a node is inside an export statement.
-fn is_exported(node: TsNode<'_>) -> bool {
-    node.parent()
-        .is_some_and(|p| p.kind() == TypeScriptLanguage::EXPORT_STATEMENT)
 }
 
 /// If `node` is inside an `export_statement`, return the export; otherwise
 /// return the node itself. Used to look for preceding doc/decorator siblings
 /// on the correct outer node.
-fn unwrap_export(node: TsNode<'_>) -> Option<TsNode<'_>> { Some(if is_exported(node) { node.parent()? } else { node }) }
+fn unwrap_export(node: TsNode<'_>) -> TsNode<'_> {
+    let Some(parent) = node.parent() else { return node };
+    if parent.kind() == TypeScriptLanguage::EXPORT_STATEMENT {
+        parent
+    } else {
+        node
+    }
+}
 
 /// Extract the variable name from a `lexical_declaration` via `variable_declarator`.
 fn extract_variable_name(node: TsNode<'_>) -> String {

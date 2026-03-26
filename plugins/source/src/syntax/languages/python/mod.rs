@@ -64,6 +64,7 @@ impl LanguageSpec for PythonLanguage {
         match node.kind() {
             Self::EXPRESSION_STATEMENT => node
                 .children()
+                .into_iter()
                 .find(|c| c.kind() == "assignment")
                 .and_then(|assignment| build_assignment_fragment(assignment, node, parent_name)),
             "assignment" => build_assignment_fragment(node, node, parent_name),
@@ -76,11 +77,14 @@ impl LanguageSpec for PythonLanguage {
 
     /// Extracts the module-level docstring range.
     fn extract_file_doc_range(root: TsNode<'_>) -> Option<Range<usize>> {
-        let first_stmt = root.children().find(|child| child.kind() != Self::COMMENT)?;
+        let first_stmt = root
+            .children()
+            .into_iter()
+            .find(|child| child.kind() != Self::COMMENT)?;
         if first_stmt.kind() != Self::EXPRESSION_STATEMENT {
             return None;
         }
-        first_stmt.children().find(|inner| {
+        first_stmt.children().into_iter().find(|inner| {
             (inner.kind() == Self::STRING || inner.kind() == Self::CONCATENATED_STRING)
                 && is_triple_quoted(inner.text())
         })?;
@@ -129,11 +133,14 @@ fn extract_decorator_range_from_decorated(decorated_node: TsNode<'_>) -> Option<
 /// Extract the docstring range from inside a function/class body (PEP 257).
 fn extract_body_docstring_range(node: TsNode<'_>) -> Option<Range<usize>> {
     let body = node.body()?;
-    let first_stmt = body.children().find(|child| child.kind() != PythonLanguage::COMMENT)?;
+    let first_stmt = body
+        .children()
+        .into_iter()
+        .find(|child| child.kind() != PythonLanguage::COMMENT)?;
     if first_stmt.kind() != PythonLanguage::EXPRESSION_STATEMENT {
         return None;
     }
-    let is_docstring = first_stmt.children().any(|inner| {
+    let is_docstring = first_stmt.children().into_iter().any(|inner| {
         (inner.kind() == PythonLanguage::STRING || inner.kind() == PythonLanguage::CONCATENATED_STRING)
             && is_triple_quoted(inner.text())
     });

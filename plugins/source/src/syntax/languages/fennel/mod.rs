@@ -98,8 +98,11 @@ fn build_fn_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragment {
 ///
 /// The name is in the \``binding_pair`\` → \``symbol_binding`\` child.
 fn extract_binding_name(node: TsNode<'_>) -> Option<String> {
-    let binding_pair = node.children().find(|c| c.kind() == "binding_pair")?;
-    let symbol = binding_pair.children().find(|c| c.kind() == "symbol_binding")?;
+    let binding_pair = node.children().into_iter().find(|c| c.kind() == "binding_pair")?;
+    let symbol = binding_pair
+        .children()
+        .into_iter()
+        .find(|c| c.kind() == "symbol_binding")?;
     Some(symbol.text().to_owned())
 }
 
@@ -108,11 +111,12 @@ fn extract_binding_name(node: TsNode<'_>) -> Option<String> {
 /// Matches \`(local name (require :module))\` — the binding pair's value
 /// is a list whose first symbol is \`require\`.
 fn is_require_binding(node: TsNode<'_>) -> bool {
-    let Some(binding_pair) = node.children().find(|c| c.kind() == "binding_pair") else {
+    let Some(binding_pair) = node.children().into_iter().find(|c| c.kind() == "binding_pair") else {
         return false;
     };
     binding_pair
         .children()
+        .into_iter()
         .filter(|c| c.kind() != "symbol_binding")
         .any(|value| value.text().starts_with("(require "))
 }

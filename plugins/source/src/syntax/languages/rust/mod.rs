@@ -80,6 +80,7 @@ impl LanguageSpec for RustLanguage {
     fn extract_file_doc_range(root: TsNode<'_>) -> Option<Range<usize>> {
         let doc_nodes: Vec<_> = root
             .children()
+            .into_iter()
             .take_while(|child| child.kind() == Self::LINE_COMMENT && child.text().starts_with("//!"))
             .collect();
         let first = doc_nodes.first()?;

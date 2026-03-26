@@ -4,6 +4,7 @@
 //! and method calls — decomposer methods like `clean_doc_comment` are called
 //! directly from templates without intermediate Rust flattening.
 
+use std::collections::BTreeSet;
 use std::fmt;
 use std::sync::Arc;
 
@@ -183,24 +184,25 @@ fn compact_visibility(vis: &str) -> &str {
 
 /// Summarize code blocks among children (e.g. "2 blocks (rust, sh)").
 fn code_block_summary(children: &[Fragment]) -> String {
-    let langs: Vec<&str> = children
-        .iter()
-        .filter_map(|c| match &c.kind {
-            FragmentKind::CodeBlock { lang } => Some(lang.as_deref().unwrap_or("txt")),
-            _ => None,
-        })
-        .collect();
+    let mut count = 0usize;
+    let mut unique: BTreeSet<&str> = BTreeSet::new();
 
-    if langs.is_empty() {
+    for c in children {
+        if let FragmentKind::CodeBlock { lang } = &c.kind {
+            count += 1;
+            unique.insert(lang.as_deref().unwrap_or("txt"));
+        }
+    }
+
+    if count == 0 {
         return String::new();
     }
 
-    let mut unique = langs.clone();
-    unique.sort_unstable();
-    unique.dedup();
-    let count = langs.len();
     let label = if count == 1 { "block" } else { "blocks" };
-    format!("{count} {label} ({})", unique.join(", "))
+    format!(
+        "{count} {label} ({})",
+        unique.into_iter().collect::<Vec<_>>().join(", ")
+    )
 }
 
 /// First non-empty, non-heading line from a markdown section body.

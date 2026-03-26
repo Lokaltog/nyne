@@ -212,7 +212,10 @@ pub fn extract_preceding_decorator_range(node: TsNode<'_>, decorator_kind: &str)
 /// Shared helper for languages where visibility is a child node
 /// (Rust `visibility_modifier`).
 pub fn extract_child_visibility(node: TsNode<'_>, kind: &str) -> Option<String> {
-    node.children().find(|c| c.kind() == kind).map(|c| c.text().to_owned())
+    node.children()
+        .into_iter()
+        .find(|c| c.kind() == kind)
+        .map(|c| c.text().to_owned())
 }
 
 /// Strip line-comment prefixes from raw doc comment text.

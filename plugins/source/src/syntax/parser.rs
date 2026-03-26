@@ -80,15 +80,17 @@ impl<'a> TsNode<'a> {
     /// Previous sibling node, if any.
     pub fn prev_sibling(&self) -> Option<Self> { self.node.prev_sibling().map(|n| Self::new(n, self.source)) }
 
-    /// Iterate over direct children.
-    pub fn children(&self) -> impl Iterator<Item = Self> + 'a {
+    /// All direct children as a `Vec`.
+    ///
+    /// Allocation is required because the tree cursor is borrowed for the
+    /// lifetime of the tree-sitter child iterator.
+    pub fn children(&self) -> Vec<Self> {
         let source = self.source;
         let mut cursor = self.node.walk();
         self.node
             .children(&mut cursor)
             .map(move |n| Self::new(n, source))
-            .collect::<Vec<_>>()
-            .into_iter()
+            .collect()
     }
 
     /// Access the underlying `tree_sitter::Node`.
@@ -154,22 +156,21 @@ pub fn merge_preceding_sibling_ranges(
 /// Trailing newlines are trimmed (same convention as
 /// [`merge_preceding_sibling_ranges`]).
 pub fn collect_import_range(root: TsNode<'_>, import_kinds: &[&str]) -> Option<Range<usize>> {
-    let import_nodes: Vec<TsNode<'_>> = root
+    let (start, mut end) = root
         .children()
+        .into_iter()
         .filter(|child| import_kinds.contains(&child.kind()))
-        .collect();
+        .fold(None, |acc, node| {
+            let s = node.start_byte();
+            let e = node.raw().end_byte();
+            Some(match acc {
+                None => (s, e),
+                Some((first, _)) => (first, e),
+            })
+        })?;
 
-    if import_nodes.is_empty() {
-        return None;
-    }
-
-    let first = import_nodes.first()?;
-    let last = import_nodes.last()?;
-
-    let mut end = last.raw().end_byte();
     // Trim trailing newlines — same rationale as merge_preceding_sibling_ranges.
     let source = root.source();
-    let start = first.start_byte();
     while end > start && source.get(end - 1) == Some(&b'\n') {
         end -= 1;
     }
