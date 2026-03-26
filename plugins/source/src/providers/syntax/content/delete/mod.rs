@@ -8,7 +8,7 @@ use nyne::prelude::*;
 use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOp, EditOpKind, EditOutcome, EditPlan, FileEditResult, ValidationResult};
 use crate::services::SourceServices;
-use crate::syntax::fragment::Fragment;
+use crate::syntax::decomposed::DecomposedSource;
 
 /// Delete a symbol from its source file.
 ///
@@ -28,10 +28,9 @@ pub(in crate::providers::syntax) struct SymbolDelete {
 
 /// Methods for [`SymbolDelete`].
 impl SymbolDelete {
-    /// Decompose the source file and return its fragments.
-    fn fragments(&self) -> Result<(String, Vec<Fragment>)> {
-        let parsed = SourceServices::get(&self.ctx).decomposition.get(&self.source_file)?;
-        Ok((parsed.source.clone(), parsed.decomposed.clone()))
+    /// Decompose the source file and return the shared decomposition.
+    fn decomposed(&self) -> Result<Arc<DecomposedSource>> {
+        SourceServices::get(&self.ctx).decomposition.get(&self.source_file)
     }
 }
 
@@ -39,7 +38,7 @@ impl SymbolDelete {
 impl DiffAction for SymbolDelete {
     /// Compute the deletion range and produce file edits.
     fn compute_edits(&self, _ctx: &RequestContext<'_>) -> Result<Vec<FileEditResult>> {
-        let (source, fragments) = self.fragments()?;
+        let parsed = self.decomposed()?;
 
         let plan = EditPlan {
             ops: vec![(0, EditOp {
@@ -49,13 +48,13 @@ impl DiffAction for SymbolDelete {
             })],
         };
 
-        let resolved = plan.resolve(&fragments, &source)?;
-        let modified = EditPlan::apply(&source, &resolved);
+        let resolved = plan.resolve(&parsed.decomposed, &parsed.source)?;
+        let modified = EditPlan::apply(&parsed.source, &resolved);
 
         Ok(vec![FileEditResult {
             source_file: self.source_file.clone(),
             display_path: self.source_file.as_str().to_owned(),
-            original: source,
+            original: parsed.source.clone(),
             modified,
             outcome: EditOutcome::Modify,
             validation: ValidationResult::Pass,

@@ -9,6 +9,7 @@ use std::io;
 use std::str::from_utf8;
 
 use color_eyre::eyre::Result;
+use nyne::err::io_err;
 
 use super::staging::StagedAction;
 use crate::edit::plan::{EditOp, EditOpKind};
@@ -36,7 +37,7 @@ pub(super) fn resolve_anchor(
 ) -> Result<StagedAction> {
     let target_name = fragment_path.last().map_or("(root)", String::as_str);
     let frag = find_fragment(fragments, fragment_path).ok_or_else(|| {
-        io::Error::new(
+        io_err(
             io::ErrorKind::NotFound,
             format!("symbol '{target_name}' not found in fragment tree"),
         )
@@ -47,11 +48,10 @@ pub(super) fn resolve_anchor(
     if kind == EditOpKind::Append {
         let is_scope = matches!(&frag.kind, FragmentKind::Symbol(k) if k.is_scope()) || !frag.children.is_empty();
         if !is_scope {
-            return Err(io::Error::new(
+            return Err(io_err(
                 io::ErrorKind::InvalidInput,
                 format!("'{target_name}' is not a scope — use insert_after instead"),
-            )
-            .into());
+            ));
         }
     }
 

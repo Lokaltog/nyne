@@ -99,19 +99,12 @@ impl FragmentKind {
 
     /// Concise display string for OVERVIEW.md symbol tables.
     ///
-    /// Differs from [`Display`] only for sections (`h2` vs `Section(h2)`) and
-    /// code blocks with a language tag (`CodeBlock(rust)` in both).
+    /// Differs from [`Display`] only for sections (`h2` vs `Section(h2)`).
+    /// All other variants delegate to the `Display` impl.
     pub fn short_display(&self) -> String {
         match self {
-            Self::Symbol(k) => k.to_string(),
-            Self::Docstring => "Docstring".into(),
-            Self::Imports => "Imports".into(),
-            Self::Decorator => "Decorator".into(),
             Self::Section { level } => format!("h{level}"),
-            Self::CodeBlock { lang } => lang
-                .as_ref()
-                .map_or_else(|| "CodeBlock".into(), |l| format!("CodeBlock({l})")),
-            Self::Preamble => "Preamble".into(),
+            _ => self.to_string(),
         }
     }
 }

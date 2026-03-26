@@ -1,11 +1,12 @@
 //! Content splicing — replacing byte ranges in source files.
 
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 use std::ops::Range;
 use std::str::from_utf8;
 
 use color_eyre::eyre::Result;
 use crop::Rope;
+use nyne::err::io_err;
 use nyne::types::real_fs::RealFs;
 use nyne::types::vfs_path::VfsPath;
 
@@ -61,19 +62,14 @@ pub fn splice_rope_validate_write(
 ) -> Result<usize> {
     let source_len = rope.byte_len();
     if byte_range.start > source_len || byte_range.end > source_len {
-        // Construct `io::Error` directly so that `fuse::extract_errno` can
-        // find it in the eyre chain and map to `EINVAL`. This mirrors the
-        // `io_err()` helper in `dispatch::mutation` — duplicated here because
-        // `edit/` (Tier 1) cannot import from `dispatch/` (Tier 3).
-        return Err(Error::new(
+        return Err(io_err(
             ErrorKind::InvalidInput,
             format!(
                 "byte range {}..{} out of bounds for source of length {source_len} \
                  (source={source_file})",
                 byte_range.start, byte_range.end,
             ),
-        )
-        .into());
+        ));
     }
     rope.replace(byte_range.clone(), new_content);
     let spliced = rope.to_string();
@@ -87,7 +83,7 @@ pub fn splice_rope_validate_write(
         // it was already invalid before the splice. Only pay this cost on
         // the error path — the common (success) path does zero extra work.
         if validate(from_utf8(&real_fs.read(source_file)?).unwrap_or("")).is_ok() {
-            return Err(Error::new(
+            return Err(io_err(
                 ErrorKind::InvalidInput,
                 format!(
                     "{e} (source={source_file}, splice_range={}..{}, new_content_len={}, \
@@ -97,8 +93,7 @@ pub fn splice_rope_validate_write(
                     new_content.len(),
                     spliced.len(),
                 ),
-            )
-            .into());
+            ));
         }
     }
     real_fs.write(source_file, spliced.as_bytes())?;
