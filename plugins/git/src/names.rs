@@ -37,8 +37,11 @@ pub(crate) const FILE_HEAD_DIFF: &str = "HEAD.diff";
 
 /// Create a [`HandleBuilder`](nyne::templates::HandleBuilder) with git name
 /// globals pre-registered for template rendering.
+///
+/// Chains from [`nyne::handle_builder`] (which registers core globals),
+/// then adds git-specific name constants.
 pub fn handle_builder() -> HandleBuilder {
-    let mut b = HandleBuilder::new();
+    let mut b = nyne::handle_builder();
     nyne::register_globals!(
         b.engine_mut(),
         DIR_GIT,

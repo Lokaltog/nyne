@@ -51,20 +51,19 @@ pub const FILE_STAGED_DIFF: &str = "staged.diff";
 
 /// Register coding name constants as template globals.
 ///
-/// Makes file-name and separator constants available in Jinja templates so
-/// that templates reference canonical names (e.g. `{{ FILE_OVERVIEW }}`)
-/// instead of hard-coding string literals.
-pub fn register_template_globals(engine: &mut TemplateEngine) {
-    nyne::register_globals!(engine, FILE_OVERVIEW, SUBDIR_SYMBOLS,);
-}
+/// Calls core's [`nyne::register_template_globals`] first, then adds
+/// source-specific constants so templates can reference canonical names
+/// (e.g. `{{ FILE_OVERVIEW }}`, `{{ FILE_BODY }}`) without hard-coding
+/// string literals.
+pub fn register_template_globals(engine: &mut TemplateEngine) { nyne::register_template_globals(engine); }
 
 /// Create a [`HandleBuilder`] with coding name globals pre-registered.
 ///
-/// Convenience wrapper so providers don't need to manually call
-/// [`register_template_globals`] after constructing a builder. Every
-/// coding provider that registers templates should start here.
+/// Chains from [`nyne::handle_builder`] (which registers core globals),
+/// then adds source-specific globals via [`register_template_globals`].
+/// Every source-layer provider that registers templates should start here.
 pub fn handle_builder() -> HandleBuilder {
-    let mut b = HandleBuilder::new();
+    let mut b = nyne::handle_builder();
     register_template_globals(b.engine_mut());
     b
 }

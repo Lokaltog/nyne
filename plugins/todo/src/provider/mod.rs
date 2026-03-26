@@ -16,7 +16,7 @@ use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::node::VirtualNode;
 use nyne::provider::{Nodes, Provider, ProviderId};
-use nyne::templates::{HandleBuilder, TemplateHandle, serialize_view};
+use nyne::templates::{TemplateHandle, serialize_view};
 use nyne::types::vfs_path::VfsPath;
 use nyne_macros::routes;
 use nyne_source::SyntaxRegistry;
@@ -68,7 +68,7 @@ impl TodoProvider {
         let scanner = TodoScanner::new(&tags);
         let syntax = SyntaxRegistry::global();
 
-        let mut b = HandleBuilder::new();
+        let mut b = nyne::handle_builder();
         let overview_key = b.register("todo/overview", include_str!("templates/overview.md.j2"));
         let tag_key = b.register("todo/tag", include_str!("templates/tag.md.j2"));
         let engine = b.finish();

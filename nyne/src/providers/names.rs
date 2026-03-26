@@ -23,16 +23,18 @@ pub(super) const FILE_GUIDE: &str = "GUIDE.md";
 pub(super) const FILE_MOUNT_STATUS: &str = "STATUS.md";
 
 /// Register core name constants as template globals.
-fn register_template_globals(engine: &mut TemplateEngine) {
+pub fn register_template_globals(engine: &mut TemplateEngine) {
     crate::register_globals!(engine, FILE_OVERVIEW, SUBDIR_SYMBOLS);
 }
 
 /// Create a [`HandleBuilder`] with core name globals pre-registered.
 ///
-/// Core providers should use this instead of `HandleBuilder::new()` so
-/// their templates can reference well-known names like `FILE_OVERVIEW`
-/// and `SUBDIR_SYMBOLS` without manual registration.
-pub(super) fn handle_builder() -> HandleBuilder {
+/// All providers (core and plugin) should use this instead of
+/// `HandleBuilder::new()` so their templates can reference well-known
+/// names like `FILE_OVERVIEW` and `SUBDIR_SYMBOLS` without manual
+/// registration. Plugin layers can call this and then register their
+/// own additional globals on the returned builder.
+pub fn handle_builder() -> HandleBuilder {
     let mut b = HandleBuilder::new();
     register_template_globals(b.engine_mut());
     b
