@@ -265,21 +265,17 @@ impl GitRepo {
     /// HEAD commit timestamp as seconds since epoch, or 0 for unborn branches.
     pub(crate) fn head_epoch_secs(&self) -> i64 {
         let repo = self.lock();
-        let head = match resolve_head(&repo) {
-            Ok(Some(h)) => h,
-            Ok(None) => return 0,
-            Err(e) => {
-                warn!(error = %e, "failed to read HEAD");
-                return 0;
-            }
+        let Ok(Some(head)) = resolve_head(&repo).inspect_err(|e| {
+            warn!(error = %e, "failed to read HEAD");
+        }) else {
+            return 0;
         };
-        match head.peel_to_commit() {
-            Ok(c) => c.time().seconds(),
-            Err(e) => {
-                warn!(error = %e, "failed to peel HEAD to commit");
-                0
-            }
-        }
+        let Ok(commit) = head.peel_to_commit().inspect_err(|e| {
+            warn!(error = %e, "failed to peel HEAD to commit");
+        }) else {
+            return 0;
+        };
+        commit.time().seconds()
     }
 
     /// All file paths in the git index.

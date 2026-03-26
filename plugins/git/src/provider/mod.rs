@@ -90,6 +90,16 @@ impl Lifecycle for CommitMtime {
         })
     }
 }
+/// Extension trait to attach [`CommitMtime`] lifecycle to a node.
+pub trait CommitMtimeExt {
+    /// Attach a [`CommitMtime`] lifecycle with the given epoch seconds.
+    #[must_use]
+    fn with_mtime(self, epoch_secs: i64) -> Self;
+}
+
+impl CommitMtimeExt for VirtualNode {
+    fn with_mtime(self, epoch_secs: i64) -> Self { self.with_lifecycle(CommitMtime(epoch_secs)) }
+}
 
 /// Template handles for git-backed virtual files.
 pub(crate) struct GitHandles {
@@ -190,13 +200,13 @@ impl GitProvider {
         let repo = self.repo()?;
         let secs = repo.head_epoch_secs();
         Ok(Some(vec![
-            VirtualNode::directory(DIR_BRANCHES).with_lifecycle(CommitMtime(secs)),
-            VirtualNode::directory(DIR_TAGS).with_lifecycle(CommitMtime(secs)),
+            VirtualNode::directory(DIR_BRANCHES).with_mtime(secs),
+            VirtualNode::directory(DIR_TAGS).with_mtime(secs),
             self.handles
                 .status
                 .node(FILE_GIT_STATUS, GitStatusView { repo })
                 .with_cache_policy(CachePolicy::Never)
-                .with_lifecycle(CommitMtime(secs)),
+                .with_mtime(secs),
         ]))
     }
 
@@ -238,7 +248,7 @@ impl GitProvider {
         let tags = repo.tags()?;
         let nodes = tags
             .iter()
-            .map(|name| VirtualNode::directory(name).with_lifecycle(CommitMtime(head_mtime)))
+            .map(|name| VirtualNode::directory(name).with_mtime(head_mtime))
             .collect();
         Ok(Some(nodes))
     }
@@ -248,9 +258,9 @@ impl GitProvider {
         let (_source, repo, rel) = self.file_ctx(ctx)?;
         let secs = repo.file_epoch_secs(&rel);
         Ok(Some(vec![
-            VirtualNode::directory(DIR_GIT).with_lifecycle(CommitMtime(secs)),
-            VirtualNode::directory(DIR_HISTORY).with_lifecycle(CommitMtime(secs)),
-            VirtualNode::directory(DIR_DIFF).with_lifecycle(CommitMtime(secs)),
+            VirtualNode::directory(DIR_GIT).with_mtime(secs),
+            VirtualNode::directory(DIR_HISTORY).with_mtime(secs),
+            VirtualNode::directory(DIR_DIFF).with_mtime(secs),
         ]))
     }
 
@@ -264,7 +274,7 @@ impl GitProvider {
                 rel_path: rel,
                 target: DiffTarget::Workdir { source_file: source },
             })
-            .with_lifecycle(CommitMtime(secs)),
+            .with_mtime(secs),
         ]))
     }
 
@@ -330,6 +340,7 @@ impl GitProvider {
         let (source, repo, rel) = self.file_ctx(ctx)?;
         let ext = source.extension().unwrap_or("");
         let entries = repo.file_history(&rel, views::HISTORY_LIMIT)?;
+        let rel: Arc<str> = Arc::from(rel);
         let nodes = entries
             .into_iter()
             .enumerate()
@@ -338,10 +349,10 @@ impl GitProvider {
                 let secs = entry.epoch_secs;
                 VirtualNode::file(filename, history::HistoryVersionContent {
                     repo: Arc::clone(&repo),
-                    rel_path: rel.clone(),
+                    rel_path: Arc::clone(&rel),
                     oid: entry.oid,
                 })
-                .with_lifecycle(CommitMtime(secs))
+                .with_mtime(secs)
             })
             .collect();
         Ok(Some(nodes))

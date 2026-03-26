@@ -15,7 +15,7 @@ use super::history::HistoryEntry;
 use super::log::LogView;
 use super::notes::NotesView;
 use super::repo::FileViewCtx;
-use super::{CommitMtime, GitProvider};
+use super::{CommitMtimeExt as _, GitProvider};
 use crate::names;
 use crate::repo::GitRepo;
 
@@ -34,15 +34,15 @@ impl GitProvider {
         let notes = NotesView(fctx.clone());
         let contributors = ContributorsView(fctx);
         vec![
-            h.blame.node(names::FILE_BLAME, blame).with_lifecycle(CommitMtime(secs)),
-            h.log.node(names::FILE_LOG, log).with_lifecycle(CommitMtime(secs)),
+            h.blame.node(names::FILE_BLAME, blame).with_mtime(secs),
+            h.log.node(names::FILE_LOG, log).with_mtime(secs),
             h.contributors
                 .node(names::FILE_CONTRIBUTORS, contributors)
-                .with_lifecycle(CommitMtime(secs)),
+                .with_mtime(secs),
             h.notes
                 .node(names::FILE_NOTES, notes.clone())
                 .with_writable(notes)
-                .with_lifecycle(CommitMtime(secs)),
+                .with_mtime(secs),
         ]
     }
 }

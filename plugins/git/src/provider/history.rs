@@ -64,7 +64,7 @@ pub(super) struct NoteEntry {
 /// Returns the raw file content at a specific commit.
 pub struct HistoryVersionContent {
     pub repo: Arc<GitRepo>,
-    pub rel_path: String,
+    pub rel_path: Arc<str>,
     pub oid: Oid,
 }
 

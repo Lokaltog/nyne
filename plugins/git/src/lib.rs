@@ -21,8 +21,8 @@ pub mod repo;
 mod status;
 
 pub use commit::CommitInfo;
-pub use provider::CommitMtime;
 pub use provider::repo::FileViewCtx;
 pub use provider::views::{BLAME_TEMPLATE, HISTORY_LIMIT, LOG_TEMPLATE, history_filename, hunk_overlaps_range};
+pub use provider::{CommitMtime, CommitMtimeExt};
 pub use repo::GitRepo;
 pub use status::RepoStatus;

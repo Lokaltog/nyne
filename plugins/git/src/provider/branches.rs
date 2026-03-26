@@ -10,7 +10,7 @@ use nyne::dispatch::context::RenameContext;
 use nyne::node::{Readable, Renameable, Unlinkable};
 use nyne::prelude::*;
 
-use super::CommitMtime;
+use super::CommitMtimeExt as _;
 use crate::repo::GitRepo;
 
 /// Renameable capability for branch directory nodes.
@@ -94,17 +94,18 @@ pub(super) fn branch_segments_at_prefix(repo: &Arc<GitRepo>, prefix: &str) -> No
         segments
             .into_iter()
             .map(|segment| {
-                let node = VirtualNode::directory(segment).with_lifecycle(CommitMtime(head_mtime));
+                let node = VirtualNode::directory(segment).with_mtime(head_mtime);
                 if let Some((_, full_name)) = leaf_branches.iter().find(|(s, _)| *s == segment) {
                     let branch_name = (*full_name).to_owned();
-                    node.with_renameable(BranchRename {
+                    let rename = BranchRename {
                         repo: Arc::clone(repo),
                         branch_name: branch_name.clone(),
-                    })
-                    .with_unlinkable(BranchRemove {
+                    };
+                    node.with_unlinkable(BranchRemove {
                         repo: Arc::clone(repo),
                         branch_name,
                     })
+                    .with_renameable(rename)
                 } else {
                     node
                 }
