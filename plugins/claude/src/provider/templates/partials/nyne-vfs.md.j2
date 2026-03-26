@@ -1,0 +1,166 @@
+<nyne-vfs>
+
+This codebase is mounted through **nyne**, a FUSE virtual filesystem. Every source file has an `@/` companion namespace directory exposing decomposed symbols, LSP intelligence, and git history. **All `@/` paths are real files** — they work with the Read tool, Edit tool, Write tool, Bash commands (`cat`, `echo >`, `ls`, `mv`, `rmdir`), and shell pipes.
+
+The nyne VFS is designed for efficient, precise code traversal, access and modification, with minimal token consumption. Use the nyne VFS for all code exploration, analysis, and edits — avoid direct file access when `@/` paths are available.
+
+## nyne VFS Tool Rules and Best Practices
+
+- **Read** VFS paths with the **Read tool**. **Edit** with the **Edit tool** (`old_string`/`new_string`). Use **Bash** for structural ops (`mv`, `rmdir`, `rm`), single-value writes (`echo >`), and shell pipelines. **Do not use `sed -i`** — it creates a temp file + rename, which FUSE doesn't support.
+- **Avoid using Edit on raw source files** — always target `@/` symbol bodies instead. Edit on a symbol body only sends the diff, not the full file.
+- **Read before Edit — always.** The Edit tool requires a prior Read (via the Read tool) of the same file. `cat` via Bash does NOT satisfy this. After modifying a file via Bash (`echo >`, `rmdir`, batch edit `rm`), you must Read the file again before using Edit on it.
+- **Never read raw source files** when VFS paths exist. Always Read `OVERVIEW.md` first, then specific symbol bodies.
+- **Start with `OVERVIEW.md`** to discover exact symbol names before accessing them.
+- **Use VFS analysis tools, not Grep**, for call-graph questions: `CALLERS.md` shows blast radius, `DEPS.md` for tracing callees, `REFERENCES.md` before renaming/deleting. These targeted, token-optimized files replace grep-for-usage workflows.
+- **Check `actions/`** before any refactoring task — an LSP code action `.diff` may already exist to execute the refactoring.
+- **Writes re-parse the file.** After any write to a `@/` path, symbol names may change (disambiguators added/removed, symbols deleted, nesting shifted). Re-read `OVERVIEW.md` or `ls symbols/` before accessing other symbols in the same file.
+- **Use batch edit staging for multi-symbol changes.** When changing multiple symbols in the same file, or when coordinating changes across files, stage via `edit/` and apply atomically with `rm @/edit/staged.diff`. Safe (tree-sitter validated) and cheap (one atomic write). Returns an error if validation fails.
+
+Use the Read tool for `@/` reads. When you have a line number (from errors, grep, OVERVIEW), use `/symbols/at-line/<line>` — it's a symlink to the containing symbol's body and can be read and and modified directly.
+
+Uppercased files (`OVERVIEW.md`, `CALLERS.md`, etc.) are read-only and optimized for token efficient lookup and exploration.
+
+Lowercased files and directories (`body.{{ ext }}`, `docstring.txt`, etc.) are virtual files representing "slices" of a source code file: symbol bodies, docstrings, decorators, import sections, and more. These are all regular editable files; you can use your normal Read, Edit and Write tools on these files directly.
+
+| What | Path |
+|-|-|
+| File overview (metadata + symbols + access guide) | Read `file.{{ ext }}@/OVERVIEW.md` |
+| Directory overview | Read `src/module@/OVERVIEW.md` |
+| Symbol body | Read/Edit `file.{{ ext }}@/symbols/Foo@/body.{{ ext }}` |
+| Signature only | Read/Edit `file.{{ ext }}@/symbols/Foo@/signature.{{ ext }}` |
+| Symbol docstring | Read/Edit `file.{{ ext }}@/symbols/Foo@/docstring.txt` |
+| File/module docstring | Read/Edit `file.{{ ext }}@/symbols/docstring.txt` |
+| Decorators/attrs | Read/Edit `file.{{ ext }}@/symbols/Foo@/decorators.{{ ext }}` |
+| Import block | Read/Edit `file.{{ ext }}@/symbols/imports.{{ ext }}` |
+| Generated docs | Read `file.{{ ext }}@/symbols/Foo@/DOC.md` |
+
+### Reading and Exploring
+
+Read the symbol at line 42 (follows symlink → body):
+
+    Read `file.{{ ext }}@/symbols/at-line/42`
+
+Directly edit a symbol at a known line:
+
+    Read → Edit `file.{{ ext }}@/symbols/at-line/42`
+
+    Note: at-line is symlinked directly to the symbol body → `../Foo~Impl@/process@/body.{{ ext }}`
+
+Insert code at known location:
+
+    echo 'fn foo() { }' >> file.{{ ext }}@/lines:10
+
+Line range reads (escape hatch — prefer symbol-targeted access):
+
+    Read `file.{{ ext }}@/lines` (full file)
+    Read `file.{{ ext }}@/lines:10-20` (range)
+
+Delete a line range:
+
+    rm file.{{ ext }}@/lines:10-20
+
+List symbols by kind:
+
+    ls file.{{ ext }}@/symbols/by-kind/fn/
+
+### Writing
+
+Prefer the Edit tool for targeted changes in known files:
+
+    Read file.{{ ext }}@/symbols/process@/body.{{ ext }} ← Read first
+    Edit file.{{ ext }}@/symbols/process@/body.{{ ext }} ← old_string/new_string
+
+Bash examples for single-value writes and structural operations:
+
+```bash
+# Add an import
+echo 'use std::collections::HashMap;' >>file.{{ ext }}@/symbols/imports.{{ ext }}
+
+# Replace a function signature
+echo 'fn process(input: &str, opts: Options) -> Result<()>' \
+    >file.{{ ext }}@/symbols/process@/signature.{{ ext }}
+
+# Add a decorator/attribute
+echo '#[instrument]' >>file.{{ ext }}@/symbols/process@/decorators.{{ ext }}
+
+# Delete a symbol (removes the entire body, docstring, decorators, etc.)
+rmdir file.{{ ext }}@/symbols/old_helper@/
+```
+
+All writes to `@/` paths are tree-sitter validated and safe. Invalid syntax returns an error, not a broken file.
+
+## Batch Edit Staging
+
+Batch Edit is the go-to for multi-step edits: stage multiple changes across symbols and files, then apply all changes atomically. Prefer this over sequential direct writes when changing multiple symbols. Apply returns an error if validation fails — no need to preview first.
+
+| Scenario | Approach |
+|-|-|
+| Change 1 symbol | Edit tool (read first, then old_string/new_string) |
+| Change 2+ symbols in one file | Batch edit staging |
+| Coordinated changes across files | Batch edit staging (cross-file atomic) |
+| Delete multiple symbols | Batch edit staging |
+
+```bash
+# 1. Stage edits (write to any symbol's edit/ namespace)
+echo 'fn new_impl(){}' >file.{{ ext }}@/symbols/Foo@/edit/replace # replace entire body
+echo 'fn helper(){}' >file.{{ ext }}@/symbols/Bar@/edit/insert-after # insert after body
+echo '/// docs' >file.{{ ext }}@/symbols/Baz@/edit/insert-before # insert before body
+echo 1 >file.{{ ext }}@/symbols/Old@/edit/delete # delete entire symbol
+echo 'fn method(){}' >file.{{ ext }}@/symbols/MyImpl@/edit/append # append to body
+
+# 2. Apply all staged edits atomically (returns error if tree-sitter validation fails)
+rm @/edit/staged.diff
+
+# Or clear without applying (truncate)
+> @/edit/staged.diff
+```
+
+## Refactoring
+
+Diff files (code actions, renames) are applied by deleting them (`rm`). Preview with `cat`, apply with `rm`.
+
+```bash
+# LSP rename — immediate, project-wide, always use this instead of manual renames across files
+mv file.{{ ext }}@/symbols/old_name@/ file.{{ ext }}@/symbols/new_name@/
+
+# Optional: Preview rename first, then apply
+cat file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
+rm file.{{ ext }}@/symbols/old_name@/rename/new_name.diff
+
+# List available LSP code actions
+ls file.{{ ext }}@/symbols/process@/actions/
+
+# Preview a code action, then apply
+cat file.{{ ext }}@/symbols/process@/actions/01-fix.diff
+rm file.{{ ext }}@/symbols/process@/actions/01-fix.diff
+```
+
+## Analysis
+
+| What | When to use | Path |
+|-|-|-|
+| Callers (incoming) | Before changing signature or behavior — shows who will break | `Read file.{{ ext }}@/symbols/Foo@/CALLERS.md` |
+| Dependencies (outgoing) | Tracing what a function calls — don't Grep for callees | `Read file.{{ ext }}@/symbols/Foo@/DEPS.md` |
+| All references | Before renaming, moving, or deleting — every usage site | `Read file.{{ ext }}@/symbols/Foo@/REFERENCES.md` |
+| Trait implementations | Working with a trait — all concrete impls | `Read file.{{ ext }}@/symbols/MyTrait@/IMPLEMENTATION.md` |
+| Project TODOs | Scanning for outstanding work | `Read @/todo/TODO.md` |
+
+Note: Symlinks in `callers/`, `deps/`, `references/`, `implementation/` are shortcuts to related symbols' `@/` directories — follow to read, edit, and inspect linked symbols directly.
+
+## Symbol Naming
+
+`OVERVIEW.md` lists exact symbol names. When a name ends with `@/`, it's a nyne namespace — nested symbols are **direct children** (no intermediate `symbols/` directory):
+
+```
+OVERVIEW shows: MyImpl@/  (Impl, with nested: process@/, validate@/)
+Full path:      file.{{ ext }}@/symbols/MyImpl@/process@/body.{{ ext }}
+```
+
+- Top-level: `symbols/my_function@/body.{{ ext }}`
+- Trait/interface impls: `symbols/Display_for_Foo@/body.{{ ext }}`
+- Name collisions: `symbols/Foo~Struct@/body.{{ ext }}`, `symbols/Foo~Fn@/body.{{ ext }}`
+- Nested (impl methods): `symbols/Foo~Impl@/new@/body.{{ ext }}`
+
+When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesystem entries.
+
+</nyne-vfs>

@@ -132,6 +132,11 @@ impl ClaudeProvider {
     pub(crate) fn new(ctx: Arc<ActivationContext>, config: ClaudePluginConfig) -> Self {
         let mut b = names::handle_builder();
         register_skill_templates(&mut b);
+        b.register_partial("partials/nyne-vfs", include_str!("templates/partials/nyne-vfs.md.j2"));
+        b.register_partial(
+            "partials/nyne-vfs-agent",
+            include_str!("templates/partials/nyne-vfs-agent.md.j2"),
+        );
         let output_style_key = b.register("claude/output-style", include_str!("templates/output-style.md.j2"));
         let system_prompt_key = b.register("claude/system-prompt", include_str!("templates/system-prompt.md.j2"));
         let agent_nyne_key = b.register("claude/agent-nyne", include_str!("templates/agents/nyne.md.j2"));
