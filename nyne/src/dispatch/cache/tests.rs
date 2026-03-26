@@ -197,7 +197,7 @@ fn is_visible_real_always_visible() {
 /// Tests that stale children and derived entries are swept while lookup entries survive.
 #[test]
 fn sweep_stale_resolve_sweeps_derived_entries() {
-    let mut dir = DirState::new();
+    let mut dir = DirState::default();
     dir.begin_resolve();
     let generation = dir.resolve_generation();
 
@@ -223,14 +223,14 @@ fn sweep_stale_resolve_sweeps_derived_entries() {
 /// Verifies that directories without a source file are never considered stale.
 #[test]
 fn is_source_stale_false_when_no_source() {
-    let dir = DirState::new();
+    let dir = DirState::default();
     assert!(!dir.is_source_stale(|_| 99), "no source → never stale");
 }
 
 /// Verifies that a directory is not stale when its generation matches the source.
 #[test]
 fn is_source_stale_false_when_generation_matches() {
-    let mut dir = DirState::new();
+    let mut dir = DirState::default();
     dir.set_source_generation(VfsPath::new("src/lib.rs").unwrap(), 5);
     assert!(!dir.is_source_stale(|_| 5));
 }
@@ -238,7 +238,7 @@ fn is_source_stale_false_when_generation_matches() {
 /// Verifies that a directory is stale when the source generation has advanced.
 #[test]
 fn is_source_stale_true_when_generation_advanced() {
-    let mut dir = DirState::new();
+    let mut dir = DirState::default();
     dir.set_source_generation(VfsPath::new("src/lib.rs").unwrap(), 5);
     assert!(dir.is_source_stale(|_| 6));
 }

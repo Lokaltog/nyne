@@ -59,14 +59,9 @@ impl TemplateHandle {
 ///
 /// Call [`register`](Self::register) for each template, then
 /// [`finish`](Self::finish) to get the `Arc<TemplateEngine>`.
+#[derive(Default)]
 pub struct HandleBuilder {
     engine: TemplateEngine,
-}
-
-/// Default implementation for `HandleBuilder`.
-impl Default for HandleBuilder {
-    /// Returns the default value.
-    fn default() -> Self { Self::new() }
 }
 
 /// Template registration and engine construction.

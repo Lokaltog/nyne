@@ -213,14 +213,9 @@ impl HandleEntry {
 ///
 /// File handle numbers are slab indices directly (no offset needed —
 /// FUSE file handles have no reserved values).
+#[derive(Default)]
 pub(super) struct HandleTable {
     inner: RwLock<Slab<HandleEntry>>,
-}
-
-/// Default implementation for `HandleTable`.
-impl Default for HandleTable {
-    /// Creates a new, empty handle table.
-    fn default() -> Self { Self::new() }
 }
 
 /// File handle operations for the FUSE filesystem.

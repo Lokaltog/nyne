@@ -135,6 +135,7 @@ impl CachedNode {
 }
 
 /// Per-directory cache state: nodes, resolve status, and generation tracking.
+#[derive(Default)]
 pub(super) struct DirState {
     /// Nodes keyed by name. O(1) lookup, no duplicate names possible.
     nodes: HashMap<String, CachedNode>,
@@ -162,26 +163,8 @@ pub(super) struct DirState {
     no_cache: bool,
 }
 
-/// Default implementation for `DirState`.
-impl Default for DirState {
-    /// Delegates to [`DirState::new`].
-    fn default() -> Self { Self::new() }
-}
-
 /// Directory state management: resolution, entries, generation sweeps.
 impl DirState {
-    /// Create an empty, unresolved directory state.
-    pub(super) fn new() -> Self {
-        Self {
-            nodes: HashMap::new(),
-            resolved: false,
-            passthrough: false,
-            resolve_generation: 0,
-            source_generation: None,
-            no_cache: false,
-        }
-    }
-
     /// Whether `resolve()` has been called for this directory.
     pub(super) const fn is_resolved(&self) -> bool { self.resolved }
 
@@ -351,14 +334,9 @@ pub(super) type DirHandle = Arc<RwLock<DirState>>;
 ///
 /// **Lock ordering**: always acquire the outer map lock first, release it,
 /// then acquire inner directory locks. Never hold both simultaneously.
+#[derive(Default)]
 pub(super) struct L1Cache {
     dirs: RwLock<BTreeMap<VfsPath, DirHandle>>,
-}
-
-/// Default implementation for `L1Cache`.
-impl Default for L1Cache {
-    /// Delegates to [`L1Cache::new`].
-    fn default() -> Self { Self::new() }
 }
 
 /// L1 directory cache operations: lookup, invalidation, prefix scanning.

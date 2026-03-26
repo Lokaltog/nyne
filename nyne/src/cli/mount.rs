@@ -223,23 +223,24 @@ pub fn run(args: &MountArgs) -> Result<()> {
 /// the mapping before the (potentially long-running) mount begins. Also
 /// prints a hint about `nyne attach` and `nyne list` for discoverability.
 fn print_mount_plan(mounts: &[(SessionId, PathBuf)]) -> Result<()> {
-    let term = output::term();
-    term.write_line(&format!(
+    use std::fmt::Write;
+
+    let mut buf = String::new();
+    let suffix = if mounts.len() == 1 { "" } else { "s" };
+    writeln!(
+        buf,
         "{}\n",
-        style(format!(
-            "Mounting {} path{}:",
-            mounts.len(),
-            if mounts.len() == 1 { "" } else { "s" }
-        ))
-        .bold()
-    ))?;
+        style(format_args!("Mounting {} path{suffix}:", mounts.len())).bold()
+    )?;
     for (id, path) in mounts {
-        term.write_line(&format!("  {}  →  {}", style(path.display()).green(), style(id).cyan(),))?;
+        writeln!(buf, "  {}  →  {}", style(path.display()).green(), style(id).cyan())?;
     }
-    term.write_line(&format!(
+    write!(
+        buf,
         "\n{}",
         style("To attach: nyne attach <id> -- <command>\nTo list:   nyne list").dim()
-    ))?;
+    )?;
+    output::term().write_line(&buf)?;
     Ok(())
 }
 

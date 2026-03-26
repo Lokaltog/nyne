@@ -55,15 +55,9 @@ pub(super) struct InodeEntry {
 /// 3. **`resolve_inode` safety:** The router validates that the L1 cache
 ///    still contains a matching entry before using an `InodeEntry`.
 ///    Stale entries are detected and return `None`.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(super) struct InodeMap {
     inner: RwLock<Slab<Arc<InodeEntry>>>,
-}
-
-/// Default implementation for `InodeMap`.
-impl Default for InodeMap {
-    /// Delegates to [`InodeMap::new`].
-    fn default() -> Self { Self::new() }
 }
 
 /// Inode allocation, lookup, and update operations.

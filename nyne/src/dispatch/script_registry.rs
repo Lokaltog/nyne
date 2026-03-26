@@ -14,7 +14,7 @@ use std::sync::Arc;
 use color_eyre::eyre::{Result, eyre};
 use tracing::warn;
 
-use super::script::{Script, ScriptContext};
+use super::script::{Script, ScriptAddress, ScriptContext};
 use crate::dispatch::activation::ActivationContext;
 use crate::plugin::PLUGINS;
 
@@ -27,7 +27,7 @@ use crate::plugin::PLUGINS;
 /// Lookup is O(1) via `HashMap`. The `nyne exec` CLI command resolves an address
 /// through this registry, then calls [`Script::exec`] with binary stdin/stdout.
 pub struct ScriptRegistry {
-    scripts: HashMap<String, Arc<dyn Script>>,
+    scripts: HashMap<ScriptAddress, Arc<dyn Script>>,
 }
 
 /// Script discovery, registration, and execution.

@@ -42,6 +42,7 @@ slab.workspace = true
 toml.workspace = true
 console.workspace = true
 smallvec.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

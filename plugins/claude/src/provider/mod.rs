@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use color_eyre::eyre::Result;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
-use nyne::dispatch::script::ScriptEntry;
+use nyne::dispatch::script::{ScriptEntry, provider_script_address};
 use nyne::node::Readable;
 use nyne::provider::{ConflictInfo, ConflictParty, ConflictResolution};
 use nyne::templates::{TemplateContent, TemplateEngine, TemplateView, serialize_view};
@@ -327,7 +327,7 @@ pub fn script_entries(config: &ClaudePluginConfig) -> Vec<ScriptEntry> {
     }
 
     let t = &config.hooks;
-    let addr = |name: &str| format!("provider.claude.{name}");
+    let addr = |name| provider_script_address("claude", name);
     let mut entries: Vec<ScriptEntry> = Vec::new();
 
     if t.pre_tool_use {

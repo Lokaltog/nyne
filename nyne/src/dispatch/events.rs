@@ -37,14 +37,9 @@ impl EventSink for LoggingEventSink {
 /// by the Router after the operation completes. This decouples event
 /// emission (which happens inside provider/node code) from event
 /// processing (which requires Router access).
+#[derive(Default)]
 pub struct BufferedEventSink {
     buffer: Mutex<Vec<InvalidationEvent>>,
-}
-
-/// Default implementation for `BufferedEventSink`.
-impl Default for BufferedEventSink {
-    /// Delegates to [`BufferedEventSink::new`].
-    fn default() -> Self { Self::new() }
 }
 
 /// Construction for the buffered event sink.

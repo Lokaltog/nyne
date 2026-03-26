@@ -31,6 +31,7 @@ enum NullPolicy {
 fn merge_inner(base: &mut Value, overlay: &Value, null_policy: NullPolicy) {
     let skip = null_policy == NullPolicy::Skip;
     match (base, overlay) {
+        // Null-skip path 1: object-into-object — skip individual null-valued keys.
         (Value::Object(base_map), Value::Object(overlay_map)) =>
             for (k, v) in overlay_map {
                 if skip && v.is_null() {
@@ -41,6 +42,9 @@ fn merge_inner(base: &mut Value, overlay: &Value, null_policy: NullPolicy) {
         (Value::Array(base_arr), Value::Array(overlay_arr)) => {
             base_arr.extend(overlay_arr.iter().cloned());
         }
+        // Null-skip path 2: non-object base with null overlay — preserve the
+        // existing base value. Without this guard the final arm would overwrite
+        // base with null, defeating the Skip policy for scalar/array bases.
         (_, overlay) if skip && overlay.is_null() => {}
         (base, overlay) => *base = overlay.clone(),
     }

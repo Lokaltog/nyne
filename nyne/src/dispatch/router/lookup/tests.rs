@@ -47,7 +47,7 @@ fn insert_virtual(dir: &mut DirState, name: &str, node: VirtualNode) {
 /// Tests that `derive_from_plugins` returns a derived node when a plugin matches.
 #[test]
 fn derive_from_plugins_returns_match() {
-    let mut dir = DirState::new();
+    let mut dir = DirState::default();
     dir.begin_resolve();
     insert_virtual(
         &mut dir,
@@ -66,7 +66,7 @@ fn derive_from_plugins_returns_match() {
 /// Tests that `derive_from_plugins` returns `None` when no plugin matches.
 #[test]
 fn derive_from_plugins_returns_none_on_no_match() {
-    let mut dir = DirState::new();
+    let mut dir = DirState::default();
     dir.begin_resolve();
     insert_virtual(
         &mut dir,
@@ -82,7 +82,7 @@ fn derive_from_plugins_returns_none_on_no_match() {
 /// Tests that nodes without plugins are skipped during derivation.
 #[test]
 fn derive_from_plugins_skips_non_plugin_nodes() {
-    let mut dir = DirState::new();
+    let mut dir = DirState::default();
     dir.begin_resolve();
     // Node without plugins — should be skipped.
     insert_virtual(&mut dir, "plain.md", VirtualNode::file("plain.md", StaticContent(b"")));
@@ -95,7 +95,7 @@ fn derive_from_plugins_skips_non_plugin_nodes() {
 /// Tests that real filesystem entries are skipped during plugin derivation.
 #[test]
 fn derive_from_plugins_skips_real_entries() {
-    let mut dir = DirState::new();
+    let mut dir = DirState::default();
     dir.begin_resolve();
     dir.insert("real.txt".to_owned(), CachedNode {
         inode: 1,

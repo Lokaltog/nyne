@@ -17,6 +17,7 @@ use crate::types::vfs_path::VfsPath;
 /// file watcher), its generation is bumped.  L1 and L2 cache entries
 /// record the generation at creation time and compare on access —
 /// a mismatch means the entry is stale and must be recomputed.
+#[derive(Default)]
 pub struct FileGenerations {
     generations: RwLock<HashMap<VfsPath, u64>>,
 }
@@ -40,12 +41,6 @@ impl FileGenerations {
 
     /// Current generation for `path` (0 if never bumped).
     pub(crate) fn get(&self, path: &VfsPath) -> u64 { self.generations.read().get(path).copied().unwrap_or(0) }
-}
-
-/// Default implementation for `FileGenerations`.
-impl Default for FileGenerations {
-    /// Delegates to [`FileGenerations::new`].
-    fn default() -> Self { Self::new() }
 }
 
 /// A cached content entry in the L2 cache.

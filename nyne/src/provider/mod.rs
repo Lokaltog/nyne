@@ -68,7 +68,14 @@ pub struct ProviderId(&'static str);
 /// Construction and access for provider identifiers.
 impl ProviderId {
     /// Create a new provider identifier.
-    pub const fn new(id: &'static str) -> Self { Self(id) }
+    ///
+    /// # Panics (debug builds)
+    ///
+    /// Panics if `id` is empty.
+    pub const fn new(id: &'static str) -> Self {
+        debug_assert!(!id.is_empty(), "ProviderId must not be empty");
+        Self(id)
+    }
 
     /// Return the identifier as a string slice.
     pub const fn as_str(&self) -> &'static str { self.0 }

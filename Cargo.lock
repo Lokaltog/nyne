@@ -1434,6 +1434,7 @@ dependencies = [
  "smallvec",
  "strum",
  "tempfile",
+ "thiserror",
  "toml",
  "tracing",
 ]

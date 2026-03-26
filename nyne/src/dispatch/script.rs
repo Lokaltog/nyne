@@ -13,6 +13,8 @@
 //! This is an **interface module** — the trait and address helpers may be
 //! imported from any tier.
 
+use std::borrow::Borrow;
+use std::fmt;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
@@ -25,17 +27,56 @@ pub const SCRIPT_NS_SEPARATOR: char = '.';
 /// Namespace prefix for provider-registered scripts.
 pub const SCRIPT_NS_PROVIDER: &str = "provider";
 
+/// A validated, fully-qualified script address (e.g., `provider.myplugin.on-save`).
+///
+/// Script addresses are dot-separated with exactly three segments:
+/// `{namespace}.{scope}.{name}`. Construction via [`script_address`] or
+/// [`provider_script_address`] guarantees this format.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ScriptAddress(String);
+
+impl ScriptAddress {
+    /// Create a new script address, validating that it contains exactly three
+    /// dot-separated non-empty segments.
+    pub fn new(address: impl Into<String>) -> Result<Self, ScriptAddressError> {
+        let address = address.into();
+        let segments: Vec<&str> = address.split(SCRIPT_NS_SEPARATOR).collect();
+        if segments.len() != 3 || segments.iter().any(|s| s.is_empty()) {
+            return Err(ScriptAddressError(address));
+        }
+        Ok(Self(address))
+    }
+
+    /// Return the address as a string slice.
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
+impl fmt::Display for ScriptAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.0) }
+}
+
+impl Borrow<str> for ScriptAddress {
+    fn borrow(&self) -> &str { &self.0 }
+}
+
+/// Error returned when a script address has an invalid format.
+#[derive(Debug, thiserror::Error)]
+#[error("invalid script address: {0:?} (expected three dot-separated non-empty segments)")]
+pub struct ScriptAddressError(String);
+
 /// Build a fully-qualified script address from namespace segments.
 ///
 /// ```ignore
 /// script_address("provider", "myplugin", "on-save") => "provider.myplugin.on-save"
 /// ```
-pub fn script_address(namespace: &str, scope: &str, name: &str) -> String {
-    format!("{namespace}{SCRIPT_NS_SEPARATOR}{scope}{SCRIPT_NS_SEPARATOR}{name}")
+pub fn script_address(namespace: &str, scope: &str, name: &str) -> ScriptAddress {
+    ScriptAddress(format!(
+        "{namespace}{SCRIPT_NS_SEPARATOR}{scope}{SCRIPT_NS_SEPARATOR}{name}"
+    ))
 }
 
 /// Build a provider-scoped script address: `provider.{id}.{name}`.
-pub fn provider_script_address(provider_id: &str, name: &str) -> String {
+pub fn provider_script_address(provider_id: &str, name: &str) -> ScriptAddress {
     script_address(SCRIPT_NS_PROVIDER, provider_id, name)
 }
 
@@ -73,4 +114,4 @@ pub trait Script: Send + Sync {
 /// Returned by [`Provider::scripts`](crate::provider::Provider::scripts) during
 /// activation. The address (first element) should be built via
 /// [`provider_script_address`] for consistency.
-pub type ScriptEntry = (String, Arc<dyn Script>);
+pub type ScriptEntry = (ScriptAddress, Arc<dyn Script>);

@@ -22,14 +22,9 @@ use tracing::{debug, info};
 ///
 /// On drop, all children are reaped — already-exited children are
 /// collected, lingering ones are killed.
+#[derive(Default)]
 pub struct Spawner {
     children: Mutex<Vec<Child>>,
-}
-
-/// Returns the default value.
-impl Default for Spawner {
-    /// Returns the default value.
-    fn default() -> Self { Self::new() }
 }
 
 /// Process spawning and child lifecycle management.

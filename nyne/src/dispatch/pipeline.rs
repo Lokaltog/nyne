@@ -21,6 +21,7 @@ use crate::provider::Provider;
 ///
 /// Owns the global middlewares and post-write hooks. Node-level and
 /// provider-level middlewares are discovered from the respective traits.
+#[derive(Default)]
 pub(super) struct Pipeline {
     global_read_middlewares: Vec<Box<dyn ReadMiddleware>>,
     global_write_middlewares: Vec<Box<dyn WriteMiddleware>>,
@@ -107,10 +108,4 @@ impl Pipeline {
 
         Ok(outcome)
     }
-}
-
-/// Default implementation for `Pipeline`.
-impl Default for Pipeline {
-    /// Delegates to [`Pipeline::new`].
-    fn default() -> Self { Self::new() }
 }
