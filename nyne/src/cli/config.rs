@@ -5,7 +5,7 @@ use color_eyre::eyre::Result;
 
 use super::output;
 use crate::config::NyneConfig;
-use crate::plugin::PLUGINS;
+use crate::plugin;
 
 /// Arguments for the `config` subcommand.
 ///
@@ -24,7 +24,7 @@ pub struct ConfigArgs;
 ///
 /// Output is pretty-printed TOML written to stdout via [`output::term()`].
 pub fn run(_args: &ConfigArgs) -> Result<()> {
-    let plugins: Vec<_> = PLUGINS.iter().map(|f| f()).collect();
+    let plugins = plugin::instantiate();
     let mut config = NyneConfig::load(&plugins, None)?;
 
     // Replace raw plugin tables with fully-resolved configs (defaults filled in).
@@ -34,7 +34,6 @@ pub fn run(_args: &ConfigArgs) -> Result<()> {
         }
     }
 
-    let toml = toml::to_string_pretty(&config)?;
-    output::term().write_line(&toml)?;
+    output::term().write_line(&toml::to_string_pretty(&config)?)?;
     Ok(())
 }

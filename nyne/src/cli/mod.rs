@@ -97,6 +97,16 @@ pub(crate) struct SessionArgs {
 }
 
 impl SessionArgs {
+    /// The raw session ID passed by the user, if any.
+    pub(crate) fn id(&self) -> Option<&str> { self.id.as_deref() }
+
+    /// Resolve the full [`session::SessionInfo`] for the targeted session.
+    ///
+    /// Delegates to [`resolve_session`], which scans the session registry and
+    /// applies the standard resolution: explicit `--id` flag or single-session
+    /// auto-detection.
+    pub(crate) fn resolve(&self) -> Result<session::SessionInfo> { resolve_session(self.id.as_deref()) }
+
     /// Resolve the control socket path for the targeted session.
     ///
     /// Delegates to [`discover_socket`], which applies the priority chain:

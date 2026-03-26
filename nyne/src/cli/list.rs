@@ -15,13 +15,13 @@ use crate::session::{self, SessionRegistry};
 
 /// Arguments for the `list` subcommand.
 ///
-/// When `id` is `None`, all active sessions are listed. When `id` is
-/// `Some(id)`, the attached processes for that specific session are shown
+/// When no session is specified, all active sessions are listed. When `--id`
+/// is provided, the attached processes for that specific session are shown
 /// instead.
 #[derive(Debug, Args)]
 pub struct ListArgs {
-    /// Session ID -- if provided, list attached processes for that session only.
-    pub id: Option<String>,
+    #[command(flatten)]
+    session: super::SessionArgs,
 }
 
 /// Dispatch the list subcommand based on whether a session ID was provided.
@@ -33,7 +33,7 @@ pub fn run(args: &ListArgs) -> Result<()> {
     let term = output::term();
     let registry = SessionRegistry::scan()?;
 
-    if let Some(id) = args.id.as_deref() {
+    if let Some(id) = args.session.id() {
         return list_processes(&term, id);
     }
 

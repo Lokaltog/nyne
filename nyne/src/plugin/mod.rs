@@ -121,3 +121,9 @@ pub type PluginFactory = fn() -> Box<dyn Plugin>;
 #[allow(unsafe_code)]
 #[distributed_slice]
 pub static PLUGINS: [PluginFactory];
+
+/// Instantiate all linked plugins by calling their factory functions.
+///
+/// This is the standard entry point for obtaining plugin instances from the
+/// [`PLUGINS`] distributed slice. Each factory is called exactly once.
+pub fn instantiate() -> Vec<Box<dyn Plugin>> { PLUGINS.iter().map(|f| f()).collect() }

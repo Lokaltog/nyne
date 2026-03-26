@@ -22,12 +22,11 @@ use crate::config::{NyneConfig, StorageStrategy};
 use crate::dispatch::ScriptRegistry;
 use crate::dispatch::path_filter::PathFilter;
 use crate::fuse::VisibilityMap;
-use crate::plugin::PLUGINS;
 use crate::process::Spawner;
 use crate::session::{self, SessionId, SessionRegistry};
 use crate::types::{GitDirName, PassthroughProcesses, ProcessVisibility};
 use crate::watcher::FsWatcher;
-use crate::{AsyncNotifier, BufferedEventSink, FuseNotifier, NyneFs, OsFs, ProviderRegistry, Router, sandbox};
+use crate::{AsyncNotifier, BufferedEventSink, FuseNotifier, NyneFs, OsFs, ProviderRegistry, Router, plugin, sandbox};
 
 /// Number of FUSE handler threads per mount.
 ///
@@ -130,7 +129,7 @@ struct SessionGuard {
 /// Returns an error if config loading fails, paths are invalid, session IDs
 /// conflict, or sandbox/FUSE setup fails.
 pub fn run(args: &MountArgs) -> Result<()> {
-    let plugins: Vec<_> = PLUGINS.iter().map(|f| f()).collect();
+    let plugins = plugin::instantiate();
 
     // Use first explicit path or CWD as the project root for config layering.
     let project_root = args
