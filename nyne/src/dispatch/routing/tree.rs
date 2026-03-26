@@ -186,108 +186,118 @@ fn apply_capture(mut params: RouteParams, capture: CaptureResult) -> RouteParams
     params
 }
 
-/// Try matching a single child route for a children dispatch.
+/// Dispatch mode for the route-tree walk.
+///
+/// Determines whether a tree walk produces directory listings (children/readdir)
+/// or single-name resolution (lookup).
+enum DispatchMode<'a> {
+    /// Children (readdir) — list all entries at the matched path.
+    Children,
+    /// Lookup — resolve a single `name` at the matched path.
+    Lookup { name: &'a str },
+}
+
+/// Result from a single route match, parameterized by dispatch mode.
+///
+/// Wraps the mode-specific return type so `try_match` can be generic
+/// over both children and lookup dispatch.
+enum MatchResult {
+    Children(Option<Vec<VirtualNode>>),
+    Lookup(Option<VirtualNode>),
+}
+
+impl MatchResult {
+    fn into_children(self) -> Option<Vec<VirtualNode>> {
+        match self {
+            Self::Children(v) => v,
+            Self::Lookup(_) => unreachable!("called into_children on Lookup result"),
+        }
+    }
+
+    fn into_lookup(self) -> Option<VirtualNode> {
+        match self {
+            Self::Lookup(v) => v,
+            Self::Children(_) => unreachable!("called into_lookup on Children result"),
+        }
+    }
+}
+
+/// Context for the rest-capture algorithm, bundling parameters that would
+/// otherwise require 6+ arguments on `try_rest_capture_core`.
+struct RestCaptureCtx<'a, P> {
+    node: &'a RouteNode<P>,
+    capture_name: &'static str,
+    suffix: Option<&'a str>,
+    first_segment: &'a str,
+    rest: &'a [&'a str],
+    params: &'a RouteParams,
+}
+
+/// Try matching a single child route for either a children or lookup dispatch.
 ///
 /// Called once per sub-route in precedence order. Uses `ControlFlow` to
-/// short-circuit: `Break(nodes)` means this child claimed the path and
+/// short-circuit: `Break(result)` means this child claimed the path and
 /// dispatch is done; `Continue(())` means try the next sibling.
 ///
 /// Handles all matcher variants: exact/capture delegate recursively,
 /// rest-capture uses the rightmost-suffix algorithm, and glob invokes
 /// the handler directly (it matches any remaining depth).
-fn try_match_children<P>(
+fn try_match<P>(
     child: &RouteNode<P>,
     provider: &P,
     ctx: &RequestContext<'_>,
     remaining: &[&str],
     params: &RouteParams,
-) -> Result<ControlFlow<Option<Vec<VirtualNode>>>> {
+    mode: &DispatchMode<'_>,
+) -> Result<ControlFlow<MatchResult>> {
     let Some((&segment, rest)) = remaining.split_first() else {
         return Ok(ControlFlow::Continue(()));
     };
     match &child.segment {
         SegmentMatcher::RestCapture { name, suffix } => {
-            let result = try_rest_capture(child, provider, ctx, name, suffix.as_deref(), segment, rest, params)?;
-            if result.is_some() {
-                return Ok(ControlFlow::Break(result));
-            }
-        }
-        SegmentMatcher::Glob => {
-            return Ok(ControlFlow::Break(child.invoke_children(
-                provider,
-                ctx,
-                params.clone(),
-            )?));
-        }
-        other => {
-            let Some(capture) = other.matches(segment) else {
-                return Ok(ControlFlow::Continue(()));
-            };
-            return Ok(ControlFlow::Break(child.dispatch_children(
-                provider,
-                ctx,
+            let rc = RestCaptureCtx {
+                node: child,
+                capture_name: name,
+                suffix: suffix.as_deref(),
+                first_segment: segment,
                 rest,
-                &apply_capture(params.clone(), capture),
-            )?));
-        }
-    }
-    Ok(ControlFlow::Continue(()))
-}
-
-/// Try matching a single child route for a lookup dispatch.
-///
-/// Lookup variant of [`try_match_children`]. Same precedence-ordered
-/// short-circuit logic, but carries an additional `lookup_name` argument
-/// that is passed through to the leaf handler for single-name resolution.
-fn try_match_lookup<P>(
-    child: &RouteNode<P>,
-    provider: &P,
-    ctx: &RequestContext<'_>,
-    remaining: &[&str],
-    lookup_name: &str,
-    params: &RouteParams,
-) -> Result<ControlFlow<Option<VirtualNode>>> {
-    let Some((&segment, rest)) = remaining.split_first() else {
-        return Ok(ControlFlow::Continue(()));
-    };
-    match &child.segment {
-        SegmentMatcher::RestCapture { name, suffix } => {
-            let result = try_rest_capture_lookup(
-                child,
-                provider,
-                ctx,
-                name,
-                suffix.as_deref(),
-                segment,
-                rest,
-                lookup_name,
                 params,
-            )?;
-            if result.is_some() {
-                return Ok(ControlFlow::Break(result));
+            };
+            if let Some(mr) = try_rest_capture(&rc, provider, ctx, mode)? {
+                return Ok(ControlFlow::Break(mr));
             }
         }
-        SegmentMatcher::Glob => {
-            let Some(handler) = &child.lookup_handler else {
-                return Ok(ControlFlow::Continue(()));
-            };
-            return Ok(ControlFlow::Break((handler)(
-                provider,
-                &RouteCtx::new(ctx, params.clone()),
-                lookup_name,
-            )?));
-        }
+        SegmentMatcher::Glob => match mode {
+            DispatchMode::Children => {
+                return Ok(ControlFlow::Break(MatchResult::Children(child.invoke_children(
+                    provider,
+                    ctx,
+                    params.clone(),
+                )?)));
+            }
+            DispatchMode::Lookup { name } => {
+                let Some(handler) = &child.lookup_handler else {
+                    return Ok(ControlFlow::Continue(()));
+                };
+                return Ok(ControlFlow::Break(MatchResult::Lookup((handler)(
+                    provider,
+                    &RouteCtx::new(ctx, params.clone()),
+                    name,
+                )?)));
+            }
+        },
         other => {
             let Some(capture) = other.matches(segment) else {
                 return Ok(ControlFlow::Continue(()));
             };
-            return Ok(ControlFlow::Break(child.dispatch_lookup(
-                provider,
-                ctx,
-                rest,
-                lookup_name,
-                &apply_capture(params.clone(), capture),
-            )?));
+            let next_params = apply_capture(params.clone(), capture);
+            let result = match mode {
+                DispatchMode::Children =>
+                    MatchResult::Children(child.dispatch_children(provider, ctx, rest, &next_params)?),
+                DispatchMode::Lookup { name } =>
+                    MatchResult::Lookup(child.dispatch_lookup(provider, ctx, rest, name, &next_params)?),
+            };
+            return Ok(ControlFlow::Break(result));
         }
     }
     Ok(ControlFlow::Continue(()))
@@ -307,10 +317,11 @@ impl<P> RouteNode<P> {
             return self.invoke_children(provider, ctx, params.clone());
         }
 
+        let mode = DispatchMode::Children;
         // Sub-routes are sorted by precedence [DD-21]: exact > capture > rest > glob.
         for child in &self.sub_routes {
-            if let ControlFlow::Break(result) = try_match_children(child, provider, ctx, remaining, params)? {
-                return Ok(result);
+            if let ControlFlow::Break(result) = try_match(child, provider, ctx, remaining, params, &mode)? {
+                return Ok(result.into_children());
             }
         }
 
@@ -330,9 +341,10 @@ impl<P> RouteNode<P> {
             return self.invoke_lookup(provider, ctx, params.clone(), name);
         }
 
+        let mode = DispatchMode::Lookup { name };
         for child in &self.sub_routes {
-            if let ControlFlow::Break(result) = try_match_lookup(child, provider, ctx, remaining, name, params)? {
-                return Ok(result);
+            if let ControlFlow::Break(result) = try_match(child, provider, ctx, remaining, params, &mode)? {
+                return Ok(result.into_lookup());
             }
         }
 
@@ -377,13 +389,17 @@ impl<P> RouteNode<P> {
             }
         }
 
-        if let Some(handler) = &self.lookup_handler {
-            let route_ctx = RouteCtx::new(ctx, params.clone());
+        let params = if let Some(handler) = &self.lookup_handler {
+            let route_ctx = RouteCtx::new(ctx, params);
             let result = (handler)(provider, &route_ctx, name)?;
             if result.is_some() {
                 return Ok(result);
             }
-        }
+            // Reclaim params for glob fallback — avoids a redundant clone
+            route_ctx.into_params()
+        } else {
+            params
+        };
 
         // Glob fallback: a "**" sub-route's lookup handler applies at any depth.
         for child in &self.sub_routes {
@@ -431,25 +447,19 @@ fn build_captured(full: &[&str], split_pos: usize, suffix: &str) -> Vec<String> 
 
 /// Core rest-capture algorithm: find split points, try each, delegate via callback.
 ///
-/// Shared by `try_rest_capture` (children) and `try_rest_capture_lookup` (lookup).
-/// The `dispatch` closure receives `(remaining_segments, params_with_capture)` and
-/// performs the type-specific dispatch.
-#[allow(clippy::too_many_arguments)]
+/// Uses [`RestCaptureCtx`] to bundle capture parameters. The `dispatch` closure
+/// receives `(remaining_segments, params_with_capture)` and performs
+/// the type-specific dispatch.
 fn try_rest_capture_core<P, R>(
-    sub_routes: &[RouteNode<P>],
-    capture_name: &'static str,
-    suffix: Option<&str>,
-    first_segment: &str,
-    rest: &[&str],
-    params: &RouteParams,
+    rc: &RestCaptureCtx<'_, P>,
     dispatch: impl Fn(&[&str], &RouteParams) -> Result<Option<R>>,
 ) -> Result<Option<R>> {
-    let full: Vec<&str> = iter::once(first_segment).chain(rest.iter().copied()).collect();
+    let full: Vec<&str> = iter::once(rc.first_segment).chain(rc.rest.iter().copied()).collect();
 
-    let Some(sfx) = suffix else {
+    let Some(sfx) = rc.suffix else {
         // No suffix — rest capture consumes all remaining segments
-        let mut params = params.clone();
-        params.insert_rest(capture_name, full.iter().map(|s| (*s).to_owned()).collect());
+        let mut params = rc.params.clone();
+        params.insert_rest(rc.capture_name, full.iter().map(|s| (*s).to_owned()).collect());
         return dispatch(&[], &params);
     };
 
@@ -458,8 +468,8 @@ fn try_rest_capture_core<P, R>(
         let remaining: Vec<&str> = full.get(split_pos + 1..).unwrap_or_default().to_vec();
 
         if remaining.is_empty() {
-            let mut next_params = params.clone();
-            next_params.insert_rest(capture_name, captured);
+            let mut next_params = rc.params.clone();
+            next_params.insert_rest(rc.capture_name, captured);
             return dispatch(&[], &next_params);
         }
 
@@ -467,12 +477,14 @@ fn try_rest_capture_core<P, R>(
         let Some(&first_remaining) = remaining.first() else {
             continue;
         };
-        if sub_routes
+        if rc
+            .node
+            .sub_routes
             .iter()
             .any(|child| child.segment.matches(first_remaining).is_some())
         {
-            let mut next_params = params.clone();
-            next_params.insert_rest(capture_name, captured);
+            let mut next_params = rc.params.clone();
+            next_params.insert_rest(rc.capture_name, captured);
             let result = dispatch(&remaining, &next_params)?;
             if result.is_some() {
                 return Ok(result);
@@ -483,49 +495,24 @@ fn try_rest_capture_core<P, R>(
     Ok(None)
 }
 
-/// Try rest-capture dispatch for children, using rightmost-suffix algorithm [DD-19].
-#[allow(clippy::too_many_arguments)]
+/// Try rest-capture dispatch using the rightmost-suffix algorithm [DD-19].
+///
+/// Unified handler for both children and lookup modes. Delegates to
+/// [`try_rest_capture_core`] with a mode-appropriate dispatch closure.
 fn try_rest_capture<P>(
-    node: &RouteNode<P>,
+    rc: &RestCaptureCtx<'_, P>,
     provider: &P,
     ctx: &RequestContext<'_>,
-    capture_name: &'static str,
-    suffix: Option<&str>,
-    first_segment: &str,
-    rest: &[&str],
-    params: &RouteParams,
-) -> Result<Option<Vec<VirtualNode>>> {
-    try_rest_capture_core(
-        &node.sub_routes,
-        capture_name,
-        suffix,
-        first_segment,
-        rest,
-        params,
-        |remaining, params| node.dispatch_children(provider, ctx, remaining, params),
-    )
-}
-
-/// Try rest-capture dispatch for lookup, using rightmost-suffix algorithm [DD-19].
-#[allow(clippy::too_many_arguments)]
-fn try_rest_capture_lookup<P>(
-    node: &RouteNode<P>,
-    provider: &P,
-    ctx: &RequestContext<'_>,
-    capture_name: &'static str,
-    suffix: Option<&str>,
-    first_segment: &str,
-    rest: &[&str],
-    lookup_name: &str,
-    params: &RouteParams,
-) -> Result<Option<VirtualNode>> {
-    try_rest_capture_core(
-        &node.sub_routes,
-        capture_name,
-        suffix,
-        first_segment,
-        rest,
-        params,
-        |remaining, params| node.dispatch_lookup(provider, ctx, remaining, lookup_name, params),
-    )
+    mode: &DispatchMode<'_>,
+) -> Result<Option<MatchResult>> {
+    match mode {
+        DispatchMode::Children => Ok(try_rest_capture_core(rc, |remaining, params| {
+            rc.node.dispatch_children(provider, ctx, remaining, params)
+        })?
+        .map(|v| MatchResult::Children(Some(v)))),
+        DispatchMode::Lookup { name } => Ok(try_rest_capture_core(rc, |remaining, params| {
+            rc.node.dispatch_lookup(provider, ctx, remaining, name, params)
+        })?
+        .map(|v| MatchResult::Lookup(Some(v)))),
+    }
 }

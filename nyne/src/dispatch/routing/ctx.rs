@@ -51,6 +51,9 @@ impl<'a> RouteCtx<'a> {
 
     /// Access the underlying `RequestContext` (used by generated lookup closures).
     pub const fn request(&self) -> &RequestContext<'a> { self.request }
+
+    /// Consume the context and return the owned route parameters.
+    pub fn into_params(self) -> RouteParams { self.params }
 }
 
 /// Derefs to the underlying [`RequestContext`] for transparent access.
