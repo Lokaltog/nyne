@@ -4,7 +4,7 @@
 //! the same structure:
 //! - [`require_capability!`] -- capability gate with early return and debug log
 //! - [`goto_method!`] -- four goto methods (definition, declaration, type definition, implementation)
-//! - [`hierarchy_query!`] -- four hierarchy methods (incoming/outgoing calls, super/subtypes)
+//! - [`hierarchy_query!`] -- two hierarchy methods (incoming/outgoing calls)
 //!
 //! Each generated method checks server capabilities, builds the appropriate
 //! LSP params, sends the request, and normalizes the response to a `Vec`.
@@ -21,7 +21,6 @@ use lsp_types::{
     DidOpenTextDocumentParams, DocumentDiagnosticParams, DocumentDiagnosticReport, DocumentDiagnosticReportResult,
     GotoDefinitionResponse, Hover, InlayHint, InlayHintParams, Location, PartialResultParams, Range, ReferenceContext,
     ReferenceParams, RenameParams, SymbolInformation, TextDocumentContentChangeEvent, TextDocumentItem,
-    TypeHierarchyItem, TypeHierarchyPrepareParams, TypeHierarchySubtypesParams, TypeHierarchySupertypesParams,
     WorkDoneProgressParams, WorkspaceEdit, WorkspaceSymbolParams,
 };
 use tracing::debug;
@@ -128,20 +127,6 @@ impl LspClient {
         outgoing_calls, prepare_call_hierarchy,
         CallHierarchyOutgoingCallsParams, CallHierarchyOutgoingCall,
         lsp_req::CallHierarchyOutgoingCalls::METHOD
-    }
-
-    hierarchy_query! {
-        /// Get supertypes of the symbol at the given position.
-        type_hierarchy_supertypes, prepare_type_hierarchy,
-        TypeHierarchySupertypesParams, TypeHierarchyItem,
-        lsp_req::TypeHierarchySupertypes::METHOD
-    }
-
-    hierarchy_query! {
-        /// Get subtypes of the symbol at the given position.
-        type_hierarchy_subtypes, prepare_type_hierarchy,
-        TypeHierarchySubtypesParams, TypeHierarchyItem,
-        lsp_req::TypeHierarchySubtypes::METHOD
     }
 
     /// Notify the server that a document has been opened.
@@ -429,18 +414,6 @@ impl LspClient {
 
         let result: Option<Vec<CallHierarchyItem>> =
             self.send_request(lsp_req::CallHierarchyPrepare::METHOD, params)?;
-        Ok(result.and_then(|v| v.into_iter().next()))
-    }
-
-    /// Prepare type hierarchy at position, returning the first item if any.
-    fn prepare_type_hierarchy(&self, pos: &FilePosition) -> Result<Option<TypeHierarchyItem>> {
-        let params = TypeHierarchyPrepareParams {
-            text_document_position_params: pos.to_params()?,
-            work_done_progress_params: WorkDoneProgressParams::default(),
-        };
-
-        let result: Option<Vec<TypeHierarchyItem>> =
-            self.send_request(lsp_req::TypeHierarchyPrepare::METHOD, params)?;
         Ok(result.and_then(|v| v.into_iter().next()))
     }
 

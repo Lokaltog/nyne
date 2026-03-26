@@ -56,10 +56,6 @@ impl LspProvider {
 
         // Shared partials (included by individual LSP templates).
         b.register_partial("syntax/lsp/_locations", include_str!("templates/lsp/_locations.md.j2"));
-        b.register_partial(
-            "syntax/lsp/_type_hierarchy",
-            include_str!("templates/lsp/_type_hierarchy.md.j2"),
-        );
 
         // Register file name globals so templates can reference e.g. FILE_DEFINITION.
         LspFeature::register_globals(b.engine_mut());

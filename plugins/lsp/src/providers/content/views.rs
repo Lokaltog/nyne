@@ -8,13 +8,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use color_eyre::eyre::{Result, eyre};
-use lsp_types::{CallHierarchyItem, Hover, InlayHint, Location, Position, TypeHierarchyItem};
+use lsp_types::{CallHierarchyItem, Hover, InlayHint, Location, Position};
 use nyne::templates::{TemplateEngine, TemplateView};
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use serde::Serialize;
 
 use super::feature::{LspFeature, LspTarget};
-use super::format::{extract_hover_content, extract_inlay_label, lsp_symbol_kind_label};
+use super::format::{extract_hover_content, extract_inlay_label};
 use crate::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
 use crate::lsp::handle::{LspHandle, SymbolQuery};
 use crate::lsp::path::LspPathResolver;
@@ -112,18 +112,15 @@ impl HoverView {
     }
 }
 
-/// Unified view for hierarchy results (callers, deps, supertypes, subtypes).
+/// Unified view for hierarchy results (callers, deps).
 ///
-/// Callers/deps templates iterate `items` with `name`/`file`/`line`.
-/// Supertypes/subtypes templates additionally use `kind`.
+/// Templates iterate `items` with `name`/`file`/`line`.
 #[derive(Serialize)]
 pub(super) struct HierarchyListView<'a> {
     pub items: &'a [HierarchyRow],
 }
 
-/// Row shared by all hierarchy results — call hierarchy and type hierarchy.
-///
-/// `kind` is empty for call hierarchy items (templates ignore it).
+/// Row for call hierarchy results (callers, deps).
 #[derive(Clone, Serialize)]
 pub(super) struct HierarchyRow {
     pub name: String,
@@ -137,16 +134,6 @@ pub(super) fn hierarchy_item(item: CallHierarchyItem) -> HierarchyRow {
     HierarchyRow {
         name: item.name,
         kind: "",
-        file: uri_to_file_path(&item.uri),
-        line: item.selection_range.start.line + 1,
-    }
-}
-
-/// Extract a `HierarchyRow` from a `TypeHierarchyItem`.
-pub(super) fn type_hierarchy_item(item: TypeHierarchyItem) -> HierarchyRow {
-    HierarchyRow {
-        name: item.name,
-        kind: lsp_symbol_kind_label(item.kind),
         file: uri_to_file_path(&item.uri),
         line: item.selection_range.start.line + 1,
     }

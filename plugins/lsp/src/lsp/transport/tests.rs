@@ -10,11 +10,17 @@ fn frame(msg: &serde_json::Value) -> Vec<u8> {
     format!("Content-Length: {}\r\n\r\n{payload}", payload.len()).into_bytes()
 }
 
-/// Tests that `send_request` produces valid Content-Length framed JSON-RPC.
+/// Tests that `write_message` produces valid Content-Length framed JSON-RPC.
 #[test]
-fn send_request_framing() {
+fn write_message_framing() {
+    let msg = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {"rootUri": null},
+    });
     let mut buf = Vec::new();
-    send_request(&mut buf, 1, "initialize", json!({"rootUri": null})).unwrap();
+    write_message(&mut buf, &msg).unwrap();
 
     let output = String::from_utf8(buf).unwrap();
     assert!(output.starts_with("Content-Length: "));
@@ -34,11 +40,16 @@ fn send_request_framing() {
     assert_eq!(declared_len, parts[1].len());
 }
 
-/// Tests that `send_notification` omits the `id` field.
+/// Tests that `write_message` faithfully writes a notification (no `id` field).
 #[test]
-fn send_notification_has_no_id() {
+fn write_message_notification_has_no_id() {
+    let msg = json!({
+        "jsonrpc": "2.0",
+        "method": "initialized",
+        "params": {},
+    });
     let mut buf = Vec::new();
-    send_notification(&mut buf, "initialized", json!({})).unwrap();
+    write_message(&mut buf, &msg).unwrap();
 
     let output = String::from_utf8(buf).unwrap();
     let parts: Vec<&str> = output.splitn(2, "\r\n\r\n").collect();

@@ -8,8 +8,6 @@
 use std::io::{BufRead, Write};
 
 use color_eyre::eyre::{Result, eyre};
-use serde::Serialize;
-use serde_json::json;
 use tracing::trace;
 
 /// JSON-RPC error response from the language server.
@@ -33,27 +31,6 @@ impl JsonRpcError {
 
     /// Whether this error indicates the method is not supported by the server.
     pub const fn is_method_not_found(&self) -> bool { self.code == Self::METHOD_NOT_FOUND }
-}
-
-/// Send a JSON-RPC request with Content-Length header.
-pub fn send_request(writer: &mut impl Write, id: i64, method: &str, params: impl Serialize) -> Result<()> {
-    let body = json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "method": method,
-        "params": params,
-    });
-    write_message(writer, &body)
-}
-
-/// Send a JSON-RPC notification (no id, no response expected).
-pub fn send_notification(writer: &mut impl Write, method: &str, params: impl Serialize) -> Result<()> {
-    let body = json!({
-        "jsonrpc": "2.0",
-        "method": method,
-        "params": params,
-    });
-    write_message(writer, &body)
 }
 
 /// Extract the result from a JSON-RPC response, or return a `JsonRpcError`.

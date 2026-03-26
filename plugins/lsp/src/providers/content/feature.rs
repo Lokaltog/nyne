@@ -14,7 +14,7 @@ use lsp_types::Position;
 use nyne::templates::{TemplateEngine, TemplateHandle};
 use strum::{EnumCount, IntoEnumIterator};
 
-use super::views::{LspQueryResult, hierarchy_item, type_hierarchy_item};
+use super::views::{LspQueryResult, hierarchy_item};
 use crate::lsp::query::FileQuery;
 use crate::lsp::uri::line_range_to_lsp_range;
 
@@ -46,8 +46,6 @@ pub(crate) enum LspFeature {
     Implementation,
     Callers,
     Deps,
-    Supertypes,
-    Subtypes,
     Doc,
     Hints,
 }
@@ -104,8 +102,6 @@ impl LspFeature {
             Self::Implementation => meta!("implementation"),
             Self::Callers => meta!("callers"),
             Self::Deps => meta!("deps"),
-            Self::Supertypes => meta!("supertypes"),
-            Self::Subtypes => meta!("subtypes"),
             Self::Doc => meta!("doc", no_dir),
             Self::Hints => meta!("hints", no_dir),
         }
@@ -158,10 +154,6 @@ impl LspFeature {
             Self::References => true, // fundamental — always available if LSP is present
             Self::Implementation => caps.implementation_provider.is_some(),
             Self::Callers | Self::Deps => caps.call_hierarchy_provider.is_some(),
-            // lsp-types 0.97 lacks `type_hierarchy_provider` — hidden until the
-            // crate exposes it.  The -32601 fallback in hierarchy_query! ensures
-            // graceful degradation if directories are force-resolved.
-            Self::Supertypes | Self::Subtypes => false,
             Self::Doc => caps.hover_provider.is_some(),
             Self::Hints => caps.inlay_hint_provider.is_some(),
         }
@@ -189,14 +181,6 @@ impl LspFeature {
             Self::Deps => {
                 let calls = fq.outgoing_calls(pos.line, pos.character)?;
                 LspQueryResult::HierarchyItems(calls.into_iter().map(|c| hierarchy_item(c.to)).collect())
-            }
-            Self::Supertypes => {
-                let items = fq.supertypes(pos.line, pos.character)?;
-                LspQueryResult::HierarchyItems(items.into_iter().map(type_hierarchy_item).collect())
-            }
-            Self::Subtypes => {
-                let items = fq.subtypes(pos.line, pos.character)?;
-                LspQueryResult::HierarchyItems(items.into_iter().map(type_hierarchy_item).collect())
             }
             Self::Doc => {
                 let hover = fq.hover(pos.line, pos.character)?;

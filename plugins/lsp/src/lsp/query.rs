@@ -10,7 +10,6 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 use lsp_types::{
     CallHierarchyIncomingCall, CallHierarchyOutgoingCall, CodeAction, Diagnostic, Hover, InlayHint, Location, Range,
-    TypeHierarchyItem,
 };
 
 use super::cache::CacheKey;
@@ -79,16 +78,6 @@ impl<'a> FileQuery<'a> {
     cached_pos_query! {
         /// Find the type definition of the symbol at the given position.
         type_definition => type_definition, "typeDefinition" -> Vec<Location>
-    }
-
-    cached_pos_query! {
-        /// Get supertypes of the symbol at the given position.
-        supertypes => type_hierarchy_supertypes, "supertypes" -> Vec<TypeHierarchyItem>
-    }
-
-    cached_pos_query! {
-        /// Get subtypes of the symbol at the given position.
-        subtypes => type_hierarchy_subtypes, "subtypes" -> Vec<TypeHierarchyItem>
     }
 
     /// Create a new file query handle for the given manager, client, and file.
