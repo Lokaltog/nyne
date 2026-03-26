@@ -245,14 +245,7 @@ impl LspClient {
             return Ok(None);
         }
 
-        let params = lsp_types::RenameFilesParams {
-            files: vec![lsp_types::FileRename {
-                old_uri: old_uri.to_owned(),
-                new_uri: new_uri.to_owned(),
-            }],
-        };
-
-        self.send_request(lsp_req::WillRenameFiles::METHOD, params)
+        self.send_request(lsp_req::WillRenameFiles::METHOD, rename_files_params(old_uri, new_uri))
     }
 
     /// Notify the server that a file rename has been completed.
@@ -269,14 +262,7 @@ impl LspClient {
             return Ok(());
         }
 
-        let params = lsp_types::RenameFilesParams {
-            files: vec![lsp_types::FileRename {
-                old_uri: old_uri.to_owned(),
-                new_uri: new_uri.to_owned(),
-            }],
-        };
-
-        self.send_notification(lsp_notif::DidRenameFiles::METHOD, params)
+        self.send_notification(lsp_notif::DidRenameFiles::METHOD, rename_files_params(old_uri, new_uri))
     }
 
     /// Get hover documentation for the symbol at the given position.
@@ -433,6 +419,15 @@ impl LspClient {
     }
 }
 
+/// Build `RenameFilesParams` for a single file rename.
+fn rename_files_params(old_uri: &str, new_uri: &str) -> lsp_types::RenameFilesParams {
+    lsp_types::RenameFilesParams {
+        files: vec![lsp_types::FileRename {
+            old_uri: old_uri.to_owned(),
+            new_uri: new_uri.to_owned(),
+        }],
+    }
+}
 /// Flatten a `GotoDefinitionResponse` into a plain `Vec<Location>`.
 ///
 /// The LSP spec allows three response shapes (scalar, array, link array).

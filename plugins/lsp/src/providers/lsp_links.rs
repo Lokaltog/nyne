@@ -1,13 +1,19 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use nyne::prelude::*;
 use nyne::{COMPANION_SUFFIX, SUBDIR_SYMBOLS, companion_name};
 use nyne_source::services::SourceServices;
+use nyne_source::syntax::decomposed::DecomposedSource;
+use nyne_source::syntax::fragment::Fragment;
 use nyne_source::syntax::{find_fragment, find_fragment_at_line};
 
 use crate::lsp::handle::LspHandle;
 use crate::providers::content::{LspTarget, actions, query_lsp_targets};
+
+/// Resolved fragment context: shared decomposition, the fragment, and its LSP handle.
+type FragmentContext = (Arc<DecomposedSource>, Fragment, Arc<LspHandle>);
 
 /// Build a companion `VfsPath` to a specific symbol in a decomposed target file.
 ///
@@ -72,6 +78,32 @@ fn target_link_name(target: &LspTarget) -> String {
     }
 }
 
+/// Resolve a fragment and its LSP handle from a symbol path.
+///
+/// Shared preamble for LSP directory resolvers: validates the file has a
+/// decomposer, retrieves the decomposition, finds the fragment, and obtains
+/// the LSP handle.
+fn resolve_fragment_handle(
+    ctx: &Arc<ActivationContext>,
+    source_file: &VfsPath,
+    fragment_path: &[String],
+) -> Result<Option<FragmentContext>> {
+    let services = SourceServices::get(ctx);
+    let Some(_decomposer) = services.syntax.decomposer_for(source_file) else {
+        return Ok(None);
+    };
+    let shared = services.decomposition.get(source_file)?;
+    let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
+        return Ok(None);
+    };
+    let frag = frag.clone();
+
+    let Some(lsp_handle) = LspHandle::for_file(ctx, source_file) else {
+        return Ok(None);
+    };
+
+    Ok(Some((shared, frag, lsp_handle)))
+}
 /// Resolve an LSP symlink directory for a symbol.
 ///
 /// Called for paths like `file.rs@/symbols/Foo@/callers/`.
@@ -83,16 +115,7 @@ pub fn resolve_lsp_symlink_dir(
     fragment_path: &[String],
     lsp_dir: &str,
 ) -> Nodes {
-    let services = SourceServices::get(ctx);
-    let Some(_decomposer) = services.syntax.decomposer_for(source_file) else {
-        return Ok(None);
-    };
-    let shared = services.decomposition.get(source_file)?;
-    let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
-        return Ok(None);
-    };
-
-    let Some(lsp_handle) = LspHandle::for_file(ctx, source_file) else {
+    let Some((shared, frag, lsp_handle)) = resolve_fragment_handle(ctx, source_file, fragment_path)? else {
         return Ok(None);
     };
 
@@ -149,16 +172,7 @@ fn build_target_nodes(ctx: &ActivationContext, targets: &[LspTarget], root: &Pat
 /// Eagerly fetches code actions from the LSP server and builds
 /// `.diff` file nodes for each one.
 pub fn resolve_actions_dir(ctx: &Arc<ActivationContext>, source_file: &VfsPath, fragment_path: &[String]) -> Nodes {
-    let services = SourceServices::get(ctx);
-    let Some(_decomposer) = services.syntax.decomposer_for(source_file) else {
-        return Ok(None);
-    };
-    let shared = services.decomposition.get(source_file)?;
-    let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
-        return Ok(None);
-    };
-
-    let Some(lsp_handle) = LspHandle::for_file(ctx, source_file) else {
+    let Some((shared, frag, lsp_handle)) = resolve_fragment_handle(ctx, source_file, fragment_path)? else {
         return Ok(None);
     };
 

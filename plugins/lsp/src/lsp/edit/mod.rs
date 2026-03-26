@@ -316,9 +316,7 @@ fn collect_resource_op(
             if let Some(existing) = results.iter_mut().find(|r| r.display_path == old_display) {
                 existing.outcome = EditOutcome::Rename { new_path: new_vfs };
             } else {
-                let content = resolver
-                    .read_to_string(rename.old_uri.path().as_str())
-                    .unwrap_or_default();
+                let content = resolver.read_to_string(rename.old_uri.path().as_str())?;
                 results.push(FileEditResult {
                     source_file: old_vfs,
                     display_path: old_display,

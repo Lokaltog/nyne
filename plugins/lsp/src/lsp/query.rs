@@ -153,8 +153,10 @@ impl<'a> FileQuery<'a> {
     /// Not cached — code actions depend on current diagnostics and file state,
     /// so stale results would be misleading.
     pub(crate) fn code_actions(&self, range: Range) -> Result<Vec<CodeAction>> {
-        let diagnostics = self.diagnostics().unwrap_or_default();
-        let relevant: Vec<_> = diagnostics
+        let relevant: Vec<_> = self
+            .diagnostics()
+            .inspect_err(|e| tracing::debug!("failed to fetch diagnostics: {e}"))
+            .unwrap_or_default()
             .into_iter()
             .filter(|d| ranges_overlap(&d.range, &range))
             .collect();

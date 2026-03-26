@@ -4,6 +4,7 @@
 //! Reading the file previews the edit; deleting it applies the action to the source.
 
 use std::ops::Range as StdRange;
+use std::sync::OnceLock;
 
 use color_eyre::eyre::eyre;
 use lsp_types::CodeAction;
@@ -65,6 +66,7 @@ pub(crate) fn build_action_nodes(resolved: Vec<ResolvedAction>, query: &SymbolQu
             let action = CodeActionDiff {
                 query: query.clone(),
                 action: entry.action,
+                resolved: OnceLock::new(),
             };
             DiffActionNode::into_node(&entry.file_name, action)
         })
@@ -76,26 +78,42 @@ pub(crate) fn build_action_nodes(resolved: Vec<ResolvedAction>, query: &SymbolQu
 ///
 /// Resolves the code action (via `codeAction/resolve` if needed), converts
 /// the workspace edit to [`FileEditResult`]s via [`resolve_workspace_edit`].
-#[derive(Clone)]
 struct CodeActionDiff {
     query: SymbolQuery,
     action: CodeAction,
+    /// Cached result of `codeAction/resolve` to avoid duplicate LSP round-trips.
+    resolved: OnceLock<Option<CodeAction>>,
 }
 
+impl Clone for CodeActionDiff {
+    fn clone(&self) -> Self {
+        Self {
+            query: self.query.clone(),
+            action: self.action.clone(),
+            resolved: OnceLock::new(),
+        }
+    }
+}
 /// Methods for [`CodeActionDiff`].
 impl CodeActionDiff {
     /// Resolve the code action to get a workspace edit.
     ///
     /// Returns the action with its edit populated, or `None` if resolution fails.
-    fn resolve_action(&self) -> Option<CodeAction> {
-        if self.action.edit.is_some() {
-            return Some(self.action.clone());
-        }
-        self.query
-            .file_query()?
-            .resolve_code_action(self.action.clone())
-            .inspect_err(|err| tracing::debug!(?err, "code action resolution failed"))
-            .ok()
+    /// Cached via `OnceLock` to avoid duplicate LSP round-trips when both
+    /// `header_lines` and `compute_edits` need the resolved action.
+    fn resolve_action(&self) -> Option<&CodeAction> {
+        self.resolved
+            .get_or_init(|| {
+                if self.action.edit.is_some() {
+                    return Some(self.action.clone());
+                }
+                self.query
+                    .file_query()?
+                    .resolve_code_action(self.action.clone())
+                    .inspect_err(|err| tracing::debug!(?err, "code action resolution failed"))
+                    .ok()
+            })
+            .as_ref()
     }
 }
 
