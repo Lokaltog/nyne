@@ -11,6 +11,7 @@ use minijinja::value::Value;
 use nyne::templates::{TemplateEngine, TemplateView};
 
 use super::FragmentResolver;
+use super::meta::FragmentPath;
 use crate::syntax;
 use crate::syntax::decomposed::DecomposedSource;
 use crate::syntax::fragment::{FragmentKind, find_fragment_of_kind};
@@ -43,7 +44,7 @@ impl TemplateView for OverviewContent {
 /// Resolves lazily via [`FragmentResolver`] — never stale after writes.
 pub(in crate::providers::syntax) struct SymbolOverviewContent {
     pub resolver: FragmentResolver,
-    pub fragment_path: Vec<String>,
+    pub fragment_path: FragmentPath,
 }
 
 /// [`TemplateView`] implementation for [`SymbolOverviewContent`].

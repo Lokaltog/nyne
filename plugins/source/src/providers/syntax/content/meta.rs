@@ -5,8 +5,9 @@
 //! stale after writes. Writes are validated by tree-sitter before being committed.
 
 use std::io::{Error, ErrorKind};
-use std::ops::Range;
+use std::ops::{Deref, Range};
 use std::str::from_utf8;
+use std::sync::Arc;
 
 use color_eyre::eyre;
 use nyne::node::capabilities::{Readable, Writable};
@@ -22,6 +23,24 @@ use crate::syntax::fragment::{Fragment, FragmentKind, find_fragment_of_kind};
 use crate::syntax::spec::{Decomposer, SpliceMode};
 use crate::syntax::{self};
 
+/// Shared, cheaply cloneable path identifying a fragment in the decomposed tree.
+///
+/// Wraps `Arc<[String]>` so that multiple content readers and splice writers
+/// can share the same allocation instead of cloning `Vec<String>` per node.
+#[derive(Clone, Debug)]
+pub(in crate::providers::syntax) struct FragmentPath(pub Arc<[String]>);
+
+impl FragmentPath {
+    /// Create a new `FragmentPath` from a slice of path segments.
+    pub fn new(segments: &[String]) -> Self { Self(Arc::from(segments)) }
+}
+
+impl Deref for FragmentPath {
+    type Target = [String];
+
+    fn deref(&self) -> &[String] { &self.0 }
+}
+
 /// Which byte range to address in a source file — resolved lazily from
 /// the current file state so byte offsets are never stale.
 ///
@@ -32,20 +51,20 @@ use crate::syntax::{self};
 #[derive(Clone, Debug)]
 pub(in crate::providers::syntax) enum SpliceTarget {
     /// Fragment body: `line_start_of(full_span.start)..full_span.end`.
-    FragmentBody(Vec<String>),
+    FragmentBody(FragmentPath),
     /// Signature text within a fragment's byte range.
-    FragmentSignature(Vec<String>),
+    FragmentSignature(FragmentPath),
     /// Doc comment range from fragment metadata.
-    FragmentDocComment(Vec<String>),
+    FragmentDocComment(FragmentPath),
     /// Decorator/attribute range (snapped to line start).
-    FragmentDecorators(Vec<String>),
+    FragmentDecorators(FragmentPath),
     /// Import span.
     Imports,
     /// File-level doc comment (e.g. `//!` in Rust).
     FileDoc,
     /// Code block body inside a document section, identified by parent
     /// fragment path and the code block's `fs_name`.
-    CodeBlockBody { parent_path: Vec<String>, fs_name: String },
+    CodeBlockBody { parent_path: FragmentPath, fs_name: String },
 }
 
 // Readable content types — all resolve lazily via FragmentResolver
@@ -53,7 +72,7 @@ pub(in crate::providers::syntax) enum SpliceTarget {
 /// Readable content for the symbol's signature line.
 pub(in crate::providers::syntax) struct SignatureContent {
     pub resolver: FragmentResolver,
-    pub fragment_path: Vec<String>,
+    pub fragment_path: FragmentPath,
 }
 
 /// [`Readable`] implementation for [`SignatureContent`].
@@ -73,7 +92,7 @@ impl Readable for SignatureContent {
 /// Readable content for the symbol's docstring (stripped of comment markers).
 pub(in crate::providers::syntax) struct DocstringContent {
     pub resolver: FragmentResolver,
-    pub fragment_path: Vec<String>,
+    pub fragment_path: FragmentPath,
 }
 
 /// [`Readable`] implementation for [`DocstringContent`].
@@ -111,7 +130,7 @@ impl Readable for FileDocstringContent {
 /// Readable content for the symbol's decorators/attributes.
 pub(in crate::providers::syntax) struct DecoratorsContent {
     pub resolver: FragmentResolver,
-    pub fragment_path: Vec<String>,
+    pub fragment_path: FragmentPath,
 }
 
 /// [`Readable`] implementation for [`DecoratorsContent`].
@@ -176,52 +195,48 @@ impl MetaSplice {
         let shared = self.resolver.decompose()?;
         let rope = crop::Rope::from(shared.source.as_str());
         let frags = &shared.decomposed;
+        let resolve_frag = |path: &[String]| -> Result<&Fragment> { syntax::require_fragment(frags, path) };
         let byte_range = match &self.target {
             SpliceTarget::Imports => {
-                let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Imports)
+                let frag = find_fragment_of_kind(frags, &FragmentKind::Imports)
                     .ok_or_else(|| eyre::eyre!("no import span in {}", self.resolver.source_file()))?;
                 line_aligned(&rope, frag.byte_range.clone())
             }
             SpliceTarget::FileDoc => {
-                let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)
+                let frag = find_fragment_of_kind(frags, &FragmentKind::Docstring)
                     .ok_or_else(|| eyre::eyre!("no file-level doc in {}", self.resolver.source_file()))?;
                 line_aligned(&rope, frag.byte_range.clone())
             }
             SpliceTarget::FragmentBody(path) => {
-                let frag = syntax::require_fragment(frags, path)?;
+                let frag = resolve_frag(path)?;
                 match shared.decomposer.splice_mode() {
                     SpliceMode::Line => line_aligned(&rope, frag.full_span()),
                     SpliceMode::Byte => frag.full_span(),
                 }
             }
             SpliceTarget::FragmentSignature(path) => {
-                let frag = syntax::require_fragment(frags, path)?;
+                let frag = resolve_frag(path)?;
                 let sig = frag
                     .signature
                     .as_deref()
-                    .ok_or_else(|| eyre::eyre!("no signature on fragment {:?}", path))?;
+                    .ok_or_else(|| eyre::eyre!("no signature on fragment {:?}", &**path))?;
                 find_signature_range(&shared.source, sig, frag.byte_range.start)
             }
-            SpliceTarget::FragmentDocComment(path) => {
-                let frag = syntax::require_fragment(frags, path)?;
-                frag.child_of_kind(&FragmentKind::Docstring)
-                    .map(|c| c.byte_range.clone())
-                    .ok_or_else(|| eyre::eyre!("no doc comment range on fragment {path:?}"))?
-            }
+            SpliceTarget::FragmentDocComment(path) => resolve_frag(path)?
+                .child_of_kind(&FragmentKind::Docstring)
+                .map(|c| c.byte_range.clone())
+                .ok_or_else(|| eyre::eyre!("no doc comment range on fragment {:?}", &**path))?,
             SpliceTarget::FragmentDecorators(path) => {
-                let frag = syntax::require_fragment(frags, path)?;
-                let range = frag
+                let child = resolve_frag(path)?
                     .child_of_kind(&FragmentKind::Decorator)
-                    .ok_or_else(|| eyre::eyre!("no decorator range on fragment {path:?}"))?;
-                line_aligned(&rope, range.byte_range.clone())
+                    .ok_or_else(|| eyre::eyre!("no decorator range on fragment {:?}", &**path))?;
+                line_aligned(&rope, child.byte_range.clone())
             }
-            SpliceTarget::CodeBlockBody { parent_path, fs_name } => {
-                let parent = syntax::require_fragment(frags, parent_path)?;
-                let cb = parent
-                    .child_by_fs_name(fs_name)
-                    .ok_or_else(|| eyre::eyre!("code block {fs_name:?} not found in {parent_path:?}"))?;
-                cb.byte_range.clone()
-            }
+            SpliceTarget::CodeBlockBody { parent_path, fs_name } => resolve_frag(parent_path)?
+                .child_by_fs_name(fs_name)
+                .ok_or_else(|| eyre::eyre!("code block {fs_name:?} not found in {:?}", &**parent_path))?
+                .byte_range
+                .clone(),
         };
         Ok(ResolvedSplice { shared, byte_range })
     }
@@ -398,55 +413,68 @@ pub(in crate::providers::syntax) fn build_meta_nodes(
     resolver: &FragmentResolver,
     fragment_path: &[String],
 ) -> Vec<VirtualNode> {
-    use crate::providers::names::{FILE_DECORATORS, FILE_DOCSTRING, FILE_OVERVIEW, FILE_SIGNATURE};
     use crate::providers::syntax::newline;
+    use crate::providers::well_known::{FILE_DECORATORS, FILE_DOCSTRING, FILE_OVERVIEW, FILE_SIGNATURE};
 
+    /// Build a readable+writable meta-file node with newline middleware.
+    fn meta_node(
+        name: impl Into<String>,
+        readable: impl Readable + 'static,
+        resolver: &FragmentResolver,
+        target: SpliceTarget,
+    ) -> VirtualNode {
+        newline::with_newline_middlewares(VirtualNode::file(name, readable).with_writable(MetaSplice {
+            resolver: resolver.clone(),
+            target,
+        }))
+    }
+
+    let path = FragmentPath::new(fragment_path);
     let mut nodes = Vec::new();
-    let path = fragment_path.to_vec();
 
     // signature.<ext> — only if the fragment has a signature.
     if frag.signature.is_some() {
-        let name = format!("{FILE_SIGNATURE}.{ext}");
-        let node = VirtualNode::file(&name, SignatureContent {
-            resolver: resolver.clone(),
-            fragment_path: path.clone(),
-        })
-        .with_writable(MetaSplice {
-            resolver: resolver.clone(),
-            target: SpliceTarget::FragmentSignature(path.clone()),
-        });
-        nodes.push(newline::with_newline_middlewares(node));
+        nodes.push(meta_node(
+            format!("{FILE_SIGNATURE}.{ext}"),
+            SignatureContent {
+                resolver: resolver.clone(),
+                fragment_path: path.clone(),
+            },
+            resolver,
+            SpliceTarget::FragmentSignature(path.clone()),
+        ));
     }
 
     // docstring.txt — only for fragments with a docstring child.
     if frag.child_of_kind(&FragmentKind::Docstring).is_some() {
-        let node = VirtualNode::file(FILE_DOCSTRING, DocstringContent {
-            resolver: resolver.clone(),
-            fragment_path: path.clone(),
-        })
-        .with_writable(DocstringSplice {
-            meta: MetaSplice {
+        nodes.push(newline::with_newline_middlewares(
+            VirtualNode::file(FILE_DOCSTRING, DocstringContent {
                 resolver: resolver.clone(),
-                target: SpliceTarget::FragmentDocComment(path.clone()),
-            },
-        });
-        nodes.push(newline::with_newline_middlewares(node));
+                fragment_path: path.clone(),
+            })
+            .with_writable(DocstringSplice {
+                meta: MetaSplice {
+                    resolver: resolver.clone(),
+                    target: SpliceTarget::FragmentDocComment(path.clone()),
+                },
+            }),
+        ));
     }
 
     // decorators.<ext> — only for fragments with a decorator child.
     if frag.child_of_kind(&FragmentKind::Decorator).is_some() {
-        let name = format!("{FILE_DECORATORS}.{ext}");
-        let node = VirtualNode::file(&name, DecoratorsContent {
-            resolver: resolver.clone(),
-            fragment_path: path.clone(),
-        })
-        .with_writable(DecoratorsSplice {
-            meta: MetaSplice {
+        nodes.push(newline::with_newline_middlewares(
+            VirtualNode::file(format!("{FILE_DECORATORS}.{ext}"), DecoratorsContent {
                 resolver: resolver.clone(),
-                target: SpliceTarget::FragmentDecorators(path.clone()),
-            },
-        });
-        nodes.push(newline::with_newline_middlewares(node));
+                fragment_path: path.clone(),
+            })
+            .with_writable(DecoratorsSplice {
+                meta: MetaSplice {
+                    resolver: resolver.clone(),
+                    target: SpliceTarget::FragmentDecorators(path.clone()),
+                },
+            }),
+        ));
     }
 
     // OVERVIEW.md — only if the fragment has children.

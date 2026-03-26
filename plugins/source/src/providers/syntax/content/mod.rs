@@ -21,7 +21,8 @@ use nyne::node::capabilities::Readable;
 // Re-exports for the parent module.
 pub(super) use self::{
     meta::{
-        FileDocstringContent, FileDocstringSplice, LinesContent, LinesWrite, MetaSplice, SpliceTarget, build_meta_nodes,
+        FileDocstringContent, FileDocstringSplice, FragmentPath, LinesContent, LinesWrite, MetaSplice, SpliceTarget,
+        build_meta_nodes,
     },
     overview::{FileOverviewContent, OverviewContent},
     write::BodySplice,
