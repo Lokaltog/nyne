@@ -79,22 +79,47 @@ impl OwnedNode {
         }
     }
 
-    /// Detect name collisions: names emitted by two or more providers.
+    /// Partition nodes into non-colliding and colliding groups.
     ///
-    /// Returns a map of colliding name → list of provider IDs that emitted it.
-    /// All collisions are reported — including same-name directories — so the
-    /// caller can merge capabilities across providers.
-    pub(super) fn detect_collisions(nodes: &[Self]) -> HashMap<String, Vec<ProviderId>> {
+    /// A collision occurs when two or more providers emit a node with the same
+    /// name. Returns `(non_colliding, colliding)` where colliding is a map of
+    /// name → nodes from all providers that emitted that name. This avoids a
+    /// second pass over the node list in the caller.
+    pub(super) fn partition_collisions(nodes: Vec<Self>) -> (Vec<Self>, HashMap<String, Vec<Self>>) {
+        // First pass: identify which names have multiple providers.
         let mut by_name: HashMap<&str, BTreeSet<ProviderId>> = HashMap::new();
-        for owned in nodes {
+        for owned in &nodes {
             by_name.entry(owned.node.name()).or_default().insert(owned.provider_id);
         }
 
-        by_name
+        let colliding_names: HashSet<String> = by_name
             .into_iter()
-            .filter_map(|(name, pids)| (pids.len() > 1).then(|| (name.to_owned(), pids.into_iter().collect())))
-            .collect()
+            .filter_map(|(name, pids)| (pids.len() > 1).then_some(name.to_owned()))
+            .collect();
+
+        if colliding_names.is_empty() {
+            return (nodes, HashMap::new());
+        }
+
+        // Second pass: partition into non-colliding and colliding groups.
+        let mut non_colliding = Vec::new();
+        let mut colliding: HashMap<String, Vec<Self>> = HashMap::new();
+        for owned in nodes {
+            if colliding_names.contains(owned.node.name()) {
+                colliding.entry(owned.node.name().to_owned()).or_default().push(owned);
+            } else {
+                non_colliding.push(owned);
+            }
+        }
+
+        (non_colliding, colliding)
     }
+}
+
+/// A single provider's force response in a naming conflict.
+struct ForceResponse {
+    provider_id: ProviderId,
+    nodes: Vec<VirtualNode>,
 }
 
 /// Raw outcome of calling `on_conflict` on all involved providers for a single name.
@@ -107,7 +132,7 @@ impl OwnedNode {
 /// The caller passes this to [`apply_force_resolution`] to determine the winner.
 struct ConflictOutcome {
     /// Providers that force-claimed the name, with their replacement nodes.
-    forces: Vec<(ProviderId, Vec<VirtualNode>)>,
+    forces: Vec<ForceResponse>,
     /// Nodes from providers willing to retry under a different name.
     retries: Vec<OwnedNode>,
 }
@@ -123,7 +148,7 @@ fn collect_conflict_responses(
     conflict_infos: &[ConflictInfo],
     ctx: &RequestContext<'_>,
 ) -> ConflictOutcome {
-    let mut forces: Vec<(ProviderId, Vec<VirtualNode>)> = Vec::new();
+    let mut forces: Vec<ForceResponse> = Vec::new();
     let mut retries: Vec<OwnedNode> = Vec::new();
 
     for provider in providers.iter().filter(|p| involved_pids.contains(&p.id())) {
@@ -134,7 +159,12 @@ fn collect_conflict_responses(
         };
         match result {
             Ok(ConflictResolution::Yield) => {}
-            Ok(ConflictResolution::Force(nodes)) => forces.push((pid, nodes)),
+            Ok(ConflictResolution::Force(nodes)) => {
+                forces.push(ForceResponse {
+                    provider_id: pid,
+                    nodes,
+                });
+            }
             Ok(ConflictResolution::Retry(nodes)) => {
                 retries.extend(nodes.into_iter().map(|node| OwnedNode { node, provider_id: pid }));
             }
@@ -149,11 +179,11 @@ fn collect_conflict_responses(
 ///
 /// Returns the winning nodes if exactly one provider forced, or `None` otherwise.
 /// Logs warnings for tied conflicts.
-fn apply_force_resolution(name: &str, forces: Vec<(ProviderId, Vec<VirtualNode>)>) -> Option<Vec<OwnedNode>> {
+fn apply_force_resolution(name: &str, forces: Vec<ForceResponse>) -> Option<Vec<OwnedNode>> {
     match forces.len() {
         0 => None,
         1 => {
-            let (pid, nodes) = forces.into_iter().next()?;
+            let ForceResponse { provider_id, nodes } = forces.into_iter().next()?;
             // Force'd nodes shadow a real file — different processes may see
             // different content (passthrough vs virtual). The FUSE kernel cache
             // is per-inode not per-process, so any TTL > 0 would let a
@@ -166,7 +196,7 @@ fn apply_force_resolution(name: &str, forces: Vec<(ProviderId, Vec<VirtualNode>)
                     .into_iter()
                     .map(|node| OwnedNode {
                         node: node.mark_shadows_real(),
-                        provider_id: pid,
+                        provider_id,
                     })
                     .collect(),
             )
@@ -174,7 +204,7 @@ fn apply_force_resolution(name: &str, forces: Vec<(ProviderId, Vec<VirtualNode>)
         n => {
             tracing::warn!(
                 name,
-                providers = ?forces.iter().map(|(pid, _)| pid).collect::<Vec<_>>(),
+                providers = ?forces.iter().map(|f| &f.provider_id).collect::<Vec<_>>(),
                 "tied force conflict ({n} providers), dropping all nodes"
             );
             None
@@ -227,10 +257,12 @@ fn resolve_conflict(
 fn merge_collision_group(
     name: &str,
     mut group: Vec<OwnedNode>,
-    collisions: &HashMap<String, Vec<ProviderId>>,
     providers: &[Arc<dyn Provider>],
     ctx: &RequestContext<'_>,
 ) -> OwnedNode {
+    // Collect provider IDs before the merge loop consumes nodes.
+    let involved: HashSet<ProviderId> = group.iter().map(|o| o.provider_id).collect();
+
     // Start with the first node, merge others into it.
     let mut base = group.remove(0);
     let mut has_contested = false;
@@ -245,9 +277,7 @@ fn merge_collision_group(
     }
 
     tracing::debug!(name, "contested capabilities — running conflict resolution");
-    let provider_ids = &collisions[name];
-    let involved: HashSet<ProviderId> = provider_ids.iter().copied().collect();
-    let conflict_infos = ConflictInfo::for_providers(name, provider_ids.iter().copied());
+    let conflict_infos = ConflictInfo::for_providers(name, involved.iter().copied());
     let outcome = collect_conflict_responses(providers, &involved, &conflict_infos, ctx);
 
     match outcome.forces.len() {
@@ -255,7 +285,7 @@ fn merge_collision_group(
         0 => base,
         // Single force: winner's node takes over, with base's non-contested caps merged in.
         1 => {
-            let Some((winner_pid, nodes)) = outcome.forces.into_iter().next() else {
+            let Some(ForceResponse { provider_id, nodes }) = outcome.forces.into_iter().next() else {
                 return base;
             };
             match nodes.into_iter().next() {
@@ -263,7 +293,7 @@ fn merge_collision_group(
                     winner_node.merge_capabilities_from(base.node);
                     OwnedNode {
                         node: winner_node,
-                        provider_id: winner_pid,
+                        provider_id,
                     }
                 }
                 None => base,
@@ -271,7 +301,7 @@ fn merge_collision_group(
         }
         // Tied force: keep merged base as-is.
         n => {
-            let force_pids: Vec<_> = outcome.forces.iter().map(|(pid, _)| pid.to_string()).collect();
+            let force_pids: Vec<_> = outcome.forces.iter().map(|f| f.provider_id.to_string()).collect();
             tracing::warn!(
                 name,
                 providers = ?force_pids,
@@ -315,24 +345,9 @@ pub(super) fn resolve_directory(providers: &[Arc<dyn Provider>], ctx: &RequestCo
         return Err(e.wrap_err(format!("all providers failed for {}", ctx.path)));
     }
 
-    let collisions = OwnedNode::detect_collisions(&all_nodes);
-    if collisions.is_empty() {
-        return Ok(all_nodes);
-    }
-
-    // Separate non-colliding nodes from colliding ones.
-    let mut resolved: Vec<OwnedNode> = Vec::new();
-    let mut colliding: HashMap<String, Vec<OwnedNode>> = HashMap::new();
-    for owned in all_nodes {
-        if collisions.contains_key(owned.node.name()) {
-            colliding.entry(owned.node.name().to_owned()).or_default().push(owned);
-        } else {
-            resolved.push(owned);
-        }
-    }
-
+    let (mut resolved, colliding) = OwnedNode::partition_collisions(all_nodes);
     for (name, group) in colliding {
-        resolved.push(merge_collision_group(&name, group, &collisions, providers, ctx));
+        resolved.push(merge_collision_group(&name, group, providers, ctx));
     }
 
     Ok(resolved)
@@ -410,13 +425,19 @@ fn resolve_competing_claims(
             Ok(None)
         }
         1 => {
-            let &[(winner_pid, _)] = outcome.forces.as_slice() else {
+            let &[
+                ForceResponse {
+                    provider_id: winner_pid,
+                    ..
+                },
+            ] = outcome.forces.as_slice()
+            else {
                 unreachable!()
             };
             Ok(claims.into_iter().find(|c| c.provider_id == winner_pid))
         }
         n => {
-            let force_pids: Vec<_> = outcome.forces.iter().map(|(pid, _)| pid.to_string()).collect();
+            let force_pids: Vec<_> = outcome.forces.iter().map(|f| f.provider_id.to_string()).collect();
             tracing::warn!(
                 path = %ctx.path,
                 name,
