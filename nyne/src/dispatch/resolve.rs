@@ -12,6 +12,7 @@
 //! the merged node gets both capabilities.
 
 use std::any::Any;
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic;
 use std::panic::AssertUnwindSafe;
@@ -48,13 +49,13 @@ fn catch_provider<T>(pid: ProviderId, op: &str, f: impl FnOnce() -> Result<Optio
 }
 
 /// Extract a human-readable message from a panic payload.
-fn panic_message(payload: &(dyn Any + Send)) -> String {
+fn panic_message(payload: &(dyn Any + Send)) -> Cow<'_, str> {
     if let Some(s) = payload.downcast_ref::<&str>() {
-        (*s).to_owned()
+        Cow::Borrowed(s)
     } else if let Some(s) = payload.downcast_ref::<String>() {
-        s.clone()
+        Cow::Borrowed(s)
     } else {
-        "non-string panic".to_owned()
+        Cow::Borrowed("non-string panic")
     }
 }
 
@@ -171,10 +172,9 @@ fn apply_force_resolution(name: &str, forces: Vec<(ProviderId, Vec<VirtualNode>)
             )
         }
         n => {
-            let force_pids: Vec<_> = forces.iter().map(|(pid, _)| pid.to_string()).collect();
             tracing::warn!(
                 name,
-                providers = ?force_pids,
+                providers = ?forces.iter().map(|(pid, _)| pid).collect::<Vec<_>>(),
                 "tied force conflict ({n} providers), dropping all nodes"
             );
             None

@@ -20,7 +20,7 @@ use smallvec::SmallVec;
 /// - No double slashes
 /// - No trailing slash (except root which is empty)
 /// - No null bytes
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VfsPath(String);
 
 /// Path construction, traversal, and query methods.
@@ -219,12 +219,6 @@ impl fmt::Display for VfsPath {
             f.write_str(&self.0)
         }
     }
-}
-
-/// Debug-formats as `VfsPath("inner/path")`.
-impl fmt::Debug for VfsPath {
-    /// Formats the value for debug output.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "VfsPath({:?})", self.0) }
 }
 
 /// Borrows the inner string representation.
