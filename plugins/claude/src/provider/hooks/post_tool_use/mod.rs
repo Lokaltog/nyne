@@ -13,7 +13,7 @@ use nyne::prelude::*;
 use nyne::templates::TemplateEngine;
 use nyne_lsp::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
 use nyne_lsp::lsp::manager::LspManager;
-use nyne_source::providers::names::{self, FILE_OVERVIEW};
+use nyne_source::providers::well_known::FILE_OVERVIEW;
 use nyne_source::services::SourceServices;
 use nyne_source::syntax::decomposed::DecomposedSource;
 
@@ -46,8 +46,7 @@ pub(in crate::provider) struct PostToolUse {
 impl PostToolUse {
     /// Create a new post-tool-use hook with registered templates.
     pub fn new() -> Self {
-        let mut b = names::handle_builder();
-        b.register_partial(super::PARTIAL_VFS_HINTS, super::PARTIAL_VFS_HINTS_SRC);
+        let mut b = super::hook_builder();
         b.register(TMPL_POST, include_str!("../templates/post-tool-use.md.j2"));
         Self { engine: b.finish() }
     }

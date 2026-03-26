@@ -12,7 +12,6 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
-use nyne_source::providers::names;
 
 use crate::config::StopHookConfig;
 use crate::provider::hook_schema::{HookInput, HookOutput};
@@ -35,7 +34,7 @@ pub(in crate::provider) struct Stop {
 impl Stop {
     /// Create a new stop hook with registered templates.
     pub fn new(config: &StopHookConfig) -> Self {
-        let mut b = names::handle_builder();
+        let mut b = super::hook_builder();
         b.register(TMPL_STOP, include_str!("../templates/stop.md.j2"));
         Self {
             engine: b.finish(),

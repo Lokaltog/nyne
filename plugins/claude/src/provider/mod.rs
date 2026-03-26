@@ -13,17 +13,17 @@ use std::path::PathBuf;
 
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
-use nyne::dispatch::script::{ScriptEntry, provider_script_address};
+use nyne::dispatch::script::{Script, ScriptEntry, provider_script_address};
 use nyne::node::Readable;
 use nyne::prelude::*;
 use nyne::provider::{ConflictInfo, ConflictParty, ConflictResolution};
 use nyne::templates::{TemplateEngine, serialize_view};
 use nyne_macros::routes;
-use nyne_source::providers::names;
 use nyne_source::providers::util::dominant_ext;
+use nyne_source::providers::well_known as names;
 use serde::Serialize;
 
-use crate::config::ClaudePluginConfig;
+use crate::config::Config;
 
 /// Typed serde schemas for hook inputs and outputs.
 pub mod hook_schema;
@@ -121,7 +121,7 @@ nyne_skills! {
 /// with any pre-existing `.claude/` directory on the real filesystem.
 pub struct ClaudeProvider {
     ctx: Arc<ActivationContext>,
-    config: ClaudePluginConfig,
+    config: Config,
     routes: RouteTree<Self>,
     templates: Arc<TemplateEngine>,
 }
@@ -129,7 +129,7 @@ pub struct ClaudeProvider {
 /// Methods for [`ClaudeProvider`].
 impl ClaudeProvider {
     /// Create a new Claude provider, registering routes and templates.
-    pub(crate) fn new(ctx: Arc<ActivationContext>, config: ClaudePluginConfig) -> Self {
+    pub(crate) fn new(ctx: Arc<ActivationContext>, config: Config) -> Self {
         let mut b = names::handle_builder();
         register_skill_templates(&mut b);
         b.register_partial("partials/nyne-vfs", include_str!("templates/partials/nyne-vfs.md.j2"));
@@ -322,8 +322,9 @@ impl ClaudeProvider {
 /// Script entries registered by the coding plugin on behalf of `ClaudeProvider`.
 ///
 /// Respects both the master `claude.enabled` toggle (returns empty if disabled)
-/// and individual `claude.hooks.*` toggles.
-pub fn script_entries(config: &ClaudePluginConfig) -> Vec<ScriptEntry> {
+/// and individual `claude.hooks.*` toggles. Derives script names from
+/// [`HOOK_REGISTRY`](settings::HOOK_REGISTRY).
+pub fn script_entries(config: &Config) -> Vec<ScriptEntry> {
     use std::sync::Arc;
 
     if !config.enabled {
@@ -334,21 +335,28 @@ pub fn script_entries(config: &ClaudePluginConfig) -> Vec<ScriptEntry> {
     let addr = |name| provider_script_address("claude", name);
     let mut entries: Vec<ScriptEntry> = Vec::new();
 
-    if t.pre_tool_use {
-        entries.push((
-            addr("pre-tool-use"),
-            Arc::new(hooks::PreToolUse::new(&config.hook_config.pre_tool)),
-        ));
+    for def in settings::HOOK_REGISTRY {
+        if !match def.script_name {
+            "pre-tool-use" => t.pre_tool_use,
+            "post-tool-use" => t.post_tool_use,
+            "session-start" => t.session_start,
+            "stop" => t.stop,
+            _ => continue,
+        } {
+            continue;
+        }
+        let script: Arc<dyn Script> = match def.script_name {
+            "pre-tool-use" => Arc::new(hooks::PreToolUse::new(&config.hook_config.pre_tool)),
+            "post-tool-use" => Arc::new(hooks::PostToolUse::new()),
+            "session-start" => Arc::new(hooks::SessionStart::new()),
+            "stop" => Arc::new(hooks::Stop::new(&config.hook_config.stop)),
+            _ => unreachable!(),
+        };
+        entries.push((addr(def.script_name), script));
     }
-    if t.post_tool_use {
-        entries.push((addr("post-tool-use"), Arc::new(hooks::PostToolUse::new())));
-    }
-    if t.session_start {
-        entries.push((addr("session-start"), Arc::new(hooks::SessionStart::new())));
-    }
-    if t.stop {
-        entries.push((addr("stop"), Arc::new(hooks::Stop::new(&config.hook_config.stop))));
-    }
+
+    // Statusline is wired via `statusLine.command` in default_settings,
+    // not through the hooks array — registered separately.
     if t.statusline {
         entries.push((addr("statusline"), Arc::new(hooks::Statusline)));
     }

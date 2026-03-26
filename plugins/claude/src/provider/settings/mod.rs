@@ -28,6 +28,51 @@ pub(super) enum HookAction {
     #[serde(rename = "command")]
     Command { command: String },
 }
+/// Declarative registration entry for a Claude Code hook.
+///
+/// Single source of truth for hook metadata shared between
+/// [`injected_hooks`] (settings JSON) and
+/// [`script_entries`](super::script_entries) (script dispatch).
+pub(super) struct HookDef {
+    /// Claude Code event name (e.g. `"PreToolUse"`).
+    pub event: &'static str,
+    /// Pipe-separated tool/event matcher (e.g. `"Read|Edit|Write|Grep"`).
+    /// Empty string matches all events.
+    pub matcher: &'static str,
+    /// Script address suffix (e.g. `"pre-tool-use"`).
+    pub script_name: &'static str,
+}
+
+/// Declarative hook registry — the single source of truth for event names,
+/// matchers, and script names.
+///
+/// Adding a new hook means adding one entry here; both `injected_hooks`
+/// and `script_entries` derive their data from this array.
+///
+/// Note: `Statusline` is omitted — it is wired via `statusLine.command` in
+/// `default_settings`, not through the hooks array.
+pub(super) const HOOK_REGISTRY: &[HookDef] = &[
+    HookDef {
+        event: "PreToolUse",
+        matcher: "Read|Edit|Write|Grep",
+        script_name: "pre-tool-use",
+    },
+    HookDef {
+        event: "PostToolUse",
+        matcher: "Bash|Edit|Write|Read|Grep|Glob",
+        script_name: "post-tool-use",
+    },
+    HookDef {
+        event: "SessionStart",
+        matcher: "startup|resume|clear",
+        script_name: "session-start",
+    },
+    HookDef {
+        event: "Stop",
+        matcher: "",
+        script_name: "stop",
+    },
+];
 
 /// Grace period (seconds) after a refused raw file access during which
 /// subsequent accesses are allowed through. Stored as atime via `touch -a`.
@@ -35,55 +80,40 @@ pub(in crate::provider) const RAW_FILE_GRACE_SECS: u64 = 300;
 
 /// Build the hooks that nyne injects into `settings.local.json`.
 ///
-/// Returns a map of event name → list of hook entries. This is the **single
-/// source of truth** for all nyne-managed hooks.
+/// Returns a map of event name → list of hook entries. Derived from
+/// [`HOOK_REGISTRY`] — adding a new hook only requires a registry entry.
 ///
 /// Hook commands use `nyne exec` to invoke native Rust scripts registered
 /// by the `CodingPlugin` via [`Plugin::scripts()`](nyne::plugin::Plugin::scripts).
 pub(super) fn injected_hooks(root: &Path) -> Map<String, Value> {
-    let entry = |matcher: &str, name: &str| HookEntry {
-        matcher: matcher.into(),
+    let entry = |def: &HookDef| HookEntry {
+        matcher: def.matcher.into(),
         hooks: vec![HookAction::Command {
-            command: format!("nyne exec provider.claude.{name}"),
+            command: format!("nyne exec provider.claude.{}", def.script_name),
         }],
     };
 
     let mut hooks = Map::new();
 
-    // SessionStart: surface mount status + skill guidance.
-    let status_path = root.join("@/STATUS.md");
-    hooks.insert(
-        "SessionStart".into(),
-        json!([
-            HookEntry {
-                matcher: "startup|resume|clear".into(),
+    for def in HOOK_REGISTRY {
+        let mut entries = Vec::new();
+
+        // SessionStart: prepend a STATUS.md cat command before the script entry.
+        if def.event == "SessionStart" {
+            entries.push(HookEntry {
+                matcher: def.matcher.into(),
                 hooks: vec![HookAction::Command {
                     command: format!(
                         r#"cat {path} | jq -Rs '{{hookSpecificOutput: {{hookEventName: "SessionStart", additionalContext: .}}}}'"#,
-                        path = status_path.display(),
+                        path = root.join("@/STATUS.md").display(),
                     ),
                 }],
-            },
-            entry("startup|resume|clear", "session-start"),
-        ]),
-    );
+            });
+        }
 
-    // PreToolUse: block broad raw reads, hint on targeted reads + edits/writes,
-    // suggest LSP analysis for grep.
-    hooks.insert(
-        "PreToolUse".into(),
-        json!([entry("Read|Edit|Write|Grep", "pre-tool-use")]),
-    );
-
-    // PostToolUse: VFS nudges, inline diagnostics, SSOT/DRY checks,
-    // tool redirects (rg/fd over Grep/Glob).
-    hooks.insert(
-        "PostToolUse".into(),
-        json!([entry("Bash|Edit|Write|Read|Grep|Glob", "post-tool-use")]),
-    );
-
-    // Stop: SSOT/DRY review after turns with code changes.
-    hooks.insert("Stop".into(), json!([entry("", "stop")]));
+        entries.push(entry(def));
+        hooks.insert(def.event.into(), json!(entries));
+    }
 
     hooks
 }
@@ -136,7 +166,6 @@ const ENV_VARS: &[(&str, &str)] = &[
     ("CLAUDE_CODE_HIDE_ACCOUNT_INFO", "1"),
     ("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "128000"),
     ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"),
-    // ("ENABLE_TOOL_SEARCH", "auto:1"), // NOTE: temporarily disabled for testing
     ("SLASH_COMMAND_TOOL_CHAR_BUDGET", "1"),
     ("USE_BUILTIN_RIPGREP", "0"),
 ];
@@ -202,7 +231,6 @@ fn default_settings() -> Value {
             "Add an import by copying a symbol: `cp other.rs@/symbols/Config@/ file.rs@/symbols/imports/`",
             "Delete a symbol cleanly with `rmdir file.rs@/symbols/Foo@/`",
         ] },
-        // "spinnerTipsEnabled": true, // NOTE: temporarily disabled for testing
     })
 }
 

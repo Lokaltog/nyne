@@ -11,7 +11,6 @@ use std::time::SystemTime;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::prelude::*;
 use nyne::templates::TemplateEngine;
-use nyne_source::providers::names;
 use nyne_source::services::SourceServices;
 use nyne_source::syntax::find_fragment_at_line;
 use nyne_source::syntax::fragment::Fragment;
@@ -63,9 +62,8 @@ pub(in crate::provider) struct PreToolUse {
 impl PreToolUse {
     /// Create a new pre-tool-use hook with registered templates.
     pub fn new(config: &PreToolHookConfig) -> Self {
-        let mut b = names::handle_builder();
+        let mut b = super::hook_builder();
         b.register_partial(SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC);
-        b.register_partial(super::PARTIAL_VFS_HINTS, super::PARTIAL_VFS_HINTS_SRC);
         b.register_partial(PARTIAL_DENY, include_str!("../templates/pre-tool-use/deny.md.j2"));
         b.register_partial(PARTIAL_HINT, include_str!("../templates/pre-tool-use/hint.md.j2"));
         b.register_partial(PARTIAL_GREP, include_str!("../templates/pre-tool-use/grep.md.j2"));

@@ -6,7 +6,6 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
-use nyne_source::providers::names;
 
 use crate::provider::hook_schema::HookOutput;
 
@@ -27,7 +26,7 @@ pub(in crate::provider) struct SessionStart {
 impl SessionStart {
     /// Create a new session start hook with registered templates.
     pub fn new() -> Self {
-        let mut b = names::handle_builder();
+        let mut b = super::hook_builder();
         b.register(TMPL_SESSION_START, include_str!("templates/session-start.md.j2"));
         Self { engine: b.finish() }
     }

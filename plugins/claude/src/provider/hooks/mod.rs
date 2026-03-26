@@ -14,7 +14,8 @@ mod statusline;
 /// Stop hook -- SSOT/DRY review after turns with code changes.
 mod stop;
 
-use nyne::templates::TemplateEngine;
+use nyne::templates::{HandleBuilder, TemplateEngine};
+use nyne_source::providers::well_known as names;
 pub(in crate::provider) use post_tool_use::PostToolUse;
 pub(in crate::provider) use pre_tool_use::PreToolUse;
 pub(in crate::provider) use session_start::SessionStart;
@@ -34,6 +35,17 @@ const PARTIAL_VFS_HINTS: &str = "hooks/vfs-hints";
 /// provides Jinja macros for rendering VFS path suggestions and symbol
 /// navigation hints.
 const PARTIAL_VFS_HINTS_SRC: &str = include_str!("templates/vfs-hints.j2");
+/// Create a [`HandleBuilder`] with common hook partials pre-registered.
+///
+/// Wraps [`names::handle_builder()`] and registers the shared VFS hints
+/// partial that multiple hooks include. Hook constructors should call this
+/// instead of `names::handle_builder()` directly.
+pub(super) fn hook_builder() -> HandleBuilder {
+    let mut b = names::handle_builder();
+    b.register_partial(PARTIAL_VFS_HINTS, PARTIAL_VFS_HINTS_SRC);
+    b
+}
+
 /// Render a hook template and wrap non-empty output as a context message.
 ///
 /// Shared epilogue for hook `exec` methods: render → trim → empty-check →
@@ -54,4 +66,4 @@ pub(super) fn render_context(
 }
 
 pub(super) use nyne::{is_vfs_path, source_file_of};
-pub(super) use nyne_source::providers::names::{is_symbols_overview, symbol_from_vfs_path};
+pub(super) use nyne_source::providers::well_known::{is_symbols_overview, symbol_from_vfs_path};
