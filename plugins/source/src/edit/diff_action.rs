@@ -105,11 +105,7 @@ impl<T: DiffAction> Readable for DiffActionNode<T> {
             .chain(edits.iter().map(format_edit))
             .collect();
 
-        Ok(if output.is_empty() {
-            NO_CHANGES.to_vec()
-        } else {
-            output.into_bytes()
-        })
+        Ok(output.into_bytes())
     }
 }
 

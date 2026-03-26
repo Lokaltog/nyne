@@ -42,7 +42,7 @@ use strum::IntoEnumIterator;
 
 use super::names::{FILE_STAGED_DIFF, SUBDIR_EDIT, SUBDIR_STAGED};
 use super::prelude::*;
-use crate::edit::diff_action::DiffActionNode;
+use crate::edit::diff_action::{DiffAction, DiffActionNode};
 use crate::edit::plan::EditOpKind;
 use crate::services::SourceServices;
 
@@ -200,10 +200,7 @@ impl BatchEditProvider {
             batches: Arc::clone(&self.batches),
             scope: ClearScope::All,
         };
-        VirtualNode::file(FILE_STAGED_DIFF, DiffActionNode::new(FILE_STAGED_DIFF, action.clone()))
-            .with_writable(clear)
-            .with_unlinkable(DiffActionNode::new(FILE_STAGED_DIFF, action))
-            .with_cache_policy(CachePolicy::Never)
+        make_diff_clear_node(action, clear)
     }
 
     /// Build a per-symbol `staged.diff` node.
@@ -217,10 +214,7 @@ impl BatchEditProvider {
             batches: Arc::clone(&self.batches),
             scope: ClearScope::Single(key),
         };
-        VirtualNode::file(FILE_STAGED_DIFF, DiffActionNode::new(FILE_STAGED_DIFF, action.clone()))
-            .with_writable(clear)
-            .with_unlinkable(DiffActionNode::new(FILE_STAGED_DIFF, action))
-            .with_cache_policy(CachePolicy::Never)
+        make_diff_clear_node(action, clear)
     }
 
     /// Build a write-only staging operation node (e.g., `replace`, `delete`).
@@ -379,6 +373,13 @@ impl Writable for StagedDiffClear {
 
 // Cache invalidation
 
+/// Build a `staged.diff` node with diff preview, apply-on-delete, and clear-on-truncate.
+fn make_diff_clear_node(action: impl DiffAction + Clone + 'static, clear: StagedDiffClear) -> VirtualNode {
+    VirtualNode::file(FILE_STAGED_DIFF, DiffActionNode::new(FILE_STAGED_DIFF, action.clone()))
+        .with_writable(clear)
+        .with_unlinkable(DiffActionNode::new(FILE_STAGED_DIFF, action))
+        .with_cache_policy(CachePolicy::Never)
+}
 /// Invalidate the symbol's `edit/` directory cache so readdir reflects staging changes.
 ///
 /// Emits a single `Subtree` event for `edit/` — the dispatch layer handles
@@ -386,11 +387,13 @@ impl Writable for StagedDiffClear {
 /// `inval_inode`.
 fn invalidate_symbol_edit_dir(key: &StagingKey, ctx: &RequestContext<'_>) {
     // Build path: file.rs@/symbols/Foo@/edit/
-    if let Ok(symbol_path) = companion_symbol_path(&key.source_file, &key.fragment_path)
-        && let Ok(edit_dir) = symbol_path.join(SUBDIR_EDIT)
-    {
-        ctx.events.emit(InvalidationEvent::Subtree { path: edit_dir });
-    }
+    let Ok(symbol_path) = companion_symbol_path(&key.source_file, &key.fragment_path) else {
+        return;
+    };
+    let Ok(edit_dir) = symbol_path.join(SUBDIR_EDIT) else {
+        return;
+    };
+    ctx.events.emit(InvalidationEvent::Subtree { path: edit_dir });
 }
 
 // Provider trait implementation
@@ -412,9 +415,12 @@ impl Provider for BatchEditProvider {
 }
 
 /// Parse a staged action filename like `10-replace.diff` → index (10).
+///
+/// Returns `None` if the suffix is not `.diff`, the label is not a valid
+/// [`EditOpKind`] name, or the index is not a valid `u32`.
 fn parse_staged_filename(name: &str) -> Option<u32> {
-    let name = name.strip_suffix(".diff")?;
-    let (index_str, _label) = name.split_once('-')?;
+    let (index_str, label) = name.strip_suffix(".diff")?.split_once('-')?;
+    EditOpKind::from_name(label)?;
     index_str.parse().ok()
 }
 

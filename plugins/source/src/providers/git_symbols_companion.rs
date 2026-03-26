@@ -125,28 +125,45 @@ impl GitSymbolsProvider {
 
     /// Lookup a symbol-scoped blame with an optional line-range spec.
     fn lookup_sliced_blame(&self, ctx: &RouteCtx<'_>) -> Node {
-        let Some(spec) = parse_spec(ctx.param("spec")) else {
-            return Ok(None);
-        };
-        let source = source_file(ctx)?;
-        let fragment_path = ctx.params("path").to_vec();
-        let resolver = self.fragment_resolver(source.clone());
-        let repo = self.repo()?;
-        let fctx = FileViewCtx::new(&repo, repo.rel_path(&source));
-        let spec_label = ctx.param("spec");
-        Ok(Some(self.blame_handle.node(
-            format!("{FILE_BLAME}:{spec_label}"),
-            SymbolBlameView {
+        self.lookup_sliced_view(
+            ctx,
+            &self.blame_handle,
+            FILE_BLAME,
+            |fctx, resolver, fragment_path, spec| SymbolBlameView {
                 ctx: fctx,
                 resolver,
                 fragment_path,
                 spec: Some(spec),
             },
-        )))
+        )
     }
 
     /// Lookup a symbol-scoped log with an optional line-range spec.
     fn lookup_sliced_log(&self, ctx: &RouteCtx<'_>) -> Node {
+        self.lookup_sliced_view(
+            ctx,
+            &self.log_handle,
+            FILE_LOG,
+            |fctx, resolver, fragment_path, spec| SymbolLogView {
+                ctx: fctx,
+                resolver,
+                fragment_path,
+                spec: Some(spec),
+            },
+        )
+    }
+
+    /// Shared implementation for sliced blame/log lookups.
+    ///
+    /// Parses the spec, resolves the source file and fragment, then delegates
+    /// to `build_view` for the type-specific view construction.
+    fn lookup_sliced_view<V: TemplateView + 'static>(
+        &self,
+        ctx: &RouteCtx<'_>,
+        handle: &TemplateHandle,
+        file_label: &str,
+        build_view: impl FnOnce(FileViewCtx, FragmentResolver, Vec<String>, SliceSpec) -> V,
+    ) -> Node {
         let Some(spec) = parse_spec(ctx.param("spec")) else {
             return Ok(None);
         };
@@ -156,14 +173,9 @@ impl GitSymbolsProvider {
         let repo = self.repo()?;
         let fctx = FileViewCtx::new(&repo, repo.rel_path(&source));
         let spec_label = ctx.param("spec");
-        Ok(Some(self.log_handle.node(
-            format!("{FILE_LOG}:{spec_label}"),
-            SymbolLogView {
-                ctx: fctx,
-                resolver,
-                fragment_path,
-                spec: Some(spec),
-            },
+        Ok(Some(handle.node(
+            format!("{file_label}:{spec_label}"),
+            build_view(fctx, resolver, fragment_path, spec),
         )))
     }
 
