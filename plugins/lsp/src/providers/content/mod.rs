@@ -96,7 +96,7 @@ pub(crate) fn build_diagnostics_node(name: &str, handle: &Arc<LspHandle>, lsp_ha
 ///
 /// Looks up the feature by directory name and delegates to
 /// `LspFeature::query()` → `LspQueryResult::into_targets()`.
-pub fn query_lsp_targets(
+pub(crate) fn query_lsp_targets(
     handle: &Arc<LspHandle>,
     source: &str,
     name_byte_offset: usize,
