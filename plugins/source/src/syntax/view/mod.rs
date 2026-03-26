@@ -51,7 +51,8 @@ impl Object for FragmentView {
             "visibility" => Some(Value::from(self.visibility())),
             "signature" => self.fragment.signature.as_deref().map(Value::from),
             "line_range" => {
-                let lr = self.fragment.line_range(&self.shared.source);
+                let rope = crop::Rope::from(self.shared.source.as_str());
+                let lr = self.fragment.line_range(&rope);
                 Some(Value::from(format!("{}-{}", lr.start + 1, lr.end)))
             }
             "bytes" => Some(Value::from(self.fragment.full_span().len())),

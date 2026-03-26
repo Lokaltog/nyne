@@ -116,12 +116,13 @@ pub(super) fn build_fragment_nodes(
     activation: &Arc<ActivationContext>,
     hook: Option<&dyn FragmentNodeHook>,
 ) -> Vec<VirtualNode> {
+    let rope = crop::Rope::from(source);
     fragments
         .iter()
         .filter_map(|frag| {
             let fs_name = frag.fs_name.as_deref()?;
             let dirname = companion_name(fs_name);
-            let meta = SymbolLineRange::from_zero_based(&frag.line_range(source));
+            let meta = SymbolLineRange::from_zero_based(&frag.line_range(&rope));
             let mut node = VirtualNode::directory(dirname).prop(meta);
 
             let mut frag_path = parent_path.to_vec();

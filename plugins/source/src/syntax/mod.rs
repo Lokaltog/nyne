@@ -274,17 +274,23 @@ pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<
 /// Structural fragments (docstrings, imports, decorators) are skipped entirely.
 /// Used by LSP symlink directories to reverse-map locations to symbols.
 pub fn find_fragment_at_line(fragments: &[fragment::Fragment], line: usize, source: &str) -> Option<Vec<String>> {
+    let rope = crop::Rope::from(source);
+    find_fragment_at_line_rope(fragments, line, &rope)
+}
+
+/// Inner implementation that accepts a pre-built rope to avoid repeated construction.
+fn find_fragment_at_line_rope(fragments: &[fragment::Fragment], line: usize, rope: &crop::Rope) -> Option<Vec<String>> {
     let frag = fragments
         .iter()
         .filter(|f| !f.kind.is_structural())
-        .find(|f| f.line_range(source).contains(&line))?;
+        .find(|f| f.line_range(rope).contains(&line))?;
 
     let Some(fs_name) = frag.fs_name.as_ref() else {
         // Nameless container: look through to children.
-        return find_fragment_at_line(&frag.children, line, source);
+        return find_fragment_at_line_rope(&frag.children, line, rope);
     };
 
-    let mut path = find_fragment_at_line(&frag.children, line, source).unwrap_or_default();
+    let mut path = find_fragment_at_line_rope(&frag.children, line, rope).unwrap_or_default();
     path.insert(0, fs_name.clone());
     Some(path)
 }
@@ -304,19 +310,29 @@ pub fn find_nearest_fragment_at_line(
     line: usize,
     source: &str,
 ) -> Option<Vec<String>> {
+    let rope = crop::Rope::from(source);
+    find_nearest_fragment_at_line_rope(fragments, line, &rope)
+}
+
+/// Inner implementation that accepts a pre-built rope to avoid repeated construction.
+fn find_nearest_fragment_at_line_rope(
+    fragments: &[fragment::Fragment],
+    line: usize,
+    rope: &crop::Rope,
+) -> Option<Vec<String>> {
     // If line falls inside a nameless container (e.g. hidden impl block),
     // narrow search to its children. Structural fragments (docstrings,
     // imports, decorators) are skipped — they're metadata, not containers.
     if let Some(frag) = fragments
         .iter()
         .filter(|f| !f.kind.is_structural())
-        .find(|f| f.line_range(source).contains(&line) && f.fs_name.is_none())
+        .find(|f| f.line_range(rope).contains(&line) && f.fs_name.is_none())
     {
-        return find_nearest_fragment_at_line(&frag.children, line, source);
+        return find_nearest_fragment_at_line_rope(&frag.children, line, rope);
     }
 
     // Fast path: exact match.
-    if let Some(path) = find_fragment_at_line(fragments, line, source) {
+    if let Some(path) = find_fragment_at_line_rope(fragments, line, rope) {
         return Some(path);
     }
 
@@ -326,7 +342,7 @@ pub fn find_nearest_fragment_at_line(
         .filter(|f| f.fs_name.is_some())
         .map(|f| {
             // Distance to nearest boundary of this fragment's line range.
-            let lr = f.line_range(source);
+            let lr = f.line_range(rope);
             let dist = if line < lr.start {
                 lr.start - line
             } else {

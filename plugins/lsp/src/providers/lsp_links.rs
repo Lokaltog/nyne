@@ -96,12 +96,13 @@ pub fn resolve_lsp_symlink_dir(
         return Ok(None);
     };
 
+    let rope = crop::Rope::from(shared.source.as_str());
     let targets = query_lsp_targets(
         &lsp_handle,
         &shared.source,
         frag.name_byte_offset,
         lsp_dir,
-        &frag.line_range(&shared.source),
+        &frag.line_range(&rope),
     )?;
 
     if targets.is_empty() {
@@ -162,7 +163,8 @@ pub fn resolve_actions_dir(ctx: &Arc<ActivationContext>, source_file: &VfsPath, 
     };
 
     let sym = lsp_handle.at(&shared.source, frag.name_byte_offset);
-    let resolved = actions::resolve_code_actions(&sym, &frag.line_range(&shared.source));
+    let rope = crop::Rope::from(shared.source.as_str());
+    let resolved = actions::resolve_code_actions(&sym, &frag.line_range(&rope));
     let nodes = actions::build_action_nodes(resolved, &sym);
     Ok(Some(nodes))
 }

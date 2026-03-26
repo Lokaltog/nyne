@@ -164,13 +164,13 @@ fn line_ranges_are_correct_in_original() {
         let expected_start = rope.line_of_byte(frag.full_span().start);
         let expected_end = rope.line_of_byte(frag.full_span().end) + 1;
         assert_eq!(
-            frag.line_range(&source).start,
+            frag.line_range(&rope).start,
             expected_start,
             "fragment '{}' line_range.start mismatch",
             frag.name
         );
         assert_eq!(
-            frag.line_range(&source).end,
+            frag.line_range(&rope).end,
             expected_end,
             "fragment '{}' line_range.end mismatch",
             frag.name

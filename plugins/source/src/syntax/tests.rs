@@ -373,14 +373,11 @@ fn rust_doc_comment_range_extends_fragment() {
     let source = "/// Doc line.\npub fn documented() {}\n";
     let result = decompose("rs", source);
     let frag = &result[0];
+    let rope = crop::Rope::from(source);
 
     assert_eq!(frag.byte_range.start, 14, "byte_range should start at fn keyword");
     assert_eq!(frag.full_span().start, 0, "full_span should include doc comment");
-    assert_eq!(
-        frag.line_range(source).start,
-        0,
-        "line_range should include doc comment"
-    );
+    assert_eq!(frag.line_range(&rope).start, 0, "line_range should include doc comment");
 }
 
 /// Verifies that a Python class body-internal docstring does not shrink the byte range.
@@ -584,9 +581,9 @@ fn byte_and_line_ranges_match(#[case] ext: &str, #[case] source: &str) {
 
     let result = decompose(ext, source);
 
-    fn check_fragments(source: &str, fragments: &[Fragment]) {
+    fn check_fragments(rope: &crop::Rope, source: &str, fragments: &[Fragment]) {
         for frag in fragments {
-            let from_line = SymbolLineRange::from_zero_based(&frag.line_range(source));
+            let from_line = SymbolLineRange::from_zero_based(&frag.line_range(rope));
             let from_bytes = SymbolLineRange::from_byte_range(source, &frag.full_span());
             assert_eq!(
                 from_line,
@@ -595,12 +592,13 @@ fn byte_and_line_ranges_match(#[case] ext: &str, #[case] source: &str) {
                  full_span={:?}, line_range={:?}",
                 frag.name,
                 frag.full_span(),
-                frag.line_range(source),
+                frag.line_range(rope),
             );
-            check_fragments(source, &frag.children);
+            check_fragments(rope, source, &frag.children);
         }
     }
-    check_fragments(source, &result);
+    let rope = crop::Rope::from(source);
+    check_fragments(&rope, source, &result);
 }
 
 // Line range: individual tests (from former line_range_symlink_tests submod)
@@ -627,7 +625,8 @@ fn import_span_line_range_matches_byte_range() {
     let source = "use std::io;\nuse std::fmt;\n\nfn foo() {}\n";
     let result = decompose("rs", source);
     let imports = super::fragment::find_fragment_of_kind(&result, &FragmentKind::Imports).expect("should have imports");
-    let from_line = SymbolLineRange::from_zero_based(&imports.line_range(source));
+    let rope = crop::Rope::from(source);
+    let from_line = SymbolLineRange::from_zero_based(&imports.line_range(&rope));
     let from_bytes = SymbolLineRange::from_byte_range(source, &imports.byte_range);
     assert_eq!(
         from_line, from_bytes,
@@ -1277,6 +1276,11 @@ mod proptest_invariants {
 
     /// Helper: recursively check invariants on a list of fragments.
     fn check_fragment_invariants(source: &str, fragments: &[Fragment]) {
+        let rope = crop::Rope::from(source);
+        check_fragment_invariants_rope(source, &rope, fragments);
+    }
+
+    fn check_fragment_invariants_rope(source: &str, rope: &crop::Rope, fragments: &[Fragment]) {
         // 1. Sibling full_span ranges must not overlap (for non-structural children).
         //    Structural children (Docstring, Decorator) may not be in source order
         //    relative to each other (e.g. Python docstrings are inside the body,
@@ -1316,7 +1320,7 @@ mod proptest_invariants {
             );
 
             // 4. line_range ↔ byte_range consistency.
-            let from_line = SymbolLineRange::from_zero_based(&frag.line_range(source));
+            let from_line = SymbolLineRange::from_zero_based(&frag.line_range(rope));
             let from_bytes = SymbolLineRange::from_byte_range(source, &frag.full_span());
             assert_eq!(
                 from_line, from_bytes,
@@ -1325,7 +1329,7 @@ mod proptest_invariants {
             );
 
             // 5. Recurse into children.
-            check_fragment_invariants(source, &frag.children);
+            check_fragment_invariants_rope(source, rope, &frag.children);
         }
     }
 

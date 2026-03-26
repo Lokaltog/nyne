@@ -264,9 +264,8 @@ impl Fragment {
     }
 
     /// Line range (0-based, exclusive end) covering this fragment and all
-    /// its children. Requires the source text for byte→line conversion.
-    pub fn line_range(&self, source: &str) -> Range<usize> {
-        let rope = crop::Rope::from(source);
+    /// its children. Requires a pre-built rope for byte→line conversion.
+    pub fn line_range(&self, rope: &crop::Rope) -> Range<usize> {
         let span = self.full_span();
         rope.line_of_byte(span.start)..rope.line_of_byte(span.end) + 1
     }
