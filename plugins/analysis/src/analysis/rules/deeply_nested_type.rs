@@ -4,6 +4,7 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "deeply-nested-type";
 /// Maximum nesting depth for generic type parameters.
 const MAX_TYPE_DEPTH: usize = 3;
 
@@ -13,7 +14,7 @@ struct DeeplyNestedType;
 /// [`AnalysisRule`] implementation for `DeeplyNestedType`.
 impl AnalysisRule for DeeplyNestedType {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "deeply-nested-type" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::TYPE_ANNOTATION }

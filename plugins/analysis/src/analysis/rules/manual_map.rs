@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "manual-map";
 /// Analysis rule that detects manual map patterns.
 struct ManualMap;
 
 /// [`AnalysisRule`] implementation for `ManualMap`.
 impl AnalysisRule for ManualMap {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "manual-map" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::MATCH }

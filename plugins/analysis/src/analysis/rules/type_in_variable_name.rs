@@ -4,6 +4,7 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "type-in-variable-name";
 /// Type-related suffixes/infixes that indicate encoding the type in the name.
 const TYPE_FRAGMENTS: &[&str] = &[
     "_string", "_str", "_vec", "_map", "_hash", "_list", "_array", "_set", "_dict", "_tuple", "_bool", "_int",
@@ -18,7 +19,7 @@ struct TypeInVariableName;
 /// [`AnalysisRule`] implementation for `TypeInVariableName`.
 impl AnalysisRule for TypeInVariableName {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "type-in-variable-name" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::BINDING }

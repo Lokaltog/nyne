@@ -4,7 +4,7 @@
 //! for O(1) lookup. Rules produce [`Hint`]s that suggest code improvements.
 
 /// Analysis rules for detecting code smells and potential improvements.
-mod rules;
+pub(crate) mod rules;
 
 /// Tests for the analysis engine.
 #[cfg(test)]
@@ -24,9 +24,9 @@ use crate::config::AnalysisConfig;
 /// Users can override this by setting `rules = []` (all rules) or listing
 /// specific rules in `[plugin.coding.analysis]`.
 pub const DEFAULT_DISABLED_RULES: &[&str] = &[
-    "magic-string",
-    "magic-number",
-    "single-use-variable",
+    rules::magic_string::ID,
+    rules::magic_number::ID,
+    rules::single_use_variable::ID,
     // TODO:
     // a. type-in-variable-name — Fix the matching logic
     // Bug: name.contains(frag) does substring matching, so storage_strategy matches _str (a substring of _strategy). Fix: split the variable name by _
@@ -38,9 +38,9 @@ pub const DEFAULT_DISABLED_RULES: &[&str] = &[
     // c. redundant-clone — Disable by default
     // Problem: flags .clone() on references (e.g., |g| g.0.clone() where g is &T from TypeMap::get()). Without type information, the rule can't
     // distinguish "clone needed to convert &T → T" from "unnecessary clone of owned value." Add "redundant-clone" to DEFAULT_DISABLED_RULES.
-    "type-in-variable-name",
-    "string-format-push",
-    "redundant-clone",
+    rules::type_in_variable_name::ID,
+    rules::string_format_push::ID,
+    rules::redundant_clone::ID,
 ];
 
 /// Factory function that creates analysis rule instances at startup.

@@ -6,6 +6,7 @@
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "deep-super-import";
 /// Analysis rule that detects deep `super::` import chains.
 struct DeepSuperImport;
 
@@ -17,7 +18,7 @@ const USE_DECLARATION: &[&str] = &["use_declaration"];
 /// [`AnalysisRule`] implementation for `DeepSuperImport`.
 impl AnalysisRule for DeepSuperImport {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "deep-super-import" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { USE_DECLARATION }

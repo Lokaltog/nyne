@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "string-format-push";
 /// Analysis rule that detects format! used as `push_str` argument.
 struct StringFormatPush;
 
 /// [`AnalysisRule`] implementation for `StringFormatPush`.
 impl AnalysisRule for StringFormatPush {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "string-format-push" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::MACRO_INVOCATION }

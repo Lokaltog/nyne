@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "todo-fixme";
 /// Analysis rule that detects TODO and FIXME comments.
 struct TodoFixme;
 
 /// [`AnalysisRule`] implementation for `TodoFixme`.
 impl AnalysisRule for TodoFixme {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "todo-fixme" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::COMMENT }

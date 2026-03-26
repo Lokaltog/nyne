@@ -4,6 +4,7 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "else-if-chain";
 /// Minimum else-if branches to trigger (3 = if + 3 else-ifs = 4 total).
 const MIN_ELSE_IFS: usize = 3;
 
@@ -13,7 +14,7 @@ struct ElseIfChain;
 /// [`AnalysisRule`] implementation for `ElseIfChain`.
 impl AnalysisRule for ElseIfChain {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "else-if-chain" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IF }

@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "index-in-loop";
 /// Analysis rule that detects array indexing inside loops.
 struct IndexInLoop;
 
 /// [`AnalysisRule`] implementation for `IndexInLoop`.
 impl AnalysisRule for IndexInLoop {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "index-in-loop" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::LOOP }

@@ -4,6 +4,7 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "magic-string";
 /// Additional safe parents specific to string literals.
 const STRING_SAFE_PARENTS: &[&str] = &[
     "macro_invocation",
@@ -25,7 +26,7 @@ struct MagicString;
 /// [`AnalysisRule`] implementation for `MagicString`.
 impl AnalysisRule for MagicString {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "magic-string" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::STRING }

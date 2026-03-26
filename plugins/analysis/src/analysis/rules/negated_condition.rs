@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "negated-condition";
 /// Analysis rule that detects negated conditions with else branches.
 struct NegatedCondition;
 
 /// [`AnalysisRule`] implementation for `NegatedCondition`.
 impl AnalysisRule for NegatedCondition {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "negated-condition" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IF }

@@ -4,6 +4,7 @@ use super::kinds::{self, strip_comment_prefix};
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "ascii-separator";
 /// Minimum consecutive separator characters for a pure separator line.
 const MIN_PURE_RUN: usize = 3;
 
@@ -20,7 +21,7 @@ struct AsciiSeparator;
 /// [`AnalysisRule`] implementation for `AsciiSeparator`.
 impl AnalysisRule for AsciiSeparator {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "ascii-separator" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::COMMENT }

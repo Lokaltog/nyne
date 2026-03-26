@@ -31,23 +31,27 @@ mod long_match;
 /// Detect functions with too many parameters.
 mod long_parameter_list;
 /// Detect magic numbers outside constant contexts.
-mod magic_number;
+pub mod magic_number;
+
 /// Detect magic strings outside constant contexts.
-mod magic_string;
+pub mod magic_string;
 /// Detect manual map patterns replaceable with combinators.
 mod manual_map;
 /// Detect negated conditions with else branches.
 mod negated_condition;
 /// Detect redundant `.clone()` and `.to_string()` calls.
-mod redundant_clone;
+pub mod redundant_clone;
+
 /// Detect repeated field access chains that should use a local binding.
 mod repeated_field_access;
 /// Detect single-use variables that could be inlined.
-mod single_use_variable;
+pub mod single_use_variable;
+
 /// Detect string concatenation inside loops.
 mod string_concat_loop;
 /// Detect `format!()` used only as a `push_str` argument.
-mod string_format_push;
+pub mod string_format_push;
+
 /// Detect match expressions dispatching on string literals.
 mod stringly_typed_match;
 /// Detect TODO and FIXME comments.
@@ -57,8 +61,9 @@ mod too_many_locals;
 /// Detect impl blocks with too many methods.
 mod too_many_methods;
 /// Detect type names encoded in variable names.
-mod type_in_variable_name;
+pub mod type_in_variable_name;
+
 /// Detect unnecessary else blocks after early returns.
 mod unnecessary_else;
 /// Detect chained `.unwrap()` calls on method results.
-mod unwrap_chain;
+pub mod unwrap_chain;

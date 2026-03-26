@@ -4,6 +4,7 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "too-many-methods";
 /// Maximum methods in an impl/class block before triggering.
 const MAX_METHODS: usize = 15;
 
@@ -13,7 +14,7 @@ struct TooManyMethods;
 /// [`AnalysisRule`] implementation for `TooManyMethods`.
 impl AnalysisRule for TooManyMethods {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "too-many-methods" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IMPL_BLOCK }
@@ -24,13 +25,7 @@ impl AnalysisRule for TooManyMethods {
 
         // Rust: methods live inside `declaration_list` (body field).
         // JS/TS/Python: methods are direct children.
-        let body = raw.child_by_field_name("body").unwrap_or(raw);
-        let mut cursor = body.walk();
-
-        let method_count = body
-            .named_children(&mut cursor)
-            .filter(|c| kinds::FUNCTION.contains(&c.kind()))
-            .count();
+        let method_count = kinds::count_children_of_kind(&raw, "body", kinds::FUNCTION);
 
         if method_count <= MAX_METHODS {
             return None;

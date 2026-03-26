@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "boolean-parameter";
 /// Analysis rule that detects boolean function parameters.
 struct BooleanParameter;
 
 /// [`AnalysisRule`] implementation for `BooleanParameter`.
 impl AnalysisRule for BooleanParameter {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "boolean-parameter" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::FUNCTION }

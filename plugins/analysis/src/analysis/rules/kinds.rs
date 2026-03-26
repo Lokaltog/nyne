@@ -277,3 +277,14 @@ pub(super) fn is_safe_literal_context(node: tree_sitter::Node<'_>, extra_safe: &
         }
     }
 }
+/// Count named children of a node (or its `field` sub-node) whose kind is in `kinds`.
+///
+/// Falls back to `node` itself when the field is absent (e.g. JS/TS where
+/// methods are direct children of the class node).
+pub(super) fn count_children_of_kind(node: &tree_sitter::Node<'_>, field: &str, kinds: &[&str]) -> usize {
+    let body = node.child_by_field_name(field).unwrap_or(*node);
+    let mut cursor = body.walk();
+    body.named_children(&mut cursor)
+        .filter(|c| kinds.contains(&c.kind()))
+        .count()
+}

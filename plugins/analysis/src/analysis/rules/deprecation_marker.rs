@@ -4,6 +4,7 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "deprecation-marker";
 /// Patterns that indicate deprecated, legacy, or deferred code.
 ///
 /// Grouped by category for maintainability. Each entry is a case-insensitive
@@ -55,7 +56,7 @@ struct DeprecationMarker;
 /// [`AnalysisRule`] implementation for `DeprecationMarker`.
 impl AnalysisRule for DeprecationMarker {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "deprecation-marker" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::COMMENT }

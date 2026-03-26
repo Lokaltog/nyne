@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "redundant-clone";
 /// Analysis rule that detects redundant clone calls.
 struct RedundantClone;
 
 /// [`AnalysisRule`] implementation for `RedundantClone`.
 impl AnalysisRule for RedundantClone {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "redundant-clone" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::CALL }

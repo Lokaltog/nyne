@@ -4,6 +4,7 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "magic-number";
 /// Node kinds for numeric literals (cross-language).
 const NUMBER_KINDS: &[&str] = &[
     "integer_literal", // Rust
@@ -33,7 +34,7 @@ struct MagicNumber;
 /// [`AnalysisRule`] implementation for `MagicNumber`.
 impl AnalysisRule for MagicNumber {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "magic-number" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { NUMBER_KINDS }

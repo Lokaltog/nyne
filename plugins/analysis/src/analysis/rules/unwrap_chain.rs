@@ -4,6 +4,7 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "unwrap-chain";
 /// Minimum `.unwrap()` calls to trigger (in a single statement or consecutive).
 const MIN_UNWRAPS: usize = 2;
 
@@ -13,7 +14,7 @@ struct UnwrapChain;
 /// [`AnalysisRule`] implementation for `UnwrapChain`.
 impl AnalysisRule for UnwrapChain {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "unwrap-chain" }
+    fn id(&self) -> &'static str { ID }
 
     /// Trigger on expression statements — we scan each for chained unwraps.
     fn node_kinds(&self) -> &'static [&'static str] { &[kinds::EXPRESSION_STATEMENT, "let_declaration"] }

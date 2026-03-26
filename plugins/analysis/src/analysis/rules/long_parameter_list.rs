@@ -3,6 +3,7 @@
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "long-parameter-list";
 /// Maximum parameter count before triggering a hint.
 const MAX_PARAMS: usize = 5;
 
@@ -21,7 +22,7 @@ struct LongParameterList;
 /// [`AnalysisRule`] implementation for `LongParameterList`.
 impl AnalysisRule for LongParameterList {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "long-parameter-list" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { PARAM_LIST_KINDS }

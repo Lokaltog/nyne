@@ -29,13 +29,14 @@ const NESTING_KINDS: &[&str] = &[
     "try_statement",
 ];
 
+pub const ID: &str = "deep-nesting";
 /// Analysis rule that detects excessive code nesting depth.
 struct DeepNesting;
 
 /// [`AnalysisRule`] implementation for `DeepNesting`.
 impl AnalysisRule for DeepNesting {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "deep-nesting" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { NESTING_KINDS }

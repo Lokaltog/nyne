@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "empty-catch";
 /// Analysis rule that detects empty catch blocks.
 struct EmptyCatch;
 
 /// [`AnalysisRule`] implementation for `EmptyCatch`.
 impl AnalysisRule for EmptyCatch {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "empty-catch" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::CATCH }

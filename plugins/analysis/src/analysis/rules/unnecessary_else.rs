@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "unnecessary-else";
 /// Analysis rule that detects unnecessary else blocks.
 struct UnnecessaryElse;
 
 /// [`AnalysisRule`] implementation for `UnnecessaryElse`.
 impl AnalysisRule for UnnecessaryElse {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "unnecessary-else" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IF }

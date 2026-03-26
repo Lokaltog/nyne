@@ -1,16 +1,17 @@
 //! Analysis rule: detect string concatenation in loops.
 
-use super::kinds;
+use super::kinds::{self, node_str};
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "string-concat-loop";
 /// Analysis rule that detects string concatenation in loops.
 struct StringConcatLoop;
 
 /// [`AnalysisRule`] implementation for `StringConcatLoop`.
 impl AnalysisRule for StringConcatLoop {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "string-concat-loop" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::LOOP }
@@ -64,7 +65,7 @@ fn has_string_concat(node: tree_sitter::Node<'_>, source: &[u8]) -> bool {
 
 /// Check if a compound assignment is `+= <string-ish>`.
 fn is_concat_assignment(node: tree_sitter::Node<'_>, source: &[u8]) -> bool {
-    let text = node_text(&node, source);
+    let text = node_str(&node, source).unwrap_or("");
     if !text.contains("+=") {
         return false;
     }
@@ -84,7 +85,7 @@ fn is_reassign_concat(node: tree_sitter::Node<'_>, source: &[u8]) -> bool {
         return false;
     }
 
-    let text = node_text(&right, source);
+    let text = node_str(&right, source).unwrap_or("");
     if !text.contains('+') {
         return false;
     }
@@ -111,7 +112,7 @@ fn subtree_has_string(node: tree_sitter::Node<'_>, source: &[u8]) -> bool {
 
     // Also match method calls like `.to_string()`, `str()`.
     if node.kind() == "call_expression" {
-        let text = node_text(&node, source);
+        let text = node_str(&node, source).unwrap_or("");
         if text.contains("to_string") || text.contains("to_owned") {
             return true;
         }
@@ -119,15 +120,6 @@ fn subtree_has_string(node: tree_sitter::Node<'_>, source: &[u8]) -> bool {
 
     let mut cursor = node.walk();
     node.named_children(&mut cursor).any(|c| subtree_has_string(c, source))
-}
-
-/// Extract the UTF-8 text of a tree-sitter node from source bytes.
-fn node_text<'a>(node: &tree_sitter::Node<'_>, source: &'a [u8]) -> &'a str {
-    use std::str::from_utf8;
-    source
-        .get(node.byte_range())
-        .and_then(|b| from_utf8(b).ok())
-        .unwrap_or("")
 }
 
 register_analysis_rule!(StringConcatLoop);

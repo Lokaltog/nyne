@@ -4,13 +4,14 @@ use super::kinds;
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "single-use-variable";
 /// Analysis rule that detects single-use variables.
 struct SingleUseVariable;
 
 /// [`AnalysisRule`] implementation for `SingleUseVariable`.
 impl AnalysisRule for SingleUseVariable {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "single-use-variable" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { kinds::BINDING }

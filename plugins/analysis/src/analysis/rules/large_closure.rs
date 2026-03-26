@@ -6,6 +6,7 @@
 use crate::TsNode;
 use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
 
+pub const ID: &str = "large-closure";
 /// Maximum closure body lines before triggering.
 const MAX_CLOSURE_LINES: usize = 15;
 
@@ -22,7 +23,7 @@ struct LargeClosure;
 /// [`AnalysisRule`] implementation for `LargeClosure`.
 impl AnalysisRule for LargeClosure {
     /// Returns the rule identifier.
-    fn id(&self) -> &'static str { "large-closure" }
+    fn id(&self) -> &'static str { ID }
 
     /// Returns the tree-sitter node kinds this rule applies to.
     fn node_kinds(&self) -> &'static [&'static str] { CLOSURE }
