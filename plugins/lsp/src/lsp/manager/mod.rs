@@ -33,6 +33,9 @@ struct OpenDocument {
     /// Monotonically increasing version, sent with `didOpen` and each subsequent
     /// `didChange`. The LSP spec requires strictly increasing versions per document URI.
     version: i32,
+    /// `true` while the first thread is performing the expensive `didOpen` sequence
+    /// (fs read + LSP call). Other threads seeing this sentinel skip the open.
+    opening: bool,
 }
 
 /// Version tracking and state for an LSP-opened document.
@@ -46,6 +49,7 @@ impl OpenDocument {
         Self {
             ext,
             version: Self::INITIAL_VERSION,
+            opening: false,
         }
     }
 }
@@ -198,19 +202,31 @@ impl LspManager {
     /// Sends the notification on first call for a given file; subsequent calls
     /// are no-ops until the document is explicitly closed via [`Self::close_document`].
     /// Reads the file content from the overlay path.
+    ///
+    /// A sentinel entry (`opening: true`) is inserted under the lock before the
+    /// expensive work (fs read + LSP call) to prevent a TOCTOU race where two
+    /// FUSE threads both pass the `contains_key` check and both send `didOpen`.
     pub fn ensure_document_open(&self, lsp_file: &Path, ext: &str) {
-        // Fast check: already open?
+        // Insert sentinel under the lock — prevents concurrent threads from
+        // also entering the open sequence for the same document.
         {
-            let docs = self.open_documents.lock();
+            let mut docs = self.open_documents.lock();
             if docs.contains_key(lsp_file) {
                 return;
             }
+            docs.insert(lsp_file.to_path_buf(), OpenDocument {
+                ext: ext.to_owned(),
+                version: OpenDocument::INITIAL_VERSION,
+                opening: true,
+            });
         }
 
         let Some(language_id) = self.registry.language_id_for(ext) else {
+            self.open_documents.lock().remove(lsp_file);
             return;
         };
         let Some(client) = self.client_for_ext(ext) else {
+            self.open_documents.lock().remove(lsp_file);
             return;
         };
 
@@ -224,6 +240,7 @@ impl LspManager {
                     error = %e,
                     "failed to read file for didOpen, skipping",
                 );
+                self.open_documents.lock().remove(lsp_file);
                 return;
             }
         };
@@ -236,9 +253,11 @@ impl LspManager {
                 error = %e,
                 "textDocument/didOpen failed",
             );
+            self.open_documents.lock().remove(lsp_file);
             return;
         }
 
+        // Promote sentinel to fully open.
         let mut docs = self.open_documents.lock();
         docs.insert(lsp_file.to_path_buf(), doc);
     }

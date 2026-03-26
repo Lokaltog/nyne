@@ -107,8 +107,10 @@ fn collect_into<'a>(
     uri: &lsp_types::Uri,
     edits: impl Iterator<Item = &'a TextEdit>,
 ) {
-    let path = uri.path().as_str().to_owned();
-    file_edits.entry(path).or_default().extend(edits);
+    file_edits
+        .entry(super::uri::uri_to_file_path(uri).display().to_string())
+        .or_default()
+        .extend(edits);
 }
 
 /// Collect text edits from `DocumentChanges` into the file edits map.

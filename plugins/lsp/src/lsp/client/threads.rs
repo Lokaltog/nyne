@@ -25,6 +25,7 @@ use tracing::{debug, trace, warn};
 use super::io::TimeoutReader;
 use super::transport;
 use crate::lsp::diagnostic_store::DiagnosticStore;
+use crate::lsp::uri::uri_to_file_path;
 
 /// Pending response map: JSON-RPC request id to a oneshot sender for the result.
 ///
@@ -164,12 +165,7 @@ fn handle_notification(msg: &serde_json::Value, store: &DiagnosticStore, server_
         let Some(params) = msg.get("params") else { return };
         match serde_json::from_value::<PublishDiagnosticsParams>(params.clone()) {
             Ok(pd) => {
-                let Some(path) = url::Url::parse(pd.uri.as_str())
-                    .ok()
-                    .and_then(|u| u.to_file_path().ok())
-                else {
-                    return;
-                };
+                let path = uri_to_file_path(&pd.uri);
                 debug!(
                     target: "nyne::lsp",
                     server = %server_name,

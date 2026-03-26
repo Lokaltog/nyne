@@ -128,10 +128,11 @@ impl LspCache {
 
     /// Invalidate all entries whose key starts with the given file path.
     pub(crate) fn invalidate_file(&self, path: &Path) {
-        let prefix = path.to_string_lossy();
+        let mut prefix = path.to_string_lossy().into_owned();
+        prefix.push(':');
         let mut entries = self.entries.write();
         let before = entries.len();
-        entries.retain(|key, _| !key.starts_with(prefix.as_ref()));
+        entries.retain(|key, _| !key.starts_with(&prefix));
         let evicted = before - entries.len();
         if evicted > 0 {
             debug!(
