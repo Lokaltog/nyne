@@ -225,12 +225,12 @@ impl NyneFs {
     /// without this, two unrelated inodes would serialize their
     /// entire write pipelines behind the map lock.
     fn flush_content(&self, ino: u64, data: &[u8], mode: WriteMode) -> Result<()> {
-        let mutex = if let Some(m) = self.write_locks.read().get(&ino) {
-            Arc::clone(m)
-        } else {
-            let mut locks = self.write_locks.write();
-            Arc::clone(locks.entry(ino).or_insert_with(|| Arc::new(Mutex::new(()))))
-        };
+        let mutex = Arc::clone(
+            self.write_locks
+                .write()
+                .entry(ino)
+                .or_insert_with(|| Arc::new(Mutex::new(()))),
+        );
         let _guard = mutex.lock();
 
         self.with_inode_io(

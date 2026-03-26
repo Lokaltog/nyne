@@ -234,16 +234,24 @@ impl VisibilityMap {
     /// Reads `/proc/{pid}/status` to extract `PPid`. Stops at PID 1 (init)
     /// or after [`MAX_ANCESTOR_DEPTH`] hops to avoid pathological loops.
     fn resolve_by_ancestors(&self, pid: u32) -> Option<ProcessVisibility> {
+        // Collect ancestor PIDs first (requires /proc reads that may block),
+        // then check the map once under a single read lock.
+        let mut ancestors = Vec::new();
         let mut current = pid;
         for _ in 0..MAX_ANCESTOR_DEPTH {
             let parent = read_ppid(current)?;
             if parent <= 1 {
-                return None;
+                break;
             }
-            if let Some(&VisibilityEntry::Explicit(vis)) = self.pid_entries.read().get(&parent) {
+            ancestors.push(parent);
+            current = parent;
+        }
+
+        let entries = self.pid_entries.read();
+        for &ancestor in &ancestors {
+            if let Some(&VisibilityEntry::Explicit(vis)) = entries.get(&ancestor) {
                 return Some(vis);
             }
-            current = parent;
         }
         None
     }

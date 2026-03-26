@@ -310,7 +310,7 @@ impl HandleTable {
             return Ok(Vec::new());
         }
         let end = bytes.len().min(offset.saturating_add(size));
-        Ok(bytes.get(offset..end).map_or_else(Vec::new, <[u8]>::to_vec))
+        Ok(bytes.get(offset..end).map(<[u8]>::to_vec).unwrap_or_default())
     }
 
     /// Write to a file handle's buffer at the given offset.
@@ -483,10 +483,10 @@ impl HandleTable {
             return Ok(());
         }
         let len = usize::try_from(size).unwrap_or(usize::MAX);
-        let mut buf = vec![0u8; len];
-        let n = fd.read_at(&mut buf, 0)?;
-        buf.truncate(n);
-        *buffer = buf;
+        buffer.clear();
+        buffer.resize(len, 0);
+        let n = fd.read_at(buffer, 0)?;
+        buffer.truncate(n);
         Ok(())
     }
 

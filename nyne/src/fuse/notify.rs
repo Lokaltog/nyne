@@ -18,7 +18,7 @@ use std::sync::mpsc;
 use std::thread::Builder;
 
 use fuser::{INodeNo, Notifier};
-use tracing::warn;
+use tracing::{trace, warn};
 
 use crate::dispatch::invalidation::KernelNotifier;
 
@@ -68,16 +68,16 @@ enum NotifyMsg {
 
 /// Non-blocking [`KernelNotifier`] wrapper.
 ///
-/// Enqueues notifications into an unbounded channel drained by a dedicated
+/// Enqueues notifications into a bounded channel drained by a dedicated
 /// background thread. This prevents `writev(/dev/fuse)` from blocking the
 /// caller (typically the filesystem watcher) when the kernel stalls on a
 /// notification — e.g., because it needs to issue a FUSE callback but all
 /// handler threads are busy.
 ///
-/// Dropped notifications (channel disconnected) are harmless: stale kernel
-/// cache entries expire via TTL and get re-resolved on next access.
+/// Dropped notifications (channel full or disconnected) are harmless: stale
+/// kernel cache entries expire via TTL and get re-resolved on next access.
 pub struct AsyncNotifier {
-    tx: mpsc::Sender<NotifyMsg>,
+    tx: mpsc::SyncSender<NotifyMsg>,
 }
 
 /// Construction for [`AsyncNotifier`].
@@ -89,7 +89,7 @@ impl AsyncNotifier {
     /// panics — it indicates system resource exhaustion.
     #[allow(clippy::expect_used)] // thread spawn failure = system resource exhaustion
     pub fn new(inner: impl KernelNotifier + 'static) -> Self {
-        let (tx, rx) = mpsc::channel::<NotifyMsg>();
+        let (tx, rx) = mpsc::sync_channel::<NotifyMsg>(1024);
 
         Builder::new()
             .name("fuse-notify".into())
@@ -109,14 +109,21 @@ impl AsyncNotifier {
 
 /// [`KernelNotifier`] implementation that enqueues notifications asynchronously.
 impl KernelNotifier for AsyncNotifier {
-    /// Enqueues an inode invalidation message.
-    fn inval_inode(&self, inode: u64) { let _ = self.tx.send(NotifyMsg::InvalInode { inode }); }
+    /// Enqueues an inode invalidation message (best-effort, drops if queue is full).
+    fn inval_inode(&self, inode: u64) {
+        if let Err(mpsc::TrySendError::Full(_)) = self.tx.try_send(NotifyMsg::InvalInode { inode }) {
+            trace!(target: "nyne::fuse", inode, "notification queue full, dropping inval_inode");
+        }
+    }
 
     /// Sends an entry invalidation message to the background notification thread.
+    /// Best-effort: drops the notification if the queue is full.
     fn inval_entry(&self, parent_inode: u64, name: &str) {
-        let _ = self.tx.send(NotifyMsg::InvalEntry {
+        if let Err(mpsc::TrySendError::Full(_)) = self.tx.try_send(NotifyMsg::InvalEntry {
             parent_inode,
             name: name.to_owned(),
-        });
+        }) {
+            trace!(target: "nyne::fuse", parent_inode, name, "notification queue full, dropping inval_entry");
+        }
     }
 }
