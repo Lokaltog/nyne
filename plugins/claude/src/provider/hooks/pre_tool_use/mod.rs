@@ -13,11 +13,11 @@ use color_eyre::eyre::Result;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
 use nyne::types::VfsPath;
-use nyne_coding::providers::names;
-use nyne_coding::services::CodingServices;
-use nyne_coding::syntax::find_fragment_at_line;
-use nyne_coding::syntax::fragment::Fragment;
-use nyne_coding::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, fragment_list};
+use nyne_source::providers::names;
+use nyne_source::services::SourceServices;
+use nyne_source::syntax::find_fragment_at_line;
+use nyne_source::syntax::fragment::Fragment;
+use nyne_source::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, fragment_list};
 
 use crate::config::PreToolHookConfig;
 use crate::provider::hook_schema::{
@@ -141,7 +141,7 @@ impl PreToolUse {
         let Ok(vfs_path) = VfsPath::new(rel) else {
             return HookOutput::empty();
         };
-        let Ok(decomposed) = CodingServices::get(activation).decomposition.get(&vfs_path) else {
+        let Ok(decomposed) = SourceServices::get(activation).decomposition.get(&vfs_path) else {
             return HookOutput::empty();
         };
         if decomposed.decomposed.is_empty() {

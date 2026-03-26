@@ -1,0 +1,75 @@
+[package]
+name = "nyne-plugin-source"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "nyne_source"
+
+[dependencies]
+nyne.workspace = true
+nyne-macros.workspace = true
+nyne-git = { workspace = true, optional = true }
+
+# Core
+color-eyre.workspace = true
+convert_case.workspace = true
+linkme.workspace = true
+minijinja.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+jiff.workspace = true
+tracing.workspace = true
+rustix = { workspace = true, features = ["fs"] }
+git2 = { workspace = true, optional = true }
+
+# Parsing & analysis
+aho-corasick.workspace = true
+tree-sitter.workspace = true
+
+# Text manipulation
+crop.workspace = true
+
+# Optional language grammars
+tree-sitter-fennel = { workspace = true, optional = true }
+tree-sitter-jinja = { workspace = true, optional = true }
+tree-sitter-md = { workspace = true, optional = true }
+tree-sitter-nix = { workspace = true, optional = true }
+tree-sitter-python = { workspace = true, optional = true }
+tree-sitter-rust = { workspace = true, optional = true }
+tree-sitter-toml-ng = { workspace = true, optional = true }
+tree-sitter-typescript = { workspace = true, optional = true }
+filetime.workspace = true
+owo-colors.workspace = true
+palette.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+humantime-serde.workspace = true
+
+[dev-dependencies]
+insta = { workspace = true, features = ["toml", "yaml", "redactions"] }
+similar-asserts.workspace = true
+tempfile.workspace = true
+rstest.workspace = true
+proptest.workspace = true
+
+[features]
+default = ["git-symbols", "lang-rust", "lang-python", "lang-typescript", "lang-markdown", "lang-toml", "lang-nix", "lang-fennel", "lang-jinja2"]
+test-support = []
+git-symbols = ["dep:nyne-git", "dep:git2"]
+lang-rust = ["dep:tree-sitter-rust"]
+lang-python = ["dep:tree-sitter-python"]
+lang-typescript = ["dep:tree-sitter-typescript"]
+lang-markdown = ["dep:tree-sitter-md"]
+lang-toml = ["dep:tree-sitter-toml-ng"]
+lang-nix = ["dep:tree-sitter-nix"]
+lang-fennel = ["dep:tree-sitter-fennel"]
+lang-jinja2 = ["dep:tree-sitter-jinja"]
+
+[lints]
+workspace = true

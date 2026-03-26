@@ -6,10 +6,9 @@ use nyne::SUBDIR_SYMBOLS;
 use nyne::text::slugify;
 use nyne::types::path_conventions::COMPANION_SUFFIX;
 use nyne::types::vfs_path::VfsPath;
-use nyne_coding::SUBDIR_AT_LINE;
+use nyne_source::SUBDIR_AT_LINE;
 
 use super::DIR_TODO;
-
 /// A single TODO/FIXME/etc. found in a source file.
 ///
 /// Discovered by [`TodoScanner`](super::scan::TodoScanner) and exposed as

@@ -48,7 +48,7 @@ fn make_decomposed(source: &str) -> DecomposedSource {
     DecomposedSource {
         source: source.to_owned(),
         decomposed: Default::default(),
-        decomposer: Arc::clone(nyne_coding::syntax::SyntaxRegistry::global().get("rs").unwrap()),
+        decomposer: Arc::clone(nyne_source::syntax::SyntaxRegistry::global().get("rs").unwrap()),
         tree: None,
     }
 }

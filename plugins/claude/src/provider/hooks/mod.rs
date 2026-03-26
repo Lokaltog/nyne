@@ -33,4 +33,4 @@ const PARTIAL_VFS_HINTS: &str = "hooks/vfs-hints";
 const PARTIAL_VFS_HINTS_SRC: &str = include_str!("templates/vfs-hints.j2");
 
 pub(super) use nyne::{is_vfs_path, source_file_of};
-pub(super) use nyne_coding::providers::names::{is_symbols_overview, symbol_from_vfs_path};
+pub(super) use nyne_source::providers::names::{is_symbols_overview, symbol_from_vfs_path};

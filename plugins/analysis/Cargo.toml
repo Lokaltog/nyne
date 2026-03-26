@@ -1,0 +1,28 @@
+[package]
+name = "nyne-plugin-analysis"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "nyne_analysis"
+
+[dependencies]
+nyne.workspace = true
+nyne-source.workspace = true
+
+color-eyre.workspace = true
+linkme.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+tracing.workspace = true
+tree-sitter.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+
+[lints]
+workspace = true

@@ -12,9 +12,11 @@ path = "src/main.rs"
 
 [dependencies]
 nyne.workspace = true
+nyne-analysis.workspace = true
 nyne-claude.workspace = true
 nyne-git.workspace = true
-nyne-coding.workspace = true
+nyne-source.workspace = true
+nyne-lsp.workspace = true
 nyne-todo.workspace = true
 clap.workspace = true
 color-eyre.workspace = true
@@ -40,7 +42,9 @@ nyne = { path = "nyne" }
 nyne-macros = { path = "nyne-macros" }
 nyne-git = { package = "nyne-plugin-git", path = "plugins/git" }
 nyne-claude = { package = "nyne-plugin-claude", path = "plugins/claude" }
-nyne-coding = { package = "nyne-plugin-coding", path = "plugins/coding" }
+nyne-source = { package = "nyne-plugin-source", path = "plugins/source" }
+nyne-lsp = { package = "nyne-plugin-lsp", path = "plugins/lsp" }
+nyne-analysis = { package = "nyne-plugin-analysis", path = "plugins/analysis" }
 nyne-todo = { package = "nyne-plugin-todo", path = "plugins/todo" }
 
 # Core
@@ -85,7 +89,7 @@ toml = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.26"
-tree-sitter-fennel = { path = "plugins/coding/vendor/tree-sitter-fennel" }
+tree-sitter-fennel = { path = "plugins/source/vendor/tree-sitter-fennel" }
 tree-sitter-jinja = "0.11.1"
 tree-sitter-md = "0.5.3"
 tree-sitter-nix = "0.3.0"

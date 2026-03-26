@@ -2,7 +2,7 @@
 //!
 //! This crate is intentionally thin -- it parses CLI arguments via [`Cli`],
 //! sets up logging, and dispatches to the library-side subcommand handlers.
-//! Plugin crates (`nyne_git`, `nyne_coding`) are linked via `use ... as _`
+//! Plugin crates (`nyne_git`, `nyne_source`, `nyne_lsp`) are linked via `use ... as _`
 //! so their `linkme` distributed-slice entries are discovered at link time
 //! without any explicit registration code.
 
@@ -13,9 +13,8 @@ use color_eyre::eyre::Result;
 use nyne::cli::{Cli, Command, attach, config, ctl, exec, list, mount};
 // Ensure plugin crates are linked — their `linkme` distributed slice
 // entries are discovered at link time.
-use nyne_coding as _;
 use tracing_subscriber::EnvFilter;
-use {nyne_claude as _, nyne_git as _, nyne_todo as _};
+use {nyne_analysis as _, nyne_claude as _, nyne_git as _, nyne_lsp as _, nyne_source as _, nyne_todo as _};
 
 /// Entry point for the nyne CLI.
 ///

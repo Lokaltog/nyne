@@ -12,7 +12,7 @@ name = "nyne_todo"
 [dependencies]
 nyne.workspace = true
 nyne-macros.workspace = true
-nyne-coding.workspace = true
+nyne-source.workspace = true
 nyne-git = { workspace = true, optional = true }
 
 aho-corasick.workspace = true

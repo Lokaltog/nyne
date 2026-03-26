@@ -1445,9 +1445,11 @@ dependencies = [
  "clap",
  "color-eyre",
  "nyne",
+ "nyne-plugin-analysis",
  "nyne-plugin-claude",
- "nyne-plugin-coding",
  "nyne-plugin-git",
+ "nyne-plugin-lsp",
+ "nyne-plugin-source",
  "nyne-plugin-todo",
  "tracing-subscriber",
 ]
@@ -1460,6 +1462,22 @@ dependencies = [
  "quote",
  "rstest",
  "syn",
+]
+
+[[package]]
+name = "nyne-plugin-analysis"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "linkme",
+ "nyne",
+ "nyne-plugin-source",
+ "rstest",
+ "serde",
+ "serde_json",
+ "strum",
+ "tracing",
+ "tree-sitter",
 ]
 
 [[package]]
@@ -1476,8 +1494,10 @@ dependencies = [
  "minijinja",
  "nyne",
  "nyne-macros",
- "nyne-plugin-coding",
+ "nyne-plugin-analysis",
  "nyne-plugin-git",
+ "nyne-plugin-lsp",
+ "nyne-plugin-source",
  "owo-colors",
  "palette",
  "rstest",
@@ -1489,21 +1509,66 @@ dependencies = [
 ]
 
 [[package]]
-name = "nyne-plugin-coding"
+name = "nyne-plugin-git"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "git2",
+ "insta",
+ "linkme",
+ "minijinja",
+ "nyne",
+ "nyne-macros",
+ "parking_lot",
+ "rstest",
+ "serde",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "nyne-plugin-lsp"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "convert_case",
+ "crop",
+ "crossbeam-channel",
+ "humantime-serde",
+ "insta",
+ "linkme",
+ "lsp-types",
+ "nyne",
+ "nyne-macros",
+ "nyne-plugin-source",
+ "parking_lot",
+ "rstest",
+ "rustix",
+ "serde",
+ "serde_json",
+ "similar-asserts",
+ "strum",
+ "tempfile",
+ "thiserror",
+ "toml",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "nyne-plugin-source"
 version = "0.1.0"
 dependencies = [
  "aho-corasick",
  "color-eyre",
  "convert_case",
  "crop",
- "crossbeam-channel",
  "filetime",
  "git2",
  "humantime-serde",
  "insta",
  "jiff",
  "linkme",
- "lsp-types",
  "minijinja",
  "nyne",
  "nyne-macros",
@@ -1531,25 +1596,6 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-toml-ng",
  "tree-sitter-typescript",
- "url",
-]
-
-[[package]]
-name = "nyne-plugin-git"
-version = "0.1.0"
-dependencies = [
- "color-eyre",
- "git2",
- "insta",
- "linkme",
- "minijinja",
- "nyne",
- "nyne-macros",
- "parking_lot",
- "rstest",
- "serde",
- "tempfile",
- "tracing",
 ]
 
 [[package]]
@@ -1563,8 +1609,8 @@ dependencies = [
  "minijinja",
  "nyne",
  "nyne-macros",
- "nyne-plugin-coding",
  "nyne-plugin-git",
+ "nyne-plugin-source",
  "parking_lot",
  "rstest",
  "serde",

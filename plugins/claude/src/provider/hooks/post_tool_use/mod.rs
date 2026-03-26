@@ -13,11 +13,13 @@ use color_eyre::eyre::Result;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
 use nyne::types::vfs_path::VfsPath;
-use nyne_coding::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
-use nyne_coding::providers::names::{self, FILE_OVERVIEW};
-use nyne_coding::services::CodingServices;
-use nyne_coding::syntax::analysis::{AnalysisContext, AnalysisEngine, HintView};
-use nyne_coding::syntax::decomposed::DecomposedSource;
+#[cfg(feature = "analysis")]
+use nyne_analysis::{AnalysisContext, AnalysisEngine, HintView};
+use nyne_lsp::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
+use nyne_lsp::lsp::manager::LspManager;
+use nyne_source::providers::names::{self, FILE_OVERVIEW};
+use nyne_source::services::SourceServices;
+use nyne_source::syntax::decomposed::DecomposedSource;
 
 use crate::provider::hook_schema::{
     BashToolInput, EditToolInput, HookInput, HookOutput, ReadToolInput, WriteToolInput,
@@ -65,15 +67,20 @@ impl Script for PostToolUse {
         let tool_name = input.tool_name.as_deref().unwrap_or("");
         let root = ctx.activation().root_prefix();
 
-        let services = CodingServices::get(ctx.activation());
-        let analysis = run_analysis_for_tool(&services.analysis, ctx, &input, tool_name, root);
-
-        // Narrow hints/diagnostics to the changed region for Edit calls.
+        #[cfg(feature = "analysis")]
+        let analysis = run_analysis_for_tool(ctx, &input, tool_name, root);
+        #[cfg(feature = "analysis")]
         let changed = analysis
             .decomposed
             .as_deref()
             .and_then(|d| changed_line_range(&input, tool_name, d));
+        #[cfg(feature = "analysis")]
         let hints = filter_hints(analysis.hints, changed.as_ref());
+        #[cfg(not(feature = "analysis"))]
+        let hints: Vec<()> = Vec::new();
+        #[cfg(not(feature = "analysis"))]
+        let changed: Option<Range<usize>> = None;
+
         let diagnostics = filter_diagnostics(
             fetch_diagnostics_for_tool(ctx, &input, tool_name, root),
             changed.as_ref(),
@@ -260,18 +267,13 @@ struct AnalysisResult {
     decomposed: Option<Arc<DecomposedSource>>,
 }
 
+#[cfg(feature = "analysis")]
 /// Run syntax analysis on the file targeted by an Edit/Write tool call.
 ///
 /// Returns hints and the decomposed source (used by the caller to compute
 /// the changed line range for filtering). Returns empty hints for non-file
 /// tools or files without tree-sitter support.
-fn run_analysis_for_tool(
-    engine: &AnalysisEngine,
-    ctx: &ScriptContext<'_>,
-    input: &HookInput,
-    tool_name: &str,
-    root: &str,
-) -> AnalysisResult {
+fn run_analysis_for_tool(ctx: &ScriptContext<'_>, input: &HookInput, tool_name: &str, root: &str) -> AnalysisResult {
     let empty = AnalysisResult {
         hints: Vec::new(),
         decomposed: None,
@@ -285,7 +287,7 @@ fn run_analysis_for_tool(
         return empty;
     };
 
-    let services = CodingServices::get(ctx.activation());
+    let services = SourceServices::get(ctx.activation());
 
     // The Edit/Write tool writes directly to the real filesystem, bypassing
     // the FUSE mount. The inotify watcher will eventually invalidate, but
@@ -298,6 +300,13 @@ fn run_analysis_for_tool(
     };
 
     let Some(tree) = &decomposed.tree else {
+        return AnalysisResult {
+            hints: Vec::new(),
+            decomposed: Some(decomposed),
+        };
+    };
+
+    let Some(engine) = ctx.activation().get::<Arc<AnalysisEngine>>() else {
         return AnalysisResult {
             hints: Vec::new(),
             decomposed: Some(decomposed),
@@ -337,10 +346,12 @@ fn fetch_diagnostics_for_tool(
         return Vec::new();
     };
 
-    let services = CodingServices::get(ctx.activation());
+    let Some(lsp) = ctx.activation().get::<Arc<LspManager>>() else {
+        return Vec::new();
+    };
 
     let lsp_file = ctx.activation().overlay_root().join(&rel);
-    services.lsp.ensure_document_open(&lsp_file, ext);
+    lsp.ensure_document_open(&lsp_file, ext);
 
     // The FUSE write handler writes through to the overlay, but LSP
     // invalidation is triggered by the inotify watcher on the overlay —
@@ -348,14 +359,13 @@ fn fetch_diagnostics_for_tool(
     // have fired yet, so the LSP server still has stale content and the
     // DiagnosticStore isn't marked dirty. Explicitly invalidate to send
     // `didChange` now and mark the store dirty for the blocking wait.
-    services.lsp.invalidate_file(&lsp_file);
+    lsp.invalidate_file(&lsp_file);
 
-    let Some(fq) = services.lsp.file_query(&lsp_file, ext) else {
+    let Some(fq) = lsp.file_query(&lsp_file, ext) else {
         return Vec::new();
     };
 
-    let diags = fq.diagnostics().unwrap_or_default();
-    diagnostics_to_rows(&diags)
+    diagnostics_to_rows(&fq.diagnostics().unwrap_or_default())
 }
 /// Compute the 1-based line range affected by an Edit tool call.
 ///

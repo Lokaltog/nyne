@@ -18,10 +18,10 @@ use nyne::dispatch::script::ScriptEntry;
 use nyne::node::Readable;
 use nyne::provider::{ConflictInfo, ConflictParty, ConflictResolution};
 use nyne::templates::{TemplateContent, TemplateEngine, TemplateView, serialize_view};
-use nyne_coding::providers::names;
-use nyne_coding::providers::prelude::*;
-use nyne_coding::providers::util::dominant_ext;
 use nyne_macros::routes;
+use nyne_source::providers::names;
+use nyne_source::providers::prelude::*;
+use nyne_source::providers::util::dominant_ext;
 use serde::Serialize;
 
 use crate::config::ClaudePluginConfig;
