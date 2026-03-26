@@ -1,6 +1,10 @@
 //! Built-in language decomposers.
 
 /// Common imports shared across language decomposers.
+///
+/// Re-exports the fragment types, naming strategies, parser utilities, and
+/// spec traits that every `LanguageSpec` implementation needs. Language
+/// modules use `use super::prelude::*;` to pull in the standard toolkit.
 mod prelude;
 
 /// Fennel language decomposer.

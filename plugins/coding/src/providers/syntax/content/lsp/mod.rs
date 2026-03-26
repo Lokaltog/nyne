@@ -1,24 +1,17 @@
-// LSP-backed virtual file content for syntax companion nodes.
-//
-// Each symbol directory (`file.rs@/symbols/MyStruct@/`) gains LSP-backed
-// virtual files (REFERENCES.md, DOC.md, etc.) and symlink directories
-// (definition/, callers/, etc.) when an LSP server is available for the
-// file's language.
-//
-// Architecture:
-//   resolve time — `LspHandle::for_file` gates on LSP availability,
-//                  `LspHandle::at` pre-computes the LSP position.
-//   read time   — `TemplateView` impls acquire a `FileQuery`, execute
-//                  the cached LSP call, and render via template.
-//   symlink dirs — emitted as `VirtualNode::directory` at resolve time,
-//                  populated with symlinks when the directory itself is
-//                  resolved (lazy reverse-map).
-//
-// SSOT: `LspFeature` is the single source of truth for all per-symbol
-// LSP features — file names, directory names, query dispatch, symlink
-// target generation, and view construction are all derived from it.
-// Template key constants are mechanically parallel (forced by
-// `include_str!` at compile time) but matched by `template_key()`.
+//! LSP feature nodes, diagnostics, and view rendering.
+//!
+//! Bridges the LSP client with the VFS by turning LSP responses (hover, references,
+//! callers, definitions, etc.) into readable virtual files and symlink directories.
+//! [`LspFeature`] is the single source of truth for supported features — adding a
+//! new one requires only a variant there plus a Jinja template.
+//!
+//! Architecture:
+//!   - **resolve time** — `LspHandle::for_file` gates on LSP availability,
+//!     `LspHandle::at` pre-computes the LSP position.
+//!   - **read time** — `TemplateView` impls acquire a `FileQuery`, execute
+//!     the cached LSP call, and render via template.
+//!   - **symlink dirs** — emitted as `VirtualNode::directory` at resolve time,
+//!     populated with symlinks when the directory itself is resolved (lazy reverse-map).
 
 /// LSP feature definitions and query dispatch.
 mod feature;

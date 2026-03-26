@@ -1,4 +1,17 @@
 //! Kernel cache invalidation via FUSE notifications.
+//!
+//! When a provider invalidates a node (e.g., source file changed on disk),
+//! the kernel's cached dentries and page data must be evicted so the next
+//! access returns fresh content. This module provides two [`KernelNotifier`]
+//! implementations:
+//!
+//! - [`FuseNotifier`] — synchronous, calls `writev(/dev/fuse)` directly.
+//! - [`AsyncNotifier`] — wraps any notifier in a background drain thread,
+//!   preventing the caller from blocking when the kernel stalls on a
+//!   notification (e.g., all FUSE handler threads are busy).
+//!
+//! Both are best-effort: dropped or failed notifications are harmless since
+//! stale cache entries expire via TTL and get re-resolved on next access.
 
 use std::ffi::OsStr;
 use std::sync::mpsc;
@@ -42,9 +55,14 @@ impl KernelNotifier for FuseNotifier {
     }
 }
 
-/// Notification message sent to the background drain thread.
+/// Notification message sent to the [`AsyncNotifier`]'s background drain thread.
+///
+/// Variants mirror the [`KernelNotifier`] trait methods. The `name` field
+/// in `InvalEntry` is owned because the message crosses a thread boundary.
 enum NotifyMsg {
+    /// Invalidate all cached data for the given inode.
     InvalInode { inode: u64 },
+    /// Invalidate a directory entry (name within a parent inode).
     InvalEntry { parent_inode: u64, name: String },
 }
 
@@ -64,9 +82,12 @@ pub struct AsyncNotifier {
 
 /// Construction for [`AsyncNotifier`].
 impl AsyncNotifier {
-    /// Wrap a synchronous notifier in an async channel + drain thread.
+    /// Wraps a synchronous notifier in an unbounded channel with a background drain thread.
+    ///
+    /// The drain thread runs until the [`AsyncNotifier`] is dropped (channel
+    /// disconnects), at which point it exits cleanly. Thread spawn failure
+    /// panics — it indicates system resource exhaustion.
     #[allow(clippy::expect_used)] // thread spawn failure = system resource exhaustion
-    /// Creates a new async notifier that dispatches invalidations on a background thread.
     pub fn new(inner: impl KernelNotifier + 'static) -> Self {
         let (tx, rx) = mpsc::channel::<NotifyMsg>();
 

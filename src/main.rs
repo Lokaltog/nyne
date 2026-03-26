@@ -1,3 +1,11 @@
+//! Binary entry point for the nyne CLI.
+//!
+//! This crate is intentionally thin -- it parses CLI arguments via [`Cli`],
+//! sets up logging, and dispatches to the library-side subcommand handlers.
+//! Plugin crates (`nyne_git`, `nyne_coding`) are linked via `use ... as _`
+//! so their `linkme` distributed-slice entries are discovered at link time
+//! without any explicit registration code.
+
 use std::{io, process};
 
 use clap::Parser;
@@ -10,6 +18,17 @@ use nyne_git as _;
 use tracing_subscriber::EnvFilter;
 
 /// Entry point for the nyne CLI.
+///
+/// Sets up `color_eyre` for rich error reports, configures `tracing` based on
+/// the `-v` verbosity flag, then dispatches to the appropriate subcommand's
+/// `run()` function. Subcommands that return an exit code (`Attach`, `Exec`)
+/// are forwarded to [`std::process::exit`]; the rest return `Result<()>`
+/// directly.
+///
+/// The `tracing` filter defaults to warnings-only, with `-v` enabling
+/// progressively more detail. `fuser::reply` is silenced at most levels
+/// because its output is extremely noisy and rarely useful for debugging
+/// nyne itself.
 fn main() -> Result<()> {
     color_eyre::install()?;
 

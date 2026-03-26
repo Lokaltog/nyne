@@ -26,6 +26,11 @@ pub fn split_disambiguator(name: &str) -> (&str, Option<&str>) {
 }
 
 /// Strategy for assigning filesystem names to fragments.
+///
+/// Chosen by each language's `Decomposer::map_to_fs` implementation.
+/// Code languages use `Identity` (symbol names are already unique-ish),
+/// while document languages use `Slugified` (headings need kebab-casing
+/// and sometimes index prefixes for ordering).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NamingStrategy {
     /// Fragment name used as-is (default for code languages).
@@ -35,6 +40,10 @@ pub enum NamingStrategy {
 }
 
 /// Strategy for resolving filesystem name collisions among sibling fragments.
+///
+/// Applied after naming, only when two or more siblings share the same
+/// `fs_name`. Code languages use `KindSuffix` (preserves the symbol name,
+/// appends the kind), document languages use `Numbered` (appends `-2`, `-3`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConflictStrategy {
     /// Append `~Kind` suffix (e.g. `foo~Function`, `foo~Struct`).
@@ -64,6 +73,11 @@ fn apply_identity(fragments: &mut [Fragment]) {
 }
 
 /// Assign `fs_name` as a kebab-case slug, optionally with a numeric prefix.
+///
+/// When `indexed` is true, names are prefixed with a zero-padded sequence
+/// number (e.g. `00-getting-started`, `01-installation`) to preserve source
+/// order in directory listings. Code blocks get a separate counter multiplied
+/// by 10 to leave room for insertions.
 fn apply_slugified(fragments: &mut [Fragment], indexed: bool) {
     let mut code_block_index = 0usize;
     for (i, frag) in fragments.iter_mut().enumerate() {
@@ -121,6 +135,10 @@ fn resolve_kind_suffix(conflicts: &[ConflictSet]) -> Vec<Resolution> {
 }
 
 /// Resolve name collisions by appending numeric suffixes (e.g. `foo`, `foo-2`, `foo-3`).
+///
+/// The first occurrence keeps its bare name; subsequent occurrences in source
+/// order get `-2`, `-3`, etc. Used by document languages where kind-based
+/// disambiguation is not meaningful (all sections are the same kind).
 fn resolve_numbered(conflicts: &[ConflictSet]) -> Vec<Resolution> {
     conflicts
         .iter()

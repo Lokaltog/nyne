@@ -37,8 +37,12 @@ pub use vfs_path::VfsPath;
 pub struct ExtensionCounts(Vec<(String, usize)>);
 
 impl ExtensionCounts {
+    /// Wrap a pre-sorted `(extension, count)` list.
+    ///
+    /// Callers are responsible for sorting by count descending.
     pub const fn new(counts: Vec<(String, usize)>) -> Self { Self(counts) }
 
+    /// Borrow the `(extension, count)` pairs.
     pub fn as_slice(&self) -> &[(String, usize)] { &self.0 }
 }
 
@@ -64,7 +68,9 @@ pub struct GitDirName(pub String);
 pub struct PassthroughProcesses(Vec<String>);
 
 impl PassthroughProcesses {
+    /// Wrap a list of process names that should receive raw filesystem passthrough.
     pub const fn new(names: Vec<String>) -> Self { Self(names) }
 
+    /// Borrow the process name list.
     pub fn as_slice(&self) -> &[String] { &self.0 }
 }

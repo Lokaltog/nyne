@@ -21,15 +21,33 @@ use crate::syntax::SyntaxRegistry;
 use crate::syntax::analysis::AnalysisEngine;
 use crate::syntax::decomposed::DecompositionCache;
 
-/// The coding plugin entry point.
+/// Entry point for the coding plugin, implementing the [`Plugin`] trait.
+///
+/// This is a unit struct that serves as the anchor for plugin lifecycle
+/// methods. It is instantiated by [`CODING_PLUGIN`] and registered into the
+/// global plugin slice at link time. All mutable state lives in
+/// [`CodingServices`], which is inserted into the `TypeMap` during activation.
 pub struct CodingPlugin;
 
-/// Plugin trait implementation for the coding plugin.
+/// Two-phase lifecycle for the coding plugin.
+///
+/// During `activate`, all heavyweight services (syntax registry, LSP manager,
+/// decomposition cache, analysis engine) are constructed and bundled into a
+/// single [`CodingServices`] inserted into the `TypeMap`. The `providers`
+/// phase then creates provider instances that read from that bundle.
+///
+/// LSP servers are eagerly spawned on a background thread during activation
+/// so they are warm before the first workspace query arrives.
 impl Plugin for CodingPlugin {
-    /// Returns the plugin identifier.
     fn id(&self) -> &'static str { "coding" }
 
-    /// Registers syntax, LSP, analysis, and decomposition services into the context.
+    /// Constructs and registers all coding services into the activation context.
+    ///
+    /// This is the "heavy" phase: it builds the LSP registry from config,
+    /// contributes LSP server commands to the passthrough set (so those
+    /// processes bypass the FUSE overlay and see the real filesystem),
+    /// creates the [`LspManager`] with eager background spawning, and
+    /// assembles the [`CodingServices`] bundle inserted into the `TypeMap`.
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
         let syntax = SyntaxRegistry::global();
 
@@ -85,18 +103,32 @@ impl Plugin for CodingPlugin {
         Ok(())
     }
 
-    /// Returns Claude hook script entries based on plugin configuration.
+    /// Returns Claude hook script entries that should be installed in `.claude/`.
+    ///
+    /// Which hooks are emitted depends on the per-hook toggles in
+    /// `[plugin.coding.claude.hooks]`. When the Claude master toggle is off,
+    /// this returns an empty list and no hooks are installed.
     fn scripts(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<ScriptEntry>> {
         Ok(claude::script_entries(&CodingServices::get(ctx).config))
     }
 
     /// Returns the fully resolved coding plugin configuration as TOML.
+    ///
+    /// Re-derives [`CodingConfig`] from the raw config map so the output
+    /// reflects all defaults, not just what the user explicitly set. Used
+    /// by `nyne config` to show the effective configuration.
     fn resolved_config(&self, config: &NyneConfig) -> Option<toml::Value> {
         let resolved = CodingConfig::from_plugin_config(config.plugin.get("coding"));
         toml::Value::try_from(&resolved).ok()
     }
 
-    /// Creates all coding plugin providers (syntax, batch edit, claude, todo, search).
+    /// Instantiates all coding plugin providers from the activated context.
+    ///
+    /// The core set is always present: syntax decomposition, Claude hooks,
+    /// todo tracking, batch edit staging, and workspace symbol search.
+    /// When the `git-symbols` feature is enabled **and** the git plugin
+    /// has successfully opened a repository, a `GitSymbolsProvider` is
+    /// appended for per-symbol blame and history.
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
         use crate::providers::batch::BatchEditProvider;
         use crate::providers::claude::ClaudeProvider;
@@ -125,7 +157,12 @@ impl Plugin for CodingPlugin {
     }
 }
 
-/// Factory registration for the coding plugin via distributed slice.
+/// Link-time registration of the coding plugin into the global `PLUGINS` slice.
+///
+/// The binary's `main.rs` pulls in this crate with `use nyne_coding as _;`,
+/// which is enough for `linkme` to include this static in the final binary.
+/// At startup, the framework iterates `PLUGINS` and calls each factory to
+/// obtain a `Box<dyn Plugin>`.
 #[allow(unsafe_code)]
 #[distributed_slice(PLUGINS)]
 static CODING_PLUGIN: PluginFactory = || Box::new(CodingPlugin);

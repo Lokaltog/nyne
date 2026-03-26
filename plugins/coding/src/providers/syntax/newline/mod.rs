@@ -1,3 +1,8 @@
+//! Trailing newline middleware for symbol body reads and writes.
+//!
+//! Editors expect files to end with `\n`. This middleware pair unconditionally
+//! appends one on read and strips one on write, ensuring symmetric round-tripping.
+
 use color_eyre::eyre::Result;
 use nyne::dispatch::context::PipelineContext;
 use nyne::node::VirtualNode;

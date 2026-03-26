@@ -1,3 +1,10 @@
+//! Application configuration for the nyne daemon.
+//!
+//! Deserialized from `~/.config/nyne/config.toml` via [`NyneConfig::load`].
+//! All fields have sensible defaults so the config file can be omitted entirely.
+//! Plugin-specific sections live in the `plugin` table as opaque TOML values --
+//! each plugin deserializes its own section independently.
+
 use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
@@ -10,19 +17,28 @@ use rustix::mount::MountFlags;
 use serde::{Deserialize, Serialize};
 
 /// Top-level nyne configuration, deserialized from `~/.config/nyne/config.toml`.
+///
+/// All fields have defaults so a config file is never required. The struct is
+/// validated with `garde` after deserialization -- fields marked `#[garde(dive)]`
+/// are recursively validated, while `#[garde(skip)]` fields rely on serde's
+/// `deny_unknown_fields` for basic correctness.
+///
+/// Plugin configs are stored as opaque `toml::Value` tables keyed by plugin ID.
+/// Each plugin deserializes its own section during activation, which keeps the
+/// core config type free of plugin-specific knowledge.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct NyneConfig {
-    /// Mount configuration (optional — omit if not using FUSE mount).
+    /// Mount configuration (optional -- omit if not using FUSE mount).
     #[garde(dive)]
     pub mount: Option<MountConfig>,
 
-    /// Repository configuration — controls how the project is exposed to the daemon.
+    /// Repository configuration -- controls how the project is exposed to the daemon.
     #[serde(default)]
     #[garde(skip)]
     pub repository: RepositoryConfig,
 
-    /// Sandbox configuration — controls namespace isolation settings.
+    /// Sandbox configuration -- controls namespace isolation settings.
     #[serde(default)]
     #[garde(skip)]
     pub sandbox: SandboxConfig,
@@ -44,7 +60,7 @@ pub struct NyneConfig {
     /// Per-plugin configuration sections.
     ///
     /// Each key is a plugin ID (e.g., `"coding"`, `"git"`). Values are
-    /// opaque TOML tables — plugins deserialize their own config.
+    /// opaque TOML tables -- plugins deserialize their own config.
     ///
     /// ```toml
     /// [plugin.coding]
@@ -70,7 +86,12 @@ impl Default for NyneConfig {
     }
 }
 
-/// Repository configuration — controls how the project is exposed to the daemon.
+/// Repository configuration -- controls how the project is exposed to the daemon.
+///
+/// Currently contains only the storage strategy, but exists as a separate
+/// struct so that future repository-level settings (e.g., sparse checkout
+/// patterns, submodule handling) have a natural home without widening
+/// [`NyneConfig`] itself.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[derive(Default)]
@@ -83,6 +104,15 @@ pub struct RepositoryConfig {
 }
 
 /// Namespace isolation settings for sandboxed subprocesses.
+///
+/// Controls the UTS hostname, bind-mounted directories, and environment
+/// variables visible inside the sandbox. These settings affect both the
+/// daemon process and any processes spawned via `nyne attach`.
+///
+/// The sandbox uses Linux namespaces (mount, PID, UTS) for isolation.
+/// Bind mounts are the primary mechanism for selectively exposing host
+/// directories (e.g., `~/.ssh`, `~/.config`) that the sandboxed process
+/// needs but wouldn't otherwise see.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SandboxConfig {
@@ -101,7 +131,7 @@ pub struct SandboxConfig {
     pub bind_mounts: Vec<BindMount>,
 
     /// Extra environment variables set in sandbox subprocesses (e.g., LSP
-    /// servers). These are merged on top of the default propagated set —
+    /// servers). These are merged on top of the default propagated set --
     /// use this to inject variables the sandbox wouldn't otherwise see.
     #[serde(default)]
     pub env: HashMap<String, String>,
@@ -119,26 +149,39 @@ impl Default for SandboxConfig {
     }
 }
 
-/// Return the default sandbox hostname.
+/// Return the default sandbox hostname (`"nyne-sandbox"`).
+///
+/// Used as the serde default for [`SandboxConfig::hostname`]. Chosen to be
+/// clearly identifiable in shell prompts so users can tell at a glance
+/// whether they're inside a sandbox.
 fn default_sandbox_hostname() -> String { "nyne-sandbox".to_owned() }
 
 /// Mount flags for user-configured bind mounts.
+///
+/// These are the config-level representations of Linux kernel mount flags.
+/// They map 1:1 to `rustix::mount::MountFlags` variants via
+/// [`BindMountFlag::to_mount_flag`]. Using a dedicated enum rather than
+/// exposing raw kernel flags keeps the config file human-readable and
+/// prevents users from setting flags that don't make sense for bind mounts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BindMountFlag {
-    /// Mount as read-only.
+    /// Mount as read-only -- prevents all write operations.
     ReadOnly,
-    /// Prevent execution of binaries.
+    /// Prevent execution of binaries on this mount.
     Noexec,
-    /// Ignore setuid/setgid bits.
+    /// Ignore setuid/setgid bits on executables.
     Nosuid,
-    /// Ignore device special files.
+    /// Ignore device special files (block/char devices).
     Nodev,
 }
 
-/// Conversion from config-level bind mount flags to kernel mount flags.
 impl BindMountFlag {
     /// Convert this config-level flag to the corresponding `rustix` kernel mount flag.
+    ///
+    /// This is a `const fn` so it can be used in static contexts. The mapping
+    /// is exhaustive -- adding a new variant to [`BindMountFlag`] requires
+    /// adding a corresponding arm here (enforced by the compiler).
     const fn to_mount_flag(self) -> MountFlags {
         use rustix::mount::MountFlags;
 
@@ -152,6 +195,19 @@ impl BindMountFlag {
 }
 
 /// A user-configured bind mount mapping a host path into the sandbox.
+///
+/// Each entry in [`SandboxConfig::bind_mounts`] becomes a `mount --bind`
+/// call during sandbox setup. The `source` path must exist on the host;
+/// the `target` path is created inside the sandbox if it doesn't exist.
+///
+/// # Example (TOML)
+///
+/// ```toml
+/// [[sandbox.bind_mounts]]
+/// source = "/home/user/.ssh"
+/// target = "/home/user/.ssh"
+/// flags = ["read_only"]
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BindMount {
@@ -161,14 +217,17 @@ pub struct BindMount {
     /// Absolute path inside the sandbox where `source` will appear.
     pub target: PathBuf,
 
-    /// Mount flags to apply (default: none — mount is RW with exec).
+    /// Mount flags to apply (default: none -- mount is RW with exec).
     #[serde(default)]
     pub flags: Vec<BindMountFlag>,
 }
 
-/// Methods for computing kernel mount flags from config-level flags.
 impl BindMount {
-    /// Combine all configured flags into a single `MountFlags` bitset, or `None` if no flags are set.
+    /// Combine all configured flags into a single `MountFlags` bitset.
+    ///
+    /// Returns `None` if no flags are set, which callers can use to skip
+    /// the `mount(..., flags)` syscall entirely and use the kernel defaults
+    /// (read-write, exec permitted, suid honored, devices allowed).
     pub fn mount_flags(&self) -> Option<MountFlags> {
         use rustix::mount::MountFlags;
 
@@ -209,6 +268,11 @@ pub enum StorageStrategy {
 }
 
 /// Configuration for the FUSE virtual mount.
+///
+/// Only used when the `[mount]` section is present in the config file.
+/// When absent, mount parameters come from CLI arguments instead. This
+/// struct exists for declarative configuration (e.g., in CI or daemon
+/// mode) where the mount should always use the same source and mountpoint.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct MountConfig {
@@ -228,8 +292,14 @@ pub struct MountConfig {
 
 /// Configuration for agent-facing virtual files injected into every directory.
 ///
-/// These files contain a module map of top-level symbols for all source files
-/// in the directory, with optional user-authored content from real files.
+/// These virtual files contain a module map of top-level symbols for all source
+/// files in the directory. If a real file with the same name exists on disk,
+/// its content is prepended to the generated map -- this lets users author
+/// project-specific instructions (e.g., `CLAUDE.md`) that agents see alongside
+/// the auto-generated symbol index.
+///
+/// The default filenames (`CLAUDE.md`, `AGENTS.md`) are chosen for compatibility
+/// with popular AI coding agents.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct AgentFilesConfig {
@@ -241,9 +311,17 @@ pub struct AgentFilesConfig {
 }
 
 /// Return the default list of agent-facing virtual filenames.
+///
+/// These names are chosen for compatibility with popular AI coding agents:
+/// `CLAUDE.md` for Anthropic's Claude Code and `AGENTS.md` as a generic
+/// convention. Users can override this list in their config file.
 pub(crate) fn default_agent_filenames() -> Vec<String> { vec!["CLAUDE.md".to_owned(), "AGENTS.md".to_owned()] }
 
-/// Return the default passthrough process list.
+/// Return the default passthrough process list (`["git"]`).
+///
+/// Git must always see the real filesystem (not the FUSE overlay) because
+/// it directly accesses `.git/` internals via mmap and inotify. Adding it
+/// to passthrough avoids subtle corruption and performance issues.
 fn default_passthrough_processes() -> Vec<String> { vec!["git".to_owned()] }
 
 /// Default implementation for `AgentFilesConfig`.
@@ -258,14 +336,28 @@ impl Default for AgentFilesConfig {
 
 /// Return the XDG config file path for nyne.
 ///
-/// Resolves to `~/.config/nyne/config.toml` on Linux.
+/// Resolves to `~/.config/nyne/config.toml` on Linux (following the XDG
+/// Base Directory Specification). Returns `None` if the platform has no
+/// concept of a config directory (unlikely on supported targets).
 fn config_path() -> Option<PathBuf> {
     ProjectDirs::from("", "", "nyne").map(|dirs| dirs.config_dir().join("config.toml"))
 }
 
-/// Loading and validation of the nyne configuration file.
 impl NyneConfig {
-    /// Load configuration from the XDG config file, falling back to defaults if the file is absent.
+    /// Load configuration from the XDG config file, falling back to defaults if absent.
+    ///
+    /// The loading strategy is intentionally lenient:
+    /// - No XDG directory at all: use defaults (common in containers).
+    /// - Config file missing: use defaults (config is optional).
+    /// - Config file present but malformed: return an error (user intent is clear).
+    ///
+    /// After successful deserialization, the config is validated with `garde`
+    /// to catch constraint violations (e.g., invalid paths in `MountConfig`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config file exists but cannot be read, parsed,
+    /// or validated.
     pub fn load() -> Result<Self> {
         let Some(path) = config_path() else {
             tracing::debug!("no XDG config directory found, using defaults");

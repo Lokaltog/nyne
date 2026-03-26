@@ -15,6 +15,9 @@ use nyne::text::unified_diff;
 use super::plan::{EditOutcome, FileEditResult, ValidationResult, apply_file_edits};
 
 /// Sentinel content returned when a diff action produces no edits.
+///
+/// Gives the reader meaningful feedback instead of an empty file, which
+/// FUSE would otherwise present as a zero-byte read.
 const NO_CHANGES: &[u8] = b"No changes.\n";
 
 /// Trait for types that compute file edits for preview and application.
@@ -156,6 +159,10 @@ fn format_header(lines: &[String]) -> String {
 }
 
 /// Format a single [`FileEditResult`] as a diff or comment string.
+///
+/// Dispatches on the edit outcome: deletions and renames become comment lines,
+/// creates and modifications become unified diffs. Renames include both the
+/// comment header and a diff of the content change.
 fn format_edit(edit: &FileEditResult) -> String {
     match &edit.outcome {
         EditOutcome::Delete => format!("# Deleted: {}\n", edit.display_path),

@@ -1,4 +1,8 @@
-// Core LSP feature dispatch — LspFeature enum, LspHandles, LspTarget.
+//! LSP feature definitions and query dispatch.
+//!
+//! [`LspFeature`] is the single source of truth for all per-symbol LSP features.
+//! Adding a new feature requires only a new variant with a `meta!("slug")` arm,
+//! an `is_supported` capability check, a `query` arm, and a Jinja template file.
 
 use std::ops::Range as StdRange;
 use std::path::PathBuf;
@@ -15,6 +19,10 @@ use crate::lsp::query::FileQuery;
 use crate::lsp::uri::line_range_to_lsp_range;
 
 /// Internal metadata for a single LSP feature variant.
+///
+/// Computed once per variant and cached in a static table. All names
+/// (file, directory, template key) are derived from the slug via
+/// `convert_case` so there is no manual name registration.
 struct FeatureMeta {
     slug: &'static str,
     file_name: String,
@@ -212,6 +220,10 @@ pub(in crate::providers::syntax) struct LspHandles {
 }
 
 /// A raw LSP result target before reverse-mapping to symbols.
+///
+/// Produced by [`LspQueryResult::into_targets`] and consumed by
+/// [`SyntaxProvider::build_target_nodes`](crate::providers::syntax::resolve::lsp_links)
+/// to create symlink nodes pointing at the target symbol's body file.
 pub(in crate::providers::syntax) struct LspTarget {
     /// Absolute file path from the LSP URI.
     pub abs_path: PathBuf,

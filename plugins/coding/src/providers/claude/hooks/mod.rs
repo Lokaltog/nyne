@@ -21,8 +21,15 @@ pub(in crate::providers::claude) use statusline::Statusline;
 pub(in crate::providers::claude) use stop::Stop;
 
 /// Shared partial template key for VFS hint macros.
+///
+/// Registered once and included by multiple hook templates to render
+/// consistent VFS usage guidance across pre-tool-use and post-tool-use hooks.
 const PARTIAL_VFS_HINTS: &str = "hooks/vfs-hints";
 /// Shared partial template source for VFS hint macros.
+///
+/// Loaded at compile time from `templates/vfs-hints.j2`. The template
+/// provides Jinja macros for rendering VFS path suggestions and symbol
+/// navigation hints.
 const PARTIAL_VFS_HINTS_SRC: &str = include_str!("templates/vfs-hints.j2");
 
 pub(super) use crate::providers::names::{is_symbols_overview, is_vfs_path, source_file_of, symbol_from_vfs_path};

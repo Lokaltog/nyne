@@ -35,6 +35,12 @@ const PARTIAL_HINT: &str = "hooks/pre-tool-use/hint";
 const PARTIAL_GREP: &str = "hooks/pre-tool-use/grep";
 
 /// `PreToolUse` hook script implementation.
+///
+/// Intercepts Read, Edit, Write, Bash, and Grep tool calls before execution.
+/// For file-access tools, computes whether the target has a VFS decomposition
+/// and either emits a hint (suggesting the `@/` namespace) or denies the
+/// raw access. For Grep, detects symbol-search patterns and suggests LSP
+/// alternatives like `CALLERS.md` or `REFERENCES.md`.
 pub(in crate::providers::claude) struct PreToolUse {
     engine: Arc<TemplateEngine>,
     config: PreToolHookConfig,
@@ -263,6 +269,11 @@ fn extract_first_identifier(pattern: &str) -> Option<String> {
 // Shared helpers
 
 /// Check if the file's atime is within the grace period.
+///
+/// After denying a raw file read, the hook stamps the file's atime via
+/// [`stamp_atime`]. Subsequent accesses within [`RAW_FILE_GRACE_SECS`]
+/// are allowed through without a hint/deny, preventing an annoying
+/// loop when the agent retries immediately after being redirected.
 fn is_within_grace(overlay_root: &Path, rel: &str) -> bool {
     let real_path = overlay_root.join(rel);
     let Ok(meta) = fs::metadata(&real_path) else {

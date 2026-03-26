@@ -27,6 +27,10 @@ use tracing::warn;
 #[serde(rename_all = "snake_case")]
 #[allow(dead_code)] // Wire type — fields populated via Deserialize
 /// Hook input payload deserialized from stdin.
+///
+/// All fields are `Option` so that deserialization degrades gracefully if
+/// the upstream Claude Code schema adds or removes fields. Hook
+/// implementations check only the fields they need and ignore the rest.
 pub struct HookInput {
     pub session_id: Option<String>,
     pub transcript_path: Option<String>,
@@ -74,8 +78,9 @@ impl HookInput {
 // Per-tool input schemas
 
 /// Input fields for `Read` tool calls.
+///
+/// Deserialized from `tool_input` via [`HookInput::tool_input_as`].
 #[derive(Debug, Deserialize)]
-/// Read tool invocation details.
 pub struct ReadToolInput {
     pub file_path: Option<String>,
     pub offset: Option<u64>,
@@ -172,10 +177,10 @@ pub struct AgentToolInput {
 ///
 /// Constructed via [`HookOutput::context`], [`HookOutput::deny`], or
 /// [`HookOutput::block`] — each builder sets the appropriate combination
-/// of fields for the hook event type.
+/// of fields for the hook event type. Serialized to JSON on stdout via
+/// [`HookOutput::to_bytes`].
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-/// Hook output payload serialized to stdout.
 pub struct HookOutput {
     /// Blocking decision for `Stop`/`UserPromptSubmit` hooks.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -191,9 +196,12 @@ pub struct HookOutput {
 }
 
 /// Inner payload of [`HookOutput`] — event-specific fields.
+///
+/// Carries the `hookEventName` discriminator plus optional context and
+/// permission fields. Which fields are populated depends on the hook event
+/// type — see the builder methods on [`HookOutput`].
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-/// Hook-specific output variants.
 pub struct HookSpecificOutput {
     /// The hook event name (e.g., `"PreToolUse"`, `"PostToolUse"`).
     hook_event_name: &'static str,

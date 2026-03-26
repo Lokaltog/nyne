@@ -1,3 +1,8 @@
+//! Inlay hints and code-analysis rendering for `HINTS.md`.
+//!
+//! Runs nyne's built-in analysis engine at read time and collapses
+//! high-frequency rules into summary groups to keep output readable.
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -11,6 +16,10 @@ use crate::services::CodingServices;
 use crate::syntax::analysis::{AnalysisContext, Hint, HintView};
 
 /// View for the file-level `HINTS.md` — runs analysis at read time.
+///
+/// Unlike LSP diagnostics, hints come from nyne's own analysis engine and
+/// surface code-quality suggestions (magic numbers, single-use variables, etc.).
+/// Analysis is run lazily on each read so results always reflect current source.
 pub(in crate::providers::syntax) struct HintsContent {
     pub resolver: FragmentResolver,
     pub activation: Arc<ActivationContext>,
@@ -75,7 +84,12 @@ fn collapse_summary(rule_id: &str) -> &'static str {
     }
 }
 
-/// Build the hints view, collapsing repeated rules above threshold.
+/// Build the hints view, collapsing repeated rules above [`COLLAPSE_THRESHOLD`].
+///
+/// Returns three collections for the template: individual hint rows (for
+/// low-frequency rules), collapsed summary groups (for noisy rules), and
+/// deduplicated suggestion rows. This prevents a single rule like
+/// `single-use-variable` from flooding the output with repetitive entries.
 fn build_view(hints: &[Hint]) -> (Vec<HintView>, Vec<CollapsedGroup>, Vec<SuggestionRow>) {
     // Count occurrences per rule to decide what gets collapsed.
     let counts: HashMap<&'static str, usize> = hints.iter().fold(HashMap::new(), |mut acc, h| {

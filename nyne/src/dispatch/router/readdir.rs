@@ -5,6 +5,12 @@ use crate::types::ProcessVisibility;
 use crate::types::vfs_path::VfsPath;
 
 /// Directory listing operations for the router.
+///
+/// Handles both virtual and passthrough directory listings. Virtual
+/// directories merge provider-emitted nodes with real filesystem entries
+/// (via the L1 cache), while passthrough directories read the real FS
+/// directly. Every response includes synthetic `.` and `..` entries
+/// with correct inode numbers for POSIX compliance.
 impl Router {
     /// Collect readdir entries for a resolved directory.
     ///
@@ -79,6 +85,12 @@ impl Router {
     }
 
     /// Assemble the `.` and `..` entries common to every readdir response.
+    ///
+    /// POSIX requires every directory to contain these two entries. The `.`
+    /// entry points to the directory itself, while `..` points to its parent
+    /// (or itself for the root). This is called first by both
+    /// [`collect_readdir_entries`](Self::collect_readdir_entries) and
+    /// [`readdir_real`](Self::readdir_real) before appending actual children.
     fn readdir_boilerplate(&self, dir_inode: u64) -> Vec<ReaddirEntry> {
         vec![
             ReaddirEntry::dot(dir_inode),

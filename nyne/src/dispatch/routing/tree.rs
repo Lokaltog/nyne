@@ -1,3 +1,16 @@
+//! Route tree structure, dispatch, and matching algorithms.
+//!
+//! Defines [`RouteTree`] and [`RouteNode`], the runtime data structures
+//! that hold a provider's declared route hierarchy. The tree walk
+//! algorithm recursively matches VFS path segments against [`SegmentMatcher`]
+//! patterns, accumulating captures in [`RouteParams`], and dispatches to
+//! handler closures for `children` (readdir) and `lookup` (single-name)
+//! operations.
+//!
+//! Rest-capture matching uses a rightmost-suffix algorithm [DD-19] that
+//! tries split points from right to left, ensuring greedy consumption
+//! of path segments while still allowing subsequent route levels to match.
+
 use std::iter;
 use std::ops::ControlFlow;
 
@@ -20,6 +33,14 @@ pub struct RouteTree<P> {
 }
 
 /// A single node in the route tree.
+///
+/// Represents one level of path matching with optional handlers for
+/// `children` (readdir) and `lookup` (single-name) operations. The tree
+/// walk recurses through `sub_routes` matching path segments until it
+/// reaches a leaf or a node with the appropriate handler.
+///
+/// Sub-routes are sorted by [`SegmentMatcher::precedence`] at build time
+/// so the walk tries the most specific matcher first at each level.
 pub(super) struct RouteNode<P> {
     pub segment: SegmentMatcher,
     pub children_handler: Option<ChildrenHandler<P>>,
@@ -50,8 +71,11 @@ pub(super) type LookupHandler<P> = Box<dyn Fn(&P, &RouteCtx<'_>, &str) -> Node +
 /// Conversion trait for children handler return values.
 ///
 /// Allows handler methods to return `Vec<VirtualNode>`, `Option<Vec<VirtualNode>>`,
-/// or the full `Nodes` — the route tree normalizes all forms.
+/// or the full `Nodes` (`Result<Option<Vec<VirtualNode>>>`) -- the route tree
+/// normalizes all forms. This ergonomic layer means providers can use the
+/// simplest return type that fits their handler logic without manual wrapping.
 pub trait IntoNodes {
+    /// Convert into the canonical `Nodes` type for route tree dispatch.
     fn into_nodes(self) -> Nodes;
 }
 
@@ -74,7 +98,12 @@ impl IntoNodes for Option<Vec<VirtualNode>> {
 }
 
 /// Conversion trait for lookup handler return values.
+///
+/// Mirrors [`IntoNodes`] but for single-item lookups. Allows handlers to
+/// return `Option<VirtualNode>` or the full `Node` (`Result<Option<VirtualNode>>`)
+/// without manual wrapping.
 pub trait IntoNode {
+    /// Convert into the canonical `Node` type for route tree dispatch.
     fn into_node(self) -> Node;
 }
 
@@ -146,6 +175,10 @@ impl<P> RouteTree<P> {
 }
 
 /// Fold a capture result into route params.
+///
+/// If the match produced a single-segment capture, inserts it into the
+/// params. For `CaptureResult::None` (exact or glob matches), this is
+/// a no-op that returns params unchanged.
 fn apply_capture(mut params: RouteParams, capture: CaptureResult) -> RouteParams {
     if let CaptureResult::Single(name, value) = capture {
         params.insert_single(name, value);
@@ -155,7 +188,13 @@ fn apply_capture(mut params: RouteParams, capture: CaptureResult) -> RouteParams
 
 /// Try matching a single child route for a children dispatch.
 ///
-/// Returns `Break(nodes)` if the child matched, `Continue(())` to try the next child.
+/// Called once per sub-route in precedence order. Uses `ControlFlow` to
+/// short-circuit: `Break(nodes)` means this child claimed the path and
+/// dispatch is done; `Continue(())` means try the next sibling.
+///
+/// Handles all matcher variants: exact/capture delegate recursively,
+/// rest-capture uses the rightmost-suffix algorithm, and glob invokes
+/// the handler directly (it matches any remaining depth).
 fn try_match_children<P>(
     child: &RouteNode<P>,
     provider: &P,
@@ -196,6 +235,10 @@ fn try_match_children<P>(
 }
 
 /// Try matching a single child route for a lookup dispatch.
+///
+/// Lookup variant of [`try_match_children`]. Same precedence-ordered
+/// short-circuit logic, but carries an additional `lookup_name` argument
+/// that is passed through to the leaf handler for single-name resolution.
 fn try_match_lookup<P>(
     child: &RouteNode<P>,
     provider: &P,
@@ -358,7 +401,10 @@ impl<P> RouteNode<P> {
 /// Find split points where a suffix-bearing rest-capture can terminate.
 ///
 /// Returns indices (into `full`) of segments that end with the given suffix,
-/// ordered from rightmost to leftmost [DD-19].
+/// ordered from rightmost to leftmost [DD-19]. The rightmost-first ordering
+/// is critical: it ensures the rest-capture consumes the maximum number of
+/// segments, which matches user intent for paths like `a@/b@/c@/symbols/`
+/// where `@` is the suffix and the capture should grab `a@/b@/c@`.
 fn find_rest_splits(full: &[&str], suffix: &str) -> Vec<usize> {
     let mut positions: Vec<usize> = full
         .iter()
@@ -372,6 +418,10 @@ fn find_rest_splits(full: &[&str], suffix: &str) -> Vec<usize> {
 
 /// Build captured segments from a split point, stripping suffix from every
 /// segment that carries it (not just the terminator).
+///
+/// For a rest-capture like `{..path}@` matching `["a@", "b", "c@"]` with
+/// split at index 2, this produces `["a", "b", "c"]` -- the `@` suffix is
+/// stripped from every segment that has it, giving handlers clean values.
 fn build_captured(full: &[&str], split_pos: usize, suffix: &str) -> Vec<String> {
     full.iter()
         .take(split_pos + 1)

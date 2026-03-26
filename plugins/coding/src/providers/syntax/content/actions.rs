@@ -1,4 +1,7 @@
-// Code action content — unified DiffAction for preview and apply.
+//! LSP code action content — unified [`DiffAction`] for preview and apply.
+//!
+//! Each code action is exposed as a virtual diff file under `symbols/Foo@/actions/`.
+//! Reading the file previews the edit; deleting it applies the action to the source.
 
 use std::ops::Range as StdRange;
 

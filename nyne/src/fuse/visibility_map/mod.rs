@@ -1,8 +1,18 @@
 //! Per-process visibility resolution for FUSE requests.
 //!
-//! Replaces the binary passthrough/non-passthrough model with a three-level
-//! [`ProcessVisibility`] system. Processes can be `All` (force-show hidden
-//! nodes), `Default` (normal nyne behavior), or `None` (full passthrough).
+//! Determines which processes see virtual nodes and which see only the real
+//! filesystem. Uses a three-level [`ProcessVisibility`] system:
+//!
+//! - **`All`** — force-show hidden nodes (e.g., `nyne attach --visibility all`)
+//! - **`Default`** — normal nyne behavior, shows non-hidden virtual nodes
+//! - **`None`** — full passthrough, process sees only real filesystem entries
+//!
+//! Resolution cascades through PID overrides, cgroup membership, name-based
+//! rules, and ancestor walks (see [`VisibilityMap::resolve`] for the full
+//! order). Results are cached per-PID for fast-path FUSE request handling.
+//!
+//! The map is shared between the FUSE handler (reads) and the control server
+//! (writes), so visibility changes from `nyne ctl` take effect immediately.
 
 use std::collections::HashMap;
 use std::fs;

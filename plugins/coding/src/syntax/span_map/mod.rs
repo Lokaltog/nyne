@@ -21,6 +21,11 @@ pub struct SpanMap {
 }
 
 /// A single content region mapping virtual to real byte offsets.
+///
+/// Each region represents a contiguous slice of inner-language content
+/// in the original file. `virtual_start` is the offset in the concatenated
+/// content string; `real_start` is the offset in the original compound file.
+/// `len` is the same in both address spaces (content is copied verbatim).
 #[derive(Debug, Clone)]
 struct Region {
     real_start: usize,

@@ -1,5 +1,10 @@
-// LSP module is staged infrastructure — providers will consume these types
-// in the next phase. All dead-code warnings are from not-yet-wired consumers.
+//! LSP client lifecycle, transport, and query abstractions.
+//!
+//! This module manages the full LSP integration: spawning language server
+//! subprocesses, sending JSON-RPC messages over stdio, caching query results,
+//! and exposing scoped query handles for both file-level and symbol-level
+//! operations. Language servers are registered at link time via
+//! [`register_lsp!`] and looked up by file extension through [`LspRegistry`].
 #![allow(dead_code)]
 
 /// TTL-based cache for LSP query results.
@@ -180,6 +185,12 @@ impl LspRegistry {
 }
 
 /// Register a single file extension's LSP servers into the registry maps.
+///
+/// # Panics
+///
+/// Panics if the extension has no corresponding tree-sitter registration.
+/// LSP features are gated on syntax decomposition, so every LSP extension
+/// must also appear in a `LanguageSpec::EXTENSIONS` declaration.
 fn register_ext(
     syntax: &SyntaxRegistry,
     ext: &str,

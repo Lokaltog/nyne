@@ -30,8 +30,17 @@ fn reply_xattr_data(reply: ReplyXattr, size: u32, data: &[u8]) {
 const XATTR_ERROR: &str = "user.error";
 
 /// Extended attribute handlers for the FUSE filesystem.
+///
+/// Xattrs serve two purposes: FUSE-level metadata (like write error
+/// reporting via [`XATTR_ERROR`]) and provider-defined attributes
+/// exposed through the [`Xattrable`](crate::node::Xattrable) capability.
 impl NyneFs {
-    /// Handles getxattr, returning error messages or provider-defined attributes.
+    /// Handles getxattr requests, checking FUSE-level attributes first, then
+    /// delegating to the node's [`Xattrable`](crate::node::Xattrable) capability.
+    ///
+    /// The FUSE-level `user.error` attribute is checked before any provider
+    /// attributes, ensuring write errors are always accessible even if the
+    /// node has no xattr capability.
     pub(super) fn do_getxattr(&self, ino: INodeNo, name: &OsStr, size: u32, reply: ReplyXattr) {
         let ino = u64::from(ino);
         let name_str = name.to_string_lossy();
@@ -64,7 +73,14 @@ impl NyneFs {
         }
     }
 
-    /// Handles listxattr, enumerating available extended attributes.
+    /// Enumerates available extended attributes for an inode.
+    ///
+    /// Merges provider-defined xattrs (from the node's [`Xattrable`](crate::node::Xattrable)
+    /// capability) with FUSE-level attributes. The `user.error` attribute is
+    /// included only when a write error is currently stored for this inode.
+    ///
+    /// The response is formatted as null-terminated names concatenated into a
+    /// single buffer, per the xattr list wire format.
     pub(super) fn do_listxattr(&self, ino: INodeNo, size: u32, reply: ReplyXattr) {
         let ino = u64::from(ino);
         trace!(target: "nyne::fuse", ino, "listxattr");
@@ -100,7 +116,15 @@ impl NyneFs {
         reply_xattr_data(reply, size, &buf);
     }
 
-    /// Handles setxattr, delegating to the node's xattr capability.
+    /// Sets an extended attribute, delegating to the node's
+    /// [`Xattrable`](crate::node::Xattrable) capability.
+    ///
+    /// Unlike getxattr, there are no FUSE-level writable attributes —
+    /// `user.error` is managed internally by the write pipeline. Returns
+    /// `ENOTSUP` for real files and nodes without the xattr capability.
+    ///
+    /// On success, triggers event processing so providers can react to
+    /// attribute changes (e.g., invalidating dependent nodes).
     pub(super) fn do_setxattr(&self, ino: INodeNo, name: &OsStr, value: &[u8], reply: ReplyEmpty) {
         let ino = u64::from(ino);
         let name_str = name.to_string_lossy();

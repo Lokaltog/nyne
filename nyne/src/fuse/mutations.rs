@@ -1,4 +1,9 @@
-//! FUSE create, mkdir, remove, and rename operations.
+//! FUSE mutation operations — create, mkdir, unlink, rmdir, and rename.
+//!
+//! These handlers delegate to `Router` mutation methods, which own event
+//! draining (see `doc/codebase.md` — "Event Draining"). The FUSE layer
+//! does **not** call `process_events()` after these operations — the
+//! router handles cache invalidation internally.
 
 use std::ffi::OsStr;
 
@@ -10,6 +15,11 @@ use super::{GENERATION, NyneFs, extract_errno};
 /// FUSE mutation handlers for create, mkdir, remove, and rename.
 impl NyneFs {
     /// Handles file creation in a parent directory.
+    ///
+    /// Asks the router to find a provider willing to claim the create. If
+    /// no provider accepts, replies `EACCES`. On success, immediately opens
+    /// the new file and returns a handle with `FOPEN_DIRECT_IO` so the
+    /// caller can write to it without a separate `open()`.
     pub(super) fn do_create(&self, req: &Request, parent: INodeNo, name: &OsStr, flags: i32, reply: ReplyCreate) {
         with_parent_ctx!(self, parent, name, reply, "create", |parent_ino, name_str, ctx| {
             let result = fuse_try!(reply, self.router.create_node(&name_str, &ctx),
@@ -30,6 +40,9 @@ impl NyneFs {
     }
 
     /// Handles directory creation in a parent directory.
+    ///
+    /// Delegates to the router's `mkdir_node`, which finds a provider to
+    /// claim the directory. Replies `EACCES` if no provider accepts.
     pub(super) fn do_mkdir(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
         with_parent_ctx!(self, parent, name, reply, "mkdir", |parent_ino, name_str, ctx| {
             let result = fuse_try!(reply, self.router.mkdir_node(&name_str, &ctx),
@@ -43,7 +56,12 @@ impl NyneFs {
         });
     }
 
-    /// Handles file or directory removal.
+    /// Handles file or directory removal (unlink or rmdir).
+    ///
+    /// Unified handler for both `unlink` and `rmdir` — the `is_dir` flag
+    /// tells the router which semantics to apply. The router decides whether
+    /// this is a real filesystem removal or a virtual node unlink based on
+    /// the node's [`Unlinkable`](crate::node::capabilities::Unlinkable) capability.
     pub(super) fn do_remove(&self, parent: INodeNo, name: &OsStr, is_dir: bool, reply: ReplyEmpty) {
         let label = if is_dir { "rmdir" } else { "unlink" };
         with_parent_ctx!(self, parent, name, reply, "remove", |parent_ino, name_str, ctx| {
@@ -54,6 +72,12 @@ impl NyneFs {
     }
 
     /// Handles rename/move of a file or directory.
+    ///
+    /// Resolves both the source and target parent directories independently
+    /// (they may differ for cross-directory moves). The router's
+    /// [`rename_node`](crate::dispatch::Router::rename_node) decides whether
+    /// the rename targets a real filesystem entry or a virtual node with
+    /// [`Renameable`](crate::node::capabilities::Renameable) capability.
     pub(super) fn do_rename(
         &self,
         parent: INodeNo,

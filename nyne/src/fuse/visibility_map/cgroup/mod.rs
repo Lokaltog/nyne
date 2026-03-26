@@ -146,6 +146,10 @@ impl Drop for CgroupTracker {
 }
 
 /// Session cgroup name for a tracked PID.
+///
+/// Uses the PID of the process that called `nyne attach` as the directory
+/// name under the nyne base cgroup. This is stable for the session lifetime
+/// and unique since the PID cannot be reused while the cgroup exists.
 fn session_name(pid: u32) -> String { format!("pid-{pid}") }
 
 /// Find the cgroup2 mount point by parsing `/proc/self/mountinfo`.

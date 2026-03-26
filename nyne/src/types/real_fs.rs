@@ -1,3 +1,11 @@
+//! Abstraction over real filesystem operations for FUSE passthrough.
+//!
+//! The [`RealFs`] trait decouples the dispatch layer from `std::fs`, enabling
+//! mock filesystems in tests while keeping the production [`OsFs`]
+//! implementation a thin delegation to the standard library. All paths are
+//! expressed as [`VfsPath`]s; the implementation resolves them against a
+//! root directory (the overlay merged view in production).
+
 use std::borrow::Cow;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -10,25 +18,43 @@ use super::file_kind::FileKind;
 use super::vfs_path::VfsPath;
 
 /// Metadata for a real filesystem entry.
+///
+/// Mirrors the subset of `std::fs::Metadata` that the FUSE layer needs for
+/// generating file attributes. Retrieved via [`RealFs::metadata`], which uses
+/// `symlink_metadata` (no symlink following) to match FUSE `lstat` semantics.
 #[derive(Debug, Clone)]
 pub struct FileMeta {
+    /// File size in bytes.
     pub size: u64,
+    /// Last modification time, used for FUSE `mtime` attributes and
+    /// cache staleness detection.
     pub mtime: SystemTime,
+    /// Entry kind (file, directory, or symlink).
     pub file_type: FileKind,
+    /// Unix permission bits (e.g., `0o644`).
     pub permissions: u32,
 }
 
 /// A directory entry returned by [`RealFs::read_dir`].
+///
+/// Contains only the entry name and its kind -- no full path or metadata.
+/// The dispatch layer uses these to build the real-file portion of directory
+/// listings before merging virtual nodes from providers.
 #[derive(Debug)]
 pub struct DirEntry {
+    /// The entry's filename (no path prefix).
     pub name: String,
+    /// Whether this entry is a file, directory, or symlink.
     pub file_type: FileKind,
 }
 
 /// Abstraction over real filesystem operations.
 ///
-/// Enables testing with mock filesystems while keeping the production
-/// implementation thin over `std::fs`.
+/// All FUSE daemon I/O against the project directory goes through this trait.
+/// The production implementation ([`OsFs`]) delegates to `std::fs`, while
+/// tests inject stubs that never touch the disk. This is the only way the
+/// dispatch layer reaches the real filesystem -- there are no direct `std::fs`
+/// calls in the provider or routing code.
 pub trait RealFs: Send + Sync {
     /// The overlay merged directory path.
     ///
@@ -81,6 +107,11 @@ pub trait RealFs: Send + Sync {
 }
 
 /// Production [`RealFs`] implementation backed by `std::fs`.
+///
+/// All operations are rooted at `source_dir`, which points to the overlay
+/// merged view in production. [`VfsPath`]s are resolved by joining them
+/// onto this root. Errors are wrapped with the verb and resolved path
+/// for clear diagnostics (e.g., "failed to read /overlay/merged/src/main.rs").
 pub struct OsFs {
     source_dir: PathBuf,
 }

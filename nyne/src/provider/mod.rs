@@ -1,4 +1,14 @@
 //! Provider interface and registration.
+//!
+//! Defines the [`Provider`] trait that all FUSE content providers implement,
+//! along with supporting types for conflict resolution, mutation handling,
+//! and provider identification. This is a Tier 2 module -- imported by both
+//! core providers (`providers/`) and plugin providers (`plugins/`).
+//!
+//! Providers are the extensibility mechanism: each one contributes virtual
+//! nodes to the VFS tree. The dispatch layer queries all active providers
+//! on cache misses and merges their results.
+
 use std::sync::Arc;
 use std::{fmt, iter};
 
@@ -152,10 +162,38 @@ pub enum MutationOutcome {
 /// Return type for [`Provider::children`] — multiple nodes or nothing.
 pub type Nodes = Result<Option<Vec<VirtualNode>>>;
 
-/// Return type for [`Provider::lookup`], [`Provider::create`], [`Provider::mkdir`] — one node or nothing.
+/// Return type for [`Provider::lookup`], [`Provider::create`], [`Provider::mkdir`] -- one node or nothing.
+///
+/// `Ok(None)` means "this provider does not handle the requested name" and the
+/// router will try other providers or fall through to the real filesystem.
+/// `Ok(Some(node))` claims the name -- at most one provider may claim a given name.
 pub type Node = Result<Option<VirtualNode>>;
 
 /// Trait for FUSE content providers.
+///
+/// Each provider contributes virtual nodes to the VFS tree. The dispatch layer
+/// queries all active providers on L1 cache misses and merges their results
+/// into a unified directory listing. Providers are constructed during
+/// activation and stored as `Arc<dyn Provider>` for the lifetime of the mount.
+///
+/// # Lifecycle
+///
+/// 1. **Activation**: [`should_activate`](Self::should_activate) is called once
+///    at mount time. Providers that return `false` are discarded.
+/// 2. **Resolution**: [`children`](Self::children) and [`lookup`](Self::lookup)
+///    are called on every L1 cache miss. Methods take `self: Arc<Self>` so
+///    providers can cheaply clone themselves into closures attached to nodes.
+/// 3. **Mutation**: [`handle_mutation`](Self::handle_mutation) and
+///    [`on_fs_change`](Self::on_fs_change) are called when the real filesystem
+///    changes, giving providers a chance to update external state and request
+///    cache invalidation of derived virtual content.
+///
+/// # Implementor notes
+///
+/// - Only [`id`](Self::id) and [`children`](Self::children) are required.
+///   All other methods have sensible defaults (decline/no-op).
+/// - Provider structs should be `pub(crate)` -- the dispatch layer only
+///   sees `Arc<dyn Provider>`.
 pub trait Provider: Send + Sync {
     /// Unique identifier for this provider.
     fn id(&self) -> ProviderId;

@@ -51,7 +51,10 @@ impl GitProvider {
     }
 }
 
-/// Format a history entry filename: `001_2024-01-15_abc1234_commit-message.rs`
+/// Format a history entry filename: `001_2024-01-15_abc1234_commit-message.rs`.
+///
+/// The zero-padded sequence number keeps entries sorted chronologically in
+/// directory listings. The message is slugified and truncated to 50 chars.
 pub fn history_filename(index: usize, entry: &HistoryEntry, ext: &str) -> String {
     let seq = index + 1;
     let kebab = text::slugify(&entry.commit.message, 50);

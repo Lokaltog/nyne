@@ -10,16 +10,22 @@ use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::{Result, WrapErr};
 
-/// Rewrites paths between the display root (`/code`), overlay root
-/// (daemon I/O), and LSP server paths.
+/// Rewrites paths between the FUSE display root and the overlay storage root.
 ///
-/// - `rewrite`: display root → overlay root (for daemon file I/O)
-/// - `rewrite_to_fuse`: overlay root → display root (for user-facing output)
+/// LSP servers run as daemon children and see the overlay filesystem, while
+/// users and VFS output see the FUSE mount path. This resolver is the single
+/// source of truth for translating between the two:
 ///
-/// Single source of truth for all path conversions in the LSP layer.
+/// - [`rewrite`](Self::rewrite): FUSE root → overlay root (for daemon file I/O)
+/// - [`rewrite_to_fuse`](Self::rewrite_to_fuse): overlay root → FUSE root (for user-facing output)
+///
+/// Without this, LSP responses would contain overlay paths that are
+/// meaningless to the agent, and agent-provided paths would not resolve
+/// to files the LSP server can read.
 pub struct LspPathResolver {
-    /// Display root — the path the user sees (`/code` in sandbox).
+    /// FUSE mount path — the path the user and agent see (e.g., `/code`).
     fuse_root: PathBuf,
+    /// Overlay storage path — the path the daemon and LSP servers use for I/O.
     overlay_root: PathBuf,
 }
 

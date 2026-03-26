@@ -1,4 +1,18 @@
 //! Virtual filesystem node types and capabilities.
+//!
+//! A [`VirtualNode`] is the unit of content in the FUSE tree. Identity is
+//! data (name, kind, permissions), while behavior is composed from optional
+//! capability trait objects ([`Readable`], [`Writable`], [`Renameable`], etc.).
+//! This composition-over-inheritance design lets providers mix capabilities
+//! freely without subclassing.
+//!
+//! Permissions are auto-derived from attached capabilities when not explicitly
+//! overridden, so a node with both [`Readable`] and [`Writable`] automatically
+//! gets `0o600`, while a read-only file gets `0o400`.
+//!
+//! Rarely-used extensions (rename, unlink, lifecycle, xattr, plugins,
+//! middlewares, typed properties) are lazily allocated behind a single
+//! [`Box`] to keep the common case (simple readable files) lightweight.
 
 /// Built-in node content types (static, empty, symlink).
 pub mod builtins;
@@ -79,6 +93,10 @@ struct NodeExtensions {
     plugins: Vec<Box<dyn NodePlugin>>,
     props: TypeMap,
 }
+/// Custom `Debug` to avoid requiring `Debug` bounds on capability trait objects.
+///
+/// Prints only presence/count information (e.g., `renameable: true`,
+/// `plugins: 2`) rather than attempting to format opaque trait objects.
 impl fmt::Debug for NodeExtensions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NodeExtensions")
@@ -145,8 +163,18 @@ pub(crate) mod default_permissions {
 }
 
 /// Construction, capability attachment, and property access.
+///
+/// Uses a builder pattern: start with [`file()`](Self::file),
+/// [`directory()`](Self::directory), or [`symlink()`](Self::symlink), then
+/// chain `with_*` methods to attach capabilities. The builder consumes
+/// `self` so nodes are fully configured before being handed to the dispatch
+/// layer (which wraps them in `Arc`).
 impl VirtualNode {
     /// Base constructor — all public constructors delegate here.
+    ///
+    /// # Panics
+    ///
+    /// Debug-asserts that `name` is non-empty.
     fn new(name: impl Into<String>, kind: NodeKind) -> Self {
         let name = name.into();
         debug_assert!(!name.is_empty(), "VirtualNode name must not be empty");
@@ -164,7 +192,10 @@ impl VirtualNode {
         }
     }
 
-    /// Get or create the extensions box.
+    /// Get or create the lazily-allocated extensions box.
+    ///
+    /// Extensions are behind `Option<Box<...>>` so the common case (a simple
+    /// readable file) pays zero allocation cost for capabilities it never uses.
     fn ext_mut(&mut self) -> &mut NodeExtensions { self.ext.get_or_insert_with(Box::default) }
 
     /// Create a read-only file node.
@@ -210,13 +241,23 @@ impl VirtualNode {
         self
     }
 
-    /// Override auto-derived permissions.
+    /// Override the auto-derived permission bits.
+    ///
+    /// By default, permissions are inferred from attached capabilities (see
+    /// [`default_permissions`]). Use this when the default derivation is
+    /// wrong — e.g., a file that should appear executable or a directory
+    /// with non-standard access.
     pub const fn with_permissions(mut self, permissions: u16) -> Self {
         self.permissions = Some(permissions);
         self
     }
 
-    /// Set the size hint for file nodes.
+    /// Set the size hint reported in `getattr` for file nodes.
+    ///
+    /// Without a hint, the FUSE layer reports size 0 until the file is read.
+    /// Some tools (e.g., `cat`, editors) use the reported size to allocate
+    /// buffers, so a reasonable hint avoids unnecessary re-reads. Silently
+    /// ignored for non-file node kinds.
     pub const fn with_size_hint(mut self, size: u64) -> Self {
         if let NodeKind::File { ref mut size_hint, .. } = self.kind {
             *size_hint = Some(size);
@@ -387,6 +428,12 @@ impl VirtualNode {
 }
 
 /// Generate a `require_*` method that returns the capability or `PermissionDenied`.
+///
+/// Produces methods like `require_readable()`, `require_writable()`, etc.
+/// that convert `Option<&dyn Trait>` accessors into `io::Result`, mapping
+/// `None` to `PermissionDenied` with a descriptive error message. The FUSE
+/// layer uses these to fail gracefully when an operation is attempted on a
+/// node lacking the required capability.
 macro_rules! require_capability {
     ($method:ident, $accessor:ident, $Trait:ident, $label:expr) => {
         impl VirtualNode {

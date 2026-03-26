@@ -1,5 +1,15 @@
-// Workspace edit utilities — apply LSP `WorkspaceEdit` to files on disk,
-// or preview edits as unified diffs without side effects.
+//! Workspace edit utilities: apply LSP `WorkspaceEdit`s to files on disk,
+//! or preview them as unified diffs without side effects.
+//!
+//! The core pipeline is shared between the two modes:
+//! 1. Collect text edits from the `WorkspaceEdit` (both `changes` and
+//!    `document_changes` fields).
+//! 2. Read each affected file's content through the [`LspPathResolver`]
+//!    (which rewrites FUSE paths to overlay paths, avoiding re-entrancy).
+//! 3. Apply edits to a [`Rope`] in reverse position order so byte offsets
+//!    remain stable across mutations.
+//!
+//! [`LspPathResolver`]: super::path::LspPathResolver
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -166,6 +176,10 @@ fn apply_edits_to_rope(content: &str, edits: &mut [&TextEdit]) -> Result<String>
 }
 
 /// A file's original and modified content after applying text edits.
+///
+/// Intermediate result from [`resolve_edits`], consumed by both
+/// [`apply_workspace_edit`] (writes `modified` to disk) and
+/// [`workspace_edit_to_diff`] (diffs `original` vs `modified`).
 struct ResolvedFileEdit {
     path: String,
     original: String,
@@ -252,7 +266,12 @@ pub fn resolve_workspace_edit(
     Ok(results)
 }
 
-/// Process a single `ResourceOp` into the results list.
+/// Process a single `ResourceOp` (Create, Delete, or Rename) into the results list.
+///
+/// Resource ops may coexist with text edits for the same file. When a
+/// `Create` or `Rename` targets a file that already has text edits in
+/// `results`, the existing entry's outcome is updated rather than
+/// duplicated. `Delete` supersedes any prior edits for the same path.
 fn collect_resource_op(
     op: &lsp_types::ResourceOp,
     resolver: &super::path::LspPathResolver,

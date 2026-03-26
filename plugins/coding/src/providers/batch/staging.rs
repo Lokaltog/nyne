@@ -1,4 +1,10 @@
 //! Staging area state tracking for batch edits.
+//!
+//! Provides the data structures that back the in-memory staging area:
+//! [`StagingKey`] identifies a specific symbol in a specific file,
+//! [`StagedBatch`] holds the ordered list of [`StagedAction`]s for that
+//! symbol. Actions are indexed with a step-based numbering scheme
+//! ([`INDEX_STEP`]) that allows insertions without immediate renumbering.
 
 use std::collections::BTreeMap;
 
@@ -7,8 +13,11 @@ use nyne::types::vfs_path::VfsPath;
 use crate::edit::plan::{EditOp, EditPlan};
 
 /// Key for staged edit lookup — identifies a specific symbol in a specific file.
+///
+/// Used as the `HashMap` key in [`StagingMap`](super::StagingMap) to group
+/// staged actions by their target symbol. Two keys are equal when they refer
+/// to the same fragment path in the same source file.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-/// Key identifying a staging entry by file and edit operation.
 pub(super) struct StagingKey {
     /// The source file being edited.
     pub source_file: VfsPath,
@@ -29,6 +38,11 @@ impl StagedAction {
 }
 
 /// Index increment between staged actions.
+///
+/// New actions are assigned indices at multiples of this step (10, 20, 30, ...),
+/// leaving gaps for potential future reordering without immediate renumbering.
+/// When a reorder operation exhausts the gap space, [`StagedBatch::renumber`]
+/// reassigns contiguous indices.
 const INDEX_STEP: u32 = 10;
 
 /// All staged edits for a single symbol.

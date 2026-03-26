@@ -11,6 +11,10 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)] // Wire type — fields exist in the JSON schema but may not be read yet.
 /// Parsed statusline JSON payload.
+///
+/// Mirrors the Claude Code statusline JSON schema. All fields are optional
+/// because Claude Code may omit sections depending on subscription tier
+/// and session state (e.g., `rate_limits` is only present for Pro/Max).
 pub(super) struct StatuslinePayload {
     pub model: Option<Model>,
     pub context_window: Option<ContextWindow>,

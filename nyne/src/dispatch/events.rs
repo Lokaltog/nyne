@@ -1,5 +1,17 @@
 //! Event sinks for invalidation event collection and processing.
 
+//! Event sink implementations for invalidation event collection.
+//!
+//! Two concrete [`EventSink`] implementations are provided:
+//!
+//! - [`LoggingEventSink`] — fire-and-forget, for contexts where events are
+//!   informational only (e.g., nested resolver calls that cannot trigger
+//!   cache invalidation themselves).
+//! - [`BufferedEventSink`] — collects events during a FUSE operation so the
+//!   router can process them after the operation completes. This decoupling
+//!   is necessary because event processing requires `&mut` access to caches,
+//!   but providers hold only `&` references during their callbacks.
+
 use std::mem;
 
 use parking_lot::Mutex;

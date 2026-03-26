@@ -224,6 +224,10 @@ fn render_vim_badge(mode: VimMode) -> String {
 }
 
 /// Pre-computed Oklch gradient for interpolation over arbitrary stops.
+///
+/// Used to color progress bar cells. Each segment of the bar has its own
+/// gradient (from green through yellow to red), and interpolation blends
+/// smoothly between the defined Oklch color stops.
 struct Gradient {
     stops: Vec<(f32, Oklch)>,
 }

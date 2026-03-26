@@ -23,14 +23,33 @@ pub trait EventSink: Send + Sync {
 }
 
 /// Events that trigger cache invalidation or re-materialization.
+///
+/// Emitted by providers and node capabilities via [`EventSink::emit`] during
+/// FUSE operations, then drained and processed by the router after the
+/// operation completes. Each variant specifies the scope of invalidation,
+/// from surgical (single node) to broad (entire provider).
+///
+/// Marked `#[non_exhaustive]` to allow adding finer-grained invalidation
+/// scopes (e.g., line-range or attribute-only) without a breaking change.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum InvalidationEvent {
-    /// A single node's content changed (L2 only).
+    /// A single node's content changed — invalidates L2 content only.
+    ///
+    /// The directory structure (L1) is unaffected; the node still exists
+    /// at the same path with the same inode. Only the cached byte content
+    /// in the L2 [`ContentCache`](super::content_cache::ContentCache) is evicted.
     Node { provider_id: ProviderId, vpath: VfsPath },
-    /// Entire subtree — both structure and content (L1 + L2).
+    /// An entire subtree changed — invalidates both L1 structure and L2 content.
+    ///
+    /// Used when a directory's children may have changed (e.g., a source file
+    /// was modified, so all its companion namespace nodes may be different).
     Subtree { path: VfsPath },
-    /// Everything from a provider (L1 + L2 for all its nodes).
+    /// Everything from a provider — invalidates all L1 and L2 entries it owns.
+    ///
+    /// Used when a provider's global state changes (e.g., LSP restart,
+    /// configuration reload) and all its previously generated content is
+    /// potentially stale.
     Provider { provider_id: ProviderId },
 }
 

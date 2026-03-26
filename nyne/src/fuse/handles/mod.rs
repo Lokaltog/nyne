@@ -1,4 +1,22 @@
 //! File handle management for buffered reads and writes.
+//!
+//! Each `open()` call allocates a [`HandleEntry`] in the slab-backed
+//! [`HandleTable`], returning a file handle number (slab index) to FUSE.
+//! Handles bridge stateless FUSE callbacks to stateful content buffering —
+//! they track dirty state, truncation history, and copy-on-write content
+//! via [`ContentBuffer`].
+//!
+//! Two distinct open paths exist:
+//!
+//! - **Buffered** ([`HandleTable::open`]) — content loaded into memory up
+//!   front. Used for virtual files (provider-generated content).
+//! - **Direct** ([`HandleTable::open_direct`]) — reads via `pread()` on a
+//!   backing fd, with lazy buffer population on first write. Used for real
+//!   files that benefit from kernel page cache avoidance.
+//!
+//! Both paths converge on flush: dirty buffers are flushed through the
+//! router's write pipeline with a [`WriteMode`] derived from truncation
+//! history (see [`HandleEntry::write_mode`]).
 
 use std::fs::File;
 use std::os::unix::fs::FileExt;
@@ -413,6 +431,10 @@ impl HandleTable {
     }
 
     /// Check whether any open handle references the given inode.
+    ///
+    /// Used by the release path to decide whether per-inode state (write
+    /// locks, error messages) can be cleaned up — cleanup is deferred as
+    /// long as at least one handle remains open.
     pub fn has_handles_for_inode(&self, inode: u64) -> bool {
         let slab = self.inner.read();
         slab.iter().any(|(_, entry)| entry.inode == inode)

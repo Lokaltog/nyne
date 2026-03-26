@@ -1,4 +1,10 @@
-// Pure I/O utilities for the LSP client: timeout-aware fd reading and stderr draining.
+//! I/O primitives for the LSP client: timeout-aware fd reading and stderr draining.
+//!
+//! The [`TimeoutReader`] wraps the server's stdout fd with `poll()`-based
+//! timeouts so that a hung or slow server surfaces a clean `TimedOut` error
+//! instead of blocking a FUSE handler thread indefinitely. Stderr is drained
+//! on a separate thread via [`drain_stderr`] to prevent the server from
+//! blocking on a full pipe buffer.
 
 use std::fs::File;
 use std::io::{self, BufReader, Read};
@@ -31,6 +37,11 @@ impl TimeoutReader {
     }
 
     /// Wait for the fd to become readable, up to the configured timeout.
+    ///
+    /// Uses `rustix::event::poll` (a thin wrapper around POSIX `ppoll`) to
+    /// avoid pulling in `mio` or `tokio` for a single blocking fd. Returns
+    /// `io::ErrorKind::TimedOut` on expiry so the reader thread can
+    /// distinguish "server is quiet" from "server is dead".
     fn poll_ready(&self) -> io::Result<()> {
         let mut pollfd = [event::PollFd::new(self.inner.get_ref(), PollFlags::IN)];
 
@@ -80,6 +91,10 @@ impl io::BufRead for TimeoutReader {
 }
 
 /// Read and log all lines from the server's stderr until EOF.
+///
+/// Runs on a dedicated background thread to prevent the server from blocking
+/// on a full stderr pipe buffer. Lines are logged at `trace` level under the
+/// `nyne::lsp` target -- visible with `RUST_LOG=nyne::lsp=trace`.
 pub(super) fn drain_stderr(stderr_file: File, server_name: &str) {
     use std::io::BufRead;
     let reader = BufReader::new(stderr_file);

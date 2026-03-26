@@ -1,4 +1,7 @@
-// Symbol deletion — unified DiffAction for both preview and apply.
+//! Symbol deletion with surrounding whitespace cleanup.
+//!
+//! Implements [`DiffAction`] so deletions can be previewed as a diff
+//! (`Foo@/delete.diff`) or applied by unlinking the diff node.
 
 use std::sync::Arc;
 

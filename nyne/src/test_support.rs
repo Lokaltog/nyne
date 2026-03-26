@@ -70,6 +70,7 @@ impl RealFs for StubFs {
     fn mkdir(&self, _: &VfsPath) -> Result<()> { bail!("stub") }
 }
 
+/// No-op `EventSink` that silently discards all invalidation events.
 pub(crate) struct StubEvents;
 
 /// No-op event sink that silently discards all invalidation events.
@@ -78,6 +79,8 @@ impl EventSink for StubEvents {
     fn emit(&self, _: InvalidationEvent) {}
 }
 
+/// Stub `Resolver` that rejects all lookups. Use when the test does not
+/// exercise cross-provider resolution.
 pub(crate) struct StubResolver;
 
 /// Stub resolver that rejects all lookups.

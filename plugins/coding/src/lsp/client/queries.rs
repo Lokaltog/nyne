@@ -1,9 +1,13 @@
-// LSP query methods on LspClient.
-//
-// Declarative macros eliminate boilerplate for method families:
-//   - `require_capability!` — capability gate with debug log
-//   - `goto_method!`        — 4 goto methods (definition, declaration, etc.)
-//   - `hierarchy_query!`    — 4 hierarchy methods (incoming/outgoing calls, super/subtypes)
+//! LSP query methods on [`LspClient`](super::LspClient).
+//!
+//! Declarative macros eliminate boilerplate for method families that share
+//! the same structure:
+//! - [`require_capability!`] -- capability gate with early return and debug log
+//! - [`goto_method!`] -- four goto methods (definition, declaration, type definition, implementation)
+//! - [`hierarchy_query!`] -- four hierarchy methods (incoming/outgoing calls, super/subtypes)
+//!
+//! Each generated method checks server capabilities, builds the appropriate
+//! LSP params, sends the request, and normalizes the response to a `Vec`.
 
 use std::path::Path;
 
@@ -24,7 +28,11 @@ use tracing::debug;
 
 use super::{FilePosition, LspClient, uri};
 
-/// Early-return if the server lacks a capability.
+/// Early-return `Ok(Default::default())` if the server lacks a capability.
+///
+/// Checks `self.capabilities.$cap` and returns an empty/default result when
+/// `None`, logging a debug message. This avoids sending requests the server
+/// would reject, and produces graceful degradation instead of errors.
 macro_rules! require_capability {
     ($self:expr, $cap:ident, $feature:literal) => {
         if $self.capabilities.$cap.is_none() {
@@ -453,6 +461,12 @@ impl LspClient {
 }
 
 /// Flatten a `GotoDefinitionResponse` into a plain `Vec<Location>`.
+///
+/// The LSP spec allows three response shapes (scalar, array, link array).
+/// This normalizer lets all goto consumers work with a single `Vec<Location>`
+/// type. `LocationLink` responses use `target_selection_range` (the precise
+/// symbol range) rather than `target_range` (which may include surrounding
+/// context).
 fn goto_response_to_locations(response: Option<GotoDefinitionResponse>) -> Vec<Location> {
     match response {
         None => Vec::new(),

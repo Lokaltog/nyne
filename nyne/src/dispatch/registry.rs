@@ -12,7 +12,15 @@ use crate::process::Spawner;
 use crate::provider::{Provider, ProviderId};
 use crate::types::real_fs::RealFs;
 
-/// Registry of activated providers.
+/// Registry of activated providers, built once per mount session.
+///
+/// Constructed via the two-phase plugin lifecycle in [`default_for`](Self::default_for):
+/// first all plugins insert shared services into `ActivationContext`, then each
+/// plugin creates its providers. Only providers that pass
+/// [`should_activate`](crate::provider::Provider::should_activate) are retained.
+///
+/// The registry is immutable after construction -- the router and resolve
+/// pipeline iterate over `active_providers()` without locking.
 pub struct ProviderRegistry {
     active: Vec<Arc<dyn Provider>>,
 }

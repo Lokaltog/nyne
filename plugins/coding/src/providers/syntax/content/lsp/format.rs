@@ -1,4 +1,8 @@
-// Pure label/extraction utilities for LSP result rendering.
+//! Formatting helpers for LSP data types.
+//!
+//! Pure extraction and label functions that convert LSP protocol types
+//! (hover contents, inlay hints, symbol kinds) into plain text for
+//! template rendering.
 
 use lsp_types::{HoverContents, InlayHintLabel, MarkedString, SymbolKind};
 

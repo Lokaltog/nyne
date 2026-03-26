@@ -11,7 +11,11 @@ use nyne::types::vfs_path::VfsPath;
 
 use crate::repo::GitRepo;
 
-/// Target for diff comparison — working tree or a ref.
+/// Target for diff comparison — working tree or a named ref.
+///
+/// `Workdir` reads the overlay file directly and diffs against HEAD's blob,
+/// avoiding git2 filesystem access. `Ref` diffs HEAD against an arbitrary
+/// branch, tag, or commit SHA.
 pub(super) enum DiffTarget {
     /// Working tree vs HEAD — computed without git2 touching the filesystem.
     Workdir { source_file: VfsPath },

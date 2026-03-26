@@ -1,3 +1,12 @@
+//! Shared context provided to providers during plugin activation.
+//!
+//! [`ActivationContext`] is the single shared object that lives for the entire
+//! lifetime of a mount session. Plugins insert domain services (git, syntax,
+//! LSP, etc.) into it during the activation phase, and providers clone an
+//! `Arc<ActivationContext>` to access those services at request time.
+//!
+//! This is an **interface module** — it may be imported freely from any tier.
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 

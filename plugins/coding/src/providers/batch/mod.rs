@@ -1,4 +1,14 @@
 //! Batch editing provider — tracks edit operations and staging area.
+//!
+//! Agents stage edits by writing to virtual files under `edit/` directories
+//! (e.g. `file.rs@/symbols/Foo@/edit/replace`). Staged edits accumulate in
+//! an in-memory [`StagingMap`] and can be previewed, individually removed,
+//! or atomically applied. Application happens when the agent deletes
+//! `staged.diff`; clearing (discarding) happens on truncate.
+//!
+//! The provider contributes to two route namespaces:
+//! - **Root `@/edit/`** — cross-file `staged.diff` covering all batches
+//! - **Companion `file.rs@/symbols/Foo@/edit/`** — per-symbol staging and preview
 
 /// Anchor resolution for mapping filesystem operations to staged edit actions.
 mod anchors;
@@ -37,6 +47,12 @@ use crate::edit::plan::EditOpKind;
 use crate::services::CodingServices;
 
 /// Provider for staging and applying batch edits across symbols and files.
+///
+/// Exposes two route trees: `@/edit/` for cross-file operations (global
+/// `staged.diff`) and per-symbol companion routes (`file.rs@/symbols/Foo@/edit/`)
+/// for staging individual edit actions (replace, delete, insert-before,
+/// insert-after, append). Staged edits accumulate in memory and are applied
+/// atomically when the user deletes `staged.diff`.
 pub struct BatchEditProvider {
     ctx: Arc<ActivationContext>,
     /// Per-symbol staged edits.
@@ -275,6 +291,11 @@ impl Writable for StagingWriter {
 // Staged action node capabilities (read, write, unlink individual actions)
 
 /// Unlinkable for removing a single staged action.
+///
+/// Attached to staged action preview nodes (e.g. `10-replace.diff`) so that
+/// `rm` on one of those files removes just that action from the batch.
+/// If removing the action empties the batch, the entire batch entry is
+/// cleaned up.
 struct StagedActionUnlink {
     batches: StagingMap,
     key: StagingKey,

@@ -1,3 +1,12 @@
+//! `nyne mount` -- start FUSE daemon(s) for one or more directories.
+//!
+//! This is the primary entry point for running nyne. It resolves mount specs
+//! (paths with optional session ID prefixes), prepares project storage per the
+//! configured [`StorageStrategy`], builds the FUSE filesystem with all active
+//! providers, and enters a sandboxed mount namespace. Each mount gets its own
+//! FUSE session, filesystem watcher, and control server, all held alive by a
+//! [`SessionGuard`] until the process is interrupted.
+
 use std::convert::Infallible;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -19,10 +28,19 @@ use crate::types::{GitDirName, PassthroughProcesses, ProcessVisibility};
 use crate::watcher::FsWatcher;
 use crate::{AsyncNotifier, BufferedEventSink, FuseNotifier, NyneFs, OsFs, ProviderRegistry, Router, sandbox};
 
-/// Number of FUSE handler threads.
+/// Number of FUSE handler threads per mount.
+///
+/// Each thread can handle one FUSE request concurrently. Four threads
+/// balance throughput against resource usage -- enough to avoid blocking
+/// on parallel `readdir`/`getattr` bursts from shells and editors, without
+/// over-committing on single-project mounts.
 const FUSE_THREADS: usize = 4;
 
 /// Arguments for the `mount` subcommand.
+///
+/// Accepts zero or more mount specs. When none are provided, the current
+/// working directory is mounted with an auto-generated session ID. Multiple
+/// specs can be given to mount several projects in a single daemon invocation.
 #[derive(Debug, Args)]
 pub struct MountArgs {
     /// Directories to mount. Defaults to the current directory if omitted.
@@ -37,7 +55,12 @@ pub struct MountArgs {
     pub paths: Vec<MountSpec>,
 }
 
-/// A parsed mount spec: optional explicit ID + path.
+/// A parsed mount specification: optional explicit session ID + directory path.
+///
+/// Parsed from the CLI argument string via [`FromStr`]. The format is either
+/// a bare path (`/path/to/project`) or an `id:path` pair (`myid:/path/to/project`).
+/// When no explicit ID is given, one is derived from the directory name at
+/// mount time.
 #[derive(Debug, Clone)]
 pub struct MountSpec {
     explicit_id: Option<String>,
@@ -47,6 +70,13 @@ pub struct MountSpec {
 impl FromStr for MountSpec {
     type Err = Infallible;
 
+    /// Parse a mount spec from a CLI argument string.
+    ///
+    /// Recognizes the `id:path` format only when the prefix contains no `/`
+    /// and the remainder is non-empty -- this avoids misinterpreting absolute
+    /// paths like `/home/user` as having an `id` of nothing and a path of
+    /// `home/user`. Parsing is infallible because any string that doesn't
+    /// match the `id:path` pattern is treated as a bare path.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some((prefix, rest)) = s.split_once(':')
             && !prefix.is_empty()
@@ -67,8 +97,12 @@ impl FromStr for MountSpec {
 
 /// Owns the FUSE session, filesystem watcher, and control IPC server.
 ///
-/// When dropped, the FUSE session unmounts, the watcher stops, and
-/// the control socket is cleaned up.
+/// All three resources are kept alive for the lifetime of the mount. When
+/// this guard is dropped (on `SIGINT`, `SIGTERM`, or normal exit), the FUSE
+/// session unmounts the overlay, the watcher stops monitoring for changes,
+/// and the control socket is cleaned up. The `#[allow(dead_code)]` is
+/// intentional -- the fields are never read, only held for their drop side
+/// effects.
 #[allow(dead_code)]
 struct SessionGuard {
     _session: fuser::BackgroundSession,
@@ -77,6 +111,23 @@ struct SessionGuard {
 }
 
 /// Run the mount subcommand: mount one or more directories as FUSE filesystems.
+///
+/// Orchestrates the full mount lifecycle:
+/// 1. Load configuration and scan for existing sessions (to detect ID conflicts).
+/// 2. Resolve each mount spec to a canonical path + unique session ID.
+/// 3. Print the mount plan so the user sees what will happen.
+/// 4. Build mount entries with closures that construct FUSE sessions inside
+///    the sandbox namespace.
+/// 5. Delegate to [`sandbox::run_mounts`] which forks, enters namespaces,
+///    and calls the mount closures.
+///
+/// The function blocks until the daemon is interrupted. Each mount gets its
+/// own FUSE session and control server, but all share a single process.
+///
+/// # Errors
+///
+/// Returns an error if config loading fails, paths are invalid, session IDs
+/// conflict, or sandbox/FUSE setup fails.
 pub fn run(args: &MountArgs) -> Result<()> {
     let nyne_config = Arc::new(NyneConfig::load()?);
     let storage_strategy = nyne_config.repository.storage_strategy;
@@ -155,7 +206,12 @@ pub fn run(args: &MountArgs) -> Result<()> {
 
     sandbox::run_mounts(entries)
 }
-/// Print the mount plan: which paths are being mounted under which IDs.
+
+/// Print the mount plan to the terminal before launching daemons.
+///
+/// Shows each path and its assigned session ID so the user can verify
+/// the mapping before the (potentially long-running) mount begins. Also
+/// prints a hint about `nyne attach` and `nyne list` for discoverability.
 fn print_mount_plan(mounts: &[(SessionId, PathBuf)]) -> Result<()> {
     let term = output::term();
     term.write_line(&format!(
@@ -177,10 +233,32 @@ fn print_mount_plan(mounts: &[(SessionId, PathBuf)]) -> Result<()> {
     Ok(())
 }
 
-/// Build the FUSE session: prepare storage, activate providers, mount FUSE, and start the control server.
+/// Build and start a FUSE session with all supporting infrastructure.
 ///
-/// Called from inside the sandbox namespace — `mount_path` is the bind-mounted
-/// project directory visible to the daemon.
+/// Called from inside the sandbox namespace after fork -- `mount_path` is the
+/// bind-mounted project directory visible to the daemon. This function is the
+/// heart of the mount lifecycle:
+///
+/// 1. **Storage**: prepare the backing store (passthrough bind or clone overlay)
+///    per the configured [`StorageStrategy`].
+/// 2. **Providers**: activate all linked plugins via [`ProviderRegistry`], which
+///    populates the `TypeMap` with shared services.
+/// 3. **Scripts**: build the script registry from provider-contributed scripts.
+/// 4. **Router**: assemble the dispatch router that maps FUSE paths to provider
+///    content, including path filters for `.git/` exclusion.
+/// 5. **Visibility**: build the per-process visibility map from config defaults
+///    and plugin contributions (e.g., LSP servers needing passthrough).
+/// 6. **Control server**: start the Unix socket IPC server for `nyne ctl`/`exec`.
+/// 7. **FUSE mount**: spawn the `fuser` background session with [`FUSE_THREADS`]
+///    handler threads.
+/// 8. **Watcher**: start the filesystem watcher for change-driven invalidation.
+///
+/// Returns a boxed [`SessionGuard`] that keeps everything alive until dropped.
+///
+/// # Errors
+///
+/// Returns an error if any step fails (storage prep, FUSE mount, etc.).
+/// Control server failures are non-fatal -- logged as warnings.
 fn build_fuse_session(
     mount_path: &Path,
     session_id: &SessionId,

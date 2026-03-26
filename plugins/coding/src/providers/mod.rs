@@ -1,4 +1,12 @@
 //! Provider implementations that depend on code analysis.
+//!
+//! Each submodule registers a [`Provider`](nyne::provider::Provider) that contributes
+//! virtual nodes to the nyne VFS. Providers are activated during plugin startup and
+//! expose capabilities ranging from syntax decomposition and batch editing to
+//! Claude Code integration and workspace-wide symbol search.
+//!
+//! Shared utilities live in [`prelude`], [`names`], [`util`], and
+//! [`fragment_resolver`]; the remaining modules are self-contained providers.
 
 /// Shared resolver for lazily accessing decomposed source files.
 pub mod fragment_resolver;

@@ -9,6 +9,10 @@ use nyne::types::vfs_path::VfsPath;
 use crate::providers::names::{DIR_TODO, SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
 
 /// A single TODO/FIXME/etc. found in a source file.
+///
+/// Discovered by [`TodoScanner`](super::scan::TodoScanner) and exposed as
+/// symlinks under `@/todo/<TAG>/`. Each entry knows its source location
+/// and can generate a filesystem-safe name and a relative symlink target.
 #[derive(Debug, Clone)]
 pub(super) struct TodoEntry {
     /// Relative path of the source file (e.g., "src/main.rs").

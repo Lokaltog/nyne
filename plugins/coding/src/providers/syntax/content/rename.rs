@@ -1,6 +1,8 @@
-// Rename — DiffAction for preview, Renameable for apply.
-// Covers both symbol-level renames (textDocument/rename) and file-level
-// renames (workspace/willRenameFiles).
+//! LSP-powered symbol and file rename operations.
+//!
+//! Covers both symbol-level renames (`textDocument/rename`) and file-level
+//! renames (`workspace/willRenameFiles`). Each operation implements [`DiffAction`]
+//! for preview and can be applied via `mv` on the VFS directory.
 
 use std::sync::Arc;
 

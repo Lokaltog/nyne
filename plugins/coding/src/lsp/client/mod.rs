@@ -1,11 +1,14 @@
-// LspClient — spawns a language server subprocess and exposes LSP operations.
-//
-// Split into:
-//   mod.rs          — struct definition, lifecycle (spawn/init/shutdown/Drop), JSON-RPC plumbing
-//   queries.rs      — all LSP query methods, with DRY helpers for common patterns
-//   io.rs           — timeout-aware fd reading, stderr draining
-//   threads.rs      — background reader/writer thread loops, pending response map
-//   capabilities.rs — static client capabilities and propagated env vars
+//! LSP client that spawns a language server subprocess and communicates via JSON-RPC.
+//!
+//! The client is fully thread-safe: multiple FUSE handler threads issue concurrent
+//! requests without contention on stdio, because dedicated reader/writer threads own
+//! the server's stdio fds and all interaction goes through channels.
+//!
+//! Split across submodules for separation of concerns:
+//! - **`capabilities`** -- static client capabilities advertised during `initialize`
+//! - **`io`** -- timeout-aware fd reading and stderr draining
+//! - **`queries`** -- all LSP query methods with DRY macros for common patterns
+//! - **`threads`** -- background reader/writer loops and the pending response map
 
 /// Server capability detection and feature checks.
 mod capabilities;
@@ -55,9 +58,12 @@ pub struct FilePosition<'a> {
     pub character: u32,
 }
 
-/// Methods for converting file positions to LSP protocol types.
+/// Conversions from [`FilePosition`] to LSP protocol request parameters.
 impl FilePosition<'_> {
-    /// Convert to LSP `TextDocumentPositionParams` for requests.
+    /// Convert to LSP `TextDocumentPositionParams` for position-based requests.
+    ///
+    /// Resolves the file path to a `file://` URI via [`uri::text_document_id`].
+    /// Returns an error if the path cannot be converted to a valid URI.
     fn to_params(&self) -> Result<TextDocumentPositionParams> {
         Ok(TextDocumentPositionParams {
             text_document: uri::text_document_id(self.file)?,
@@ -356,8 +362,12 @@ impl LspClient {
 }
 
 /// Gracefully shuts down the language server on drop.
+///
+/// Sends the `shutdown` request followed by `exit` notification, matching
+/// the LSP lifecycle contract. Shutdown errors are logged but cannot
+/// propagate from `Drop` -- the server process is reaped by the `Spawner`
+/// regardless.
 impl Drop for LspClient {
-    /// Cleans up resources.
     fn drop(&mut self) {
         if let Err(e) = self.shutdown() {
             warn!(target: "nyne::lsp", server = %self.name, error = %e, "LSP shutdown failed");

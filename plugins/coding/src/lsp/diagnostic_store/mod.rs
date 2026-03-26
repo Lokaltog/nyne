@@ -1,10 +1,14 @@
-// Per-file diagnostic storage with condition-variable signaling.
-//
-// Captures `textDocument/publishDiagnostics` notifications from LSP servers
-// and provides a blocking `get_or_wait` for read-time freshness. The dirty
-// flag tracks whether a `didChange` was sent since the last publish — reads
-// on clean files return immediately, reads on dirty files block until the
-// server pushes fresh diagnostics or a timeout expires.
+//! Per-file diagnostic storage with condition-variable signaling.
+//!
+//! Captures `textDocument/publishDiagnostics` notifications from LSP servers
+//! and provides a blocking [`DiagnosticStore::get_or_wait`] for read-time
+//! freshness. A dirty flag per file tracks whether a `didChange` was sent
+//! since the last `publishDiagnostics` -- reads on clean files return
+//! immediately, reads on dirty files block until the server pushes fresh
+//! diagnostics or a timeout expires.
+//!
+//! This design lets FUSE reads of `DIAGNOSTICS.md` return up-to-date results
+//! after a file mutation without requiring the caller to poll.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -14,9 +18,16 @@ use lsp_types::Diagnostic;
 use parking_lot::{Condvar, Mutex};
 
 /// Per-file entry in the diagnostic store.
+///
+/// Tracks the most recent diagnostics from the server along with a dirty
+/// flag that indicates whether the file has been modified since the last
+/// `publishDiagnostics` notification. The flag drives the blocking behavior
+/// of [`DiagnosticStore::get_or_wait`].
 struct FileEntry {
+    /// Latest diagnostics received from the server for this file.
     diagnostics: Vec<Diagnostic>,
     /// Whether a `didChange` was sent since the last `publishDiagnostics`.
+    /// When `true`, readers block until the server publishes fresh results.
     dirty: bool,
 }
 

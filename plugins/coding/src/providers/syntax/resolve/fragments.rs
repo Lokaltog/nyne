@@ -13,7 +13,11 @@ use crate::syntax::fragment::FragmentKind;
 
 /// Fragment directory resolution methods for [`SyntaxProvider`].
 impl SyntaxProvider {
-    /// Resolve a fragment directory, listing its children and meta-files.
+    /// Resolve a fragment directory (`Foo@/`), assembling its full child listing.
+    ///
+    /// Emits: `body.<ext>`, meta-files (signature, docstring, decorators, OVERVIEW),
+    /// LSP feature files and symlink directories, code action directory, child
+    /// fragments, and a `code/` directory for fenced code blocks.
     pub(in super::super) fn resolve_fragment_dir(
         &self,
         source_file: &VfsPath,

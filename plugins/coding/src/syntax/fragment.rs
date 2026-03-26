@@ -10,6 +10,10 @@ use std::ops::Range;
 use strum::{Display as StrumDisplay, EnumString};
 
 /// Kind of a top-level source-code symbol.
+///
+/// Cross-language superset: not every variant applies to every language.
+/// Language decomposers map tree-sitter node kinds to these via
+/// `LanguageSpec::map_symbol_kind` / the `symbol_map!` macro.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, StrumDisplay, EnumString)]
 pub enum SymbolKind {
     Function,
@@ -103,8 +107,14 @@ pub enum FragmentMetadata {
     CodeBlock { index: usize },
 }
 
-/// A single decomposed piece of a file — a code symbol, docstring, import
+/// A single decomposed piece of a file -- a code symbol, docstring, import
 /// block, decorator, or document section.
+///
+/// Fragments form a tree: a function fragment may have docstring and
+/// decorator children, and an impl block may have method children.
+/// Each fragment carries its source byte range so that the VFS can
+/// serve content directly from the original source and splice writes
+/// back into it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fragment {
     pub name: String,
@@ -238,14 +248,25 @@ impl Fragment {
 pub type DecomposedFile = Vec<Fragment>;
 
 /// Find the first fragment of a given kind in a fragment slice.
+///
+/// Linear scan; typically used on small child lists to locate the
+/// imports or docstring fragment for a symbol.
 pub fn find_fragment_of_kind<'a>(fragments: &'a [Fragment], kind: &FragmentKind) -> Option<&'a Fragment> {
     fragments.iter().find(|f| f.kind == *kind)
 }
 
 /// Default maximum nesting depth for recursive fragment extraction.
+///
+/// Set to 5 to handle common nesting patterns (module > impl > fn > closure)
+/// without exploding on pathological inputs. Deeper nesting is flattened
+/// into the parent fragment's body.
 pub const DEFAULT_MAX_DEPTH: usize = 5;
 
 /// A syntax error detected by tree-sitter in the parse tree.
+///
+/// Collected from ERROR and MISSING nodes after parsing. Used by the
+/// validation step in splice operations to reject edits that would
+/// introduce syntax errors.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
     /// 0-based start line.
@@ -261,6 +282,9 @@ pub struct ParseError {
 }
 
 /// A group of fragments that share the same `fs_name` and need disambiguation.
+///
+/// Passed to [`Decomposer::resolve_conflicts`] which returns [`Resolution`]s
+/// with updated names (typically `~Kind` suffixed, e.g. `Foo~Struct` vs `Foo~Impl`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConflictSet {
     /// The colliding filesystem name.

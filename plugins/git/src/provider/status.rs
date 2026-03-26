@@ -8,6 +8,10 @@ use nyne::templates::{TemplateEngine, TemplateView};
 use crate::repo::GitRepo;
 
 /// Git status view — renders working tree and index state.
+///
+/// Backs the `@/git/STATUS.md` virtual file. Calls [`GitRepo::status()`]
+/// at read time to capture branch, tracking, staged/modified files, and
+/// recent commits, then renders the result via Jinja template.
 pub(super) struct GitStatusView {
     pub repo: Arc<GitRepo>,
 }

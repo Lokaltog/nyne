@@ -1,5 +1,12 @@
 //! Directory provider — lists contents and provides metadata.
 
+//! Directory overview provider -- generates `OVERVIEW.md` for directory companions.
+//!
+//! When a user reads `dir@/OVERVIEW.md`, this provider renders a summary of
+//! the directory's contents (file listing with sizes, extensions, and token
+//! estimates). The template is registered once at activation time and rendered
+//! on each read with live filesystem data.
+
 use std::sync::Arc;
 
 use nyne_macros::routes;
@@ -92,6 +99,10 @@ impl DirectoryProvider {
 }
 
 /// A file entry for the directory overview template.
+///
+/// Serialized into the Jinja template context so the overview can render
+/// a table row per file with name, size, and a one-line description
+/// (extracted from the first non-empty line of the file content).
 #[derive(Serialize)]
 struct FileEntry {
     name: String,

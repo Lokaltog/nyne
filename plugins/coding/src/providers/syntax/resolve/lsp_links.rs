@@ -122,6 +122,10 @@ impl SyntaxProvider {
     }
 
     /// Convert LSP targets into deduplicated symlink nodes.
+    ///
+    /// For each target, attempts to resolve a symbol-level link via tree-sitter
+    /// decomposition of the target file. Falls back to a line-slice link when
+    /// symbol resolution fails (e.g. the target file has no decomposer).
     fn build_target_nodes(&self, targets: &[LspTarget], root: &Path, base: &VfsPath) -> Vec<VirtualNode> {
         let mut nodes = Vec::new();
         let mut seen = HashSet::new();

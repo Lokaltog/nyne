@@ -73,6 +73,10 @@ impl Provider for GitCompanionProvider {
 }
 
 /// Git-aware file rename: filesystem rename + git index update.
+///
+/// Attached to companion directory nodes so that `mv old.rs@ new.rs@`
+/// performs both the real filesystem rename and a `git mv` equivalent
+/// (removing the old path and adding the new path in the git index).
 struct GitFileRename {
     repo: Option<Arc<GitRepo>>,
     source_file: VfsPath,

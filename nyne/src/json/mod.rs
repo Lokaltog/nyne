@@ -27,6 +27,7 @@ enum NullPolicy {
     Skip,
 }
 
+/// Recursive merge implementation shared by [`deep_merge`] and [`deep_merge_non_null`].
 fn merge_inner(base: &mut Value, overlay: &Value, null_policy: NullPolicy) {
     let skip = null_policy == NullPolicy::Skip;
     match (base, overlay) {

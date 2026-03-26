@@ -1,3 +1,10 @@
+//! Coding plugin configuration types and deserialization.
+//!
+//! All config lives under `[plugin.coding]` in `config.toml`. The top-level
+//! struct is [`CodingConfig`], which nests sub-configs for LSP, analysis,
+//! Claude hooks, and tool-use policies. Serde's `deny_unknown_fields` is
+//! applied on every struct to catch typos early.
+
 /// LSP configuration types.
 pub mod lsp;
 

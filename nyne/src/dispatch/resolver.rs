@@ -1,5 +1,20 @@
 //! Resolver trait and implementation for Router with recursion depth guard.
 
+//! Resolver trait for virtual path-to-node resolution with recursion guard.
+//!
+//! The [`Resolver`] trait is the controlled escape hatch that lets nodes and
+//! providers access the router's resolution and lookup capabilities. Without it,
+//! a node's `read()` handler would have no way to discover sibling or child
+//! nodes (e.g., an `OVERVIEW.md` that lists all symbols in a directory).
+//!
+//! Because resolution can trigger further resolution (a node's content may
+//! depend on resolving another directory), a thread-local depth counter
+//! prevents infinite recursion. The limit ([`MAX_RESOLVER_DEPTH`]) is generous
+//! enough for legitimate chains (e.g., companion -> symbols -> nested impl)
+//! but catches bugs quickly.
+//!
+//! This is an **interface module** — the trait may be imported from any tier.
+
 use std::cell::Cell;
 use std::sync::Arc;
 

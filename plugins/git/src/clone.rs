@@ -15,8 +15,16 @@ use nyne::config::StorageStrategy;
 use nyne::{ClonerFactory, PROJECT_CLONERS, ProjectCloner};
 use tracing::{debug, info};
 
+/// Git-backed [`ProjectCloner`] for overlay lowerdir construction.
+///
+/// Supports two strategies: [`Snapshot`](StorageStrategy::Snapshot) copies only
+/// HEAD tree objects via the ODB (fast, minimal), while
+/// [`Hardlink`](StorageStrategy::Hardlink) does a full `git clone --local`.
+/// Registered at link time via the [`PROJECT_CLONERS`] distributed slice.
 struct GitCloner;
 
+/// Dispatches to [`clone_snapshot`] or [`clone_hardlink`] based on the
+/// requested [`StorageStrategy`]. Panics on `Passthrough` (no cloning needed).
 impl ProjectCloner for GitCloner {
     fn clone_project(&self, source: &Path, target: &Path, strategy: StorageStrategy) -> Result<()> {
         fs::create_dir_all(target).wrap_err_with(|| format!("creating clone target {}", target.display()))?;

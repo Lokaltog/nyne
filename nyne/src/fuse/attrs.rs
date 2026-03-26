@@ -1,5 +1,17 @@
-//! `FileAttr` construction pipeline — timestamps, permission mapping, FUSE
-//! attribute building for real and virtual inodes.
+//! `FileAttr` construction pipeline for the FUSE filesystem.
+//!
+//! Centralizes all `fuser::FileAttr` construction so permission mapping,
+//! timestamp handling, and TTL policy live in one place. Key design decisions:
+//!
+//! - **Directories always report `r-xr-xr-x`** — stripping write bits prevents
+//!   editors from attempting atomic saves (rename-write-unlink) while still
+//!   allowing FUSE to receive and handle mutation callbacks.
+//! - **Virtual file `st_size` is advisory** — all virtual files use `FOPEN_DIRECT_IO`,
+//!   so the kernel reads until EOF regardless. We report the L2 cache size when
+//!   available, falling back to a non-zero sentinel (zero causes `cat`/`wc` to
+//!   report empty files).
+//! - **Derived/shadow inodes use TTL=0** — forces every access through the daemon's
+//!   generation-based staleness check and per-process visibility demoting.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -13,10 +25,17 @@ use crate::types::file_kind::FileKind;
 use crate::types::vfs_path::VfsPath;
 
 /// TTL for cached attribute/entry responses on most paths.
+///
+/// The kernel caches `FileAttr` and directory entry results for this duration
+/// before re-querying the daemon. Derived and shadow inodes override this to
+/// [`Duration::ZERO`] so staleness is checked on every access.
 const TTL: Duration = Duration::from_secs(1);
 
-/// Block size used for `st_blksize` in file attributes and as the
-/// placeholder size for virtual files.
+/// Block size reported in `st_blksize` and used as the fallback `st_size`
+/// for virtual files whose true size is unknown.
+///
+/// Must be non-zero: `st_size=0` causes tools like `cat` and `wc` to report
+/// empty files even with `FOPEN_DIRECT_IO` (which reads until EOF).
 const BLKSIZE: u32 = 4096;
 
 /// FUSE inode generation — always zero since we don't reuse inode numbers.
@@ -35,7 +54,11 @@ pub(super) const fn file_kind_to_fuse(ft: FileKind) -> FileType {
 }
 
 #[derive(Clone, Copy)]
-/// Timestamp triplet for file attribute construction.
+/// Timestamp triplet for [`make_attr`].
+///
+/// Separating timestamps into a struct avoids positional ambiguity at
+/// call sites — each field is named rather than being the 4th-vs-5th
+/// `SystemTime` argument.
 struct Timestamps {
     atime: SystemTime,
     mtime: SystemTime,
@@ -43,6 +66,10 @@ struct Timestamps {
 }
 
 /// Build a `fuser::FileAttr` with common defaults.
+///
+/// Fills in block count, nlink (2 for directories, 1 otherwise), and
+/// uid/gid from the FUSE request (so files appear owned by the caller).
+/// All attr construction funnels through this function.
 fn make_attr(ino: u64, size: u64, kind: FileType, perm: u16, ts: Timestamps, req: &Request) -> fuser::FileAttr {
     fuser::FileAttr {
         ino: INodeNo(ino),
@@ -66,6 +93,10 @@ fn make_attr(ino: u64, size: u64, kind: FileType, perm: u16, ts: Timestamps, req
 /// Attribute construction methods for the FUSE filesystem.
 impl NyneFs {
     /// Build a `fuser::FileAttr` and TTL for a given inode.
+    ///
+    /// Returns `None` if the inode is unknown or (for passthrough processes)
+    /// the underlying real file no longer exists. The TTL varies: derived and
+    /// shadow inodes get `Duration::ZERO`, everything else gets [`TTL`].
     pub(super) fn build_attr(&self, ino: u64, req: &Request) -> Option<(fuser::FileAttr, Duration)> {
         if ino == Router::ROOT_INODE {
             return Some((Self::root_attr(req), TTL));
@@ -77,6 +108,11 @@ impl NyneFs {
     }
 
     /// Build attributes for a real filesystem inode.
+    ///
+    /// Reads metadata from the real filesystem and maps it to FUSE attrs.
+    /// Directory permissions have write bits stripped (see module docs).
+    /// The `atime` is taken from [`NyneFs::atime_overrides`] if present,
+    /// otherwise falls back to `UNIX_EPOCH` (real atime is not tracked).
     fn build_real_attr(
         &self,
         ino: u64,
@@ -113,6 +149,14 @@ impl NyneFs {
     }
 
     /// Build attributes for a virtual (provider-generated) inode.
+    ///
+    /// Size, mtime, and ctime can be overridden by the node's [`Lifecycle::getattr`]
+    /// hook. Without overrides, mtime defaults to `UNIX_EPOCH` for stability —
+    /// `SystemTime::now()` caused "file modified since opening" warnings in neovim
+    /// because every getattr returned a different mtime.
+    ///
+    /// TTL is structural (not configurable): derived inodes (those with a source
+    /// file) and shadow inodes use `Duration::ZERO` to force re-validation.
     fn build_virtual_attr(
         &self,
         ino: u64,

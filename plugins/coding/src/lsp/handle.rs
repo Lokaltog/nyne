@@ -20,7 +20,15 @@ use super::query::FileQuery;
 use super::uri::byte_offset_to_position;
 use crate::services::CodingServices;
 
-/// Handle to LSP capabilities and queries for a single source file.
+/// Per-file handle to an LSP language server.
+///
+/// Created by [`Self::for_file`] during provider resolve, which acquires
+/// the appropriate [`LspClient`] based on file extension. The handle caches
+/// the client reference and overlay-rooted file path so that downstream
+/// queries (hover, references, rename, etc.) avoid repeated lookups.
+///
+/// Use [`at`](Self::at) to create a position-scoped [`SymbolQuery`] for
+/// symbol-level operations.
 pub struct LspHandle {
     manager: Arc<LspManager>,
     /// Cached client — acquired at resolve time for capability checks.
@@ -28,6 +36,7 @@ pub struct LspHandle {
     /// File path using the overlay root — matches the workspace root
     /// that LSP servers see (they run as daemon children on the overlay).
     lsp_file: PathBuf,
+    /// File extension used for LSP language ID lookup.
     ext: String,
 }
 
@@ -92,14 +101,16 @@ impl LspHandle {
     pub(crate) fn path_resolver(&self) -> &super::path::LspPathResolver { self.manager.path_resolver() }
 }
 
-/// Symbol-level LSP query context — an `LspHandle` bound to a specific position.
+/// Symbol-level LSP query context — an [`LspHandle`] bound to a specific position.
 ///
-/// Clone-friendly for embedding in multiple `VirtualNode` readables
-/// (e.g., REFERENCES.md and HOVER.md for the same symbol).
+/// Created by [`LspHandle::at`] with a byte offset that is converted to an
+/// LSP `Position`. Clone-friendly (`Arc<LspHandle>` inside) for embedding
+/// in multiple `VirtualNode` readables (e.g., `REFERENCES.md` and `DOC.md`
+/// for the same symbol share a cloned `SymbolQuery`).
 #[derive(Clone)]
-/// Symbol-level LSP query context.
 pub struct SymbolQuery {
     handle: Arc<LspHandle>,
+    /// LSP position (line + UTF-16 character offset) this query is bound to.
     position: Position,
 }
 

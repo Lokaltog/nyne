@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 use crate::repo::GitRepo;
 
-/// Context for a git view — repo and the relative path being inspected.
+/// Context for a git view — repo handle and the git-relative path being inspected.
+///
+/// Shared by all per-file git view structs (blame, log, contributors, notes)
+/// via the [`git_template_view!`](super::git_template_view) macro.
 #[derive(Clone)]
 pub struct FileViewCtx {
     pub repo: Arc<GitRepo>,

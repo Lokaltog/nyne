@@ -1,4 +1,14 @@
-// Background thread infrastructure for the LSP client: writer and reader loops.
+//! Background threads that own the LSP server's stdio file descriptors.
+//!
+//! Two threads run per `LspClient`:
+//! - **Writer** ([`writer_loop`]): drains a channel of outbound JSON-RPC messages
+//!   and writes them to the server's stdin with Content-Length framing.
+//! - **Reader** ([`reader_loop`]): reads all inbound messages from the server's
+//!   stdout, dispatching responses to waiting callers via oneshot channels and
+//!   storing push diagnostics in the [`DiagnosticStore`].
+//!
+//! This design decouples FUSE handler threads from raw stdio: they never touch
+//! the fds directly, only interact via channels and the pending response map.
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -16,7 +26,12 @@ use super::io::TimeoutReader;
 use super::transport;
 use crate::lsp::diagnostic_store::DiagnosticStore;
 
-/// Pending response map: request id -> oneshot sender for the result.
+/// Pending response map: JSON-RPC request id to a oneshot sender for the result.
+///
+/// Shared between `LspClient` (which inserts entries before sending a request)
+/// and the reader thread (which removes entries when dispatching responses).
+/// Protected by a `Mutex` because insertions and removals happen on different
+/// threads. The lock is held only briefly -- never across I/O.
 pub(super) type PendingResponses = Mutex<HashMap<i64, crossbeam_channel::Sender<Result<serde_json::Value>>>>;
 
 /// Writer thread: reads JSON-RPC messages from the channel and writes
@@ -136,8 +151,12 @@ pub(super) fn reader_loop(
     }
 }
 
-/// Dispatch a server notification. `publishDiagnostics` is stored in the
-/// [`DiagnosticStore`]; all other notifications are traced and discarded.
+/// Dispatch a server-initiated notification.
+///
+/// Only `textDocument/publishDiagnostics` is actionable -- its diagnostics
+/// are parsed and stored in the [`DiagnosticStore`], which wakes any FUSE
+/// threads blocked in [`DiagnosticStore::get_or_wait`]. All other
+/// notifications are logged at `trace` level and discarded.
 fn handle_notification(msg: &serde_json::Value, store: &DiagnosticStore, server_name: &str) {
     let method = msg.get("method").and_then(|m| m.as_str()).unwrap_or("?");
 

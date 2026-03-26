@@ -1,4 +1,10 @@
-// Static LSP client configuration: environment variables and capability declarations.
+//! Static LSP client configuration: environment variables propagated to server
+//! subprocesses and the `ClientCapabilities` advertised during the `initialize`
+//! handshake.
+//!
+//! These are compile-time constants -- they never change at runtime. Keeping
+//! them separate from the client lifecycle code avoids cluttering `mod.rs`
+//! with large struct literals.
 
 use lsp_types::{
     CallHierarchyClientCapabilities, ClientCapabilities, CodeActionCapabilityResolveSupport,
@@ -33,14 +39,30 @@ pub(super) const PROPAGATED_ENV_VARS: &[&str] = &[
     "RUSTUP_TOOLCHAIN",
 ];
 
-/// Static goto capability — reused for definition, declaration,
-/// `type_definition`, and implementation (all identical).
+/// Shared goto capability declaration reused by definition, declaration,
+/// type-definition, and implementation.
+///
+/// All four advertise the same settings: no dynamic registration (capabilities
+/// are fixed at handshake time) and no `LocationLink` support (we normalize
+/// everything to plain `Location` in [`super::queries::goto_response_to_locations`]).
 const GOTO_CAPABILITY: GotoCapability = GotoCapability {
     dynamic_registration: Some(false),
     link_support: Some(false),
 };
 
-/// Build the client capabilities we advertise to servers.
+/// Build the `ClientCapabilities` sent in the `initialize` request.
+///
+/// This is the single source of truth for what nyne tells LSP servers it
+/// supports. Key design choices:
+///
+/// - **No dynamic registration** -- all capabilities are declared statically
+///   at handshake time, keeping the protocol exchange simple.
+/// - **Full document sync** -- `didSave` is disabled because nyne sends
+///   `didChange` with the complete content on every mutation.
+/// - **Code action resolve** -- we request the `edit` property lazily via
+///   `codeAction/resolve` to avoid computing expensive edits eagerly.
+/// - **File operations** -- `willRename`/`didRename` are advertised so
+///   servers can compute import-path rewrites on file moves.
 pub(super) fn client_capabilities() -> ClientCapabilities {
     ClientCapabilities {
         text_document: Some(TextDocumentClientCapabilities {

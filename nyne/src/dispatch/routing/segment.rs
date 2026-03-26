@@ -1,3 +1,12 @@
+//! Segment pattern types and matching logic.
+//!
+//! Defines [`SegmentMatcher`], the core pattern-matching primitive for the
+//! route tree. Each variant matches a single path segment (or multiple,
+//! in the case of rest-captures). The matcher is domain-agnostic -- it
+//! knows nothing about VFS semantics, companion directories, or providers.
+//! This separation keeps the routing layer reusable and testable in
+//! isolation.
+
 /// Segment pattern types for route matching.
 ///
 /// Domain-agnostic — no VFS-specific variants. Generic parametric
@@ -27,11 +36,18 @@ pub enum SegmentMatcher {
 }
 
 /// Result of a single-segment match attempt.
+///
+/// Returned by [`SegmentMatcher::matches`] to communicate both whether
+/// a segment matched and what value (if any) was captured. The tree
+/// walk uses [`apply_capture`](super::tree::apply_capture) to fold
+/// this into the accumulated [`RouteParams`](super::params::RouteParams).
 #[derive(Debug)]
 pub(super) enum CaptureResult {
-    /// No capture (exact or glob match).
+    /// The segment matched but produced no capture (exact or glob match).
     None,
-    /// Single-segment capture: (name, `captured_value`).
+    /// The segment matched a capture pattern: `(capture_name, captured_value)`.
+    ///
+    /// The prefix and/or suffix have already been stripped from the value.
     Single(&'static str, String),
 }
 
@@ -39,8 +55,16 @@ pub(super) enum CaptureResult {
 impl SegmentMatcher {
     /// Match a single path segment against this pattern.
     ///
-    /// Returns `None` if no match. `RestCapture` and `Root` are handled
-    /// by the tree walk, not by this method.
+    /// Returns `Some(CaptureResult)` on match, `None` on mismatch.
+    /// For `Capture` patterns, the prefix/suffix are stripped and the
+    /// remaining non-empty content becomes the captured value. An empty
+    /// capture (e.g., just the prefix+suffix with nothing between) is
+    /// treated as a non-match to avoid creating meaningless empty params.
+    ///
+    /// `RestCapture`, `Root`, and `Glob` always return `None` here --
+    /// they require multi-segment or structural matching handled by the
+    /// tree walk in [`RouteNode::dispatch_children`](super::tree::RouteNode)
+    /// and related functions.
     pub(super) fn matches(&self, segment: &str) -> Option<CaptureResult> {
         match self {
             Self::Exact(expected) => (segment == *expected).then_some(CaptureResult::None),
@@ -63,7 +87,17 @@ impl SegmentMatcher {
     }
 
     /// Precedence rank for deterministic matching order [DD-21].
-    /// Lower is higher priority.
+    ///
+    /// Lower values mean higher priority. Used by
+    /// [`RouteNodeBuilder::build`](super::builder::RouteNodeBuilder::build)
+    /// to sort sub-routes so the tree walk tries the most specific
+    /// matchers first:
+    ///
+    /// `Root(0) > Exact(1) > Capture+affix(2) > Capture(3) > RestCapture(4) > Glob(5)`
+    ///
+    /// This eliminates ambiguity when multiple patterns could match the
+    /// same segment -- the first match wins, and specificity ordering
+    /// guarantees deterministic results.
     pub(super) const fn precedence(&self) -> u8 {
         match self {
             Self::Root => 0,

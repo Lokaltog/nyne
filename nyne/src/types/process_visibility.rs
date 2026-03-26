@@ -1,3 +1,10 @@
+//! Per-process visibility levels controlling VFS content filtering.
+//!
+//! Each process attached to a nyne sandbox can have its own visibility level,
+//! determining whether it sees virtual nodes, hidden companion directories,
+//! or only the raw real filesystem. This allows tools like git and LSP servers
+//! to operate on the real files while interactive shells see the full VFS.
+
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use strum::Display;

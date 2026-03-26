@@ -1,3 +1,8 @@
+//! Symbol body write and splice operations.
+//!
+//! Validates new content with tree-sitter before splicing it back into the
+//! source file, rejecting writes that would introduce parse errors.
+
 use std::str::from_utf8;
 
 use color_eyre::eyre::Result;

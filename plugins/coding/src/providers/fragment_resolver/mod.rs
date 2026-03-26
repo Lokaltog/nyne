@@ -19,6 +19,11 @@ use crate::syntax::decomposed::{DecomposedSource, DecompositionCache};
 /// Holds a [`DecompositionCache`] reference and a source file path.
 /// Every access re-decomposes (or hits the cache), guaranteeing fresh
 /// data even after the source file has been modified.
+///
+/// This is the **canonical way** for content readers and splice writers to
+/// access decomposition data. Capturing `Arc<DecomposedSource>` directly on
+/// a `Readable`/`TemplateView` would snapshot stale data — `FragmentResolver`
+/// defers resolution to call time so reads after writes see current content.
 #[derive(Clone)]
 pub struct FragmentResolver {
     cache: DecompositionCache,

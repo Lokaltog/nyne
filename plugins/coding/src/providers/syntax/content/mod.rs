@@ -1,3 +1,9 @@
+//! Content reading, writing, and rendering for decomposed symbols.
+//!
+//! Each submodule handles a different aspect of symbol content: body splicing,
+//! meta-files (signature, docstring, decorators), LSP features, overview tables,
+//! rename/delete previews, and code-analysis hints.
+
 /// LSP code action resolution and application.
 pub(super) mod actions;
 /// Symbol deletion with surrounding whitespace cleanup.

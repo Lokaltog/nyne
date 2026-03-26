@@ -44,6 +44,10 @@ pub const DEFAULT_DISABLED_RULES: &[&str] = &[
 ];
 
 /// Factory function that creates analysis rule instances at startup.
+///
+/// Registered via the `register_analysis_rule!` macro into the
+/// [`ANALYSIS_RULE_FACTORIES`] distributed slice. Each factory may
+/// return multiple rules (e.g. a single module registering related checks).
 pub type AnalysisRuleFactory = fn() -> Vec<Box<dyn AnalysisRule>>;
 
 /// Distributed slice collecting all registered analysis rule factories.
@@ -80,6 +84,10 @@ pub enum Severity {
 }
 
 /// A hint produced by an analysis rule.
+///
+/// Carries the source location, severity, human-readable message, and
+/// optional suggestions. Converted to [`HintView`] for template rendering
+/// and serialization.
 #[derive(Debug, Clone)]
 pub struct Hint {
     pub rule_id: &'static str,
@@ -121,6 +129,9 @@ impl From<&Hint> for HintView {
 }
 
 /// Context provided to analysis rules during inspection.
+///
+/// Gives rules access to the full source text (for byte-range extraction)
+/// and the activation context (for config-dependent thresholds).
 pub struct AnalysisContext<'a> {
     pub source: &'a str,
     pub activation: &'a ActivationContext,

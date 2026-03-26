@@ -149,6 +149,9 @@ pub fn fragment_list(fragments: &[Fragment], shared: &Arc<DecomposedSource>) -> 
 }
 
 /// Format a fragment's kind for display (e.g. "Struct", "h2").
+///
+/// Produces concise labels for the "Kind" column in OVERVIEW.md symbol tables.
+/// Code blocks include the language tag when available (e.g. "CodeBlock(rust)").
 fn format_kind(frag: &Fragment) -> String {
     match &frag.kind {
         FragmentKind::Symbol(k) => k.to_string(),
@@ -164,6 +167,9 @@ fn format_kind(frag: &Fragment) -> String {
 }
 
 /// Shorten Rust visibility qualifiers for display.
+///
+/// Renders `pub(crate)` as `crate`, `pub(super)` as `super`, etc.
+/// Used in OVERVIEW.md symbol tables where column width is limited.
 fn compact_visibility(vis: &str) -> &str {
     match vis {
         "pub" => "pub",
@@ -197,6 +203,9 @@ fn code_block_summary(children: &[Fragment]) -> String {
 }
 
 /// First non-empty, non-heading line from a markdown section body.
+///
+/// Used as the description column in OVERVIEW.md for document sections,
+/// where the heading itself is already the section name.
 fn section_first_line(body: &str) -> Option<String> {
     body.lines()
         .map(str::trim)

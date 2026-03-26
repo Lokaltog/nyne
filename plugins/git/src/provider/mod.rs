@@ -31,6 +31,11 @@ use crate::names::{
 use crate::repo::GitRepo;
 
 /// Define a per-file git view struct backed by `FileViewCtx`.
+///
+/// Generates a tuple struct wrapping [`FileViewCtx`] and a [`TemplateView`]
+/// impl that fetches data from the repo at read time. The `$fetch` expression
+/// receives the repo and relative path, and must return `Result<T>` where `T`
+/// is serializable.
 macro_rules! git_template_view {
     ($(#[$attr:meta])* $name:ident, |$repo:ident, $path:ident| $fetch:expr) => {
         $(#[$attr])*
@@ -78,6 +83,9 @@ use status::GitStatusView;
 use views::{SlicedBlameView, SlicedLogView};
 
 /// Lifecycle that reports a git commit timestamp as the node's mtime.
+///
+/// Attached to history version nodes so that `ls -l` shows the commit date
+/// rather than the current time. The inner value is seconds since epoch.
 pub struct CommitMtime(pub i64);
 
 /// [`Lifecycle`] implementation for [`CommitMtime`].

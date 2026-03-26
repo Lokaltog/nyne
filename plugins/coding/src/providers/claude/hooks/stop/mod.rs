@@ -21,6 +21,11 @@ use crate::providers::names;
 const TMPL_STOP: &str = "claude/stop";
 
 /// Stop hook script implementation.
+///
+/// Scans the Claude Code transcript for Edit/Write tool uses in the
+/// current turn. If code changes are detected, blocks the stop and
+/// emits a review prompt listing modified files, reminding the agent
+/// to verify SSOT/DRY compliance before concluding.
 pub(in crate::providers::claude) struct Stop {
     engine: Arc<TemplateEngine>,
     config: StopHookConfig,

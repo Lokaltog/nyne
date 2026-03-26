@@ -1,5 +1,16 @@
 //! Bidirectional inode number <-> VFS location mapping with growth-only semantics.
 
+//! Bidirectional inode number to VFS location mapping with growth-only semantics.
+//!
+//! FUSE identifies every file and directory by a 64-bit inode number.
+//! The [`InodeMap`] translates between these opaque numbers and the
+//! `(dir_path, name)` locations used by the L1 cache. A `Slab` provides
+//! O(1) allocation and lookup, with inode numbers derived from slab
+//! indices plus a fixed offset to avoid the FUSE-reserved range.
+//!
+//! Entries are **never removed** (growth-only) to guarantee inode uniqueness
+//! across the lifetime of the mount. See [`InodeMap`] for the rationale.
+
 use std::sync::Arc;
 
 use parking_lot::RwLock;

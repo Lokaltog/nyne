@@ -1,12 +1,17 @@
-// Shared diagnostic formatting for template rendering.
-//
-// SSOT for the `lsp_types::Diagnostic` → `DiagnosticRow` conversion.
-// Used by both the DIAGNOSTICS.md provider and the post-tool-use hook.
+//! Shared diagnostic formatting for template rendering.
+//!
+//! SSOT for the `lsp_types::Diagnostic` to [`DiagnosticRow`] conversion.
+//! Used by both the `DIAGNOSTICS.md` provider and the post-tool-use hook,
+//! ensuring consistent formatting across all diagnostic surfaces.
 
 use lsp_types::{Diagnostic, DiagnosticSeverity};
 use serde::Serialize;
 
-/// A diagnostic row for template rendering.
+/// A single diagnostic formatted for template rendering.
+///
+/// All fields are template-friendly: positions are 1-based (human-readable),
+/// severity is a lowercase label string, and code/source are pre-extracted
+/// from the LSP `Diagnostic`'s optional fields.
 #[derive(Debug, Clone, Serialize)]
 pub struct DiagnosticRow {
     pub line: u32,
@@ -18,6 +23,10 @@ pub struct DiagnosticRow {
 }
 
 /// Convert LSP diagnostics to template-ready rows.
+///
+/// Converts 0-based LSP positions to 1-based line/column numbers and
+/// extracts optional fields (code, source) into plain strings. The
+/// resulting rows are directly consumable by `minijinja` templates.
 pub fn diagnostics_to_rows(diags: &[Diagnostic]) -> Vec<DiagnosticRow> {
     diags
         .iter()

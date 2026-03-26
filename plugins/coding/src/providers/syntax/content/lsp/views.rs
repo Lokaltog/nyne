@@ -1,4 +1,8 @@
-// View structs and TemplateView impls for LSP result rendering.
+//! View types for rendering LSP query results into Jinja templates.
+//!
+//! Each LSP feature has a corresponding view struct that transforms raw LSP
+//! protocol responses into serializable data for template rendering.
+//! [`LspQueryResult`] is the unified return type from all LSP queries.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -188,7 +192,10 @@ impl InlayHintsRenderView {
     }
 }
 
-/// View for rendering diagnostic results.
+/// View for rendering file-level LSP diagnostics (errors, warnings, hints).
+///
+/// Unlike per-symbol views, diagnostics cover the entire file and are not
+/// position-scoped. Serialized directly into the diagnostics Jinja template.
 #[derive(Serialize)]
 pub(super) struct DiagnosticsView<'a> {
     pub items: &'a [DiagnosticRow],

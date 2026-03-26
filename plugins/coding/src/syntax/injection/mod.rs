@@ -15,6 +15,12 @@ use super::spec::{Decomposer, SpliceMode};
 
 /// Compound decomposer that delegates inner-language parsing through an
 /// outer template grammar with byte-range remapping.
+///
+/// For a file like `schema.sql.j2`, the outer grammar (Jinja2) identifies
+/// content regions vs template directives. Content regions are concatenated
+/// and handed to the inner decomposer (SQL). A [`SpanMap`] then remaps the
+/// resulting fragments' byte ranges from the virtual concatenated space back
+/// to their real positions in the original file.
 pub(super) struct InjectionDecomposer {
     inner: Arc<dyn Decomposer>,
     /// File extension used for the compound file (the inner extension).

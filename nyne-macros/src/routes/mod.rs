@@ -1,3 +1,10 @@
+//! Route tree macro implementation: parsing, validation, and code generation.
+//!
+//! This module orchestrates the three-phase pipeline for the [`routes!`](crate::routes) macro.
+//! The public entry point is [`expand`], which validates a parsed AST and delegates to the
+//! [`codegen`] module for token generation. Validation happens here rather than during parsing
+//! so that parse errors are reported first (syntax before semantics).
+
 /// Code generation: transforms validated route AST into token streams.
 mod codegen;
 /// Parsing: converts `routes!` token input into a typed AST.
@@ -10,12 +17,21 @@ use proc_macro2::{Span, TokenStream};
 use syn::Result;
 
 /// Validate and expand parsed route input into a `RouteTree` token stream.
+///
+/// This is the main entry point called by the [`routes!`](crate::routes) proc macro after
+/// parsing. Validation runs first to catch structural errors (duplicate segments, ambiguous
+/// patterns) before code generation begins — this ensures users see the most actionable
+/// error message rather than confusing generated-code failures.
 pub fn expand(input: &RoutesInput) -> Result<TokenStream> {
     validate_entries(&input.entries)?;
     codegen::generate(input)
 }
 
-/// Validate a list of route entries for duplicate segments and ambiguous patterns at each level.
+/// Validate a list of route entries for structural correctness.
+///
+/// Filters out non-segment entries (lookups, files, children) since only segments
+/// can conflict with each other at the same nesting level, then delegates to
+/// [`validate_segments`] for the actual duplicate/ambiguity checks.
 fn validate_entries(entries: &[RouteEntry]) -> Result<()> {
     validate_segments(
         &entries
@@ -25,7 +41,12 @@ fn validate_entries(entries: &[RouteEntry]) -> Result<()> {
     )
 }
 
-/// Validate a list of segment routes for duplicates and ambiguous patterns at each level.
+/// Validate a list of segment routes for duplicates and ambiguous patterns.
+///
+/// Initializes per-kind tracking state (exact name set, capture/rest/glob spans) and
+/// validates each segment against it. This enforces the rule that at any given nesting
+/// level there can be at most one capture, one rest capture, and one glob — but any
+/// number of distinct exact segments.
 fn validate_segments(segments: &[&SegmentRoute]) -> Result<()> {
     let mut exact_names: HashMap<String, Span> = HashMap::new();
     let mut capture_span: Option<Span> = None;
@@ -38,7 +59,18 @@ fn validate_segments(segments: &[&SegmentRoute]) -> Result<()> {
     Ok(())
 }
 
-/// Validate a single segment route: reject duplicate exact names, multiple captures/globs, and invalid lookup patterns.
+/// Validate a single segment route against the accumulated state for its nesting level.
+///
+/// Enforces three invariants per nesting level:
+/// 1. No two exact segments share the same name (would be ambiguous during lookup).
+/// 2. At most one capture pattern (multiple `{name}` patterns cannot be distinguished).
+/// 3. At most one rest capture and one glob (same ambiguity reason).
+///
+/// After checking the current segment, recursively validates its children with fresh
+/// accumulators — each nesting level has independent uniqueness constraints.
+///
+/// Lookup patterns are not validated here; they are checked during parsing to ensure
+/// they are `Capture` variants with at least a prefix or suffix.
 fn validate_segment(
     seg: &SegmentRoute,
     exact_names: &mut HashMap<String, Span>,
@@ -74,7 +106,11 @@ fn validate_segment(
     Ok(())
 }
 
-/// Reject a second occurrence of a pattern kind, pointing at both locations.
+/// Reject a second occurrence of a pattern kind at the same nesting level.
+///
+/// If `first` is already `Some`, produces a compile error pointing at both the
+/// original and duplicate spans — giving the user two locations to compare. Otherwise,
+/// records the current span as the first occurrence for future checks.
 fn reject_duplicate(first: &mut Option<Span>, current: Span, kind: &str) -> Result<()> {
     if let Some(prev) = *first {
         let mut err = syn::Error::new(current, format!("multiple {kind} at the same level are ambiguous"));

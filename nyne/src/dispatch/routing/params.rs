@@ -1,8 +1,29 @@
+//! Accumulated route captures from segment matching.
+//!
+//! Defines [`RouteParams`], which collects named captures as the route tree
+//! walks through matching segments. Single-segment captures (e.g., `{name}`)
+//! store one string, while rest-captures (e.g., `{..path}`) store a `Vec` of
+//! segments. Parameters from parent segments propagate to all child handlers,
+//! enabling nested routes to access captures from any ancestor.
+
 use std::collections::HashMap;
 
 /// Accumulated captures from route matching.
 ///
 /// Captures from parent segments propagate to all child handlers [DD-9].
+/// The route tree clones params at each branch point so that sibling
+/// routes get independent copies -- a capture in one branch never leaks
+/// into another.
+///
+/// Keys are `&'static str` because capture names come from route
+/// declarations which are compile-time constants.
+///
+/// # Panics
+///
+/// The `get` and `get_rest` accessors panic on missing keys. This is
+/// intentional -- a missing capture means the route declaration and
+/// handler disagree on parameter names, which is a programmer error
+/// (and typically caught at compile time by the `routes!` macro).
 #[derive(Debug, Default, Clone)]
 pub struct RouteParams {
     singles: HashMap<&'static str, String>,

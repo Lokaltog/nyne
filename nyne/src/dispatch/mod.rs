@@ -17,10 +17,14 @@ pub mod routing;
 /// Script execution context, traits, and addressing.
 pub mod script;
 
-/// How the FUSE write should be dispatched to the `Writable` capability.
+/// How the FUSE write should be dispatched to the [`Writable`](crate::node::Writable) capability.
 ///
-/// Derived from the open flags (`O_TRUNC`, `O_APPEND`) stored on the file handle.
-/// The pipeline passes this through so the final `Writable` method is chosen correctly.
+/// Derived from the open flags (`O_TRUNC`, `O_APPEND`) stored on the file handle
+/// at open time. The [`Pipeline`] threads this through the middleware chain so the
+/// final `Writable` method is chosen correctly without re-inspecting flags.
+///
+/// Marked `#[non_exhaustive]` because additional modes (e.g., `Append`) may be
+/// added as providers gain richer write semantics.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WriteMode {

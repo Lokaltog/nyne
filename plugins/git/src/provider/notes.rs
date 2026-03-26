@@ -17,7 +17,9 @@ git_template_view!(
 
 /// [`Writable`] implementation for `NotesView` — sets or removes a git note.
 impl Writable for NotesView {
-    /// Writes a git note to the file.
+    /// Write or update the git note on the most recent commit touching this file.
+    ///
+    /// The note content must be valid UTF-8. An empty write removes the note.
     fn write(&self, _ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         let message = from_utf8(data).wrap_err("note content must be valid UTF-8")?;
         self.0.repo.set_note(&self.0.rel_path, message)?;

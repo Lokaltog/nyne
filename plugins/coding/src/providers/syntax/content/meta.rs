@@ -1,3 +1,9 @@
+//! Symbol meta-file rendering and splicing (signature, docstring, decorators).
+//!
+//! Each meta-file is a [`Readable`]/[`Writable`] pair that lazily resolves byte
+//! ranges from a fresh decomposition on every access, ensuring content is never
+//! stale after writes. Writes are validated by tree-sitter before being committed.
+
 use std::io::{Error, ErrorKind};
 use std::ops::Range;
 use std::str::from_utf8;
@@ -382,6 +388,11 @@ impl Writable for LinesWrite {
 // Node construction
 
 /// Build per-symbol meta-file nodes from a fragment.
+///
+/// Conditionally emits `signature.<ext>`, `docstring.txt`, `decorators.<ext>`,
+/// and `OVERVIEW.md` depending on which metadata the fragment carries. Each
+/// node is both readable (via [`SourceSlice`]) and writable (via [`MetaSplice`]),
+/// with trailing-newline middleware for editor compatibility.
 pub(in crate::providers::syntax) fn build_meta_nodes(
     frag: &Fragment,
     ext: &str,

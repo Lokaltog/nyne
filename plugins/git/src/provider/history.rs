@@ -18,6 +18,9 @@ use crate::repo::GitRepo;
 const MAX_REVWALK: usize = 5000;
 
 /// Blame hunk with line range and commit metadata.
+///
+/// Line numbers are 1-based inclusive, matching the template output.
+/// The commit metadata is flattened into the serialized output via `#[serde(flatten)]`.
 #[derive(serde::Serialize)]
 pub struct BlameHunk {
     pub start_line: usize,

@@ -1,4 +1,9 @@
-//! Anchor detection for line-based edits in batch operations.
+//! Anchor resolution for mapping filesystem write operations to staged edit actions.
+//!
+//! When an agent writes to a file like `file.rs@/symbols/Foo@/edit/replace`,
+//! the filesystem operation name (`replace`, `delete`, `insert-before`, etc.)
+//! is the *anchor*. This module validates the anchor against the current
+//! fragment tree and produces a [`StagedAction`] ready for the staging area.
 
 use std::io;
 use std::str::from_utf8;
@@ -10,11 +15,19 @@ use crate::edit::plan::{EditOp, EditOpKind};
 use crate::syntax::find_fragment;
 use crate::syntax::fragment::{Fragment, FragmentKind};
 
-/// Map a filesystem anchor operation to a `StagedAction`.
+/// Map a filesystem anchor operation to a [`StagedAction`].
 ///
-/// Validates that `target_name` exists in the fragment tree and that
-/// the anchor kind is appropriate for the target (e.g., `Append` only
-/// on scope symbols).
+/// Validates that the target symbol exists in the fragment tree and that
+/// the anchor kind is appropriate for the target. Specifically, `Append`
+/// is only allowed on scope symbols (impl blocks, modules, etc.) or
+/// fragments with children — leaf symbols must use `InsertAfter` instead.
+///
+/// # Errors
+///
+/// Returns `NotFound` if `fragment_path` does not resolve to a known
+/// fragment, or `InvalidInput` if `Append` is used on a non-scope symbol.
+/// Also errors if `content` is not valid UTF-8 (for operations that carry
+/// content).
 pub(super) fn resolve_anchor(
     kind: EditOpKind,
     fragment_path: &[String],

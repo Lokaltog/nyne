@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use super::default_true;
 
 /// TODO/FIXME comment aggregation configuration.
+///
+/// Controls which comment tags are scanned across the workspace and in what
+/// priority order they appear. The `tags` list is the single source of truth
+/// for scanning, grouping, directory layout, and template rendering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TodoConfig {
@@ -32,6 +36,10 @@ impl Default for TodoConfig {
 }
 
 /// Default set of TODO tags ordered by priority.
+///
+/// Order matters: earlier entries are treated as higher severity. `FIXME`
+/// comes first because it implies something is broken, while `TODO` is
+/// lowest because it is purely aspirational.
 fn default_todo_tags() -> Vec<String> {
     ["FIXME", "SAFETY", "HACK", "XXX", "TODO"]
         .into_iter()

@@ -41,6 +41,9 @@ pub fn commit_info(commit: &git2::Commit<'_>, oid: Oid) -> CommitInfo {
 }
 
 /// Create `DiffOptions` scoped to a single pathspec.
+///
+/// Used by blame, log, and diff providers to limit git operations to a
+/// single file path rather than the entire repository.
 pub fn diff_opts(pathspec: &str) -> git2::DiffOptions {
     let mut opts = git2::DiffOptions::new();
     opts.pathspec(pathspec);

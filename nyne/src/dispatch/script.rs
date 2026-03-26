@@ -1,3 +1,18 @@
+//! Script execution context, traits, and addressing.
+//!
+//! Scripts are in-process functions that accept binary stdin and produce binary
+//! stdout, accessed via `nyne exec <address>`. They run inside the daemon with
+//! full access to [`ActivationContext`] (git, syntax, LSP, etc.), making them
+//! far cheaper than shelling out to external commands.
+//!
+//! Each script has a fully-qualified dotted address (e.g.,
+//! `provider.coding.decompose`) built from namespace segments. Providers
+//! register scripts during activation; the [`ScriptRegistry`](super::script_registry::ScriptRegistry)
+//! indexes them for lookup by address.
+//!
+//! This is an **interface module** — the trait and address helpers may be
+//! imported from any tier.
+
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
@@ -25,7 +40,12 @@ pub fn provider_script_address(provider_id: &str, name: &str) -> String {
 }
 
 /// Context available to scripts during execution.
+///
+/// Provides access to the full [`ActivationContext`] so scripts can query
+/// project roots, configuration, and plugin-provided services (git, LSP, etc.)
+/// without needing to shell out or duplicate setup logic.
 pub struct ScriptContext<'a> {
+    /// The shared activation context for this mount session.
     pub activation: &'a ActivationContext,
 }
 
@@ -49,4 +69,8 @@ pub trait Script: Send + Sync {
 }
 
 /// A registered script entry: fully-qualified address + implementation.
+///
+/// Returned by [`Provider::scripts`](crate::provider::Provider::scripts) during
+/// activation. The address (first element) should be built via
+/// [`provider_script_address`] for consistency.
 pub type ScriptEntry = (String, Arc<dyn Script>);

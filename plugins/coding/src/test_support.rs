@@ -6,14 +6,24 @@ use std::sync::Arc;
 use crate::syntax::SyntaxRegistry;
 
 /// Build a `SyntaxRegistry` with all compiled-in languages.
+///
+/// Shorthand for [`SyntaxRegistry::build()`] so tests don't need to import
+/// the registry type directly.
 pub fn registry() -> SyntaxRegistry { SyntaxRegistry::build() }
 
-/// Build a `VfsPath` helper from a decomposed file.
+/// Build a [`VfsPath`] from a string, panicking on invalid paths.
+///
+/// Convenience wrapper that avoids `unwrap()` noise in test assertions
+/// while still failing loudly on bad input.
 pub fn vfs(path: &str) -> nyne::types::vfs_path::VfsPath {
     nyne::types::vfs_path::VfsPath::new(path).expect("invalid test path")
 }
 
 /// Load a test fixture file relative to `nyne-coding/src/`.
+///
+/// Resolves `src/{module}/fixtures/{name}` using `CARGO_MANIFEST_DIR` so
+/// fixtures work regardless of the working directory. Panics with a
+/// descriptive message if the file is missing.
 pub fn load_fixture(module: &str, name: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("src")

@@ -99,6 +99,10 @@ pub trait Plugin: Send + Sync {
 }
 
 /// Plugin factory function type for the distributed slice.
+///
+/// A function pointer (not a closure) because `linkme` distributed slices
+/// require `Sync` statics with a fixed type. Each factory is called once
+/// at mount time to produce the plugin instance.
 pub type PluginFactory = fn() -> Box<dyn Plugin>;
 
 /// Link-time distributed slice of plugin factories.

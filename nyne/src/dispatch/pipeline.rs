@@ -1,4 +1,13 @@
 //! Middleware pipeline for read/write request processing.
+//!
+//! The pipeline executes a three-tier middleware chain for both reads and writes:
+//! **node** (innermost) -> **provider** -> **global** (outermost). This ordering
+//! means node-specific transformations run closest to the raw data, while global
+//! cross-cutting concerns (e.g., metrics, validation) wrap everything.
+//!
+//! For writes, after the middleware chain and the final `Writable` dispatch,
+//! post-write hooks run non-fatally -- the write is already committed, so hook
+//! failures are logged but do not roll back the operation.
 
 use color_eyre::eyre::Result;
 

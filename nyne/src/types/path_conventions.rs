@@ -7,6 +7,9 @@ pub const COMPANION_SUFFIX: &str = "@";
 
 /// Strip a suffix from a string, returning `None` if the suffix is absent
 /// or if stripping it would leave an empty string.
+///
+/// The empty-string guard prevents a bare `@` from being treated as a valid
+/// companion name (it has no associated real file).
 fn strip_suffix_nonempty<'a>(s: &'a str, suffix: &str) -> Option<&'a str> {
     s.strip_suffix(suffix).filter(|s| !s.is_empty())
 }

@@ -15,12 +15,14 @@ use tracing::trace;
 /// JSON-RPC error response from the language server.
 ///
 /// Structured so callers can match on `code` (e.g., `-32601` = method not found)
-/// without parsing error message strings.
+/// without parsing error message strings. Implements `std::error::Error` via
+/// `thiserror` so it integrates naturally with the `eyre` error chain.
 #[derive(Debug, thiserror::Error)]
 #[error("JSON-RPC error {code}: {message}")]
-/// JSON-RPC error response from the language server.
 pub struct JsonRpcError {
+    /// Numeric error code as defined by the JSON-RPC and LSP specifications.
     pub code: i64,
+    /// Human-readable error description from the server.
     pub message: String,
 }
 

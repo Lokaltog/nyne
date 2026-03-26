@@ -179,4 +179,9 @@ impl<'a> FileQuery<'a> {
 }
 
 /// Whether two LSP ranges overlap (inclusive of touching boundaries).
+///
+/// Used by [`FileQuery::code_actions`] to filter code actions whose
+/// reported range intersects the queried symbol span. Touching ranges
+/// (e.g., end of one equals start of another) are considered overlapping
+/// so that boundary-adjacent diagnostics are not missed.
 fn ranges_overlap(a: &Range, b: &Range) -> bool { a.start <= b.end && b.start <= a.end }

@@ -117,9 +117,17 @@ impl Router {
     }
 
     /// Access the real filesystem abstraction.
+    ///
+    /// Used by the FUSE layer and sibling modules to read/stat the underlying
+    /// filesystem without going through the virtual overlay.
     pub(crate) fn real_fs(&self) -> &dyn RealFs { self.real_fs.as_ref() }
 
     /// Find an active provider by its ID.
+    ///
+    /// Returns `None` if the provider has been deactivated or was never
+    /// registered. Callers must handle the `None` case gracefully --
+    /// a cached `ProviderId` can outlive the provider that created it
+    /// when providers are dynamically reconfigured.
     pub(crate) fn find_provider(&self, id: ProviderId) -> Option<&Arc<dyn Provider>> { self.registry.find_provider(id) }
 
     /// Build a [`RequestContext`] using this router's services.
@@ -204,6 +212,15 @@ impl Router {
 }
 
 /// A single entry from [`Router::collect_readdir_entries`].
+///
+/// Represents one child in a directory listing, combining the minimal
+/// information FUSE needs for `readdir`/`readdirplus` responses: an inode
+/// number, file kind, and entry name. The FUSE layer converts these into
+/// the kernel's `dirent` format.
+///
+/// Inode `0` is used as a sentinel for real filesystem entries that have
+/// not yet been resolved through `lookup` -- the kernel will issue a
+/// follow-up `lookup` call to get the real inode and attributes.
 pub struct ReaddirEntry {
     pub(crate) inode: u64,
     pub(crate) kind: FileKind,
@@ -231,15 +248,32 @@ impl ReaddirEntry {
     }
 
     /// Create a real filesystem entry.
+    ///
+    /// Typically called with inode `0` for lazily-resolved entries --
+    /// the kernel will issue a `lookup` to get the real inode on first access.
     const fn real(inode: u64, kind: FileKind, name: String) -> Self { Self { inode, kind, name } }
 }
 
-/// Owned snapshot of a resolved inode — extracted from cache with no held locks.
+/// Owned snapshot of a resolved inode -- extracted from cache with no held locks.
+///
+/// The FUSE layer needs inode data to service `getattr`, `read`, `write`,
+/// and other operations, but the L1 cache uses interior-mutability locks
+/// (`RwLock<DirState>`). Holding a cache lock across I/O would block
+/// concurrent FUSE operations on the same directory. Instead,
+/// [`Router::resolve_inode`] performs a single lock acquisition, clones
+/// the minimum needed data, and returns this owned snapshot.
 pub enum ResolvedInode {
-    Real {
-        file_type: FileKind,
-        path: VfsPath,
-    },
+    /// A real filesystem entry -- served directly from the underlying FS.
+    ///
+    /// The `path` is the full VFS path (dir + name), ready for `RealFs`
+    /// operations without further allocation.
+    Real { file_type: FileKind, path: VfsPath },
+    /// A provider-generated virtual entry.
+    ///
+    /// `dir_path` is the parent directory (not the entry itself) because
+    /// `VirtualNode` already carries its own name. The `provider_id`
+    /// identifies which provider owns this node, needed for routing
+    /// read/write calls back to the correct provider.
     Virtual {
         node: Arc<VirtualNode>,
         provider_id: ProviderId,
@@ -249,7 +283,12 @@ pub enum ResolvedInode {
 
 /// Accessors for resolved inode snapshots.
 impl ResolvedInode {
-    /// The VFS path as a string reference, for logging.
+    /// The VFS path as a string reference, for logging and diagnostics.
+    ///
+    /// For `Real` inodes this returns the full entry path. For `Virtual`
+    /// inodes it returns only the parent directory path to avoid allocating
+    /// a new string by joining `dir_path` + `node.name()`. This is
+    /// acceptable for log messages where approximate context suffices.
     pub fn path_str(&self) -> &str {
         match self {
             Self::Real { path, .. } => path.as_str(),

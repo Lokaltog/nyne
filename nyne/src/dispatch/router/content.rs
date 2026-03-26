@@ -55,11 +55,19 @@ impl Router {
     /// simply returns `None` and the caller uses a sentinel value.
     pub(crate) fn content_cache_size(&self, inode: u64) -> Option<u64> { self.content_cache.get_size(inode) }
 
-    /// Write content for a virtual inode through the write pipeline.
+    /// Write content to a virtual inode through the pipeline.
     ///
-    /// Executes the full write pipeline, invalidates the L2 content
-    /// cache, and bumps the source file's generation so that sibling
-    /// companion entries are lazily detected as stale on next access.
+    /// After the provider processes the write, three side-effects occur:
+    ///
+    /// 1. **L2 cache invalidation** -- the cached content for this inode is
+    ///    evicted so the next read re-runs the pipeline with fresh data.
+    /// 2. **Source generation bump** -- if the node tracks a source file,
+    ///    its generation is incremented so other nodes derived from the same
+    ///    source detect staleness on their next access.
+    /// 3. **Companion subtree invalidation** -- emitted synchronously (not
+    ///    via inotify) so the FUSE flush handler can notify the kernel
+    ///    before returning to the caller, eliminating a race between write
+    ///    completion and async `on_fs_change` delivery.
     #[allow(clippy::too_many_arguments)] // internal dispatch: inode + node + provider + write data + context
     pub(crate) fn write_content(
         &self,

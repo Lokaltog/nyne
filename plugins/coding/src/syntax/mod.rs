@@ -41,9 +41,17 @@ use spec::Decomposer;
 
 /// Factory function that creates decomposer instances for link-time
 /// auto-discovery via `linkme`.
+///
+/// Each factory returns `(extension, decomposer)` pairs. The `register_syntax!`
+/// macro generates one factory per language type, but a single factory may
+/// emit multiple extensions (e.g. TypeScript emits `"ts"`, `"tsx"`, `"js"`, `"jsx"`).
 pub type SyntaxFactory = fn() -> Vec<(&'static str, Box<dyn Decomposer>)>;
 
 /// Distributed slice collecting all registered syntax decomposer factories.
+///
+/// Populated at link time by `register_syntax!` invocations across language
+/// modules. [`SyntaxRegistry::build`] iterates this slice to construct the
+/// extension-indexed lookup table.
 #[linkme::distributed_slice]
 pub static SYNTAX_FACTORIES: [SyntaxFactory];
 
@@ -345,6 +353,10 @@ pub fn find_nearest_fragment_at_line(
 }
 
 /// Navigate a fragment tree by following `fs_name` components.
+///
+/// Walks down the tree matching each path segment against the `fs_name` of
+/// sibling fragments. Returns `None` if any segment has no match.
+/// Used by VFS path resolution to map filesystem lookups to specific symbols.
 pub fn find_fragment<'a>(fragments: &'a [fragment::Fragment], path: &[String]) -> Option<&'a fragment::Fragment> {
     let (first, rest) = path.split_first()?;
     let frag = fragments

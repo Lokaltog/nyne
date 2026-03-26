@@ -1,4 +1,18 @@
-//! Fuser `Filesystem` trait implementation — all FUSE protocol callbacks.
+//! `fuser::Filesystem` trait implementation — all FUSE protocol callbacks.
+//!
+//! This is the entry point for every kernel FUSE request. Each method follows
+//! the same pattern: convert fuser types to internal types, resolve the inode
+//! via [`NyneFs::resolve_for_request`] (which applies per-process visibility),
+//! delegate to the router or handle table, and reply.
+//!
+//! Mutation callbacks (`create`, `mkdir`, `unlink`, `rmdir`, `rename`) delegate
+//! to `mutations.rs`. Extended attribute callbacks delegate to `xattr.rs`.
+//! This file contains read-path operations and the I/O pipeline (open, read,
+//! write, flush, release).
+//!
+//! Event draining ownership: the FUSE layer drains after I/O and xattr ops
+//! (`flush`, `release`, `setxattr`). Mutation handlers drain internally via
+//! the router (see `doc/codebase.md`).
 
 use std::ffi::OsStr;
 use std::io;
@@ -25,6 +39,13 @@ use crate::types::file_kind::FileKind;
 /// `Filesystem` implementation for [`NyneFs`], dispatching FUSE protocol callbacks.
 impl Filesystem for NyneFs {
     /// Initializes the FUSE filesystem, negotiating kernel capabilities.
+    ///
+    /// Negotiates two optional capabilities:
+    /// - **`FUSE_PASSTHROUGH`** — zero-copy I/O for real files by forwarding
+    ///   reads/writes directly to the backing fd. Requires `CAP_SYS_ADMIN`.
+    ///   Falls back gracefully if the kernel rejects `max_stack_depth=1`.
+    /// - **`FUSE_READDIRPLUS`** — combined readdir+getattr in a single call,
+    ///   reducing round-trips for directory listings.
     fn init(&mut self, _req: &Request, config: &mut fuser::KernelConfig) -> io::Result<()> {
         if let Err(unsupported) = config.add_capabilities(InitFlags::FUSE_PASSTHROUGH) {
             warn!(target: "nyne::fuse", ?unsupported, "kernel does not support FUSE_PASSTHROUGH");
@@ -52,6 +73,10 @@ impl Filesystem for NyneFs {
     }
 
     /// Looks up a child entry by name within a parent directory.
+    ///
+    /// Passthrough processes (`None` visibility) use `lookup_real` to see
+    /// only real filesystem entries. All other processes use `lookup_name`,
+    /// which includes virtual nodes from providers.
     fn lookup(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
         with_parent_ctx!(self, parent, name, reply, "lookup", |parent_ino, name_str, ctx| {
             // None-visibility processes see only real filesystem entries.
@@ -79,6 +104,15 @@ impl Filesystem for NyneFs {
     }
 
     /// Sets file attributes (size, timestamps) for an inode.
+    ///
+    /// Only two attributes are actually handled:
+    /// - **size** — triggers buffer truncation (via file handle or by inode).
+    ///   This is how the kernel implements `O_TRUNC` and `ftruncate()`.
+    /// - **atime** — stored in the session-scoped `atime_overrides` map for
+    ///   hooks that use `touch -a` to communicate timestamps.
+    ///
+    /// All other attributes (mode, uid, gid, mtime, etc.) are silently
+    /// accepted but ignored — virtual files don't have real metadata to update.
     fn setattr(
         &self,
         req: &Request,
@@ -154,7 +188,18 @@ impl Filesystem for NyneFs {
         }
     }
 
-    /// Opens a file, setting up buffered or passthrough I/O.
+    /// Opens a file, selecting the optimal I/O strategy.
+    ///
+    /// Tries three paths in order:
+    /// 1. **Kernel passthrough** — zero-copy for real files if `FUSE_PASSTHROUGH`
+    ///    was negotiated in `init()`. Disabled permanently on first rejection.
+    /// 2. **Direct fd** — `pread()`-based I/O for real files when passthrough is
+    ///    unavailable. Avoids loading large files (e.g., git pack files) into memory.
+    /// 3. **Buffered** — content loaded into [`HandleTable`](super::handles::HandleTable)
+    ///    with COW semantics. Used for virtual files and `O_TRUNC` real files.
+    ///
+    /// All paths use `FOPEN_DIRECT_IO` so the kernel bypasses its page cache
+    /// and always consults our handle table for content.
     fn open(&self, req: &Request, ino: INodeNo, flags: OpenFlags, reply: ReplyOpen) {
         let ino = u64::from(ino);
         let resolved = self.resolve_for_request(ino, req);
@@ -278,6 +323,15 @@ impl Filesystem for NyneFs {
     }
 
     /// Flushes dirty buffer contents for an open file handle.
+    ///
+    /// Called on every `close()` (possibly multiple times per handle if the fd
+    /// was dup'd). Empty truncations are deferred to `release` to avoid a race
+    /// with the kernel's `O_TRUNC` → `setattr(size=0)` + `flush` sequence
+    /// that arrives before the actual write data.
+    ///
+    /// On failure, stores the error message in `write_errors` for retrieval
+    /// via the `user.error` extended attribute. Drains router events after
+    /// every flush (FUSE owns the drain for I/O ops).
     fn flush(&self, _req: &Request, ino: INodeNo, fh: FileHandle, _lock_owner: LockOwner, reply: ReplyEmpty) {
         let (ino, fh) = (u64::from(ino), u64::from(fh));
         trace!(target: "nyne::fuse", ino, fh, "flush");
@@ -312,6 +366,12 @@ impl Filesystem for NyneFs {
     }
 
     /// Releases a file handle, flushing any remaining dirty data.
+    ///
+    /// This is the last chance to persist writes — after release, the handle
+    /// is gone. Flush errors are stored in `write_errors` (not returned to
+    /// the caller, since `close()` errors are typically ignored by shells).
+    /// Also invokes the lifecycle `release` hook for virtual nodes and cleans
+    /// up per-inode write locks when no handles remain.
     fn release(
         &self,
         req: &Request,
@@ -375,6 +435,13 @@ impl Filesystem for NyneFs {
     }
 
     /// Checks access permissions for an inode.
+    ///
+    /// Only `W_OK` is meaningfully enforced — read/execute are always allowed.
+    /// Write access is denied for real directories (prevents atomic-save
+    /// strategies in editors) and for virtual nodes without the `Writable`
+    /// capability (consistent with the `open()` rejection). Since
+    /// `default_permissions` is not set, actual mutation syscalls still reach
+    /// FUSE handlers regardless of what `access()` returns.
     fn access(&self, req: &Request, ino: INodeNo, mask: AccessFlags, reply: ReplyEmpty) {
         let ino = u64::from(ino);
         trace!(target: "nyne::fuse", ino, ?mask, "access");
@@ -570,6 +637,9 @@ impl Filesystem for NyneFs {
     }
 
     /// Returns filesystem statistics from the underlying real filesystem.
+    ///
+    /// Delegates to `statvfs()` on the source directory so tools like `df`
+    /// report the backing filesystem's capacity, not artificial limits.
     fn statfs(&self, _req: &Request, _ino: INodeNo, reply: ReplyStatfs) {
         match statvfs(self.router.real_fs().source_dir()) {
             Ok(st) => {

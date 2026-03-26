@@ -1,3 +1,10 @@
+//! Plugin registration for the three built-in core providers.
+//!
+//! Registers [`CorePlugin`] in the global [`PLUGINS`](crate::plugin::PLUGINS)
+//! distributed slice so the dispatch layer discovers it alongside external
+//! plugin crates. This keeps the plugin discovery mechanism uniform -- core
+//! providers go through the same activation path as plugin providers.
+
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;

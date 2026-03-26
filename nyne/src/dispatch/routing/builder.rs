@@ -1,3 +1,14 @@
+//! Fluent builder API for constructing route trees.
+//!
+//! Provides [`RouteTreeBuilder`] and [`RouteNodeBuilder`] for assembling
+//! route trees programmatically. This is the target API for the `routes!`
+//! proc-macro codegen, but can also be used directly when the macro's
+//! syntax is insufficient (escape hatch, see DD-11).
+//!
+//! The builder enforces correct structure at compile time via the type
+//! parameter `P` (the provider state type), ensuring handler closures
+//! receive the right provider reference.
+
 use super::ctx::RouteCtx;
 use super::segment::SegmentMatcher;
 use super::tree::{ChildrenHandler, LookupHandler, RouteNode, RouteTree, StaticFileEntry};
@@ -13,6 +24,16 @@ pub struct RouteTreeBuilder<P> {
 }
 
 /// Builder for constructing a single route node with handlers and sub-routes.
+///
+/// Each node represents one level in the route tree hierarchy and binds a
+/// [`SegmentMatcher`] to optional `children`/`lookup` handlers, static
+/// files, and nested sub-routes. Convenience constructors (`exact`,
+/// `capture`, `rest_capture`, `glob`) create a node with the appropriate
+/// matcher pre-configured.
+///
+/// By default, `Exact` nodes auto-emit a directory entry in the parent's
+/// readdir. Call [`no_emit`](Self::no_emit) to suppress this for
+/// lookup-only routes (e.g., companion `@` directories).
 pub struct RouteNodeBuilder<P> {
     segment: SegmentMatcher,
     children_handler: Option<ChildrenHandler<P>>,
@@ -116,6 +137,11 @@ impl<P: Send + Sync + 'static> RouteNodeBuilder<P> {
     }
 
     /// Add a static file via factory closure.
+    ///
+    /// Static files appear in both `children` (readdir) and `lookup`
+    /// responses for this node. The factory is called on each access
+    /// because `VirtualNode` is not `Clone` (it may hold `Box<dyn Readable>`).
+    /// Use this for lightweight, always-present entries like `OVERVIEW.md`.
     #[must_use]
     pub fn file(mut self, name: &'static str, factory: impl Fn() -> VirtualNode + Send + Sync + 'static) -> Self {
         self.static_files.push(StaticFileEntry {
@@ -133,6 +159,11 @@ impl<P: Send + Sync + 'static> RouteNodeBuilder<P> {
     }
 
     /// Build into a `RouteNode`, sorting children by precedence.
+    ///
+    /// Sub-routes are sorted so that more specific matchers (exact) are
+    /// tried before less specific ones (capture, rest-capture, glob).
+    /// This ensures deterministic dispatch order per [DD-21]. The sort
+    /// is recursive -- each child's sub-routes are also sorted.
     pub(super) fn build(mut self) -> RouteNode<P> {
         self.sub_routes.sort_by_key(|r| r.segment.precedence());
         RouteNode {

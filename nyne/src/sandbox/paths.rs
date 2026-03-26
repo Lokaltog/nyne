@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use rustix::process::Pid;
 
-/// Static procfs paths (no allocation needed).
+/// Path to the current process UID mapping file.
 pub(super) const UID_MAP: &str = "/proc/self/uid_map";
 /// Path to the current process GID mapping file.
 pub(super) const GID_MAP: &str = "/proc/self/gid_map";

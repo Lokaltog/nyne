@@ -1,4 +1,9 @@
 //! Preview computation for staged edits before application.
+//!
+//! Implements the [`DiffAction`] trait for both per-symbol and cross-file
+//! scopes. Reading `staged.diff` triggers preview computation: staged edit
+//! operations are resolved against current source content to produce a
+//! unified diff. Deleting the file applies the edits atomically.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -16,11 +21,12 @@ use crate::edit::plan::{EditOutcome, EditPlan, FileEditResult, ValidationResult}
 use crate::services::CodingServices;
 use crate::syntax::decomposed::DecomposedSource;
 
-/// `DiffAction` for a single symbol's staged edits.
+/// [`DiffAction`] for a single symbol's staged edits.
 ///
-/// Decomposes the source file at read time to avoid stale byte ranges.
+/// Decomposes the source file at read time to avoid stale byte ranges —
+/// never captures a snapshot of the decomposition, since the source may
+/// have been modified between staging and previewing.
 #[derive(Clone)]
-/// Preview of a symbol within a staged file.
 pub(super) struct SymbolPreview {
     pub key: StagingKey,
     pub batches: StagingMap,
@@ -84,11 +90,12 @@ impl DiffAction for SymbolPreview {
     }
 }
 
-/// `DiffAction` for the cross-file root `@/edit/staged.diff`.
+/// [`DiffAction`] for the cross-file root `@/edit/staged.diff`.
 ///
-/// Combines previews for all symbols across all files with staged batches.
+/// Combines previews for all symbols across all files with staged batches
+/// into a single unified diff. Applying this action atomically writes all
+/// modified files and clears the entire staging area.
 #[derive(Clone)]
-/// Cross-file preview for multi-file edits.
 pub(super) struct CrossFilePreview {
     pub batches: StagingMap,
     pub ctx: Arc<ActivationContext>,
@@ -156,6 +163,9 @@ impl DiffAction for CrossFilePreview {
 }
 
 /// Readable for a single staged action — returns the staged content.
+///
+/// Backs the preview files under `edit/staged/` (e.g. `10-replace.diff`).
+/// Reading returns the raw content that was written when the action was staged.
 pub(super) struct StagedActionContent {
     pub batches: StagingMap,
     pub key: StagingKey,

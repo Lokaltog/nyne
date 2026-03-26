@@ -1,3 +1,13 @@
+//! Central coordinator for LSP server lifecycle, document tracking, and query routing.
+//!
+//! [`LspManager`] is the entry point for all LSP interactions in the plugin.
+//! It owns the set of active [`LspClient`] instances, tracks which documents
+//! have been opened via `textDocument/didOpen`, and routes queries through a
+//! TTL-based [`LspCache`] to avoid redundant server round-trips.
+//!
+//! Servers are spawned lazily on first access for a file extension, but can
+//! also be warmed eagerly at activation via [`LspManager::spawn_all_applicable`].
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,7 +50,14 @@ impl OpenDocument {
     }
 }
 
-/// Manages LSP server lifecycle and cached queries.
+/// Central coordinator for LSP server lifecycle, document state, and cached queries.
+///
+/// Thread-safe: all mutable state is behind `RwLock` (clients) or `Mutex`
+/// (open documents). Multiple FUSE handler threads access this concurrently.
+///
+/// LSP is gated on syntax support -- if no tree-sitter grammar is registered
+/// for a file extension, no LSP server will be spawned for it. This ensures
+/// the decomposition layer is always available when LSP features are active.
 pub struct LspManager {
     /// LSP server registry (built-in defaults + config overrides).
     registry: LspRegistry,
@@ -454,6 +471,13 @@ impl LspManager {
     }
 
     /// Return an existing client for the given server definition, or spawn one.
+    ///
+    /// Uses a check-lock-check pattern to avoid spawning duplicate servers
+    /// when multiple FUSE threads race on first access: the read lock is
+    /// checked first (fast path), then the server is spawned outside any
+    /// lock, and finally the write lock re-checks before inserting. If
+    /// another thread won the race, the redundant client is dropped (its
+    /// `Drop` impl shuts it down gracefully).
     fn get_or_spawn(&self, def: &super::spec::LspServerDef) -> Option<Arc<LspClient>> {
         // Fast path: already running.
         if let Some(client) = self.clients.read().get(def.name()) {

@@ -1,5 +1,12 @@
 //! Nyne provider — root-level meta files (GUIDE, STATUS).
 
+//! Root-level nyne meta provider -- serves `@/GUIDE.md` and `@/STATUS.md`.
+//!
+//! This provider creates the top-level `@/` directory at the mount root and
+//! populates it with informational files about the mount session. `GUIDE.md`
+//! provides an overview of the project (detected languages, structure).
+//! `STATUS.md` shows live runtime data (uptime, active providers, project stats).
+
 use std::sync::Arc;
 use std::time::Instant;
 

@@ -7,13 +7,12 @@ pub type DetectFn = fn(&Path) -> bool;
 /// Definition of an LSP server — its identity, how to spawn it, and
 /// when it applies.
 ///
-/// Constructed via builder methods in `LspSpec::servers()`. Merged with
-/// config overrides at registry build time.
+/// Constructed via builder methods in [`LspSpec::servers`]. Merged with
+/// config overrides (command, args, enabled) at registry build time.
 ///
 /// `Clone`: needed because languages with multiple extensions (e.g.,
-/// TypeScript: ts + tsx) clone server defs per-extension in the registry.
+/// TypeScript: `ts` + `tsx`) clone server defs per-extension in the registry.
 #[derive(Clone)]
-/// Definition of an LSP server.
 pub struct LspServerDef {
     /// Unique name for this server (e.g., "rust-analyzer", "biome").
     /// Used as the config key for overrides.

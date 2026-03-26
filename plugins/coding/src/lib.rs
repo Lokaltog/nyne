@@ -4,12 +4,16 @@
 //! integration, edit planning/splicing, and all providers that depend on
 //! source-code understanding.
 
+/// Batch edit staging, splice application, and diff-based code actions.
 pub(crate) mod edit;
 
+/// LSP client lifecycle, transport, and query abstractions.
 pub(crate) mod lsp;
 
+/// FUSE providers that expose decomposed source code and LSP intelligence.
 pub(crate) mod providers;
 
+/// Tree-sitter parsing, symbol decomposition, and source analysis.
 pub(crate) mod syntax;
 
 /// Plugin configuration types and deserialization.

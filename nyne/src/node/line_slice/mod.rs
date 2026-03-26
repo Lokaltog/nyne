@@ -1,3 +1,15 @@
+//! Line-range slicing plugin for `:M-N` suffixes.
+//!
+//! Enables reading, writing, and deleting subsets of a file's lines via
+//! path suffixes like `file.rs@/lines:10-20`. The [`LineSlice`] plugin
+//! attaches to a base node and derives virtual slice nodes on demand when
+//! the dispatch layer encounters a lookup miss matching `base:M-N` syntax.
+//!
+//! Sliced writes work by read-modify-write: the full base content is read,
+//! the targeted lines are spliced, and the complete result is written back
+//! through the base node's [`Writable`]. This ensures that any validation
+//! (e.g., tree-sitter syntax checking) runs on the full file content.
+
 use std::sync::Arc;
 
 use color_eyre::eyre::{Result, bail};

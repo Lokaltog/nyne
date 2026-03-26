@@ -6,10 +6,18 @@ use super::spec::{LanguageSpec, WrapperInfo};
 
 /// The standard extraction loop for languages using the trait-based pipeline.
 ///
-/// For each child of `root`:
-/// 1. Try wrapper unwrapping (`LanguageSpec::unwrap_wrapper`)
-/// 2. Try symbol kind mapping (`LanguageSpec::map_symbol_kind`)
-/// 3. Try extra extractors (`LanguageSpec::extract_extra`)
+/// Iterates over direct children of `root` and attempts extraction in
+/// priority order:
+/// 1. Wrapper unwrapping (`LanguageSpec::unwrap_wrapper`) -- handles
+///    decorated/exported items where the symbol is nested inside an outer node.
+/// 2. Symbol kind mapping (`LanguageSpec::map_symbol_kind`) -- direct
+///    symbol recognition by tree-sitter node kind.
+/// 3. Extra extractors (`LanguageSpec::extract_extra`) -- language-specific
+///    constructs that don't fit the standard symbol model (e.g. imports).
+///
+/// The first strategy that succeeds wins; unrecognized nodes are silently
+/// skipped. This layered approach keeps individual `LanguageSpec`
+/// implementations small while covering edge cases.
 pub(super) fn extract_fragments<L: LanguageSpec>(
     root: TsNode<'_>,
     remaining_depth: usize,
@@ -48,7 +56,12 @@ pub(super) fn extract_fragments<L: LanguageSpec>(
 /// Build a [`Fragment`] for a symbol node using the language spec methods.
 ///
 /// Docstrings and decorators are created as child fragments rather than
-/// metadata byte ranges, giving a uniform tree representation.
+/// metadata byte ranges, giving a uniform tree representation that the
+/// VFS can expose as individual readable/writable files.
+///
+/// When `remaining_depth > 1` and the node's kind is in `RECURSABLE_KINDS`,
+/// this recurses into the body to extract nested symbols (e.g. methods
+/// inside an impl block).
 fn build_symbol_fragment<L: LanguageSpec>(
     node: TsNode<'_>,
     wrapper: Option<TsNode<'_>>,

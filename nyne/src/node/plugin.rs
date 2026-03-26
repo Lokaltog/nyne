@@ -1,3 +1,14 @@
+//! Node plugin trait for extending node construction with parametric derivation.
+//!
+//! A [`NodePlugin`] lets a single base node spawn an open-ended family of
+//! derived nodes without pre-registering them. The dispatch layer tries
+//! plugins on lookup misses, so derived nodes are created lazily and
+//! transparently — callers see them as regular virtual nodes.
+//!
+//! This is distinct from the top-level [`Plugin`](crate::plugin::Plugin)
+//! trait which manages provider lifecycle. `NodePlugin` operates at the
+//! individual node level within a provider's namespace.
+
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;

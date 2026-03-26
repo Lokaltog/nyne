@@ -1,3 +1,9 @@
+//! `nyne attach` -- enter the namespace of a running mount and execute a command.
+//!
+//! This module handles the lifecycle of an attached process: resolving the
+//! target session, registering with the daemon for process tracking, entering
+//! the sandbox namespace, and cleaning up on exit via [`RegistrationGuard`].
+
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::{env, process};
@@ -11,6 +17,11 @@ use crate::types::ProcessVisibility;
 use crate::{sandbox, session};
 
 /// Arguments for the `attach` subcommand.
+///
+/// Attaching enters the mount namespace of a running nyne daemon and executes
+/// a command (defaulting to `$SHELL`) so the user gets an interactive session
+/// where the FUSE overlay is visible. The spawned process is registered with
+/// the daemon for tracking in `nyne list` and unregistered on exit.
 #[derive(Debug, Args)]
 pub struct AttachArgs {
     /// Session ID to attach to (optional if only one mount is active).
@@ -19,8 +30,8 @@ pub struct AttachArgs {
     /// Virtual filesystem visibility for the spawned process and its children.
     ///
     /// - `all`: force all nyne nodes (including companion dirs) into directory listings.
-    /// - `default`: normal nyne behavior — companion dirs hidden from listings.
-    /// - `none`: full passthrough — process sees only the real filesystem.
+    /// - `default`: normal nyne behavior -- companion dirs hidden from listings.
+    /// - `none`: full passthrough -- process sees only the real filesystem.
     #[arg(long, default_value = "default")]
     pub visibility: ProcessVisibility,
 
@@ -30,17 +41,23 @@ pub struct AttachArgs {
 }
 
 /// RAII guard that registers a process with the daemon on creation and
-/// unregisters it on drop. Ensures cleanup even if the attach command
-/// panics or returns early via `?`.
+/// unregisters it on drop.
+///
+/// This ensures the daemon's process table stays accurate even if the attach
+/// command panics or returns early via `?`. Without this guard, orphaned
+/// entries would accumulate in `nyne list` output.
 struct RegistrationGuard {
     socket: PathBuf,
     pid: i32,
 }
 
 impl RegistrationGuard {
-    /// Send a `Register` request to the daemon and return a guard that will
-    /// `Unregister` on drop. Returns `None` if the registration request fails
-    /// (logged as a warning).
+    /// Register this process with the daemon and return a drop guard.
+    ///
+    /// Sends a `Register` control request so that `nyne list` can display
+    /// the attached process. Returns `None` if the request fails -- this is
+    /// intentionally non-fatal because the attach itself can still succeed;
+    /// the user just won't see the process in listings.
     fn register(socket: PathBuf, pid: i32, command: String) -> Option<Self> {
         let req = sandbox::control::Request::Register { pid, command };
         if let Err(e) = sandbox::control::send_request(&socket, &req) {
@@ -50,7 +67,12 @@ impl RegistrationGuard {
         Some(Self { socket, pid })
     }
 
-    /// Set visibility override for this process. Failures are logged as warnings.
+    /// Set visibility override for this process.
+    ///
+    /// Tells the daemon how to present virtual filesystem entries to this
+    /// PID and its children. Failures are logged as warnings rather than
+    /// propagated, because a visibility failure should not prevent the
+    /// attach session from working.
     fn set_visibility(&self, visibility: ProcessVisibility) {
         let req = sandbox::control::Request::SetVisibility {
             pid: Some(self.pid),
@@ -64,6 +86,10 @@ impl RegistrationGuard {
 }
 
 impl Drop for RegistrationGuard {
+    /// Unregister this process from the daemon's process table.
+    ///
+    /// Best-effort: if the daemon is already gone (e.g., killed), the
+    /// unregister request will fail silently with a warning log.
     fn drop(&mut self) {
         let req = sandbox::control::Request::Unregister { pid: self.pid };
         if let Err(e) = sandbox::control::send_request(&self.socket, &req) {
@@ -72,7 +98,20 @@ impl Drop for RegistrationGuard {
     }
 }
 
-/// Run the attach subcommand: attach to a running mount and execute a command in its namespace.
+/// Run the attach subcommand: enter a running mount's namespace and execute a command.
+///
+/// Resolves the target session, registers the process with the daemon for
+/// `nyne list` tracking, optionally overrides visibility, then delegates to
+/// [`sandbox::run_attach`] which performs the actual namespace entry (joining
+/// the daemon's mount/PID/UTS namespaces).
+///
+/// The spawned command defaults to `$SHELL` when no explicit command is given,
+/// providing an interactive shell session inside the FUSE overlay.
+///
+/// # Errors
+///
+/// Returns an error if session resolution fails or if sandbox entry fails.
+/// Registration and visibility failures are non-fatal (logged as warnings).
 pub fn run(args: &AttachArgs) -> Result<i32> {
     let config = NyneConfig::load()?;
     let session_info = super::resolve_session(args.id.as_deref())?;

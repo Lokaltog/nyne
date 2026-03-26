@@ -1,4 +1,24 @@
 //! Nyne — expose source code as a FUSE filesystem.
+//!
+//! This is the core library crate for nyne. It provides the FUSE filesystem layer,
+//! the request dispatch pipeline (routing, caching, content resolution), the virtual
+//! node abstraction, and the plugin/provider system that lets external crates contribute
+//! filesystem content.
+//!
+//! # Architecture
+//!
+//! The crate is organized into tiers to enforce a clean dependency direction:
+//!
+//! - **Foundation** (`types`, `text`, `config`, `session`, `process`) — no crate-internal
+//!   imports, pure domain types and utilities.
+//! - **Domain** (`node`, `err`) — virtual node types and error handling.
+//! - **Contracts** (`provider`, `templates`) — the [`Provider`] trait and template rendering
+//!   that plugin crates implement.
+//! - **Orchestration** (`dispatch`, `fuse`, `watcher`, `sandbox`, `cli`) — ties everything
+//!   together into a running FUSE daemon.
+//!
+//! The `extern crate self as nyne` alias allows proc macros (like [`nyne_macros::routes!`])
+//! to generate `::nyne::...` paths that resolve correctly within this crate's own code.
 extern crate self as nyne;
 
 /// Error utilities for FUSE errno handling and eyre integration.

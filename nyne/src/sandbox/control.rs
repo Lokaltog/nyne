@@ -32,20 +32,22 @@ use crate::types::ProcessVisibility;
 pub const NYNE_CONTROL_SOCKET_ENV: &str = "NYNE_CONTROL_SOCKET";
 
 /// Inbound message types for the control socket.
+///
+/// This enum is the single source of truth for the control protocol.
+/// The `nyne ctl` CLI reads a JSON `Request` directly rather than
+/// maintaining a parallel type.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Request {
-    Exec {
-        address: String,
-        stdin: String,
-    },
-    Register {
-        pid: i32,
-        command: String,
-    },
-    Unregister {
-        pid: i32,
-    },
+    /// Execute a provider script by address (used by `nyne exec`).
+    /// `stdin` is base64-encoded binary input.
+    Exec { address: String, stdin: String },
+    /// Register an attached process in the process table.
+    Register { pid: i32, command: String },
+    /// Remove an attached process from the process table.
+    Unregister { pid: i32 },
+    /// Set or query visibility level for a PID or process name.
+    /// Exactly one of `pid` or `name` should be provided.
     SetVisibility {
         #[serde(default)]
         pid: Option<i32>,
@@ -53,19 +55,30 @@ pub enum Request {
         name: Option<String>,
         visibility: ProcessVisibility,
     },
+    /// Query all attached processes (used by `nyne list`).
     ListProcesses,
 }
 
 /// Outbound message types from the control socket.
+///
+/// Each variant corresponds to a specific [`Request`] type, except
+/// [`Error`](Self::Error) which is a catch-all for protocol-level failures.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Response {
+    /// Successful script execution. `data` is base64-encoded stdout.
     ExecOk { data: String },
+    /// Script execution failed with the given error message.
     ExecErr { error: String },
+    /// Process successfully registered.
     Registered,
+    /// Process successfully unregistered.
     Unregistered,
+    /// Current visibility rules snapshot (response to `SetVisibility`).
     Visibility { rules: VisibilityRules },
+    /// List of all attached processes (response to `ListProcesses`).
     Processes { list: Vec<AttachedProcess> },
+    /// Protocol-level error (malformed request, unknown type, etc.).
     Error { message: String },
 }
 

@@ -1,5 +1,19 @@
 // SSOT: VFS companion name constants live in names.rs.
 // Re-exported here for backward compatibility with existing imports.
+//! Core providers and shared companion-dispatch helpers.
+//!
+//! This module contains the three providers that ship with every nyne mount:
+//! - [`companion::CompanionProvider`] -- creates `@/` companion directories
+//!   for real files and directories.
+//! - [`directory::DirectoryProvider`] -- generates `OVERVIEW.md` for directory
+//!   companions.
+//! - [`nyne::NyneProvider`] -- serves root-level meta files (`@/GUIDE.md`,
+//!   `@/STATUS.md`).
+//!
+//! It also provides shared helpers for companion-path routing that plugin
+//! providers reuse (e.g., [`companion_children`], [`companion_lookup`],
+//! [`dispatch_children`], [`dispatch_lookup`]).
+
 use color_eyre::eyre::{Result, eyre};
 
 use crate::dispatch::routing::ctx::RouteCtx;

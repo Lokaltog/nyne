@@ -1,3 +1,14 @@
+//! CLI command implementations and shared argument types.
+//!
+//! Each subcommand lives in its own module (`attach`, `config`, `ctl`, `exec`,
+//! `list`, `mount`) with a public `run()` entry point called from `main()`.
+//! This module re-exports the top-level [`Cli`] parser and [`Command`] enum,
+//! plus shared helpers for session resolution that multiple subcommands need.
+//!
+//! Terminal output is centralised in the [`output`] module -- all CLI modules
+//! import `term()` and `style()` from there rather than using `println!` or
+//! constructing `console::Term` directly.
+
 /// CLI handler for `nyne attach` -- enter namespace of a running mount.
 pub mod attach;
 /// CLI handler for `nyne config` -- dump resolved configuration.
@@ -28,7 +39,16 @@ use self::mount::MountArgs;
 use crate::sandbox;
 use crate::session::{self, SessionRegistry};
 
-/// nyne — expose source code as a FUSE filesystem.
+/// Top-level CLI argument parser for the nyne binary.
+///
+/// Parsed by `clap` in `main()` to extract the global verbosity flag and
+/// the selected subcommand. Each [`Command`] variant delegates to its
+/// module's `run()` function, keeping dispatch logic in `main.rs` thin.
+///
+/// The `verbose` counter controls `tracing` filter levels so that `-v`,
+/// `-vv`, and `-vvv` progressively surface info, debug, and trace logs.
+/// Without `-v`, only warnings are shown (plus `fuser::reply` is silenced
+/// to avoid noise from the FUSE layer).
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
 pub struct Cli {
@@ -41,6 +61,12 @@ pub struct Cli {
 }
 
 /// Top-level CLI subcommands dispatched by the binary entry point.
+///
+/// Each variant wraps the argument struct for its subcommand module. The
+/// binary's `main()` matches on this enum and forwards to the corresponding
+/// `run()` function. Variants that represent long-running processes (`Mount`)
+/// block until interrupted, while interactive ones (`Attach`, `Exec`) return
+/// an exit code that `main()` propagates via [`std::process::exit`].
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Mount one or more directories as FUSE filesystems.
@@ -58,6 +84,11 @@ pub enum Command {
 }
 
 /// Common arguments for commands that target a running session.
+///
+/// Embedded via `#[command(flatten)]` into subcommands that need to address a
+/// specific daemon (e.g., `ctl`, `exec`). The optional `id` field allows the
+/// user to specify which session to target; when omitted, [`discover_socket`]
+/// auto-resolves if exactly one session is active.
 #[derive(Debug, clap::Args)]
 pub(crate) struct SessionArgs {
     /// Session ID (optional if only one mount is active).
@@ -66,25 +97,40 @@ pub(crate) struct SessionArgs {
 }
 
 impl SessionArgs {
+    /// Resolve the control socket path for the targeted session.
+    ///
+    /// Delegates to [`discover_socket`], which applies the priority chain:
+    /// explicit `--id` flag, `NYNE_CONTROL_SOCKET` env var, or single-session
+    /// auto-detection.
     pub(crate) fn socket_path(&self) -> Result<PathBuf> { discover_socket(self.id.as_deref()) }
 }
 
 /// Resolve a session by optional ID.
 ///
-/// Scans for active sessions and resolves the target:
-/// - With ID: resolve that specific session
-/// - Without ID: auto-resolve if exactly one session is active
+/// Scans the filesystem-based session registry for active nyne daemons and
+/// returns the matching [`session::SessionInfo`]. This is the shared lookup
+/// used by `attach` and `list` to find the target daemon.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - No sessions are active and no `id` was provided.
+/// - Multiple sessions are active and no `id` was provided (ambiguous).
+/// - The requested `id` does not match any active session.
 pub(super) fn resolve_session(id: Option<&str>) -> Result<session::SessionInfo> {
     Ok(SessionRegistry::scan()?.resolve(id)?.clone())
 }
 
 /// Discover the control socket path for a session.
 ///
-/// Priority:
-/// 1. Explicit `--id` flag → derive socket from session ID
-/// 2. `NYNE_CONTROL_SOCKET` env var → use directly
-/// 3. Single active session → use its socket
-/// 4. Error
+/// Uses a priority chain so that the most explicit source wins:
+///
+/// 1. **Explicit `--id` flag** -- derive the socket path from the session ID.
+/// 2. **`NYNE_CONTROL_SOCKET` env var** -- use the path directly. This is set
+///    automatically inside sandbox namespaces so that attached processes can
+///    reach their daemon without knowing the session ID.
+/// 3. **Single active session** -- auto-resolve if exactly one daemon is running.
+/// 4. **Error** -- none of the above matched; the user must specify `--id`.
 fn discover_socket(id: Option<&str>) -> Result<PathBuf> {
     if let Some(id) = id {
         return session::control_socket(id);

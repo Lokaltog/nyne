@@ -76,7 +76,12 @@ pub enum EditOp {
     },
 }
 
-/// An `EditOp` resolved to a concrete byte range in the source.
+/// An [`EditOp`] resolved to a concrete byte range in the source.
+///
+/// Produced by [`EditPlan::resolve`], which walks the decomposed symbol tree
+/// to translate fragment paths into byte ranges. Resolved edits are then
+/// sorted and conflict-checked before being applied in reverse order to
+/// avoid offset invalidation.
 pub struct ResolvedEdit {
     /// The original staged order (user numbering).
     pub staged_index: u32,
@@ -98,7 +103,14 @@ impl ResolvedEdit {
 }
 
 /// A plan of edits for a single source file.
+///
+/// Collects staged [`EditOp`]s paired with their user-assigned sequence
+/// numbers (the `u32`). Call [`resolve`](Self::resolve) to translate
+/// fragment paths into byte ranges, then [`apply`](Self::apply) to
+/// produce the modified source text.
 pub struct EditPlan {
+    /// Staged operations in user-assigned order. The `u32` is the staged
+    /// sequence number used for conflict reporting and diff labels.
     pub ops: Vec<(u32, EditOp)>,
 }
 

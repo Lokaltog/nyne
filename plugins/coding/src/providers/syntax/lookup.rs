@@ -1,3 +1,8 @@
+//! Symbol lookup by shorthand, line number, and rename/delete preview.
+//!
+//! Handles lookup-only paths that are not listed in readdir — shorthand
+//! file symlinks (`Foo.rs`), at-line resolution, and diff preview nodes.
+
 use std::sync::Arc;
 
 use color_eyre::eyre::eyre;
@@ -17,7 +22,11 @@ use crate::syntax::{find_fragment, find_nearest_fragment_at_line};
 
 /// Symbol lookup methods for [`SyntaxProvider`].
 impl SyntaxProvider {
-    /// Lookup-only: `symbols/Foo.rs` → symlink to `Foo@/body.rs`.
+    /// Resolve a shorthand symbol file to a symlink: `symbols/Foo.rs` → `Foo@/body.rs`.
+    ///
+    /// Allows direct reads without navigating the `@/` directory layer. Only
+    /// matches the `<fs_name>.<ext>` pattern for top-level fragments.
+    /// Lookup-only — not listed in readdir.
     pub(super) fn lookup_symbol_shorthand(&self, source_file: &VfsPath, name: &str, _ctx: &RequestContext<'_>) -> Node {
         let Some(decomposer) = self.decomposer_for(source_file) else {
             return Ok(None);
@@ -39,7 +48,11 @@ impl SyntaxProvider {
         Ok(Some(VirtualNode::symlink(name, target.relative_to(&base))))
     }
 
-    /// Generate a symbol rename preview diff via LSP.
+    /// Resolve a symbol rename preview: `Foo@/rename/new_name.diff`.
+    ///
+    /// Calls the LSP `textDocument/rename` to produce a unified diff of all
+    /// changes across the workspace. The actual LSP call happens lazily at
+    /// read time through [`DiffActionNode`].
     pub(super) fn lookup_rename_preview_impl(
         &self,
         source_file: &VfsPath,
@@ -75,11 +88,11 @@ impl SyntaxProvider {
         Ok(Some(DiffActionNode::into_node(name, action)))
     }
 
-    /// Lookup-only: `file.rs@/rename/new_name.rs.diff` → file rename preview.
+    /// Resolve a file rename preview: `file.rs@/rename/new_name.rs.diff`.
     ///
-    /// Dry-run `workspace/willRenameFiles` — returns a unified diff of all
-    /// import-path updates without performing the rename.
-    /// Generate a file rename preview diff via LSP willRenameFiles.
+    /// Dry-runs the LSP `workspace/willRenameFiles` request to produce a unified
+    /// diff of all import-path updates that would result from the rename, without
+    /// actually performing it. Lookup-only — not listed in readdir.
     pub(super) fn lookup_file_rename_preview_impl(&self, source_file: &VfsPath, name: &str) -> Node {
         let Some(new_filename) = name.strip_suffix(".diff") else {
             return Ok(None);
@@ -109,7 +122,10 @@ impl SyntaxProvider {
         Ok(Some(DiffActionNode::into_node(name, action)))
     }
 
-    /// Generate a delete preview diff for a symbol.
+    /// Resolve `Foo@/delete.diff` — a preview of removing the symbol from source.
+    ///
+    /// Produces a unified diff showing the symbol's removal including surrounding
+    /// whitespace cleanup. The computation happens lazily at read time.
     pub(super) fn lookup_delete_preview(
         &self,
         source_file: &VfsPath,
@@ -132,12 +148,11 @@ impl SyntaxProvider {
         Ok(Some(DiffActionNode::into_node("delete.diff", action)))
     }
 
-    /// Lookup-only: `symbols/at-line/<N>` → symlink to the narrowest symbol
+    /// Resolve `symbols/at-line/<N>` to a symlink targeting the narrowest symbol
     /// whose line range contains line N (1-based).
     ///
-    /// Falls back to the nearest fragment when the line is in a gap
-    /// (imports, blank lines between items).
-    /// Resolve a line number to a symlink targeting the narrowest symbol.
+    /// Falls back to the nearest fragment when the line falls in a gap
+    /// (e.g. imports, blank lines between items). Lookup-only — not listed in readdir.
     pub(super) fn lookup_at_line_impl(&self, source_file: &VfsPath, name: &str, _ctx: &RequestContext<'_>) -> Node {
         let line: usize = name
             .parse()

@@ -332,6 +332,10 @@ fn head_tree(repo: &git2::Repository) -> Result<Option<git2::Tree<'_>>> {
 }
 
 /// Format a `git2::Diff` as a unified diff string.
+///
+/// Iterates all patch lines, prefixing content lines with their origin
+/// character (`+`, `-`, ` `) while passing file and hunk headers through
+/// verbatim.
 fn format_diff(diff: &git2::Diff<'_>) -> Result<String> {
     let mut output = String::new();
     diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {

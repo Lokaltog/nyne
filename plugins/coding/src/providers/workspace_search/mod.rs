@@ -22,6 +22,9 @@ use crate::services::CodingServices;
 ///
 /// Contributes `@/search/symbols/{query}` — a directory of symlinks
 /// pointing to matching symbols in the VFS. Empty directory if no match.
+/// Queries are forwarded to the LSP workspace symbol search, so results
+/// include symbols from all files the language server indexes.
+/// Only activates when at least one LSP server supports workspace symbols.
 pub struct WorkspaceSearchProvider {
     ctx: Arc<ActivationContext>,
     routes: RouteTree<Self>,

@@ -104,6 +104,10 @@ impl TemplateEngine {
 /// data during rendering. For simple `Serialize` structs, use [`serialize_view`]
 /// instead.
 pub trait TemplateView: Send + Sync {
+    /// Render this view through the given template, returning the output bytes.
+    ///
+    /// Called on every FUSE read of the virtual file. Implementations should
+    /// be idempotent -- repeated calls with the same state produce identical output.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>>;
 }
 

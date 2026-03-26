@@ -89,6 +89,10 @@ impl fmt::Display for SessionId {
 }
 
 /// Sanitize a string into a valid session ID component.
+///
+/// Delegates to [`slugify_unbounded`] to produce a lowercase-alphanumeric-hyphen
+/// string. No length cap is applied because session IDs are short (derived from
+/// the last path component of the mount directory).
 fn sanitize(s: &str) -> String { slugify_unbounded(s) }
 
 /// Unit tests.

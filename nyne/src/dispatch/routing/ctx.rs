@@ -1,12 +1,29 @@
+//! Route handler context with captured parameters.
+//!
+//! Defines [`RouteCtx`], the context object passed to every route handler.
+//! It combines the [`RequestContext`](crate::dispatch::context::RequestContext)
+//! (path, services, resolver) with [`RouteParams`] (captured segments from
+//! pattern matching), and provides `Deref` to `RequestContext` for ergonomic
+//! access to request-scoped services.
+
 use std::ops::Deref;
 
 use super::params::RouteParams;
 use crate::dispatch::context::RequestContext;
 
-/// Handler context — wraps `RequestContext` with route captures.
+/// Handler context -- wraps [`RequestContext`] with route captures.
 ///
-/// Provides `param()` / `params()` for captures, and derefs to
-/// `RequestContext` for path, `real_fs`, events, resolver access.
+/// Every route handler receives a `RouteCtx` that provides two things:
+///
+/// 1. **Captured parameters** via [`param`](Self::param) (single-segment)
+///    and [`params`](Self::params) (rest-capture). These are accumulated
+///    as the route tree walks through matching segments.
+/// 2. **Request services** via `Deref<Target = RequestContext>` -- path,
+///    `real_fs`, events, resolver, and file-generation tracking are all
+///    accessible without explicit unwrapping.
+///
+/// Constructed by the route tree dispatch machinery; handlers should not
+/// need to create these manually.
 pub struct RouteCtx<'a> {
     request: &'a RequestContext<'a>,
     params: RouteParams,

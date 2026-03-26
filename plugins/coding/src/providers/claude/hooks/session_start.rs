@@ -14,6 +14,11 @@ use crate::providers::names;
 const TMPL_SESSION_START: &str = "claude/session-start";
 
 /// `SessionStart` hook script implementation.
+///
+/// Fires on session start and resume. Renders VFS guidance (available
+/// `@/` paths, navigation patterns) and project context (mount status,
+/// CLAUDE.md instructions) so the agent starts with awareness of the
+/// nyne virtual filesystem.
 pub(in crate::providers::claude) struct SessionStart {
     engine: Arc<TemplateEngine>,
 }

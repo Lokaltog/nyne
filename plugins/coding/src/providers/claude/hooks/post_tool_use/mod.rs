@@ -24,12 +24,22 @@ use crate::syntax::analysis::{AnalysisContext, AnalysisEngine, HintView};
 use crate::syntax::decomposed::DecomposedSource;
 
 /// Minimum combined old+new line count to trigger SSOT reminder on Edit.
+///
+/// When an Edit tool call's `old_string` + `new_string` combined line count
+/// exceeds this threshold, the post-hook emits an SSOT/DRY check reminder.
+/// Small edits (renames, one-liners) are not worth the noise.
 const SSOT_LINE_THRESHOLD: usize = 10;
 
 /// Template key for the post-tool-use hook.
 const TMPL_POST: &str = "claude/post-tool-use";
 
 /// `PostToolUse` hook script implementation.
+///
+/// Fires after every tool execution. For Edit and Write tools targeting
+/// source files, runs syntax analysis and fetches LSP diagnostics scoped
+/// to the changed line range. For Bash commands, extracts relative paths
+/// to provide VFS navigation hints. All derived data is passed to a
+/// Jinja template that decides what context to surface.
 pub(in crate::providers::claude) struct PostToolUse {
     engine: Arc<TemplateEngine>,
 }

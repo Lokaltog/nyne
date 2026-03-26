@@ -12,16 +12,35 @@ use crate::types::ProcessVisibility;
 use crate::types::file_kind::FileKind;
 use crate::types::vfs_path::VfsPath;
 
-/// How a node entered the cache.
+/// How a node entered the cache — determines visibility and generation lifecycle.
+///
+/// Each source has different semantics for readdir visibility and for
+/// whether it participates in the resolve generation sweep cycle (see
+/// [`DirState::sweep_stale_resolve`]). The source is set once at insertion
+/// time and never changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum NodeSource {
-    /// From `Provider::children()` — visible in readdir.
+    /// From `Provider::children()` — visible in readdir, generation-tracked.
+    ///
+    /// Swept if not refreshed by a provider during the current resolve cycle.
     Children,
-    /// From `Provider::lookup()` — hidden from readdir.
+    /// From `Provider::lookup()` — hidden from readdir, **not** generation-tracked.
+    ///
+    /// Lookup-only nodes are never swept because they represent on-demand
+    /// discoveries (e.g., resolving a specific companion path). They persist
+    /// until explicit cache invalidation.
     Lookup,
-    /// From plugin derivation — swept alongside `Children` on re-resolve.
+    /// From plugin derivation — visible in readdir, generation-tracked.
+    ///
+    /// Derived nodes are produced by post-processing other nodes (e.g., a
+    /// `by-kind/` index built from children). They are swept alongside
+    /// `Children` because their validity depends on the same base data.
     Derived,
-    /// From a mutation operation (create, mkdir) — visible in readdir.
+    /// From a mutation operation (create, mkdir) — visible in readdir, **not**
+    /// generation-tracked.
+    ///
+    /// User-created entries persist until explicitly removed or the cache
+    /// is invalidated. They are never swept by re-resolve.
     Mutated,
 }
 
@@ -36,13 +55,24 @@ impl NodeSource {
 }
 
 /// What kind of node this cache entry represents.
+///
+/// The cache must distinguish virtual nodes (owned by a provider, with read/write
+/// capabilities) from real filesystem entries (passed through to the overlay).
+/// This distinction drives conflict resolution: when a virtual node and a real
+/// entry share a name, [`resolve_real_conflicts`](super::resolve::resolve_real_conflicts)
+/// uses this to decide which wins.
 pub(super) enum CachedNodeKind {
     /// A provider-generated virtual node with capabilities.
+    ///
+    /// Tracks the owning `provider_id` so that per-provider invalidation
+    /// and conflict negotiation can identify which provider produced it.
     Virtual {
         node: Arc<VirtualNode>,
         provider_id: ProviderId,
     },
-    /// A real filesystem entry — FUSE handles I/O directly.
+    /// A real filesystem entry — FUSE handles I/O directly via the overlay.
+    ///
+    /// Only the [`FileKind`] is cached; actual content is never buffered.
     Real { file_type: FileKind },
 }
 

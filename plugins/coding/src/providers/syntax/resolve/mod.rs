@@ -1,3 +1,8 @@
+//! Symbol directory resolution — inventory, fragments, and LSP links.
+//!
+//! Decomposes source files via tree-sitter and builds the VFS directory tree
+//! (`symbols/`, `by-kind/`, per-fragment `@/` directories) that agents navigate.
+
 /// Fragment resolution for symbol directory lookups.
 mod fragments;
 /// Symbol inventory resolution (symbols root and by-kind filtering).
@@ -110,6 +115,10 @@ impl SyntaxProvider {
 }
 
 /// Build virtual nodes for all fragments in a decomposition.
+///
+/// Each fragment becomes a directory node with a `SymbolLineRange` property,
+/// an unlinkable `delete.diff` action, and — when an LSP handle is available —
+/// a renameable capability for `mv`-based symbol renames.
 pub(super) fn build_fragment_nodes(
     fragments: &[&Fragment],
     source: &str,

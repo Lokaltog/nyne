@@ -13,6 +13,14 @@ use crate::node::CachePolicy;
 use crate::types::file_kind::FileKind;
 
 /// Resolution and name lookup operations for the router.
+///
+/// This impl block contains the core resolution pipeline that populates
+/// the L1 directory cache and services individual name lookups. The
+/// pipeline has five stages: cache check, provider resolution, plugin
+/// derivation, provider lookup, and real-filesystem fallback.
+///
+/// All methods acquire and release cache locks internally -- callers
+/// never hold locks across calls into this module.
 impl Router {
     /// Ensure a directory is resolved in the L1 cache.
     ///
@@ -259,8 +267,16 @@ impl Router {
 
 /// Scan directory entries for a plugin that can derive a node for `name`.
 ///
+/// Plugin derivation is the mechanism by which a virtual node can spawn
+/// additional sibling entries on demand. For example, a source-file node
+/// with an attached decomposer plugin can derive `file.rs@/` companion
+/// directories when they are looked up, without the provider needing to
+/// enumerate them upfront during `children`.
+///
 /// Iterates all cached entries, checking each plugin-bearing virtual node.
 /// Returns a ready-to-insert [`NodeEntry`] on first match, `None` otherwise.
+/// The returned entry uses [`NodeSource::Derived`] so it is exempt from
+/// generation-based sweep (it persists until explicit invalidation).
 fn derive_from_plugins(dir: &DirState, name: &str, ctx: &RequestContext<'_>) -> Result<Option<NodeEntry>> {
     for (_, cn) in dir.all_entries() {
         let CachedNodeKind::Virtual { node, provider_id } = &cn.kind else {

@@ -1,4 +1,13 @@
 //! Claude Code integration — hooks, settings, and tool dispatch.
+//!
+//! Provides a virtual `.claude/` directory tree containing merged settings,
+//! injected hook scripts, skill definitions, and a system prompt. The
+//! provider activates only when `claude.enabled` is true in coding config.
+//!
+//! Hook scripts are registered via [`script_entries`] and execute as
+//! [`Script`](nyne::dispatch::script::Script) trait objects — one per
+//! Claude Code hook event type (pre-tool-use, post-tool-use, session-start,
+//! stop, statusline).
 
 use std::path::PathBuf;
 
@@ -105,7 +114,13 @@ nyne_skills! {
     "refactor" => ["interface-changes", "diff-patterns"],
 }
 
-/// Provider for Claude Code integration -- hooks, settings, and tool dispatch.
+/// Provider for Claude Code integration — hooks, settings, and tool dispatch.
+///
+/// Contributes the virtual `.claude/` directory containing `settings.json`
+/// (merged from nyne defaults + user config + injected hooks), a system
+/// prompt, skill directories with reference docs, and an output style file.
+/// Activates only when `claude.enabled` is true; merges non-destructively
+/// with any pre-existing `.claude/` directory on the real filesystem.
 pub struct ClaudeProvider {
     ctx: Arc<ActivationContext>,
     routes: RouteTree<Self>,
@@ -245,6 +260,11 @@ impl Provider for ClaudeProvider {
 }
 
 /// Readable that layers nyne defaults, user `settings.json`, and injected hooks.
+///
+/// On read, merges three sources in priority order: nyne's built-in defaults
+/// (hook entries, permissions), the user's on-disk `settings.json` (if present),
+/// and dynamically injected hook scripts. The merge is non-destructive — user
+/// settings are preserved and nyne entries are additive.
 struct SettingsContent {
     root: PathBuf,
 }

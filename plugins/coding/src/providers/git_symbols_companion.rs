@@ -32,8 +32,14 @@ use crate::syntax::decomposed::DecompositionCache;
 
 /// Provider for symbol-scoped git features.
 ///
-/// Handles `symbols/{..path}@/git/` companion routes, providing per-symbol
-/// blame, log, and history by filtering git data to the symbol's line range.
+/// Extends nyne-git's file-level blame, log, and history with syntax-aware
+/// symbol scoping. For any decomposed symbol, this provider contributes a
+/// `git/` companion directory containing blame hunks, commit log entries,
+/// and historical versions filtered to that symbol's line range.
+///
+/// Uses [`ConflictResolution::Force`](nyne::provider::ConflictResolution) to
+/// override nyne-git's file-level `git/` directory when accessed through a
+/// symbol path (`symbols/{..path}@/git/`).
 pub struct GitSymbolsProvider {
     ctx: Arc<ActivationContext>,
     blame_handle: TemplateHandle,
@@ -275,6 +281,10 @@ impl TemplateView for SymbolLogView {
 }
 
 /// Shared context for symbol history version lookups.
+///
+/// Captured once when listing history entries and then shared (via `Arc`)
+/// across all [`SymbolHistoryVersionContent`] nodes for that symbol.
+/// Avoids redundant repository and registry lookups per version.
 struct SymbolHistoryCtx {
     repo: Arc<GitRepo>,
     rel_path: String,

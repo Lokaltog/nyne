@@ -52,6 +52,10 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
 }
 
 /// A resolved node paired with the provider that produced it.
+///
+/// Provenance tracking is essential for conflict negotiation: when two
+/// providers emit nodes with the same name, the conflict protocol must
+/// notify each provider individually and attribute the resolution.
 pub(super) struct OwnedNode {
     pub(super) node: VirtualNode,
     pub(super) provider_id: ProviderId,
@@ -101,9 +105,18 @@ impl OwnedNode {
     }
 }
 
-/// Outcome of calling `on_conflict` on all involved providers for a single name.
+/// Raw outcome of calling `on_conflict` on all involved providers for a single name.
+///
+/// Aggregates the three possible provider responses:
+/// - **Force** — "I insist on owning this name" (stored in `forces`)
+/// - **Retry** — "I can rename my node to avoid the conflict" (stored in `retries`)
+/// - **Yield** — "I give up this name" (not stored — yielded nodes are dropped)
+///
+/// The caller passes this to [`apply_force_resolution`] to determine the winner.
 struct ConflictOutcome {
+    /// Providers that force-claimed the name, with their replacement nodes.
     forces: Vec<(ProviderId, Vec<VirtualNode>)>,
+    /// Nodes from providers willing to retry under a different name.
     retries: Vec<OwnedNode>,
 }
 
@@ -179,8 +192,14 @@ fn apply_force_resolution(name: &str, forces: Vec<(ProviderId, Vec<VirtualNode>)
 }
 
 /// Result of attempting to resolve a naming conflict through provider negotiation.
+///
+/// The caller's behavior differs by context:
+/// - **Provider-vs-provider:** `Unforced` retries are checked for remaining
+///   conflicts; if still conflicting, all nodes for that name are dropped.
+/// - **Provider-vs-real:** `Unforced` means the real file wins; retries are
+///   kept only if they no longer collide with real names.
 enum ConflictResult {
-    /// Exactly one provider forced — these nodes win.
+    /// Exactly one provider forced — these nodes win and shadow any real entry.
     Forced(Vec<OwnedNode>),
     /// No provider forced — retries available for caller-specific handling.
     Unforced { retries: Vec<OwnedNode> },

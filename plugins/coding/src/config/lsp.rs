@@ -15,6 +15,10 @@ use super::default_true;
 ///
 /// Always present in `CodingConfig` (via `#[serde(default)]`).
 /// LSP is enabled by default; set `enabled = false` to disable.
+///
+/// Deserialized from the `[lsp]` table (top-level, not under `[plugin.coding]`)
+/// so that LSP settings live alongside language server tooling rather than
+/// being buried inside plugin-specific config.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LspConfig {

@@ -1,3 +1,8 @@
+//! Plugin registration and activation for the git plugin.
+//!
+//! Opens the git repository during activation and inserts [`GitRepo`] into the
+//! `TypeMap` for other providers (including nyne-coding) to consume.
+
 use std::path::Path;
 use std::sync::Arc;
 
@@ -14,6 +19,10 @@ use crate::provider::GitProvider;
 use crate::repo::GitRepo;
 
 /// Git plugin entry point — opens the repo and creates providers.
+///
+/// During activation, discovers the git repository for the source directory
+/// and inserts a shared [`GitRepo`] into the `TypeMap`. If no repo is found,
+/// gracefully disables itself by returning no providers.
 pub struct GitPlugin;
 
 /// [`Plugin`] implementation for [`GitPlugin`].

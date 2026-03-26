@@ -1,3 +1,10 @@
+//! Line range metadata for symbol directory nodes.
+//!
+//! When a provider decomposes a source file into symbols, each symbol's
+//! directory node carries a [`SymbolLineRange`] property. Other providers
+//! (e.g., git blame, git log) read this property to scope their operations
+//! to the symbol's line span without needing to understand the decomposition.
+
 use std::fmt;
 use std::ops::Range;
 

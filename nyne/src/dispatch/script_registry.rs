@@ -1,3 +1,13 @@
+//! Registry of named scripts indexed by dotted address.
+//!
+//! Built once at mount time alongside the [`ProviderRegistry`](super::registry::ProviderRegistry).
+//! Each plugin contributes scripts via [`Plugin::scripts`](crate::plugin::Plugin::scripts);
+//! they are indexed by their fully-qualified address (e.g., `provider.coding.decompose`)
+//! for O(1) lookup when `nyne exec` is invoked.
+//!
+//! Duplicate addresses are detected at registration time and logged as warnings --
+//! the last registration wins, matching HashMap insert semantics.
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -8,10 +18,14 @@ use super::script::{Script, ScriptContext};
 use crate::dispatch::activation::ActivationContext;
 use crate::plugin::PLUGINS;
 
-/// Registry of named scripts, indexed by dotted address.
+/// Registry of named scripts, indexed by fully-qualified dotted address.
 ///
-/// Built at startup by iterating [`PLUGINS`] and calling each plugin's
-/// [`scripts`](crate::plugin::Plugin::scripts) method.
+/// Built once at mount time by iterating [`PLUGINS`] and calling each plugin's
+/// [`scripts`](crate::plugin::Plugin::scripts) method. The registry is immutable
+/// after construction -- scripts cannot be added or removed at runtime.
+///
+/// Lookup is O(1) via `HashMap`. The `nyne exec` CLI command resolves an address
+/// through this registry, then calls [`Script::exec`] with binary stdin/stdout.
 pub struct ScriptRegistry {
     scripts: HashMap<String, Arc<dyn Script>>,
 }

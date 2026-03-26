@@ -1,3 +1,16 @@
+//! TTL-based cache for LSP query results.
+//!
+//! Avoids redundant LSP server round-trips for repeated reads of the same
+//! symbol or file. Entries are keyed by [`CacheKey`] (file path + LSP method +
+//! position) and expire after a configurable TTL. Values are type-erased
+//! (`Box<dyn Any>`) so any result type can be cached without a serde
+//! round-trip.
+//!
+//! Invalidation is path-prefix-based: when a file changes, all entries whose
+//! key starts with that file's path are evicted. This is coarse-grained but
+//! correct -- LSP results for a file are only valid for the exact source text
+//! the server last saw.
+
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
@@ -21,8 +34,11 @@ pub struct CacheKey<'a> {
 }
 
 /// Display a cache key as `path:method:line:param`.
+///
+/// This format is also used as the `HashMap` key string. The path-prefix
+/// property enables [`LspCache::invalidate_file`] to match entries by
+/// checking `key.starts_with(path)`.
 impl fmt::Display for CacheKey<'_> {
-    /// Formats the value for display.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -36,8 +52,14 @@ impl fmt::Display for CacheKey<'_> {
 }
 
 /// Single cache entry with TTL metadata.
+///
+/// The value is type-erased so the cache can store heterogeneous LSP result
+/// types (`Vec<Location>`, `Option<Hover>`, etc.) in a single `HashMap`.
+/// Callers downcast via `get::<T>` which returns `None` on type mismatch.
 struct CacheEntry {
+    /// Type-erased cached value, downcast by callers via `Any::downcast_ref`.
     data: Box<dyn Any + Send + Sync>,
+    /// When this entry was inserted, used to compute expiry against the TTL.
     cached_at: Instant,
 }
 

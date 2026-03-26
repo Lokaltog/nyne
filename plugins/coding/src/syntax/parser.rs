@@ -104,6 +104,13 @@ impl<'a> TsNode<'a> {
 /// Merge byte ranges of preceding siblings matched by `collect_fn` into a single span.
 ///
 /// Walks backwards from `node`, trimming trailing newlines from the result.
+/// Used to collect doc-comment and attribute blocks that precede a symbol
+/// definition. The `collect_fn` returns `Some(true)` to include a sibling,
+/// `Some(false)` to skip it (e.g. blank lines), or `None` to stop walking.
+///
+/// Trailing newlines are stripped because tree-sitter line-based node ranges
+/// include the `\n` -- keeping it would eat the separator between the collected
+/// content and the following symbol during splice operations.
 pub fn merge_preceding_sibling_ranges(
     node: TsNode<'_>,
     mut collect_fn: impl FnMut(TsNode<'_>) -> Option<bool>,
@@ -171,6 +178,10 @@ pub fn collect_import_range(root: TsNode<'_>, import_kinds: &[&str]) -> Option<R
 }
 
 /// Walk a tree-sitter tree and collect all ERROR and MISSING nodes.
+///
+/// Entry point for syntax validation. The returned [`ParseError`]s are
+/// used by splice validation to reject edits that introduce syntax errors
+/// and by DIAGNOSTICS.md rendering to show parse problems.
 pub fn collect_parse_errors(tree: &tree_sitter::Tree, source: &[u8]) -> Vec<ParseError> {
     let mut errors = Vec::new();
     let mut cursor = tree.walk();
@@ -179,6 +190,9 @@ pub fn collect_parse_errors(tree: &tree_sitter::Tree, source: &[u8]) -> Vec<Pars
 }
 
 /// Recursively walk the tree-sitter tree collecting ERROR and MISSING nodes.
+///
+/// Uses a `TreeCursor` for stack-efficient traversal. Error text is
+/// truncated to 120 chars to keep diagnostic output readable.
 fn collect_errors_recursive(cursor: &mut tree_sitter::TreeCursor<'_>, source: &[u8], errors: &mut Vec<ParseError>) {
     let node = cursor.node();
     if node.is_error() || node.is_missing() {
@@ -226,6 +240,10 @@ pub struct CodeFragmentSpec {
 }
 
 /// Build a [`Fragment`] from a tree-sitter node and a [`CodeFragmentSpec`].
+///
+/// Thin adapter that bridges the language-specific data collected in
+/// [`CodeFragmentSpec`] with the generic [`Fragment::new`] constructor.
+/// The byte range is taken from the tree-sitter `span_node`.
 pub fn build_code_fragment(span_node: TsNode<'_>, spec: CodeFragmentSpec, parent_name: Option<&str>) -> Fragment {
     Fragment::new(
         spec.name,

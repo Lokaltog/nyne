@@ -31,6 +31,11 @@ use content::lsp::{LspFeature, LspHandles, build_diagnostics_node};
 use strum::IntoEnumIterator;
 
 /// Core syntax decomposition provider — tree-sitter parsing, symbol resolution, and LSP integration.
+///
+/// Owns the route tree that maps companion-namespace paths (`file.rs@/symbols/...`) to
+/// virtual nodes, dispatching to the resolve, lookup, and content submodules. Each source
+/// file gets its own companion directory tree with symbol inventory, meta-files (signature,
+/// docstring, decorators), LSP feature nodes, and code-action diffs.
 pub struct SyntaxProvider {
     ctx: Arc<ActivationContext>,
     overview: TemplateHandle,

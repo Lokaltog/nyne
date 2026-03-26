@@ -13,16 +13,17 @@ use serde_json::{Map, Value, json};
 /// { "matcher": "startup|resume", "hooks": [{ "type": "command", "command": "..." }] }
 /// ```
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-/// Hook entry in settings configuration.
 pub(super) struct HookEntry {
     pub matcher: String,
     pub hooks: Vec<HookAction>,
 }
 
 /// A single hook action (the inner `hooks` array element).
+///
+/// Currently only `Command` is supported — the `type` field is used as
+/// the serde tag discriminator matching Claude Code's JSON schema.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 #[serde(tag = "type")]
-/// Action associated with a hook (launch, attach, message).
 pub(super) enum HookAction {
     #[serde(rename = "command")]
     Command { command: String },
@@ -166,6 +167,8 @@ const DENIED_TOOLS: &[&str] = &[
 /// These are the single source of truth for settings values that nyne
 /// controls. The real `.claude/settings.json` on disk can override any
 /// of these — user values always win.
+///
+/// TODO: Migrate to plugin defaults (see LSP configuration)
 fn default_settings() -> Value {
     let env: Map<String, Value> = ENV_VARS
         .iter()

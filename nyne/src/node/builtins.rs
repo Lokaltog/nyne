@@ -1,3 +1,13 @@
+//! Built-in [`Readable`] and [`Writable`] implementations for common cases.
+//!
+//! These cover the two most frequent node content patterns:
+//!
+//! - **[`StaticContent`]** — compile-time-known bytes (e.g., fixed metadata
+//!   files, help text). Zero-cost to construct; allocates only on read.
+//! - **[`PassthroughContent`]** — delegates to a real file on the underlying
+//!   filesystem via [`RealFs`](crate::types::real_fs::RealFs). Used by
+//!   providers that overlay virtual structure onto real files.
+
 use color_eyre::eyre::Result;
 
 use super::capabilities::{Readable, Writable};
@@ -5,7 +15,10 @@ use super::kind::WriteOutcome;
 use crate::dispatch::context::RequestContext;
 use crate::types::vfs_path::VfsPath;
 
-/// Simple readable that returns static content.
+/// Readable that returns a compile-time-known byte slice.
+///
+/// Useful for fixed-content virtual files (help text, metadata stubs)
+/// where the content never changes across reads.
 pub struct StaticContent(pub &'static [u8]);
 
 /// Readable implementation for [`StaticContent`].

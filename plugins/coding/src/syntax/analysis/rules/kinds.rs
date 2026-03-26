@@ -204,6 +204,10 @@ pub(super) fn node_str<'a>(node: &tree_sitter::Node<'_>, source: &'a [u8]) -> Op
 }
 
 /// Count how many times `name` appears as an identifier in the subtree.
+///
+/// Used by the single-use-variable rule to determine whether a binding
+/// is referenced more than once. Matches on exact byte equality of the
+/// `"identifier"` node text against `name`.
 pub(super) fn count_identifier_uses(node: &tree_sitter::Node<'_>, name: &[u8], source: &[u8]) -> usize {
     let mut count = 0;
     let mut cursor = node.walk();
@@ -212,6 +216,9 @@ pub(super) fn count_identifier_uses(node: &tree_sitter::Node<'_>, name: &[u8], s
 }
 
 /// Recursively count occurrences of an identifier name in a subtree.
+///
+/// Uses a `TreeCursor` for stack-efficient traversal, matching only
+/// leaf nodes with kind `"identifier"` whose text equals `name`.
 fn count_identifier_recursive(cursor: &mut tree_sitter::TreeCursor<'_>, name: &[u8], source: &[u8], count: &mut usize) {
     let node = cursor.node();
     if node.kind() == IDENTIFIER && node_bytes(&node, source) == name {

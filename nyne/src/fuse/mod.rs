@@ -1,4 +1,17 @@
-//! FUSE filesystem handler — maps fuser callbacks to router operations.
+//! FUSE filesystem handler — bridges the kernel's FUSE protocol to nyne's router.
+//!
+//! This module implements `fuser::Filesystem`, translating low-level FUSE callbacks
+//! (lookup, read, write, readdir, etc.) into high-level [`Router`] operations. The
+//! split between submodules reflects the distinct ownership rules for event draining
+//! (see `doc/codebase.md` — "Event Draining"):
+//!
+//! - [`ops`] — read-only FUSE callbacks plus write/flush/release I/O (FUSE owns drain)
+//! - [`mutations`] — create/mkdir/rename/unlink (dispatch owns drain)
+//! - [`xattr`] — extended attribute get/list/set (FUSE owns drain)
+//!
+//! Per-process visibility is resolved at every entry point via [`VisibilityMap`],
+//! ensuring that passthrough processes (git, LSP servers) never observe virtual nodes
+//! while attached agents see the full decomposed namespace.
 
 /// FUSE file attribute helpers.
 mod attrs;
@@ -136,6 +149,10 @@ pub struct NyneFs {
 /// Core FUSE handler methods for inode resolution and content I/O.
 impl NyneFs {
     /// Creates a new FUSE filesystem handler.
+    ///
+    /// The `router` provides all inode resolution, content I/O, and provider
+    /// dispatch. The `visibility` map is shared with the control server so
+    /// that `SetVisibility` requests take effect on the next FUSE callback.
     pub fn new(router: Arc<Router>, visibility: Arc<VisibilityMap>) -> Self {
         Self {
             router,
@@ -148,7 +165,14 @@ impl NyneFs {
         }
     }
 
-    /// Dispatches inode operations to real or virtual handlers.
+    /// Dispatches an inode operation to the appropriate handler based on inode type.
+    ///
+    /// Real inodes (including `ROOT_INODE`) invoke `on_real` with the resolved
+    /// [`VfsPath`]. Virtual inodes look up the owning provider and invoke
+    /// `on_virtual` with the node, provider, and a fresh [`RequestContext`].
+    ///
+    /// This is the central dispatch point for per-inode I/O — [`load_content`](Self::load_content)
+    /// and [`flush_content`](Self::flush_content) both delegate here.
     fn with_inode_io<T>(
         &self,
         ino: u64,
@@ -220,6 +244,10 @@ impl NyneFs {
     }
 
     /// Resolve the visibility level for the requesting process.
+    ///
+    /// Delegates to [`VisibilityMap::resolve`], which walks PID ancestry
+    /// and name-based rules to classify the process as `All`, `Default`,
+    /// or `None` (full passthrough).
     fn process_visibility(&self, req: &Request) -> ProcessVisibility { self.visibility.resolve(req.pid()) }
 
     /// Resolve an inode, demoting virtual nodes to real for passthrough
@@ -326,8 +354,13 @@ impl NyneFs {
 
     /// Core readdir iteration: resolve placeholder inodes and emit entries.
     ///
-    /// `lookup` resolves inode-0 placeholders to real inodes. `emit` returns
-    /// `true` when the reply buffer is full (stop iterating).
+    /// Skips `offset` entries (FUSE's cursor-based pagination), then calls
+    /// `emit` for each remaining entry. Entries with inode 0 are passthrough
+    /// placeholders — `lookup` resolves them to real inodes before emission.
+    /// Entries that fail lookup are silently skipped (the real file may have
+    /// been deleted between readdir collection and iteration).
+    ///
+    /// `emit` returns `true` when the reply buffer is full, stopping iteration.
     fn iter_readdir_entries(
         entries: &[ReaddirEntry],
         offset: u64,

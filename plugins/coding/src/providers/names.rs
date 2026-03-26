@@ -1,4 +1,13 @@
 //! VFS name constants for coding-provided virtual paths.
+//!
+//! Centralizes every directory name, file name, and separator that the coding
+//! plugin injects into the virtual filesystem. Constants defined here are the
+//! single source of truth — providers, templates, and path-parsing helpers all
+//! reference them rather than duplicating string literals.
+//!
+//! The module also re-exports shared constants from nyne core
+//! ([`FILE_OVERVIEW`], [`SUBDIR_SYMBOLS`], [`COMPANION_SUFFIX`]) so that
+//! coding-side code has a single import site.
 
 use nyne::templates::{HandleBuilder, TemplateEngine};
 // Re-exported from nyne core — shared with core providers.
@@ -6,9 +15,18 @@ pub use nyne::types::path_conventions::{COMPANION_SUFFIX, companion_name};
 pub use nyne::{FILE_OVERVIEW, SUBDIR_SYMBOLS};
 
 /// VFS path separator (`@/`).
+///
+/// Delimits the boundary between a real source file path and its virtual
+/// namespace. For example, in `src/main.rs@/symbols/Foo@/body.rs`, the first
+/// `@/` separates the source file from its VFS subtree, and the second
+/// separates the symbol name from its metadata files.
 pub const VFS_SEP: &str = "@/";
 
 /// VFS symbols path segment (`@/symbols/`).
+///
+/// The combined prefix used to locate the symbol namespace within a file's
+/// VFS tree. Used by [`symbol_from_vfs_path`] and other path-parsing helpers
+/// to extract symbol names from full VFS paths.
 pub const VFS_SYMBOLS_SEP: &str = "@/symbols/";
 
 /// Subdirectory for type-filtered symbol views.
@@ -48,13 +66,21 @@ pub const FILE_IMPORTS: &str = "imports";
 pub const SUBDIR_EDIT: &str = "edit";
 /// Subdirectory for previewing staged edit actions.
 pub const SUBDIR_STAGED: &str = "staged";
-/// Staged diff file name -- apply on delete, clear on truncate.
+/// Staged diff file name — apply on delete, clear on truncate.
+///
+/// This file has dual semantics: reading it previews the staged diff,
+/// deleting it (`rm`) atomically applies all staged edits, and truncating
+/// it (writing empty content) discards all staged edits without applying.
 pub const FILE_STAGED_DIFF: &str = "staged.diff";
 
 /// TODO directory name at the `@/` root level.
 pub const DIR_TODO: &str = "todo";
 
 /// Register coding name constants as template globals.
+///
+/// Makes file-name and separator constants available in Jinja templates so
+/// that templates reference canonical names (e.g. `{{ FILE_OVERVIEW }}`)
+/// instead of hard-coding string literals.
 pub fn register_template_globals(engine: &mut TemplateEngine) {
     nyne::register_globals!(
         engine,
@@ -68,6 +94,10 @@ pub fn register_template_globals(engine: &mut TemplateEngine) {
 }
 
 /// Create a [`HandleBuilder`] with coding name globals pre-registered.
+///
+/// Convenience wrapper so providers don't need to manually call
+/// [`register_template_globals`] after constructing a builder. Every
+/// coding provider that registers templates should start here.
 pub fn handle_builder() -> HandleBuilder {
     let mut b = HandleBuilder::new();
     register_template_globals(b.engine_mut());
@@ -80,6 +110,10 @@ pub fn is_vfs_path(path: &str) -> bool { path.contains(VFS_SEP) }
 pub fn source_file_of(path: &str) -> &str { path.split(VFS_SEP).next().unwrap_or(path) }
 
 /// Extract the symbol name from a VFS path like `file.rs@/symbols/Foo@/body.rs`.
+///
+/// Returns `None` when the path does not contain a `@/symbols/` segment or
+/// when the symbol name portion is empty. Only the first symbol name is
+/// extracted — nested `@/` separators after the symbol are ignored.
 pub fn symbol_from_vfs_path(path: &str) -> Option<&str> {
     let after_symbols = path.split(VFS_SYMBOLS_SEP).nth(1)?;
     let name = after_symbols.split(VFS_SEP).next()?;

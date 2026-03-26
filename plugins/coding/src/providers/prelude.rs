@@ -1,4 +1,8 @@
 //! Common imports for provider implementations in nyne-coding.
+//!
+//! Re-exports the core dispatch, node, and provider types that virtually every
+//! provider module needs, so individual files can `use super::prelude::*` instead
+//! of repeating the same import block.
 
 pub use std::sync::Arc;
 

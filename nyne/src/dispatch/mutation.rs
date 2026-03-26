@@ -1,4 +1,17 @@
 //! File system mutation operations: create, remove, rename, with provider delegation.
+//!
+//! All mutations follow a two-phase pattern:
+//!
+//! 1. **Provider delegation** — providers are queried via single-claim semantics.
+//!    At most one provider may claim ownership of a mutation; if multiple claim
+//!    it, the operation fails as ambiguous.
+//! 2. **Real-FS fallback** — if no provider claims the mutation and the target
+//!    exists on the real filesystem, the operation is executed directly via
+//!    [`MutationOp::execute`](crate::provider::MutationOp::execute).
+//!
+//! After either phase, the L1 cache is updated inline (not deferred to the
+//! watcher) so subsequent FUSE operations see consistent state immediately.
+//! Events are drained and processed before returning.
 
 use std::io::ErrorKind;
 use std::sync::Arc;

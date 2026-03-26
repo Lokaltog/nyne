@@ -1,5 +1,12 @@
 //! VFS name constants used by core providers.
 
+//! Well-known VFS node names used across providers.
+//!
+//! SSOT for string constants that appear in the virtual filesystem tree
+//! (e.g., `"symbols"`, `"OVERVIEW.md"`). Centralizing these prevents
+//! typo-induced mismatches between providers that produce nodes and
+//! providers or templates that reference them by name.
+
 use crate::templates::{HandleBuilder, TemplateEngine};
 pub(super) use crate::types::path_conventions::{COMPANION_SUFFIX, companion_name};
 
@@ -21,6 +28,10 @@ fn register_template_globals(engine: &mut TemplateEngine) {
 }
 
 /// Create a [`HandleBuilder`] with core name globals pre-registered.
+///
+/// Core providers should use this instead of `HandleBuilder::new()` so
+/// their templates can reference well-known names like `FILE_OVERVIEW`
+/// and `SUBDIR_SYMBOLS` without manual registration.
 pub(super) fn handle_builder() -> HandleBuilder {
     let mut b = HandleBuilder::new();
     register_template_globals(b.engine_mut());

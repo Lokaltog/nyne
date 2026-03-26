@@ -1,5 +1,12 @@
 //! Companion directory provider — makes real files/directories accessible with suffix.
 
+//! Companion directory provider -- creates `@/` namespaces for real files and directories.
+//!
+//! This is the foundational provider that makes nyne's VFS decomposition possible.
+//! Every real file `foo.rs` gets a hidden companion directory `foo.rs@/` that serves
+//! as the mount point for other providers' virtual content (syntax symbols, git
+//! blame, diagnostics, etc.). Without this provider, no `@/` paths would exist.
+
 use std::sync::Arc;
 
 use color_eyre::eyre::{Result, eyre};

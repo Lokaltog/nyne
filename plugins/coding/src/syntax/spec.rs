@@ -257,17 +257,33 @@ pub fn wrap_line_doc_comment(plain: &str, indent: &str, bare_prefix: &str, space
 }
 
 /// Public API for decomposing source files.
+///
+/// Implemented by [`CodeDecomposer<L>`] for trait-based languages and by
+/// [`InjectionDecomposer`](super::injection::InjectionDecomposer) for
+/// compound template files. Stored as `Arc<dyn Decomposer>` in the
+/// [`SyntaxRegistry`](super::SyntaxRegistry).
 pub trait Decomposer: Send + Sync {
+    /// Parse `source` into a flat/tree of [`Fragment`]s, recursing up to `max_depth` levels.
     fn decompose(&self, source: &str, max_depth: usize) -> (DecomposedFile, Option<tree_sitter::Tree>);
+    /// Validate `source` syntax via tree-sitter, returning an error on parse failures.
     fn validate(&self, source: &str) -> Result<()>;
+    /// Human-readable language name (e.g. `"Rust"`).
     fn language_name(&self) -> &'static str;
+    /// Primary file extension this decomposer handles (without dot).
     fn file_extension(&self) -> &'static str;
+    /// Strip language-specific doc comment markers from raw text.
     fn strip_doc_comment(&self, raw: &str) -> String;
+    /// Wrap plain text in language-specific doc comment syntax.
     fn wrap_doc_comment(&self, plain: &str, indent: &str) -> String;
+    /// Wrap plain text in file-level doc comment syntax (e.g. `//!` in Rust).
     fn wrap_file_doc_comment(&self, plain: &str, indent: &str) -> String;
+    /// Extract the first non-empty sentence from a raw doc comment for summaries.
     fn clean_doc_comment(&self, raw: &str) -> Option<String>;
+    /// Assign filesystem names to fragments according to the language's naming strategy.
     fn map_to_fs(&self, fragments: &mut [Fragment]);
+    /// Resolve filesystem name collisions among sibling fragments.
     fn resolve_conflicts(&self, conflicts: &[ConflictSet]) -> Vec<Resolution>;
+    /// How fragment bodies are sliced from source for reading and spliced back on write.
     fn splice_mode(&self) -> SpliceMode;
 }
 

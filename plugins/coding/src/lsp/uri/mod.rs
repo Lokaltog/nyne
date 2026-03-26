@@ -1,10 +1,13 @@
-// URI and position conversion helpers for LSP protocol interop.
-//
-// SSOT: all file-path-to-URI and byte-offset-to-position conversions live here.
-// Both `client.rs` and `edit.rs` import from this module.
-//
-// Position conversions delegate to `crop::Rope` with the `utf16-metric` feature
-// for O(log n) line/column lookups instead of O(n) character scanning.
+//! URI and position conversion helpers for LSP protocol interop.
+//!
+//! **SSOT:** all file-path-to-URI and byte-offset-to-position conversions
+//! live here. Both `client.rs` and `edit.rs` import from this module —
+//! never duplicate these conversions elsewhere.
+//!
+//! Position conversions delegate to `crop::Rope` with the `utf16-metric`
+//! feature for O(log n) line/column lookups instead of O(n) character
+//! scanning. This matters because LSP positions use UTF-16 code unit
+//! offsets, which do not correspond 1:1 to byte offsets in UTF-8 source.
 
 use std::ops::Range;
 use std::path::{Path, PathBuf};

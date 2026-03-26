@@ -44,6 +44,11 @@ pub fn parse_tag_suffix(after_tag: &str) -> Option<&str> {
 }
 
 /// TODO provider — aggregates TODO/FIXME markers from source files.
+///
+/// Exposes `@/todo/` containing per-tag subdirectories (e.g. `TODO/`, `FIXME/`)
+/// with symlinks pointing back to the source file and line. Scans lazily on
+/// first access using the git index as the file list, and invalidates the
+/// cached index when scanned files change on disk.
 pub struct TodoProvider {
     ctx: Arc<ActivationContext>,
     scanner: TodoScanner,
@@ -56,6 +61,10 @@ pub struct TodoProvider {
 }
 
 /// Cached scan results.
+///
+/// Built lazily on first access by scanning all git-tracked files.
+/// Invalidated via `on_fs_change` when any of the `scanned_files` is
+/// modified, causing a full re-scan on the next read.
 struct TodoIndex {
     /// All discovered entries, grouped by tag.
     entries_by_tag: BTreeMap<String, Vec<TodoEntry>>,

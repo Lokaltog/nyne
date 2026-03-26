@@ -34,7 +34,11 @@ pub struct DecomposedSource {
     pub tree: Option<tree_sitter::Tree>,
 }
 
-/// Debug implementation for `DecomposedSource`, showing only the decomposed fragments.
+/// Custom `Debug` that omits the raw source text and parse tree.
+///
+/// The full source string can be enormous and the tree-sitter `Tree` type
+/// does not implement `Debug`, so this focuses on the fragment structure
+/// which is what matters when diagnosing decomposition issues.
 impl fmt::Debug for DecomposedSource {
     /// Formats the decomposed source for debug output.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -83,6 +87,9 @@ pub struct DecompositionCache {
 }
 
 /// Inner state of the decomposition cache behind `Arc`.
+///
+/// Separated from [`DecompositionCache`] so that cloning the cache is a
+/// cheap `Arc` bump without requiring `RwLock<HashMap<...>>` to be `Clone`.
 struct DecompositionCacheInner {
     real_fs: Arc<dyn RealFs>,
     syntax: Arc<SyntaxRegistry>,
