@@ -34,7 +34,7 @@ pub(super) struct StagedAction {
 /// Methods for [`StagedAction`].
 impl StagedAction {
     /// Filename for this staged action (e.g., `10-replace.diff`).
-    pub fn filename(&self, index: u32) -> String { format!("{:02}-{}.diff", index, self.op.kind().name()) }
+    pub fn filename(&self, index: u32) -> String { format!("{:02}-{}.diff", index, self.op.kind.name()) }
 }
 
 /// Index increment between staged actions.

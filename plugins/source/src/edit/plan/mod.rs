@@ -41,40 +41,17 @@ impl EditOpKind {
 
 /// A single edit operation targeting a source file.
 ///
-/// `#[non_exhaustive]` — future variants (e.g., `AstGrep` for structural
-/// pattern matching) can be added without breaking downstream matches.
-#[non_exhaustive]
+/// Each op targets a `fragment_path` (symbol address in the tree) with a
+/// [`kind`](EditOpKind) and optional `content`. Only [`Delete`](EditOpKind::Delete)
+/// carries no content.
 #[derive(Clone)]
-pub enum EditOp {
-    /// Replace a symbol's body with new content.
-    Replace {
-        /// Fragment path (e.g., `["Foo", "bar"]` for nested symbol).
-        fragment_path: Vec<String>,
-        /// New content to splice in.
-        content: String,
-    },
-
-    /// Delete a symbol entirely (including decorators, docstring, signature).
-    Delete { fragment_path: Vec<String> },
-
-    /// Insert content before a symbol.
-    InsertBefore {
-        fragment_path: Vec<String>,
-        content: String,
-    },
-
-    /// Insert content after a symbol.
-    InsertAfter {
-        fragment_path: Vec<String>,
-        content: String,
-    },
-
-    /// Append content as last child of a scope.
-    /// Rejects leaf symbols (empty `children`) with EINVAL.
-    Append {
-        fragment_path: Vec<String>,
-        content: String,
-    },
+pub struct EditOp {
+    /// Fragment path (e.g., `["Foo", "bar"]` for nested symbol).
+    pub fragment_path: Vec<String>,
+    /// The operation to perform on the target symbol.
+    pub kind: EditOpKind,
+    /// Content payload. `None` only for `Delete`.
+    pub content: Option<String>,
 }
 
 /// An [`EditOp`] resolved to a concrete byte range in the source.
@@ -117,39 +94,24 @@ pub struct EditPlan {
 
 /// Methods for inspecting and mutating edit operations.
 impl EditOp {
-    /// The discriminant kind of this operation.
+    /// Create a new edit operation.
     #[must_use]
-    pub const fn kind(&self) -> EditOpKind {
-        match self {
-            Self::Replace { .. } => EditOpKind::Replace,
-
-            Self::Delete { .. } => EditOpKind::Delete,
-            Self::InsertBefore { .. } => EditOpKind::InsertBefore,
-            Self::InsertAfter { .. } => EditOpKind::InsertAfter,
-            Self::Append { .. } => EditOpKind::Append,
+    pub fn new(fragment_path: Vec<String>, kind: EditOpKind, content: impl Into<Option<String>>) -> Self {
+        Self {
+            fragment_path,
+            kind,
+            content: content.into(),
         }
     }
 
-    /// The content payload, if any. `Delete` has no content.
+    /// The content payload, or `""` when absent (`Delete`).
     #[must_use]
-    pub fn content(&self) -> &str {
-        match self {
-            Self::Replace { content, .. }
-            | Self::InsertBefore { content, .. }
-            | Self::InsertAfter { content, .. }
-            | Self::Append { content, .. } => content,
-            Self::Delete { .. } => "",
-        }
-    }
+    pub fn content(&self) -> &str { self.content.as_deref().unwrap_or("") }
 
     /// Replace the content payload. No-op for `Delete`.
     pub fn set_content(&mut self, new_content: String) {
-        match self {
-            Self::Replace { content, .. }
-            | Self::InsertBefore { content, .. }
-            | Self::InsertAfter { content, .. }
-            | Self::Append { content, .. } => *content = new_content,
-            Self::Delete { .. } => {}
+        if self.content.is_some() {
+            self.content = Some(new_content);
         }
     }
 }
@@ -168,9 +130,11 @@ impl EditPlan {
         let mut resolved = Vec::with_capacity(self.ops.len());
 
         for (index, op) in &self.ops {
-            let edit = match op {
-                EditOp::Replace { fragment_path, content } => {
-                    let frag = require_fragment(fragments, fragment_path)?;
+            let frag = require_fragment(fragments, &op.fragment_path)?;
+            let content = op.content();
+
+            let edit = match op.kind {
+                EditOpKind::Replace => {
                     // Use full_span (decorators + docstring + signature + body)
                     // to match body.rs read range — ensures round-trip:
                     // `cat body.rs > edit/replace` is a no-op.
@@ -179,11 +143,10 @@ impl EditPlan {
                     ResolvedEdit {
                         staged_index: *index,
                         byte_range: start..span.end,
-                        replacement: content.clone(),
+                        replacement: content.to_owned(),
                     }
                 }
-                EditOp::Delete { fragment_path } => {
-                    let frag = require_fragment(fragments, fragment_path)?;
+                EditOpKind::Delete => {
                     let range = extend_delete_range(source, frag.full_span());
                     ResolvedEdit {
                         staged_index: *index,
@@ -191,8 +154,7 @@ impl EditPlan {
                         replacement: String::new(),
                     }
                 }
-                EditOp::InsertBefore { fragment_path, content } => {
-                    let frag = require_fragment(fragments, fragment_path)?;
+                EditOpKind::InsertBefore => {
                     let offset = line_start_of(source, frag.full_span().start);
                     // Ensure trailing newline so the inserted content doesn't
                     // join directly to the anchor symbol's first line.
@@ -203,8 +165,7 @@ impl EditPlan {
                         replacement,
                     }
                 }
-                EditOp::InsertAfter { fragment_path, content } => {
-                    let frag = require_fragment(fragments, fragment_path)?;
+                EditOpKind::InsertAfter => {
                     let offset = frag.full_span().end;
                     // Ensure leading newline so inserted content doesn't join
                     // directly to the anchor symbol's closing delimiter.
@@ -215,8 +176,7 @@ impl EditPlan {
                         replacement,
                     }
                 }
-                EditOp::Append { fragment_path, content } => {
-                    let frag = require_fragment(fragments, fragment_path)?;
+                EditOpKind::Append => {
                     // Append after the last child, or inside the empty scope body
                     // (just before the closing brace).
                     let offset = append_offset(source, frag);
@@ -228,9 +188,6 @@ impl EditPlan {
                         replacement,
                     }
                 }
-                // Future variants (e.g., AstGrep) — `non_exhaustive` requires this arm.
-                #[allow(unreachable_patterns)]
-                _ => continue,
             };
             resolved.push(edit);
         }

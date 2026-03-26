@@ -52,9 +52,10 @@ fn replace_body_uses_full_span_including_doc_comment() {
     frag.signature = Some("fn foo()".to_owned());
 
     let plan = EditPlan {
-        ops: vec![(0, EditOp::Replace {
+        ops: vec![(0, EditOp {
             fragment_path: vec!["foo".to_owned()],
-            content: "/// New doc\nfn foo() {\n    99\n}\n".to_owned(),
+            kind: EditOpKind::Replace,
+            content: Some("/// New doc\nfn foo() {\n    99\n}\n".to_owned()),
         })],
     };
 
@@ -87,9 +88,10 @@ fn replace_body_round_trip_is_noop() {
     let body_content = &source[0..20];
 
     let plan = EditPlan {
-        ops: vec![(0, EditOp::Replace {
+        ops: vec![(0, EditOp {
             fragment_path: vec!["bar".to_owned()],
-            content: body_content.to_owned(),
+            kind: EditOpKind::Replace,
+            content: Some(body_content.to_owned()),
         })],
     };
 
@@ -113,9 +115,10 @@ fn append_into_empty_impl_block() {
     let frag = frag;
 
     let plan = EditPlan {
-        ops: vec![(0, EditOp::Append {
+        ops: vec![(0, EditOp {
             fragment_path: vec!["Foo".to_owned()],
-            content: "    fn bar() {}\n".to_owned(),
+            kind: EditOpKind::Append,
+            content: Some("    fn bar() {}\n".to_owned()),
         })],
     };
 
@@ -145,9 +148,10 @@ fn append_into_scope_with_children_still_works() {
     let frag = frag;
 
     let plan = EditPlan {
-        ops: vec![(0, EditOp::Append {
+        ops: vec![(0, EditOp {
             fragment_path: vec!["Foo".to_owned()],
-            content: "    fn new_method() {}\n".to_owned(),
+            kind: EditOpKind::Append,
+            content: Some("    fn new_method() {}\n".to_owned()),
         })],
     };
 
@@ -177,13 +181,15 @@ fn check_conflicts_detects_zero_width_at_same_start_as_nonempty() {
     // (the insert is inside the replaced range's start boundary).
     let plan = EditPlan {
         ops: vec![
-            (0, EditOp::InsertAfter {
+            (0, EditOp {
                 fragment_path: vec!["aaa".to_owned()],
-                content: "fn inserted() {}\n".to_owned(),
+                kind: EditOpKind::InsertAfter,
+                content: Some("fn inserted() {}\n".to_owned()),
             }),
-            (1, EditOp::Replace {
+            (1, EditOp {
                 fragment_path: vec!["bbb".to_owned()],
-                content: "/// New B\nfn bbb() { 1 }\n".to_owned(),
+                kind: EditOpKind::Replace,
+                content: Some("/// New B\nfn bbb() { 1 }\n".to_owned()),
             }),
         ],
     };

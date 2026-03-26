@@ -11,7 +11,7 @@ use nyne::dispatch::context::RequestContext;
 use nyne::types::vfs_path::VfsPath;
 
 use crate::edit::diff_action::DiffAction;
-use crate::edit::plan::{EditOp, EditOutcome, EditPlan, FileEditResult, ValidationResult};
+use crate::edit::plan::{EditOp, EditOpKind, EditOutcome, EditPlan, FileEditResult, ValidationResult};
 use crate::services::SourceServices;
 use crate::syntax::fragment::Fragment;
 
@@ -47,8 +47,10 @@ impl DiffAction for SymbolDelete {
         let (source, fragments) = self.fragments()?;
 
         let plan = EditPlan {
-            ops: vec![(0, EditOp::Delete {
+            ops: vec![(0, EditOp {
                 fragment_path: self.fragment_path.clone(),
+                kind: EditOpKind::Delete,
+                content: None,
             })],
         };
 
