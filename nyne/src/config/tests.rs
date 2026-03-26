@@ -217,3 +217,33 @@ fn default_matches_empty_toml_deserialization() {
          update the manual Default impl to match #[serde(default)] attributes"
     );
 }
+
+#[derive(Debug, Default, PartialEq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Dummy {
+    #[serde(default)]
+    name: String,
+}
+
+#[test]
+fn deserialize_plugin_config_valid() {
+    let value = serde_json::json!({"name": "test"});
+    let result: Dummy = deserialize_plugin_config(&value);
+    assert_eq!(result.name, "test");
+}
+
+#[test]
+fn deserialize_plugin_config_falls_back_on_error() {
+    // deny_unknown_fields should reject "bogus", but the helper falls back to Default.
+    let value = serde_json::json!({"bogus": true});
+    let result: Dummy = deserialize_plugin_config(&value);
+    assert_eq!(result, Dummy::default());
+}
+
+#[test]
+fn deserialize_plugin_config_borrows_value() {
+    // Null → falls back to Default (empty string), proving it borrows without clone.
+    let value = serde_json::Value::Null;
+    let result: Dummy = deserialize_plugin_config(&value);
+    assert_eq!(result, Dummy::default());
+}
