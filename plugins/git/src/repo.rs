@@ -351,7 +351,13 @@ fn format_diff(diff: &git2::Diff<'_>) -> Result<String> {
             output.push(origin);
         }
         // File/hunk headers are printed as-is from content
-        output.push_str(&String::from_utf8_lossy(line.content()));
+        let content = line.content();
+        if let Ok(s) = str::from_utf8(content) {
+            output.push_str(s);
+        } else {
+            warn!("lossy UTF-8 conversion in diff line (origin={origin:?})");
+            output.push_str(&String::from_utf8_lossy(content));
+        }
         true
     })?;
     Ok(output)

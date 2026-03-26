@@ -196,7 +196,7 @@ impl GitSymbolsProvider {
             .into_iter()
             .enumerate()
             .map(|(i, entry)| {
-                let secs = entry.commit.epoch_secs;
+                let secs = entry.epoch_secs;
                 VirtualNode::file(history_filename(i, &entry, ext), SymbolHistoryVersionContent {
                     ctx: Arc::clone(&shared),
                     oid: entry.oid,

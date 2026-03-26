@@ -53,11 +53,11 @@ impl GitProvider {
 /// directory listings. The message is slugified and truncated to 50 chars.
 pub fn history_filename(index: usize, entry: &HistoryEntry, ext: &str) -> String {
     let seq = index + 1;
-    let kebab = text::slugify(&entry.commit.message, 50);
+    let kebab = text::slugify(&entry.message, 50);
     if ext.is_empty() {
-        format!("{seq:03}_{}_{}_{kebab}", entry.commit.date, entry.commit.hash)
+        format!("{seq:03}_{}_{}_{kebab}", entry.date, entry.hash)
     } else {
-        format!("{seq:03}_{}_{}_{kebab}.{ext}", entry.commit.date, entry.commit.hash)
+        format!("{seq:03}_{}_{}_{kebab}.{ext}", entry.date, entry.hash)
     }
 }
 

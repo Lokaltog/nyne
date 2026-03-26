@@ -6,8 +6,6 @@
 //!
 //! Symbol-scoped git features (per-symbol blame/history) live in `nyne-coding`.
 
-use std::collections::HashSet;
-
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::node::{Lifecycle, NodeAttr};
@@ -179,6 +177,14 @@ impl GitProvider {
             .ok_or_else(|| color_eyre::eyre::eyre!("git repo not available"))
     }
 
+    /// Extracts the source file, git repo, and repo-relative path from a route context.
+    fn file_ctx(&self, ctx: &RouteCtx<'_>) -> Result<(VfsPath, Arc<GitRepo>, String)> {
+        let source = source_file(ctx)?;
+        let repo = self.repo()?;
+        let rel = repo.rel_path(&source);
+        Ok((source, repo, rel))
+    }
+
     /// Lists children at the git root (branches, tags, status).
     fn children_git_root(&self, _ctx: &RouteCtx<'_>) -> Nodes {
         let repo = self.repo()?;
@@ -212,11 +218,12 @@ impl GitProvider {
         // Not a namespace — find the longest branch name that is a prefix of the segments.
         // e.g., segs=["main","src"] → branch "main", tree_path "src"
         // e.g., segs=["feat","foo","src"] → branch "feat/foo", tree_path "src"
-        let branches: HashSet<String> = repo.branches()?.into_iter().collect();
+        let mut branches = repo.branches()?;
+        branches.sort();
         #[allow(clippy::indexing_slicing)] // split ∈ 1..=segs.len() — always in bounds
         for split in (1..=segs.len()).rev() {
             let candidate = segs[..split].join("/");
-            if branches.contains(&candidate) {
+            if branches.binary_search(&candidate).is_ok() {
                 return branch_tree_nodes(&repo, &candidate, &segs[split..].join("/"));
             }
         }
@@ -238,9 +245,7 @@ impl GitProvider {
 
     /// Lists companion directories (git, history, diff) for a source file.
     fn children_companion_root(&self, ctx: &RouteCtx<'_>) -> Nodes {
-        let source = source_file(ctx)?;
-        let repo = self.repo()?;
-        let rel = repo.rel_path(&source);
+        let (_source, repo, rel) = self.file_ctx(ctx)?;
         let secs = repo.file_epoch_secs(&rel);
         Ok(Some(vec![
             VirtualNode::directory(DIR_GIT).with_lifecycle(CommitMtime(secs)),
@@ -251,9 +256,7 @@ impl GitProvider {
 
     /// Lists diff children for a source file.
     fn children_diff(&self, ctx: &RouteCtx<'_>) -> Nodes {
-        let source = source_file(ctx)?;
-        let repo = self.repo()?;
-        let rel = repo.rel_path(&source);
+        let (source, repo, rel) = self.file_ctx(ctx)?;
         let secs = repo.head_epoch_secs();
         Ok(Some(vec![
             VirtualNode::file(FILE_HEAD_DIFF, DiffContent {
@@ -267,9 +270,7 @@ impl GitProvider {
 
     /// Lists companion git children (blame, log, etc.) for a source file.
     fn children_companion_git(&self, ctx: &RouteCtx<'_>) -> Nodes {
-        let source = source_file(ctx)?;
-        let repo = self.repo()?;
-        let rel = repo.rel_path(&source);
+        let (_source, repo, rel) = self.file_ctx(ctx)?;
         Ok(Some(self.resolve_companion_git(&repo, rel)))
     }
 
@@ -316,8 +317,7 @@ impl GitProvider {
         if refspec == "HEAD" {
             return Ok(None);
         }
-        let source = source_file(ctx)?;
-        let repo = self.repo()?;
+        let (source, repo, _rel) = self.file_ctx(ctx)?;
         Ok(Some(VirtualNode::file(format!("{refspec}.diff"), DiffContent {
             repo: Arc::clone(&repo),
             rel_path: repo.rel_path(&source),
@@ -327,9 +327,7 @@ impl GitProvider {
 
     /// Lists file history version entries.
     fn children_history(&self, ctx: &RouteCtx<'_>) -> Nodes {
-        let source = source_file(ctx)?;
-        let repo = self.repo()?;
-        let rel = repo.rel_path(&source);
+        let (source, repo, rel) = self.file_ctx(ctx)?;
         let ext = source.extension().unwrap_or("");
         let entries = repo.file_history(&rel, views::HISTORY_LIMIT)?;
         let nodes = entries
@@ -337,7 +335,7 @@ impl GitProvider {
             .enumerate()
             .map(|(i, entry)| {
                 let filename = views::history_filename(i, &entry, ext);
-                let secs = entry.commit.epoch_secs;
+                let secs = entry.epoch_secs;
                 VirtualNode::file(filename, history::HistoryVersionContent {
                     repo: Arc::clone(&repo),
                     rel_path: rel.clone(),

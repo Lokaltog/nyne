@@ -36,8 +36,13 @@ pub struct BlameHunk {
 pub struct HistoryEntry {
     #[serde(skip)]
     pub oid: Oid,
-    #[serde(flatten)]
-    pub commit: CommitInfo,
+    pub hash: String,
+    pub author: String,
+    pub date: String,
+    pub message: String,
+    /// Commit timestamp as seconds since epoch (not serialized into templates).
+    #[serde(skip)]
+    pub epoch_secs: i64,
 }
 
 /// An author with commit count.
@@ -246,9 +251,14 @@ fn blame_hunk(repo: &git2::Repository, hunk: &git2::BlameHunk<'_>) -> Result<Bla
 
 /// Convert a `git2::Commit` into a [`HistoryEntry`].
 fn commit_entry(commit: &git2::Commit<'_>) -> HistoryEntry {
+    let info = commit_info(commit);
     HistoryEntry {
         oid: commit.id(),
-        commit: commit_info(commit),
+        hash: info.hash,
+        author: info.author,
+        date: info.date,
+        message: info.message,
+        epoch_secs: info.epoch_secs,
     }
 }
 

@@ -131,13 +131,11 @@ mod history_filename_tests {
     fn entry(message: &str) -> history::HistoryEntry {
         history::HistoryEntry {
             oid: git2::Oid::zero(),
-            commit: crate::commit::CommitInfo {
-                hash: "abc1234".into(),
-                author: "dev".into(),
-                date: "2024-01-15".into(),
-                message: message.into(),
-                epoch_secs: 1_705_276_800,
-            },
+            hash: "abc1234".into(),
+            author: "dev".into(),
+            date: "2024-01-15".into(),
+            message: message.into(),
+            epoch_secs: 1_705_276_800,
         }
     }
 
