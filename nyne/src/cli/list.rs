@@ -82,40 +82,37 @@ fn list_processes(term: &Term, id: &str) -> Result<()> {
     let req = sandbox::control::Request::ListProcesses;
     let resp = sandbox::control::send_request(&socket_path, &req)?;
 
-    match resp {
-        sandbox::control::Response::Processes { list } => {
-            if list.is_empty() {
-                term.write_line(
-                    &style(format!("No attached processes for session {id:?}."))
-                        .dim()
-                        .to_string(),
-                )?;
-                return Ok(());
-            }
+    let sandbox::control::Response::Processes { list } = resp else {
+        return match resp {
+            sandbox::control::Response::Error { message } => Err(eyre!("daemon error: {message}")),
+            other => Err(eyre!("unexpected response from daemon: {other:?}")),
+        };
+    };
 
-            term.write_line(
-                &style(format!("{:<8} {:<24} {:<12} START", "PID", "COMMAND", "DURATION"))
-                    .bold()
-                    .to_string(),
-            )?;
-            for proc in &list {
-                let elapsed = SystemTime::now().duration_since(proc.start_time).unwrap_or_default();
+    if list.is_empty() {
+        term.write_line(
+            &style(format!("No attached processes for session {id:?}."))
+                .dim()
+                .to_string(),
+        )?;
+        return Ok(());
+    }
 
-                term.write_line(&format!(
-                    "{:<8} {:<24} {:<12} {}",
-                    proc.pid,
-                    style(&proc.command).cyan(),
-                    humantime::format_duration(elapsed),
-                    style(humantime::format_rfc3339_seconds(proc.start_time)).dim(),
-                ))?;
-            }
-        }
-        sandbox::control::Response::Error { message } => {
-            return Err(eyre!("daemon error: {message}"));
-        }
-        other => {
-            return Err(eyre!("unexpected response from daemon: {other:?}"));
-        }
+    term.write_line(
+        &style(format!("{:<8} {:<24} {:<12} START", "PID", "COMMAND", "DURATION"))
+            .bold()
+            .to_string(),
+    )?;
+    for proc in &list {
+        let elapsed = SystemTime::now().duration_since(proc.start_time).unwrap_or_default();
+
+        term.write_line(&format!(
+            "{:<8} {:<24} {:<12} {}",
+            proc.pid,
+            style(&proc.command).cyan(),
+            humantime::format_duration(elapsed),
+            style(humantime::format_rfc3339_seconds(proc.start_time)).dim(),
+        ))?;
     }
 
     Ok(())

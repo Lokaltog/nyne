@@ -94,9 +94,8 @@ impl Default for NyneConfig {
 /// struct so that future repository-level settings (e.g., sparse checkout
 /// patterns, submodule handling) have a natural home without widening
 /// [`NyneConfig`] itself.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[derive(Default)]
 pub struct RepositoryConfig {
     /// How the project is exposed to the FUSE daemon.
     ///

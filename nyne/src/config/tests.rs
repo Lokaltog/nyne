@@ -203,3 +203,17 @@ fn agent_files_config_validates() {
     };
     config.validate().expect("agent_files config should be valid");
 }
+#[test]
+fn default_matches_empty_toml_deserialization() {
+    let from_toml: NyneConfig = toml::from_str("").expect("empty TOML should deserialize");
+    let from_default = NyneConfig::default();
+
+    let toml_value = serde_json::to_value(&from_toml).expect("serialization of deserialized config");
+    let default_value = serde_json::to_value(&from_default).expect("serialization of default config");
+
+    assert_eq!(
+        toml_value, default_value,
+        "NyneConfig::default() diverges from serde defaults -- \
+         update the manual Default impl to match #[serde(default)] attributes"
+    );
+}

@@ -200,12 +200,13 @@ fn first_line(s: &str) -> String {
 /// Strip a prefix from a string, returning the original if no match.
 ///
 /// Registered as a minijinja filter (`strip_prefix`).
-fn strip_prefix(v: String, prefix: &str) -> String {
-    match v.strip_prefix(prefix) {
-        Some(rest) => rest.to_owned(),
-        None => v,
+fn strip_prefix(mut v: String, prefix: &str) -> String {
+    if v.starts_with(prefix) {
+        v.replace_range(..prefix.len(), "");
     }
+    v
 }
+
 /// Register constants as template globals, using the constant's identifier
 /// as the template variable name.
 ///

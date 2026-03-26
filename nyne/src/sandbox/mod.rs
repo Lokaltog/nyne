@@ -72,7 +72,7 @@ pub struct DaemonConfig {
     pub mount: MountEntry,
 }
 
-/// Construction and validation for [`MountConfig`].
+/// Construction and validation for [`DaemonConfig`].
 impl DaemonConfig {
     /// Create a new mount configuration.
     ///
