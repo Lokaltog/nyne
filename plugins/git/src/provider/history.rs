@@ -102,26 +102,34 @@ impl GitRepo {
         range: &SymbolLineRange,
         limit: usize,
     ) -> Result<Vec<HistoryEntry>> {
-        // Hold a single lock for the entire operation — walk + filter — so
-        // the repo cannot mutate between phases.
         let repo = self.lock();
-        let all = walk_file_commits(&repo, rel_path, super::log::LOG_LIMIT, |commit, _oid| {
-            commit_entry(commit)
-        })?;
+        let mut revwalk = repo.revwalk()?;
+        revwalk
+            .set_sorting(git2::Sort::TIME)
+            .wrap_err("failed to configure revwalk")?;
+        revwalk.push_head().wrap_err("HEAD not found")?;
 
-        let mut opts = diff_opts(rel_path);
-        let filtered: Vec<_> = all
-            .into_iter()
-            .filter(|entry| match commit_touches_range(&repo, entry.oid, &mut opts, range) {
-                Ok(touches) => touches,
+        let mut path_opts = diff_opts(rel_path);
+        let mut range_opts = diff_opts(rel_path);
+        let mut results = Vec::new();
+        for (walked, oid_result) in revwalk.enumerate() {
+            if results.len() >= limit || walked >= MAX_REVWALK {
+                break;
+            }
+            let oid = oid_result?;
+            let commit = repo.find_commit(oid)?;
+            if !commit_touches_path(&repo, &commit, &mut path_opts)? {
+                continue;
+            }
+            match commit_touches_range(&repo, oid, &mut range_opts, range) {
+                Ok(true) => results.push(commit_entry(&commit)),
+                Ok(false) => {}
                 Err(e) => {
-                    warn!(oid = %entry.oid, path = rel_path, error = %e, "commit range check failed");
-                    false
+                    warn!(oid = %oid, path = rel_path, error = %e, "commit range check failed");
                 }
-            })
-            .take(limit)
-            .collect();
-        Ok(filtered)
+            }
+        }
+        Ok(results)
     }
 
     /// Most recent commit that touched `rel_path`, as seconds since epoch.
@@ -177,13 +185,9 @@ impl GitRepo {
 
     /// Collect git notes from commits that touched `rel_path`.
     pub(super) fn file_notes(&self, rel_path: &str, limit: usize) -> Result<Vec<NoteEntry>> {
-        // Walk commits under lock, then release before note lookup.
-        let commits = {
-            let repo = self.lock();
-            walk_file_commits(&repo, rel_path, limit, |commit, oid| (oid, commit_info(commit)))?
-        };
-
         let repo = self.lock();
+        let commits = walk_file_commits(&repo, rel_path, limit, |commit, oid| (oid, commit_info(commit)))?;
+
         let mut entries = Vec::new();
         for (oid, info) in commits {
             let note = match repo.find_note(None, oid) {
