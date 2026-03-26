@@ -150,7 +150,8 @@ impl SessionRegistry {
 
         match self.sessions.len() {
             0 => Err(eyre!("no active nyne sessions")),
-            1 => self.sessions.first().ok_or_else(|| eyre!("no active nyne sessions")),
+            #[allow(clippy::indexing_slicing)] // len() == 1 guarantees [0] is valid
+            1 => Ok(&self.sessions[0]),
             n => Err(eyre!(
                 "{n} active sessions — specify an ID.\nActive sessions: {}",
                 self.sessions

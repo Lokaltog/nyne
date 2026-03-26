@@ -4,6 +4,8 @@
 //! This module is the SSOT for terminal access — no direct `println!` or
 //! `console::Term` construction elsewhere in `cli/`.
 
+use std::sync::LazyLock;
+
 pub(super) use console::{Term, style};
 
 /// Return a stdout terminal handle for CLI output.
@@ -16,4 +18,7 @@ pub(super) use console::{Term, style};
 /// The returned [`Term`] supports styled output via [`style()`] and is
 /// safe to use in non-terminal contexts (e.g., piped output) -- `console`
 /// will automatically strip ANSI codes when stdout is not a TTY.
-pub(super) fn term() -> Term { Term::stdout() }
+pub(super) fn term() -> &'static Term {
+    static TERM: LazyLock<Term> = LazyLock::new(Term::stdout);
+    &TERM
+}

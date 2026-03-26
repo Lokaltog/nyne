@@ -108,18 +108,18 @@ mod symbol_line_range_tests {
         assert_eq!(range, SymbolLineRange { start: 1, end: 1 });
     }
 
-    /// Verifies `as_lines_suffix` produces `"lines:5-10"` for a multi-line range.
+    /// Verifies `to_string()` produces `"lines:5-10"` for a multi-line range.
     #[test]
-    fn as_lines_suffix_range() {
+    fn display_range() {
         let range = SymbolLineRange { start: 5, end: 10 };
-        assert_eq!(range.as_lines_suffix(), "lines:5-10");
+        assert_eq!(range.to_string(), "lines:5-10");
     }
 
-    /// Verifies `as_lines_suffix` produces `"lines:3"` for a single-line range.
+    /// Verifies `to_string()` produces `"lines:3"` for a single-line range.
     #[test]
-    fn as_lines_suffix_single() {
+    fn display_single() {
         let range = SymbolLineRange { start: 3, end: 3 };
-        assert_eq!(range.as_lines_suffix(), "lines:3");
+        assert_eq!(range.to_string(), "lines:3");
     }
 }
 

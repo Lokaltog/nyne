@@ -14,9 +14,14 @@ pub(super) fn languages_display(ext_counts: &[(String, usize)]) -> String {
     } else {
         ext_counts
             .iter()
-            .map(|(ext, _)| ext.as_str())
-            .collect::<Vec<_>>()
-            .join(", ")
+            .enumerate()
+            .fold(String::new(), |mut acc, (i, (ext, _))| {
+                if i > 0 {
+                    acc.push_str(", ");
+                }
+                acc.push_str(ext);
+                acc
+            })
     }
 }
 

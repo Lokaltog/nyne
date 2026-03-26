@@ -34,10 +34,10 @@ pub fn run(args: &ListArgs) -> Result<()> {
     let registry = SessionRegistry::scan()?;
 
     if let Some(id) = args.session.id() {
-        return list_processes(&term, id);
+        return list_processes(term, id);
     }
 
-    list_sessions(&term, &registry)
+    list_sessions(term, &registry)
 }
 
 /// Print a table of all active nyne sessions (ID, PID, mount path).

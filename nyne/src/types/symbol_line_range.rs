@@ -40,9 +40,6 @@ impl SymbolLineRange {
         let rope = crop::Rope::from(source);
         Self::from_zero_based(&(rope.line_of_byte(byte_range.start)..rope.line_of_byte(byte_range.end) + 1))
     }
-
-    /// Format as a `lines:M-N` suffix string (or `lines:M` for single-line ranges).
-    pub fn as_lines_suffix(&self) -> String { self.to_string() }
 }
 impl fmt::Display for SymbolLineRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

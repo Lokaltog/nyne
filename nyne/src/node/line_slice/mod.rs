@@ -75,14 +75,15 @@ impl Readable for SlicedReadable {
     /// Reads the base content and extracts the specified line range.
     fn read(&self, ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let content = self.base.require_readable()?.read(ctx)?;
-        let lines: Vec<&[u8]> = content.split(|&b| b == b'\n').collect();
-        let sliced = self.spec.apply(&lines);
+        let range = self.spec.index_range(split_lines(&content).count());
         let mut result = Vec::new();
-        for (i, line) in sliced.iter().enumerate() {
-            result.extend_from_slice(line);
-            if i < sliced.len() - 1 {
+        let mut first = true;
+        for line in split_lines(&content).skip(range.start).take(range.len()) {
+            if !first {
                 result.push(b'\n');
             }
+            result.extend_from_slice(line);
+            first = false;
         }
         Ok(result)
     }
@@ -143,35 +144,37 @@ fn splice_lines(current: &[u8], spec: &SliceSpec, new_data: &[u8]) -> Result<Vec
     }
 
     let has_trailing_newline = current.last() == Some(&b'\n');
-    let lines = split_lines(current);
-    let range = spec.index_range(lines.len());
-    let new_lines = split_lines(new_data);
+    let range = spec.index_range(split_lines(current).count());
 
-    let mut result: Vec<&[u8]> = Vec::with_capacity(lines.len() - range.len() + new_lines.len());
-    result.extend_from_slice(lines.get(..range.start).unwrap_or(&[]));
-    result.extend_from_slice(&new_lines);
-    result.extend_from_slice(lines.get(range.end..).unwrap_or(&[]));
+    let before = split_lines(current).take(range.start);
+    let after = split_lines(current).skip(range.end);
+    let replacement = split_lines(new_data);
 
-    let mut out = result.join(&b'\n');
+    let mut out = Vec::with_capacity(current.len());
+    let mut first = true;
+    for line in before.chain(replacement).chain(after) {
+        if !first {
+            out.push(b'\n');
+        }
+        out.extend_from_slice(line);
+        first = false;
+    }
     if has_trailing_newline {
         out.push(b'\n');
     }
     Ok(out)
 }
 
-/// Split bytes on `\n`, treating it as a line terminator.
+/// Return an iterator over lines in `data`, treating `\n` as a terminator.
 ///
 /// Unlike `slice::split`, strips the trailing empty element produced by
-/// a terminating `\n`, and returns an empty vec for empty input.
-fn split_lines(data: &[u8]) -> Vec<&[u8]> {
-    if data.is_empty() {
-        return Vec::new();
-    }
-    let mut lines: Vec<&[u8]> = data.split(|&b| b == b'\n').collect();
-    if data.last() == Some(&b'\n') {
-        lines.pop();
-    }
-    lines
+/// a terminating `\n`, and yields nothing for empty input.
+fn split_lines(data: &[u8]) -> impl Iterator<Item = &[u8]> {
+    let trimmed = data.strip_suffix(b"\n").unwrap_or(data);
+    // `split` on empty input yields one empty slice; skip it.
+    trimmed
+        .split(|&b| b == b'\n')
+        .take(if trimmed.is_empty() { 0 } else { usize::MAX })
 }
 
 /// Unit tests.
