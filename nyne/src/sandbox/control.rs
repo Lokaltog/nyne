@@ -7,6 +7,7 @@
 //!
 //! Wire format: newline-delimited JSON, one request → one response per connection.
 
+use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::Shutdown;
 use std::os::fd::{AsFd, OwnedFd};
@@ -239,7 +240,7 @@ fn server_loop(
         }
         match listener.accept() {
             Ok((stream, _addr)) =>
-                if let Err(e) = handle_connection(stream, registry, activation, processes, visibility) {
+                if let Err(e) = handle_connection(&stream, registry, activation, processes, visibility) {
                     warn!(error = format!("{e:#}"), "control request failed");
                 },
             Err(e) => {
@@ -250,37 +251,37 @@ fn server_loop(
     }
 }
 
+/// Write a JSON response to the stream followed by a newline.
+fn write_response(stream: &UnixStream, response: &Response) -> Result<()> {
+    let mut writer = stream;
+    serde_json::to_writer(&mut writer, response).wrap_err("writing response")?;
+    writer.write_all(b"\n")?;
+    Ok(())
+}
+
 /// Read a single JSON request from a stream, dispatch it, and write the response.
 fn handle_connection(
-    stream: UnixStream,
+    stream: &UnixStream,
     registry: &ScriptRegistry,
     activation: &ActivationContext,
     processes: &ProcessTable,
     visibility: &VisibilityMap,
 ) -> Result<()> {
-    let mut reader = BufReader::new(&stream);
+    let mut reader = BufReader::new(stream);
     let mut line = String::new();
     reader.read_line(&mut line).wrap_err("reading request")?;
 
-    let req: Request = match serde_json::from_str(&line) {
+    let req = match serde_json::from_str::<Request>(&line) {
         Ok(req) => req,
         Err(e) => {
-            let response = Response::Error {
+            write_response(stream, &Response::Error {
                 message: format!("{e:#}"),
-            };
-            let mut writer = stream;
-            serde_json::to_writer(&mut writer, &response).wrap_err("writing error response")?;
-            writer.write_all(b"\n")?;
+            })
+            .wrap_err("writing error response")?;
             return Err(e).wrap_err("parsing request");
         }
     };
-    let response = dispatch(req, registry, activation, processes, visibility);
-
-    let mut writer = stream;
-    serde_json::to_writer(&mut writer, &response).wrap_err("writing response")?;
-    writer.write_all(b"\n")?;
-
-    Ok(())
+    write_response(stream, &dispatch(req, registry, activation, processes, visibility))
 }
 
 /// Route a control request to the appropriate handler.
@@ -383,7 +384,7 @@ fn handle_set_visibility(
         }
         (None, Some(name)) => {
             debug!(name = %name, %vis, "name visibility rule set");
-            map.set_name_rule(name, vis);
+            map.set_name_rule(&name, vis);
         }
         (None, None) => {
             debug!("visibility rules queried");
@@ -398,12 +399,12 @@ fn handle_set_visibility(
 /// Snapshot all active visibility rules (per-PID and per-name) into a response struct.
 fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> VisibilityRules {
     let table = processes.lock();
-    let pid_entries = map.explicit_pid_entries();
+    let pid_entries: HashMap<u32, _> = map.explicit_pid_entries().into_iter().collect();
 
     let pid_rules = table
         .iter()
         .filter_map(|proc| {
-            let vis = pid_entries.iter().find(|(pid, _)| *pid == proc.pid.cast_unsigned())?.1;
+            let &vis = pid_entries.get(&proc.pid.cast_unsigned())?;
             Some(PidVisibility {
                 pid: proc.pid,
                 command: proc.command.clone(),

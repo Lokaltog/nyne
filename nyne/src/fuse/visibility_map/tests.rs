@@ -47,7 +47,7 @@ fn pid_override_shadows_name_rule() {
 #[test]
 fn dynamic_name_rule_takes_precedence_over_static() {
     let map = VisibilityMap::new([("test-proc".to_owned(), ProcessVisibility::None)]);
-    map.set_name_rule("test-proc".to_owned(), ProcessVisibility::All);
+    map.set_name_rule("test-proc", ProcessVisibility::All);
 
     let rules = map.dynamic_name_rules();
     assert_eq!(rules.len(), 1);
@@ -59,7 +59,7 @@ fn dynamic_name_rule_takes_precedence_over_static() {
 fn dynamic_name_rule_truncates_long_names() {
     let map = VisibilityMap::new([]);
     let long_name = "a".repeat(20);
-    map.set_name_rule(long_name, ProcessVisibility::None);
+    map.set_name_rule(&long_name, ProcessVisibility::None);
 
     let rules = map.dynamic_name_rules();
     assert_eq!(rules[0].0.len(), COMM_MAX_LEN);

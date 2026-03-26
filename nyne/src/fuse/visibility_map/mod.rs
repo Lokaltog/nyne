@@ -14,6 +14,7 @@
 //! The map is shared between the FUSE handler (reads) and the control server
 //! (writes), so visibility changes from `nyne ctl` take effect immediately.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs;
 
@@ -98,7 +99,7 @@ impl VisibilityMap {
             pid_entries: RwLock::new(HashMap::new()),
             name_rules: name_rules
                 .into_iter()
-                .map(|(name, vis)| (truncate_comm(name), vis))
+                .map(|(name, vis)| (truncate_comm(&name).into_owned(), vis))
                 .collect(),
             dynamic_name_rules: RwLock::new(HashMap::new()),
             cgroup_tracker: None,
@@ -192,8 +193,10 @@ impl VisibilityMap {
     /// The name is truncated to [`COMM_MAX_LEN`] to match kernel behavior.
     /// Dynamic rules take precedence over static (config-time) rules and
     /// invalidate any cached resolutions that relied on name matching.
-    pub fn set_name_rule(&self, name: String, visibility: ProcessVisibility) {
-        self.dynamic_name_rules.write().insert(truncate_comm(name), visibility);
+    pub fn set_name_rule(&self, name: &str, visibility: ProcessVisibility) {
+        self.dynamic_name_rules
+            .write()
+            .insert(truncate_comm(name).into_owned(), visibility);
     }
 
     /// Return all explicit PID overrides (not cached resolutions).
@@ -293,11 +296,13 @@ fn read_ppid(pid: u32) -> Option<u32> {
 /// Truncate a process name to [`COMM_MAX_LEN`] bytes, matching the kernel's
 /// `/proc/{pid}/comm` truncation behavior. Uses `floor_char_boundary` to
 /// avoid panicking on multi-byte UTF-8 characters at the boundary.
-fn truncate_comm(name: String) -> String {
+///
+/// Returns `Cow::Borrowed` when no truncation is needed, avoiding allocation.
+fn truncate_comm(name: &str) -> Cow<'_, str> {
     if name.len() > COMM_MAX_LEN {
-        name[..name.floor_char_boundary(COMM_MAX_LEN)].to_owned()
+        Cow::Owned(name[..name.floor_char_boundary(COMM_MAX_LEN)].to_owned())
     } else {
-        name
+        Cow::Borrowed(name)
     }
 }
 

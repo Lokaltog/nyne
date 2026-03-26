@@ -1,8 +1,8 @@
 //! Virtual filesystem relative paths with validation and normalization.
 
 use std::borrow::Borrow;
-use std::fmt;
 use std::path::PathBuf;
+use std::{fmt, iter};
 
 use color_eyre::eyre::{Result, bail};
 use smallvec::SmallVec;
@@ -190,22 +190,18 @@ impl VfsPath {
     ///     // => PathBuf("Foo@/body.rs")
     /// ```
     pub fn relative_to(&self, base: &Self) -> PathBuf {
-        let self_parts: Vec<&str> = self.components().collect();
-        let base_parts: Vec<&str> = base.components().collect();
+        let self_parts = self.segments();
+        let base_parts = base.segments();
 
         // Find the longest common prefix.
         let common = self_parts.iter().zip(&base_parts).take_while(|(a, b)| a == b).count();
 
         // One `..` per remaining base component, then the remaining self components.
         let ups = base_parts.len() - common;
-        let mut result = PathBuf::new();
-        for _ in 0..ups {
-            result.push("..");
-        }
-        for part in self_parts.iter().skip(common) {
-            result.push(part);
-        }
-        result
+        iter::repeat_n("..", ups)
+            // common ≤ self_parts.len() by construction (zip bounded by shortest)
+            .chain(self_parts.get(common..).unwrap_or_default().iter().copied())
+            .collect()
     }
 }
 
