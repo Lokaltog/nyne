@@ -6,6 +6,7 @@
 //!
 //! Symbol-scoped git features (per-symbol blame/history) live in `nyne-coding`.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
@@ -217,10 +218,10 @@ impl GitProvider {
         // Not a namespace — find the longest branch name that is a prefix of the segments.
         // e.g., segs=["main","src"] → branch "main", tree_path "src"
         // e.g., segs=["feat","foo","src"] → branch "feat/foo", tree_path "src"
-        let branches = repo.branches()?;
+        let branches: HashSet<String> = repo.branches()?.into_iter().collect();
         for split in (1..=segs.len()).rev() {
             let candidate = segs.get(..split).unwrap_or_default().join("/");
-            if branches.iter().any(|b| b == &candidate) {
+            if branches.contains(&candidate) {
                 let tree_path = segs.get(split..).unwrap_or_default().join("/");
                 return branch_tree_nodes(&repo, &candidate, &tree_path);
             }

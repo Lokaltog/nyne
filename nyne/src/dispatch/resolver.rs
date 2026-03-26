@@ -23,6 +23,7 @@ use color_eyre::eyre::{Result, bail};
 use super::cache::CachedNodeKind;
 use super::router::Router;
 use crate::node::VirtualNode;
+use crate::types::ProcessVisibility;
 use crate::types::vfs_path::VfsPath;
 
 /// Resolves virtual paths to nodes.
@@ -89,7 +90,7 @@ impl Resolver for Router {
             .get(path)
             .map(|handle| {
                 let dir = handle.read();
-                dir.visible_entries()
+                dir.readdir_entries(ProcessVisibility::Default)
                     .filter_map(|(_, cn)| match &cn.kind {
                         CachedNodeKind::Virtual { node, .. } => Some(Arc::clone(node)),
                         CachedNodeKind::Real { .. } => None,

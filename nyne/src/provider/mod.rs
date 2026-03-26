@@ -143,7 +143,7 @@ pub enum ConflictResolution {
 impl fmt::Debug for ConflictResolution {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Yield => write!(f, "Yield"),
+            Self::Yield => f.write_str("Yield"),
             Self::Force(nodes) => f.debug_tuple("Force").field(&nodes.len()).finish(),
             Self::Retry(nodes) => f.debug_tuple("Retry").field(&nodes.len()).finish(),
         }

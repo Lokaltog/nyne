@@ -61,7 +61,15 @@ fn invalidate_subtree_allows_re_resolve_with_new_entries() {
         dir.insert(name, node);
     }
 
-    assert_eq!(cache.get(&staged).unwrap().read().visible_entries().count(), 1);
+    assert_eq!(
+        cache
+            .get(&staged)
+            .unwrap()
+            .read()
+            .readdir_entries(ProcessVisibility::Default)
+            .count(),
+        1
+    );
     assert!(cache.get(&staged).unwrap().read().is_resolved());
 
     // Invalidate the parent subtree.
@@ -85,7 +93,10 @@ fn invalidate_subtree_allows_re_resolve_with_new_entries() {
 
     let handle = cache.get(&staged).unwrap();
     let dir = handle.read();
-    let entries: Vec<_> = dir.visible_entries().map(|(n, _)| n.to_owned()).collect();
+    let entries: Vec<_> = dir
+        .readdir_entries(ProcessVisibility::Default)
+        .map(|(n, _)| n.to_owned())
+        .collect();
     assert_eq!(
         entries.len(),
         2,

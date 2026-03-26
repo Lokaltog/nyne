@@ -17,6 +17,9 @@ use crate::repo::GitRepo;
 /// Safety cap on revwalk iterations to prevent unbounded history walks.
 const MAX_REVWALK: usize = 5000;
 
+/// Maximum commits examined when computing contributors for a file.
+const CONTRIBUTORS_LIMIT: usize = 500;
+
 /// Blame hunk with line range and commit metadata.
 ///
 /// Line numbers are 1-based inclusive, matching the template output.
@@ -159,7 +162,7 @@ impl GitRepo {
     pub(super) fn contributors(&self, rel_path: &str) -> Result<Vec<Contributor>> {
         let authors = {
             let repo = self.lock();
-            walk_file_commits(&repo, rel_path, usize::MAX, |commit, _| {
+            walk_file_commits(&repo, rel_path, CONTRIBUTORS_LIMIT, |commit, _| {
                 commit.author().name().unwrap_or("unknown").to_owned()
             })?
         };

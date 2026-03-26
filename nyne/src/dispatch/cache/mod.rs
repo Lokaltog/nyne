@@ -250,13 +250,6 @@ impl DirState {
     /// Find a node by name.
     pub(super) fn get(&self, name: &str) -> Option<&CachedNode> { self.nodes.get(name) }
 
-    /// Get all visible nodes for readdir (filtered by [`CachedNode::is_visible`]).
-    pub(super) fn visible_entries(&self) -> impl Iterator<Item = (&str, &CachedNode)> {
-        self.nodes
-            .iter()
-            .filter_map(|(name, cn)| cn.is_visible().then_some((name.as_str(), cn)))
-    }
-
     /// Get all entries (both visible and lookup-only).
     pub(super) fn all_entries(&self) -> impl Iterator<Item = (&str, &CachedNode)> {
         self.nodes.iter().map(|(name, cn)| (name.as_str(), cn))
