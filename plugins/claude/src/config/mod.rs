@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use nyne::config::deserialize_plugin_config;
 use nyne::default_true;
 use nyne::json::deep_merge_non_null;
 use serde::{Deserialize, Serialize};
@@ -42,7 +43,7 @@ impl ClaudePluginConfig {
         let Some(value) = section else {
             return Self::default();
         };
-        serde_json::from_value(value.clone()).unwrap_or_default()
+        deserialize_plugin_config(value)
     }
 }
 
