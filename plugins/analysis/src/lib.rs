@@ -7,6 +7,7 @@ pub mod analysis;
 pub mod config;
 
 mod plugin;
+mod providers;
 
 pub use analysis::{AnalysisContext, AnalysisEngine, Hint, HintView};
 pub use nyne_source::TsNode;

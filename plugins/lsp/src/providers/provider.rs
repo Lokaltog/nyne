@@ -21,10 +21,13 @@ use nyne::types::vfs_path::VfsPath;
 use nyne::{companion_children, companion_lookup, source_file};
 use nyne_source::edit::diff_action::DiffActionNode;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
-use nyne_source::providers::names::{FILE_DIAGNOSTICS, SUBDIR_ACTIONS, SUBDIR_SYMBOLS, companion_name, handle_builder};
+use nyne_source::providers::names::{SUBDIR_SYMBOLS, companion_name, handle_builder};
 use nyne_source::services::SourceServices;
-use nyne_source::syntax::SyntaxRegistry;
+use nyne_source::syntax::{SyntaxRegistry, find_fragment};
 use strum::IntoEnumIterator;
+
+const FILE_DIAGNOSTICS: &str = "DIAGNOSTICS.md";
+const SUBDIR_ACTIONS: &str = "actions";
 
 use crate::lsp::handle::LspHandle;
 use crate::lsp::manager::LspManager;
@@ -49,6 +52,7 @@ impl LspProvider {
     /// Create a new LSP provider, registering all LSP templates.
     pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
         let mut b = handle_builder();
+        nyne::register_globals!(b.engine_mut(), FILE_DIAGNOSTICS, SUBDIR_ACTIONS,);
 
         // Shared partials (included by individual LSP templates).
         b.register_partial("syntax/lsp/_locations", include_str!("templates/lsp/_locations.md.j2"));
@@ -204,7 +208,7 @@ impl LspProvider {
             return Ok(None);
         };
         let shared = services.decomposition.get(&sf)?;
-        let Some(frag) = nyne_source::syntax::find_fragment(&shared.decomposed, path) else {
+        let Some(frag) = find_fragment(&shared.decomposed, path) else {
             return Ok(None);
         };
 
@@ -276,7 +280,7 @@ impl LspProvider {
             return Ok(None);
         }
         let shared = services.decomposition.get(&sf)?;
-        let Some(frag) = nyne_source::syntax::find_fragment(&shared.decomposed, path) else {
+        let Some(frag) = find_fragment(&shared.decomposed, path) else {
             return Ok(None);
         };
 

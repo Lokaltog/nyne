@@ -11,6 +11,7 @@ use tracing::info;
 
 use crate::analysis::AnalysisEngine;
 use crate::config::AnalysisConfig;
+use crate::providers::AnalysisProvider;
 
 /// Entry point for the analysis plugin.
 struct AnalysisPlugin;
@@ -32,7 +33,9 @@ impl Plugin for AnalysisPlugin {
         Ok(())
     }
 
-    fn providers(&self, _ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> { Ok(vec![]) }
+    fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
+        Ok(vec![Arc::new(AnalysisProvider::new(Arc::clone(ctx)))])
+    }
 }
 
 /// Link-time registration of the analysis plugin into the global `PLUGINS` slice.

@@ -102,7 +102,7 @@ pub struct Hint {
 /// Converts 0-based `line_range` to 1-based `line_start`/`line_end` and
 /// pre-formats `severity` as a string. This is the single source of truth
 /// for the `Hint → template context` conversion — used by both the
-/// `HINTS.md` provider and the `PostToolUse` hook.
+/// `ANALYSIS.md` provider and the `PostToolUse` hook.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HintView {
     pub rule_id: &'static str,

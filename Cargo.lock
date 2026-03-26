@@ -1470,7 +1470,9 @@ version = "0.1.0"
 dependencies = [
  "color-eyre",
  "linkme",
+ "minijinja",
  "nyne",
+ "nyne-macros",
  "nyne-plugin-source",
  "rstest",
  "serde",

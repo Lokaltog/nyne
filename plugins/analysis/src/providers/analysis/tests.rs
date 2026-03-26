@@ -1,7 +1,7 @@
-use nyne_analysis::analysis::{Hint, Severity};
 use rstest::*;
 
 use super::{COLLAPSE_THRESHOLD, build_view};
+use crate::analysis::{Hint, Severity};
 
 /// Builds a `Hint` fixture with the given rule ID, line, and suggestions.
 fn hint(rule_id: &'static str, line: usize, suggestions: Vec<String>) -> Hint {

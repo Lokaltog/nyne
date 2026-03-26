@@ -23,15 +23,6 @@ pub const SUBDIR_AT_LINE: &str = "at-line";
 /// Subdirectory for fenced code blocks.
 pub const SUBDIR_CODE: &str = "code";
 
-/// Subdirectory for LSP code actions as `.diff` files.
-pub const SUBDIR_ACTIONS: &str = "actions";
-
-/// Diagnostics file name.
-pub const FILE_DIAGNOSTICS: &str = "DIAGNOSTICS.md";
-
-/// Analysis hints file name.
-pub const FILE_HINTS: &str = "HINTS.md";
-
 /// Symbol body file name.
 pub const FILE_BODY: &str = "body";
 
@@ -64,7 +55,7 @@ pub const FILE_STAGED_DIFF: &str = "staged.diff";
 /// that templates reference canonical names (e.g. `{{ FILE_OVERVIEW }}`)
 /// instead of hard-coding string literals.
 pub fn register_template_globals(engine: &mut TemplateEngine) {
-    nyne::register_globals!(engine, FILE_OVERVIEW, FILE_DIAGNOSTICS, SUBDIR_SYMBOLS, SUBDIR_ACTIONS,);
+    nyne::register_globals!(engine, FILE_OVERVIEW, SUBDIR_SYMBOLS,);
 }
 
 /// Create a [`HandleBuilder`] with coding name globals pre-registered.

@@ -1,39 +1,35 @@
-//! Inlay hints and code-analysis rendering for `HINTS.md`.
+//! Static code analysis rendering for `ANALYSIS.md`.
 //!
 //! Runs nyne's built-in analysis engine at read time and collapses
 //! high-frequency rules into summary groups to keep output readable.
 
-#[cfg(feature = "analysis")]
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use nyne::dispatch::activation::ActivationContext;
 use nyne::templates::{TemplateEngine, TemplateView};
-#[cfg(feature = "analysis")]
-use nyne_analysis::{AnalysisContext, AnalysisEngine, Hint, HintView};
-#[cfg(feature = "analysis")]
+use nyne_source::providers::fragment_resolver::FragmentResolver;
 use serde::Serialize;
 
-use crate::providers::fragment_resolver::FragmentResolver;
+use crate::{AnalysisContext, AnalysisEngine, Hint, HintView};
 
-/// View for the file-level `HINTS.md` — runs analysis at read time.
+/// View for `ANALYSIS.md` — runs static analysis at read time.
 ///
-/// Unlike LSP diagnostics, hints come from nyne's own analysis engine and
-/// surface code-quality suggestions (magic numbers, single-use variables, etc.).
-/// Analysis is run lazily on each read so results always reflect current source.
-pub(in crate::providers::syntax) struct HintsContent {
+/// Surfaces code-quality suggestions (magic numbers, single-use variables, etc.)
+/// from nyne's built-in analysis engine. Analysis is run lazily on each read so
+/// results always reflect current source.
+pub struct AnalysisContent {
     pub resolver: FragmentResolver,
     pub activation: Arc<ActivationContext>,
 }
 
-/// [`TemplateView`] implementation for [`HintsContent`].
-impl TemplateView for HintsContent {
+/// [`TemplateView`] implementation for [`AnalysisContent`].
+impl TemplateView for AnalysisContent {
     /// Run analysis and render hints via template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
 
-        #[cfg(feature = "analysis")]
         let (hint_rows, collapsed, suggestions) = {
             let hints: Vec<Hint> = shared
                 .tree
@@ -50,9 +46,6 @@ impl TemplateView for HintsContent {
             build_view(&hints)
         };
 
-        #[cfg(not(feature = "analysis"))]
-        let (hint_rows, collapsed, suggestions): (Vec<()>, Vec<()>, Vec<()>) = (Vec::new(), Vec::new(), Vec::new());
-
         let view = minijinja::context! {
             hints => hint_rows,
             collapsed => collapsed,
@@ -62,7 +55,6 @@ impl TemplateView for HintsContent {
     }
 }
 
-#[cfg(feature = "analysis")]
 /// A group of hints collapsed into a single summary when count exceeds a threshold.
 #[derive(Serialize)]
 struct CollapsedGroup {
@@ -73,11 +65,9 @@ struct CollapsedGroup {
     summary: &'static str,
 }
 
-#[cfg(feature = "analysis")]
 /// Threshold: rules with this many or more hits get collapsed into a summary row.
 const COLLAPSE_THRESHOLD: usize = 3;
 
-#[cfg(feature = "analysis")]
 /// A suggestion row for analysis hints.
 #[derive(Serialize)]
 struct SuggestionRow {
@@ -85,7 +75,6 @@ struct SuggestionRow {
     text: String,
 }
 
-#[cfg(feature = "analysis")]
 /// Rule-level summary messages used when collapsing repeated hits.
 fn collapse_summary(rule_id: &str) -> &'static str {
     match rule_id {
@@ -98,7 +87,6 @@ fn collapse_summary(rule_id: &str) -> &'static str {
     }
 }
 
-#[cfg(feature = "analysis")]
 /// Build the hints view, collapsing repeated rules above [`COLLAPSE_THRESHOLD`].
 ///
 /// Returns three collections for the template: individual hint rows (for
