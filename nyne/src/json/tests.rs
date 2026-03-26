@@ -15,11 +15,6 @@ use super::{deep_merge, deep_merge_non_null};
     json!({"env": {"B": "override", "C": "3"}}),
     json!({"env": {"A": "1", "B": "override", "C": "3"}}),
 )]
-#[case::arrays_replaced(
-    json!({"items": [1, 2]}),
-    json!({"items": [3]}),
-    json!({"items": [3]}),
-)]
 #[case::new_keys_added(
     json!({"a": 1}),
     json!({"b": 2}),
@@ -34,6 +29,51 @@ use super::{deep_merge, deep_merge_non_null};
     json!({"a": {"nested": true}}),
     json!({"a": "flat"}),
     json!({"a": "flat"}),
+)]
+#[case::string_arrays(
+    json!({"tags": ["a", "b"]}),
+    json!({"tags": ["c"]}),
+    json!({"tags": ["a", "b", "c"]}),
+)]
+#[case::number_arrays(
+    json!({"ids": [1, 2]}),
+    json!({"ids": [3, 4]}),
+    json!({"ids": [1, 2, 3, 4]}),
+)]
+#[case::object_arrays(
+    json!({"servers": [{"name": "a", "port": 80}]}),
+    json!({"servers": [{"name": "b", "port": 443}]}),
+    json!({"servers": [{"name": "a", "port": 80}, {"name": "b", "port": 443}]}),
+)]
+#[case::nested_arrays(
+    json!({"config": {"items": [1]}}),
+    json!({"config": {"items": [2]}}),
+    json!({"config": {"items": [1, 2]}}),
+)]
+#[case::overlay_adds_new_array_key(
+    json!({"a": [1]}),
+    json!({"b": [2]}),
+    json!({"a": [1], "b": [2]}),
+)]
+#[case::empty_base_array(
+    json!({"x": []}),
+    json!({"x": [1, 2]}),
+    json!({"x": [1, 2]}),
+)]
+#[case::empty_overlay_array(
+    json!({"x": [1, 2]}),
+    json!({"x": []}),
+    json!({"x": [1, 2]}),
+)]
+#[case::scalar_still_replaced(
+    json!({"name": "old"}),
+    json!({"name": "new"}),
+    json!({"name": "new"}),
+)]
+#[case::objects_still_deep_merged(
+    json!({"a": {"b": 1, "c": 2}}),
+    json!({"a": {"b": 3}}),
+    json!({"a": {"b": 3, "c": 2}}),
 )]
 fn deep_merge_cases(#[case] mut base: Value, #[case] overlay: Value, #[case] expected: Value) {
     deep_merge(&mut base, &overlay);
@@ -65,4 +105,11 @@ fn deep_merge_cases(#[case] mut base: Value, #[case] overlay: Value, #[case] exp
 fn deep_merge_non_null_cases(#[case] mut base: Value, #[case] overlay: Value, #[case] expected: Value) {
     deep_merge_non_null(&mut base, &overlay);
     assert_eq!(base, expected);
+}
+#[test]
+fn deep_merge_non_null_concatenates_arrays() {
+    let mut base = json!({"items": [1, 2]});
+    let overlay = json!({"items": [3]});
+    deep_merge_non_null(&mut base, &overlay);
+    assert_eq!(base, json!({"items": [1, 2, 3]}));
 }

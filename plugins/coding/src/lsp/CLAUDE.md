@@ -1,30 +1,41 @@
 # LSP Registration and Access
 
-## Registration pattern (`register_lsp!`)
+## Config-driven server definitions
 
-Mirrors the syntax and provider patterns — `linkme` distributed slice, one trait impl per language:
+LSP servers are defined declaratively in config, not source code. Built-in defaults live in `config/lsp.rs::default_servers()` using the `server!` macro. Users override or extend via `[plugin.coding.lsp.servers]` in `config.toml`.
 
-```rust
-// src/lsp/languages/go.rs
-use super::prelude::*;
+Adding a new built-in server: one `server!(...)` entry in `default_servers()`. No other changes.
 
-struct GoLsp;
+Adding a server via config (no recompilation):
 
-impl LspSpec for GoLsp {
-    const EXTENSIONS: &'static [&'static str] = &["go"];
-
-    fn language_id(_ext: &str) -> &'static str { "go" }
-
-    fn servers() -> Vec<LspServerDef> {
-        vec![LspServerDef::new("gopls")
-            .detect(|root| root.join("go.mod").exists())]
-    }
-}
-
-register_lsp!(GoLsp);
+```toml
+[[plugin.coding.lsp.servers]]
+name = "gopls"
+command = "gopls"
+extensions = ["go"]
+language_ids = "go"
+root_markers = ["go.mod"]
 ```
 
-Two files touched: the language file + `mod go;` in `src/lsp/languages/mod.rs`. No other changes.
+Overriding an existing server:
+
+```toml
+[[plugin.coding.lsp.servers]]
+name = "rust-analyzer"
+args = ["--log-file", "/tmp/ra.log"]
+```
+
+Disabling a built-in:
+
+```toml
+[[plugin.coding.lsp.servers]]
+name = "basedpyright"
+enabled = false
+```
+
+## Multi-tier config merge
+
+Config layers merge in priority order: plugin defaults → user config → project config. Arrays are concatenated across layers. For servers, `LspRegistry::resolve_servers()` deduplicates by name (later entries override earlier ones per-field via `ServerEntry::overlay()`).
 
 ## LSP server spawning
 

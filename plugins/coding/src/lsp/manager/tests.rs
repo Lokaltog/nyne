@@ -13,7 +13,7 @@ use crate::syntax::SyntaxRegistry;
 ///
 /// Useful for testing gating/routing logic without spawning real servers.
 fn test_manager_with_config(config: LspConfig) -> LspManager {
-    let registry = LspRegistry::build();
+    let registry = LspRegistry::build_with_config(&config);
     let syntax = SyntaxRegistry::global();
     let spawner = Arc::new(Spawner::new());
 

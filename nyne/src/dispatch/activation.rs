@@ -98,7 +98,7 @@ impl ActivationContext {
     /// Retrieve a plugin's configuration section (`[plugin.<id>]`).
     ///
     /// Returns `None` if the section doesn't exist (plugin uses defaults).
-    pub fn plugin_config(&self, id: &str) -> Option<&toml::Value> { self.config.plugin.get(id) }
+    pub fn plugin_config(&self, id: &str) -> Option<&serde_json::Value> { self.config.plugin.get(id) }
 
     /// Insert a service into the plugin extension map.
     ///

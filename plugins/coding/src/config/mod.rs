@@ -283,12 +283,11 @@ const fn default_true() -> bool { true }
 /// Deserialization and config loading methods.
 impl CodingConfig {
     /// Deserialize from the plugin config section, falling back to defaults.
-    pub fn from_plugin_config(section: Option<&toml::Value>) -> Self {
-        let Some(table) = section else {
+    pub fn from_plugin_config(section: Option<&serde_json::Value>) -> Self {
+        let Some(value) = section else {
             return Self::default();
         };
-        // toml::Value::try_into consumes self, clone is required.
-        table.clone().try_into().unwrap_or_default()
+        serde_json::from_value(value.clone()).unwrap_or_default()
     }
 }
 

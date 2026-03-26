@@ -22,6 +22,7 @@ use crate::config::{NyneConfig, StorageStrategy};
 use crate::dispatch::ScriptRegistry;
 use crate::dispatch::path_filter::PathFilter;
 use crate::fuse::VisibilityMap;
+use crate::plugin::PLUGINS;
 use crate::process::Spawner;
 use crate::session::{self, SessionId, SessionRegistry};
 use crate::types::{GitDirName, PassthroughProcesses, ProcessVisibility};
@@ -129,7 +130,17 @@ struct SessionGuard {
 /// Returns an error if config loading fails, paths are invalid, session IDs
 /// conflict, or sandbox/FUSE setup fails.
 pub fn run(args: &MountArgs) -> Result<()> {
-    let nyne_config = Arc::new(NyneConfig::load()?);
+    let plugins: Vec<_> = PLUGINS.iter().map(|f| f()).collect();
+
+    // Use first explicit path or CWD as the project root for config layering.
+    let project_root = args
+        .paths
+        .first()
+        .map(|s| s.path.clone())
+        .map(|p| p.canonicalize().unwrap_or(p))
+        .or_else(|| env::current_dir().ok());
+
+    let nyne_config = Arc::new(NyneConfig::load(&plugins, project_root.as_deref())?);
     let storage_strategy = nyne_config.repository.storage_strategy;
 
     // Ensure session directory exists before scanning.

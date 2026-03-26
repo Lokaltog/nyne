@@ -112,15 +112,17 @@ impl Plugin for CodingPlugin {
         Ok(claude::script_entries(&CodingServices::get(ctx).config))
     }
 
-    /// Returns the fully resolved coding plugin configuration as TOML.
+    /// Returns the fully resolved coding plugin configuration as JSON.
     ///
     /// Re-derives [`CodingConfig`] from the raw config map so the output
     /// reflects all defaults, not just what the user explicitly set. Used
     /// by `nyne config` to show the effective configuration.
-    fn resolved_config(&self, config: &NyneConfig) -> Option<toml::Value> {
+    fn resolved_config(&self, config: &NyneConfig) -> Option<serde_json::Value> {
         let resolved = CodingConfig::from_plugin_config(config.plugin.get("coding"));
-        toml::Value::try_from(&resolved).ok()
+        serde_json::to_value(&resolved).ok()
     }
+
+    fn default_config(&self) -> Option<toml::Table> { toml::Table::try_from(CodingConfig::default()).ok() }
 
     /// Instantiates all coding plugin providers from the activated context.
     ///

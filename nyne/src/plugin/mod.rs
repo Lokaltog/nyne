@@ -85,14 +85,23 @@ pub trait Plugin: Send + Sync {
         Ok(vec![])
     }
 
-    /// Return the fully-resolved plugin configuration as a TOML value.
+    /// Default plugin configuration as a TOML table.
+    ///
+    /// Plugins that have configuration should override this to return their
+    /// default config. The returned table is merged as the lowest-priority
+    /// layer for `[plugin.<id>]` during config resolution.
+    ///
+    /// Returns `None` (default) if the plugin has no configuration.
+    fn default_config(&self) -> Option<toml::Table> { None }
+
+    /// Return the fully-resolved plugin configuration as a JSON value.
     ///
     /// Plugins that deserialize a config struct from `[plugin.<id>]` should
     /// serialize it back here with all defaults filled in, so `nyne config`
     /// can show the effective configuration.
     ///
     /// Returns `None` (default) if the plugin has no configuration.
-    fn resolved_config(&self, config: &NyneConfig) -> Option<toml::Value> {
+    fn resolved_config(&self, config: &NyneConfig) -> Option<serde_json::Value> {
         let _ = config;
         None
     }

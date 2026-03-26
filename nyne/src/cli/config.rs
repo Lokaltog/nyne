@@ -24,11 +24,11 @@ pub struct ConfigArgs;
 ///
 /// Output is pretty-printed TOML written to stdout via [`output::term()`].
 pub fn run(_args: &ConfigArgs) -> Result<()> {
-    let mut config = NyneConfig::load()?;
+    let plugins: Vec<_> = PLUGINS.iter().map(|f| f()).collect();
+    let mut config = NyneConfig::load(&plugins, None)?;
 
     // Replace raw plugin tables with fully-resolved configs (defaults filled in).
-    for factory in PLUGINS {
-        let plugin = factory();
+    for plugin in &plugins {
         if let Some(resolved) = plugin.resolved_config(&config) {
             config.plugin.insert(plugin.id().to_owned(), resolved);
         }

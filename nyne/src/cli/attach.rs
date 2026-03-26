@@ -13,6 +13,7 @@ use color_eyre::eyre::Result;
 use tracing::{info, warn};
 
 use crate::config::NyneConfig;
+use crate::plugin::PLUGINS;
 use crate::types::ProcessVisibility;
 use crate::{sandbox, session};
 
@@ -113,7 +114,8 @@ impl Drop for RegistrationGuard {
 /// Returns an error if session resolution fails or if sandbox entry fails.
 /// Registration and visibility failures are non-fatal (logged as warnings).
 pub fn run(args: &AttachArgs) -> Result<i32> {
-    let config = NyneConfig::load()?;
+    let plugins: Vec<_> = PLUGINS.iter().map(|f| f()).collect();
+    let config = NyneConfig::load(&plugins, None)?;
     let session_info = super::resolve_session(args.id.as_deref())?;
     let control_socket = session::control_socket(&session_info.id)
         .inspect_err(|e| warn!(error = %e, "control socket unavailable — process registration disabled"))

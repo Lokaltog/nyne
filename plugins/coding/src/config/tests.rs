@@ -4,7 +4,8 @@ use super::*;
 
 /// Parses a TOML string into a `CodingConfig` for testing.
 fn parse_coding_config(toml_str: &str) -> CodingConfig {
-    CodingConfig::from_plugin_config(Some(&toml::from_str(toml_str).unwrap()))
+    let value: serde_json::Value = toml::from_str(toml_str).unwrap();
+    CodingConfig::from_plugin_config(Some(&value))
 }
 
 /// Loads a `CodingConfig` from a named test fixture file.
@@ -365,13 +366,33 @@ fn claude_config_from_fixture() {
     assert!(config.claude.hooks.session_start);
 }
 
-/// Verifies LSP defaults when the section is omitted.
-#[test]
-fn lsp_defaults_when_omitted() {
-    let config = load_fixture("lsp_empty_section.toml");
-    assert!(config.lsp.enabled);
-    assert_eq!(config.lsp.cache_ttl, std::time::Duration::from_secs(300));
-    assert_eq!(config.lsp.diagnostics_timeout, std::time::Duration::from_secs(2));
+/// Helper: find a server entry by name.
+fn find_server<'a>(config: &'a CodingConfig, name: &str) -> &'a lsp::ServerEntry {
+    config
+        .lsp
+        .servers
+        .iter()
+        .find(|s| s.name == name)
+        .unwrap_or_else(|| panic!("server '{name}' not found"))
+}
+
+/// Verifies LSP global config fields from various fixtures.
+#[rstest]
+#[case::defaults_when_omitted("lsp_empty_section.toml", true, 300, 2)]
+#[case::custom_durations("lsp_custom_durations.toml", true, 600, 5)]
+fn lsp_global_config(
+    #[case] fixture: &str,
+    #[case] enabled: bool,
+    #[case] cache_ttl_secs: u64,
+    #[case] diag_timeout_secs: u64,
+) {
+    let config = load_fixture(fixture);
+    assert_eq!(config.lsp.enabled, enabled);
+    assert_eq!(config.lsp.cache_ttl, std::time::Duration::from_secs(cache_ttl_secs));
+    assert_eq!(
+        config.lsp.diagnostics_timeout,
+        std::time::Duration::from_secs(diag_timeout_secs)
+    );
 }
 
 /// Verifies that LSP can be explicitly disabled.
@@ -381,84 +402,144 @@ fn lsp_disabled() {
     assert!(!config.lsp.enabled);
 }
 
-/// Verifies custom LSP duration overrides.
-#[test]
-fn lsp_custom_durations() {
-    let config = load_fixture("lsp_custom_durations.toml");
-    assert_eq!(config.lsp.cache_ttl, std::time::Duration::from_secs(600));
-    assert_eq!(config.lsp.diagnostics_timeout, std::time::Duration::from_secs(5));
+/// Verifies per-server field overrides from fixtures.
+#[rstest]
+#[case::override_args(
+    "lsp_server_override_args.toml", "rust-analyzer",
+    true, None, Some(&["--log-file", "/tmp/ra.log"][..])
+)]
+#[case::override_command(
+    "lsp_server_override_command.toml",
+    "pyright",
+    true,
+    Some("basedpyright-langserver"),
+    None
+)]
+#[case::disable("lsp_server_disable.toml", "basedpyright", false, None, None)]
+fn lsp_server_overrides(
+    #[case] fixture: &str,
+    #[case] server_name: &str,
+    #[case] enabled: bool,
+    #[case] command: Option<&str>,
+    #[case] args: Option<&[&str]>,
+) {
+    let config = load_fixture(fixture);
+    let server = find_server(&config, server_name);
+    assert_eq!(server.enabled, enabled);
+    if let Some(cmd) = command {
+        assert_eq!(server.command.as_deref(), Some(cmd));
+    }
+    if let Some(expected_args) = args {
+        let actual: Vec<&str> = server.args.as_ref().unwrap().iter().map(String::as_str).collect();
+        assert_eq!(actual.as_slice(), expected_args);
+    }
 }
 
-/// Verifies LSP server argument overrides.
-#[test]
-fn lsp_server_override_args() {
-    let config = load_fixture("lsp_server_override_args.toml");
-    let ra = &config.lsp.servers["rust-analyzer"];
-    assert!(ra.enabled);
-    assert!(ra.command.is_none());
-    assert_eq!(
-        ra.args.as_deref(),
-        Some(&["--log-file".to_owned(), "/tmp/ra.log".to_owned()][..])
-    );
+/// Verifies custom server entries are present and enabled.
+#[rstest]
+#[case::single("lsp_custom_server.toml", &["ruff"])]
+#[case::multiple("lsp_multiple_custom_servers.toml", &["ruff", "deno"])]
+fn lsp_custom_servers(#[case] fixture: &str, #[case] expected_names: &[&str]) {
+    let config = load_fixture(fixture);
+    for name in expected_names {
+        assert!(
+            find_server(&config, name).enabled,
+            "server '{name}' should be present and enabled"
+        );
+    }
 }
 
-/// Verifies LSP server command overrides.
-#[test]
-fn lsp_server_override_command() {
-    let config = load_fixture("lsp_server_override_command.toml");
-    let pyright = &config.lsp.servers["pyright"];
-    assert!(pyright.enabled);
-    assert_eq!(pyright.command.as_deref(), Some("basedpyright-langserver"));
-    assert!(pyright.args.is_none());
-}
-
-/// Verifies that an LSP server can be disabled via override.
-#[test]
-fn lsp_server_disable() {
-    let config = load_fixture("lsp_server_disable.toml");
-    assert!(!config.lsp.servers["basedpyright"].enabled);
-}
-
-/// Verifies custom LSP server configuration.
-#[test]
-fn lsp_custom_server() {
-    let config = load_fixture("lsp_custom_server.toml");
-    insta::assert_debug_snapshot!(config.lsp.custom);
-}
-
-/// Verifies configuration of multiple custom LSP servers.
-#[test]
-fn lsp_multiple_custom_servers() {
-    let config = load_fixture("lsp_multiple_custom_servers.toml");
-    insta::assert_debug_snapshot!(config.lsp.custom);
-}
-
-/// Verifies that custom LSP servers work without args.
+/// Verifies that custom servers can omit args.
 #[test]
 fn lsp_custom_server_no_args() {
     let config = load_fixture("lsp_custom_server_no_args.toml");
-    assert!(config.lsp.custom[0].args.is_empty());
+    let gopls = find_server(&config, "gopls");
+    assert!(gopls.args.is_none());
 }
 
-/// Verifies a complete LSP configuration with all fields populated.
+/// Verifies a complete LSP configuration with all field types.
 #[test]
 fn lsp_full_config() {
     let config = load_fixture("lsp_full.toml");
     assert!(config.lsp.enabled);
     assert_eq!(config.lsp.cache_ttl, std::time::Duration::from_secs(600));
     assert_eq!(config.lsp.diagnostics_timeout, std::time::Duration::from_secs(3));
-    assert_eq!(config.lsp.servers.len(), 2);
-    assert!(!config.lsp.servers["basedpyright"].enabled);
-    assert_eq!(config.lsp.custom.len(), 1);
+    assert_eq!(config.lsp.servers.len(), 3);
+    assert!(!find_server(&config, "basedpyright").enabled);
+    assert!(find_server(&config, "ruff").enabled);
 }
 
 /// Verifies that invalid config sections are rejected by serde.
 #[rstest]
 #[case::unknown_lsp("[lsp]\nbogus = true")]
-#[case::unknown_lsp_server_override("[lsp.servers.rust-analyzer]\nbogus = true")]
-#[case::unknown_lsp_custom("[[lsp.custom]]\nname = \"foo\"\ncommand = \"foo\"\nextensions = [\"bar\"]\nbogus = true")]
+#[case::unknown_server("[[lsp.servers]]\nname = \"foo\"\nbogus = true")]
 #[case::unknown_todo("[todo]\nbogus = true")]
 fn reject_invalid_config(#[case] toml_input: &str) {
     let result: std::result::Result<CodingConfig, _> = toml::from_str(toml_input);
     assert!(result.is_err(), "invalid config should be rejected: {toml_input}");
+}
+
+/// Verifies LanguageIdMapping deserialization and resolve.
+#[rstest]
+#[case::uniform_string(r#"language_ids = "rust""#, "rs", Some("rust"))]
+#[case::uniform_any_ext(r#"language_ids = "python""#, "py", Some("python"))]
+#[case::per_ext_match(
+    r#"language_ids = { ts = "typescript", tsx = "typescriptreact" }"#,
+    "ts",
+    Some("typescript")
+)]
+#[case::per_ext_other(
+    r#"language_ids = { ts = "typescript", tsx = "typescriptreact" }"#,
+    "tsx",
+    Some("typescriptreact")
+)]
+#[case::per_ext_miss(r#"language_ids = { ts = "typescript" }"#, "jsx", None)]
+fn language_id_mapping_resolve(#[case] toml_input: &str, #[case] ext: &str, #[case] expected: Option<&str>) {
+    #[derive(serde::Deserialize)]
+    struct Wrapper {
+        language_ids: lsp::LanguageIdMapping,
+    }
+    let w: Wrapper = toml::from_str(toml_input).unwrap();
+    assert_eq!(w.language_ids.resolve(ext), expected);
+}
+
+/// Verifies that overlay merges Some fields and preserves None fields.
+#[test]
+fn server_entry_overlay_merges_fields() {
+    let mut base = lsp::ServerEntry {
+        name: "test".into(),
+        command: Some("old-cmd".into()),
+        args: Some(vec!["--old".into()]),
+        extensions: Some(vec!["rs".into()]),
+        ..Default::default()
+    };
+    let overlay = lsp::ServerEntry {
+        name: "test".into(),
+        args: Some(vec!["--new".into()]),
+        root_markers: Some(vec!["Cargo.toml".into()]),
+        ..Default::default()
+    };
+    base.overlay(&overlay);
+
+    assert_eq!(base.args.as_deref(), Some(&["--new".into()][..]));
+    assert_eq!(base.root_markers.as_deref(), Some(&["Cargo.toml".into()][..]),);
+    // Base retains command and extensions (overlay had None)
+    assert_eq!(base.command.as_deref(), Some("old-cmd"));
+    assert_eq!(base.extensions.as_deref(), Some(&["rs".into()][..]));
+}
+
+/// Verifies that overlay always overwrites enabled.
+#[test]
+fn server_entry_overlay_overwrites_enabled() {
+    let mut base = lsp::ServerEntry {
+        name: "test".into(),
+        ..Default::default()
+    };
+    let overlay = lsp::ServerEntry {
+        name: "test".into(),
+        enabled: false,
+        ..Default::default()
+    };
+    base.overlay(&overlay);
+    assert!(!base.enabled);
 }

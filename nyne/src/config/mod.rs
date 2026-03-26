@@ -8,13 +8,15 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
 use garde::Validate;
 use rustix::mount::MountFlags;
 use serde::{Deserialize, Serialize};
+
+use crate::plugin::Plugin;
 
 /// Top-level nyne configuration, deserialized from `~/.config/nyne/config.toml`.
 ///
@@ -60,7 +62,7 @@ pub struct NyneConfig {
     /// Per-plugin configuration sections.
     ///
     /// Each key is a plugin ID (e.g., `"coding"`, `"git"`). Values are
-    /// opaque TOML tables -- plugins deserialize their own config.
+    /// opaque JSON values -- plugins deserialize their own config.
     ///
     /// ```toml
     /// [plugin.coding]
@@ -68,7 +70,7 @@ pub struct NyneConfig {
     /// ```
     #[serde(default)]
     #[garde(skip)]
-    pub plugin: HashMap<String, toml::Value>,
+    pub plugin: HashMap<String, serde_json::Value>,
 }
 
 /// Default implementation for `NyneConfig`.
@@ -342,44 +344,123 @@ impl Default for AgentFilesConfig {
 fn config_path() -> Option<PathBuf> {
     ProjectDirs::from("", "", "nyne").map(|dirs| dirs.config_dir().join("config.toml"))
 }
+/// Project config filenames, checked in order. First match wins.
+const PROJECT_CONFIG_FILENAMES: &[&str] = &[".nyne/config.toml", ".nyne.toml", "nyne.toml"];
+
+/// Load project-level configuration from the project root directory.
+///
+/// Searches for config files in priority order (first match wins).
+/// Returns `None` if no project config file exists.
+/// Returns an error if a file exists but cannot be read or parsed.
+fn load_project_config(project_root: &Path) -> Result<Option<serde_json::Value>> {
+    for filename in PROJECT_CONFIG_FILENAMES {
+        let path = project_root.join(filename);
+        match fs::read_to_string(&path) {
+            Ok(contents) => {
+                tracing::debug!(path = %path.display(), "loading project config");
+                let value: serde_json::Value =
+                    toml::from_str(&contents).wrap_err_with(|| format!("parsing {}", path.display()))?;
+                return Ok(Some(value));
+            }
+            Err(e) if e.kind() == ErrorKind::NotFound => {}
+
+            Err(e) => return Err(e).wrap_err_with(|| format!("reading {}", path.display())),
+        }
+    }
+    Ok(None)
+}
+/// Load user configuration from the XDG config file.
+///
+/// Returns `None` if no XDG directory exists or the config file is missing.
+/// Returns an error if the file exists but cannot be read or parsed.
+fn load_user_config() -> Result<Option<serde_json::Value>> {
+    let Some(path) = config_path() else {
+        tracing::debug!("no XDG config directory found, skipping user config");
+        return Ok(None);
+    };
+
+    tracing::debug!(path = %path.display(), "loading user config");
+
+    match fs::read_to_string(&path) {
+        Ok(contents) => {
+            let value: serde_json::Value =
+                toml::from_str(&contents).wrap_err_with(|| format!("parsing {}", path.display()))?;
+            Ok(Some(value))
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            tracing::debug!(path = %path.display(), "config file not found, skipping user config");
+            Ok(None)
+        }
+        Err(e) => Err(e).wrap_err_with(|| format!("reading {}", path.display())),
+    }
+}
 
 impl NyneConfig {
-    /// Load configuration from the XDG config file, falling back to defaults if absent.
+    /// Load configuration by merging layers in priority order.
     ///
-    /// The loading strategy is intentionally lenient:
-    /// - No XDG directory at all: use defaults (common in containers).
-    /// - Config file missing: use defaults (config is optional).
-    /// - Config file present but malformed: return an error (user intent is clear).
+    /// The merge strategy uses [`deep_merge`](crate::json::deep_merge) so that
+    /// each successive layer only needs to specify overrides — unset keys
+    /// inherit from the layer below.
     ///
-    /// After successful deserialization, the config is validated with `garde`
-    /// to catch constraint violations (e.g., invalid paths in `MountConfig`).
+    /// ## Layer order (lowest → highest priority)
+    ///
+    /// 1. **Core defaults** — `NyneConfig::default()` serialized to JSON.
+    /// 2. **Plugin defaults** — each plugin's `default_config()` merged into
+    ///    `plugin.<id>`.
+    /// 3. **User config** — XDG config file (`~/.config/nyne/config.toml`).
+    /// 4. **Project config** — `.nyne.toml` (or similar) in the project root.
+    ///
+    /// After merging, the result is deserialized back into `NyneConfig` and
+    /// validated with `garde`.
     ///
     /// # Errors
     ///
-    /// Returns an error if the config file exists but cannot be read, parsed,
-    /// or validated.
-    pub fn load() -> Result<Self> {
-        let Some(path) = config_path() else {
-            tracing::debug!("no XDG config directory found, using defaults");
-            return Ok(Self::default());
-        };
+    /// Returns an error if any config file exists but cannot be read/parsed,
+    /// if the merged result fails deserialization, or if validation fails.
+    pub fn load(plugins: &[Box<dyn Plugin>], project_root: Option<&Path>) -> Result<Self> {
+        use serde_json::{Map, Value};
 
-        tracing::debug!(path = %path.display(), "loading config");
+        use crate::json::deep_merge;
 
-        let config: Self = toml::from_str(&match fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(e) if e.kind() == ErrorKind::NotFound => {
-                tracing::debug!(path = %path.display(), "config file not found, using defaults");
-                return Ok(Self::default());
-            }
-            Err(e) => {
-                return Err(e).wrap_err_with(|| format!("reading {}", path.display()));
-            }
-        })
-        .wrap_err_with(|| format!("parsing {}", path.display()))?;
+        // Layer 1: Core defaults.
+        let mut merged = serde_json::to_value(Self::default()).wrap_err("serializing default config")?;
 
+        // Layer 2: Plugin defaults.
+        for plugin in plugins {
+            let Some(defaults) = plugin.default_config() else {
+                continue;
+            };
+
+            let plugin_section = merged
+                .get_mut("plugin")
+                .and_then(Value::as_object_mut)
+                .ok_or_else(|| color_eyre::eyre::eyre!("default config missing plugin table"))?;
+
+            let plugin_value = serde_json::to_value(defaults)
+                .wrap_err_with(|| format!("serializing defaults for plugin '{}'", plugin.id()))?;
+
+            let entry = plugin_section
+                .entry(plugin.id())
+                .or_insert(Value::Object(Map::default()));
+
+            deep_merge(entry, &plugin_value);
+        }
+
+        // Layer 3: User config (XDG).
+        if let Some(user_config) = load_user_config()? {
+            deep_merge(&mut merged, &user_config);
+        }
+
+        // Layer 4: Project config.
+        if let Some(root) = project_root
+            && let Some(project_config) = load_project_config(root)?
+        {
+            deep_merge(&mut merged, &project_config);
+        }
+
+        // Deserialize merged result.
+        let config: Self = serde_json::from_value(merged).wrap_err("deserializing merged config")?;
         config.validate().wrap_err("config validation failed")?;
-
         Ok(config)
     }
 }

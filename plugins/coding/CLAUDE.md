@@ -15,9 +15,13 @@ Coding plugin — syntax decomposition, LSP integration, AI-assisted editing, de
 
 ## Config
 
-Plugin config: `[plugin.coding]` in `~/.config/nyne/config.toml`. LSP config: `[lsp]` (top-level, `ctx.config().lsp`).
+Plugin config: `[plugin.coding]` in `~/.config/nyne/config.toml` or project-level `.nyne/config.toml` / `.nyne.toml` / `nyne.toml`.
 
-- `config.rs`: `CodingConfig` + `AnalysisConfig` + `ClaudeConfig` — deserialized via `CodingConfig::from_plugin_config()`
+Config is multi-tier: plugin defaults → user config → project config. Merged via `deep_merge` (arrays concatenated, objects recursive-merged). Plugin defaults are provided by `CodingPlugin::default_config()`.
+
+- `config/mod.rs`: `CodingConfig` — deserialized via `CodingConfig::from_plugin_config()`
+- `config/lsp.rs`: `LspConfig`, `ServerEntry`, `LanguageIdMapping` — LSP server definitions
+- `[plugin.coding.lsp.servers]`: array of server entries (name, command, args, extensions, language_ids, root_markers, enabled). Built-in defaults in `default_servers()`. See `lsp/CLAUDE.md` for config examples.
 - `[plugin.coding.analysis]`: `enabled` (bool), `rules` (optional list — `None` = all except `DEFAULT_DISABLED_RULES`)
 - `[plugin.coding.claude]`: `enabled` (bool, default true) — master toggle for `.claude/` directory and all hooks
 - `[plugin.coding.claude.hooks]`: per-hook toggles — `session_start`, `pre_tool_use`, `post_tool_use`, `stop`, `statusline` (all default true)

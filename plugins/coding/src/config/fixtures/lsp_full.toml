@@ -3,13 +3,15 @@ enabled = true
 cache_ttl = "10m"
 diagnostics_timeout = "3s"
 
-[lsp.servers.rust-analyzer]
+[[lsp.servers]]
+name = "rust-analyzer"
 args = ["--log-file", "/tmp/ra.log"]
 
-[lsp.servers.basedpyright]
+[[lsp.servers]]
+name = "basedpyright"
 enabled = false
 
-[[lsp.custom]]
+[[lsp.servers]]
 name = "ruff"
 command = "ruff"
 args = ["server"]

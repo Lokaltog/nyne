@@ -38,6 +38,9 @@ fn merge_inner(base: &mut Value, overlay: &Value, null_policy: NullPolicy) {
                 }
                 merge_inner(base_map.entry(k.clone()).or_insert(Value::Null), v, null_policy);
             },
+        (Value::Array(base_arr), Value::Array(overlay_arr)) => {
+            base_arr.extend(overlay_arr.iter().cloned());
+        }
         (_, overlay) if skip && overlay.is_null() => {}
         (base, overlay) => *base = overlay.clone(),
     }

@@ -1,7 +1,30 @@
 # nyne configuration
 # Place at: ~/.config/nyne/config.toml
+# Project-level overrides: .nyne/config.toml, .nyne.toml, or nyne.toml
 
-[general]
+# [plugin.coding.lsp]
+# enabled = true
+# cache_ttl = "5m"
+# diagnostics_timeout = "2s"
+# response_timeout = "10s"
+#
+# Override a built-in server (only specified fields are changed):
+# [[plugin.coding.lsp.servers]]
+# name = "rust-analyzer"
+# args = ["--log-file", "/tmp/ra.log"]
+#
+# Disable a built-in server:
+# [[plugin.coding.lsp.servers]]
+# name = "basedpyright"
+# enabled = false
+#
+# Add a new server:
+# [[plugin.coding.lsp.servers]]
+# name = "gopls"
+# command = "gopls"
+# extensions = ["go"]
+# language_ids = "go"
+# root_markers = ["go.mod"]
 
 # [plugin.coding.analysis]
 # enabled = true
