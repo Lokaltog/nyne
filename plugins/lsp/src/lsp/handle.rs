@@ -6,6 +6,7 @@
 //
 // Created at resolve time, stored inside Readable impls, queried at read time.
 
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use crop::Rope;
@@ -114,15 +115,14 @@ pub struct SymbolQuery {
 
 /// Per-symbol LSP query bound to a specific position.
 impl SymbolQuery {
-    /// Acquire a `FileQuery` for cached LSP operations.
-    pub(crate) fn file_query(&self) -> Option<FileQuery<'_>> { self.handle.file_query() }
-
     /// The LSP position this query is bound to.
     pub(crate) const fn position(&self) -> Position { self.position }
+}
 
-    /// The overlay-rooted file path used for LSP requests.
-    pub(crate) fn lsp_file(&self) -> &Path { self.handle.lsp_file() }
+/// Auto-delegates `file_query`, `lsp_file`, `path_resolver`, etc. to the
+/// inner [`LspHandle`] — avoids pure-forwarding boilerplate.
+impl Deref for SymbolQuery {
+    type Target = LspHandle;
 
-    /// Path resolver for rewriting LSP URIs from FUSE paths to overlay paths.
-    pub(crate) fn path_resolver(&self) -> &super::path::LspPathResolver { self.handle.path_resolver() }
+    fn deref(&self) -> &LspHandle { &self.handle }
 }

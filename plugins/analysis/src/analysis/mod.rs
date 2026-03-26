@@ -273,8 +273,18 @@ impl AnalysisEngine {
                 catch_all.push(rule);
                 continue;
             }
-            let unique_kinds: HashSet<&str> = kinds.iter().copied().collect();
-            for kind in unique_kinds {
+            #[cfg(debug_assertions)]
+            {
+                let mut sorted = kinds.to_vec();
+                sorted.sort_unstable();
+                sorted.dedup();
+                assert!(
+                    sorted.len() == kinds.len(),
+                    "rule {:?} returns duplicate node_kinds — fix the rule implementation",
+                    rule.id(),
+                );
+            }
+            for kind in kinds {
                 dispatch.entry(kind).or_default().push(Arc::clone(&rule));
             }
         }

@@ -19,7 +19,7 @@ use crop::Rope;
 use lsp_types::{DocumentChanges, OneOf, TextEdit, WorkspaceEdit};
 use nyne::text;
 use nyne::types::vfs_path::VfsPath;
-use nyne_source::edit::plan::{FileEditResult, ValidationResult};
+use nyne_source::edit::plan::FileEditResult;
 use tracing::{debug, warn};
 
 use super::uri::position_to_byte_offset;
@@ -115,25 +115,20 @@ fn collect_into<'a>(
 
 /// Collect text edits from `DocumentChanges` into the file edits map.
 fn collect_document_changes<'a>(doc_changes: &'a DocumentChanges, file_edits: &mut HashMap<String, Vec<&'a TextEdit>>) {
+    let mut collect_edit = |edit: &'a lsp_types::TextDocumentEdit| {
+        collect_into(
+            file_edits,
+            &edit.text_document.uri,
+            edit.edits.iter().map(unwrap_text_edit),
+        );
+    };
     match doc_changes {
-        DocumentChanges::Edits(edits) =>
-            for edit in edits {
-                collect_into(
-                    file_edits,
-                    &edit.text_document.uri,
-                    edit.edits.iter().map(unwrap_text_edit),
-                );
-            },
-        DocumentChanges::Operations(ops) =>
-            for op in ops {
-                if let lsp_types::DocumentChangeOperation::Edit(edit) = op {
-                    collect_into(
-                        file_edits,
-                        &edit.text_document.uri,
-                        edit.edits.iter().map(unwrap_text_edit),
-                    );
-                }
-            },
+        DocumentChanges::Edits(edits) => edits.iter().for_each(&mut collect_edit),
+        DocumentChanges::Operations(ops) => ops.iter().for_each(|op| {
+            if let lsp_types::DocumentChangeOperation::Edit(edit) = op {
+                collect_edit(edit);
+            }
+        }),
     }
 }
 
@@ -242,14 +237,13 @@ pub fn resolve_workspace_edit(
     // 1. Resolve text edits into Modify results.
     for r in resolve_edits(edit, resolver)? {
         let (source_file, display_path) = to_paths(&r.path)?;
-        results.push(FileEditResult {
+        results.push(FileEditResult::skipped(
             source_file,
             display_path,
-            original: r.original,
-            modified: r.modified,
-            outcome: EditOutcome::Modify,
-            validation: ValidationResult::Skipped,
-        });
+            r.original,
+            r.modified,
+            EditOutcome::Modify,
+        ));
     }
 
     // 2. Collect file-level operations from document_changes.
@@ -288,27 +282,25 @@ fn collect_resource_op(
             if let Some(existing) = results.iter_mut().find(|r| r.display_path == display) {
                 existing.outcome = EditOutcome::Create;
             } else {
-                results.push(FileEditResult {
-                    source_file: vfs,
-                    display_path: display,
-                    original: String::new(),
-                    modified: String::new(),
-                    outcome: EditOutcome::Create,
-                    validation: ValidationResult::Skipped,
-                });
+                results.push(FileEditResult::skipped(
+                    vfs,
+                    display,
+                    String::new(),
+                    String::new(),
+                    EditOutcome::Create,
+                ));
             }
         }
         lsp_types::ResourceOp::Delete(delete) => {
             let (vfs, display) = to_paths(delete.uri.path().as_str())?;
             results.retain(|r| r.display_path != display);
-            results.push(FileEditResult {
-                source_file: vfs,
-                display_path: display,
-                original: String::new(),
-                modified: String::new(),
-                outcome: EditOutcome::Delete,
-                validation: ValidationResult::Skipped,
-            });
+            results.push(FileEditResult::skipped(
+                vfs,
+                display,
+                String::new(),
+                String::new(),
+                EditOutcome::Delete,
+            ));
         }
         lsp_types::ResourceOp::Rename(rename) => {
             let (old_vfs, old_display) = to_paths(rename.old_uri.path().as_str())?;
@@ -317,14 +309,13 @@ fn collect_resource_op(
                 existing.outcome = EditOutcome::Rename { new_path: new_vfs };
             } else {
                 let content = resolver.read_to_string(rename.old_uri.path().as_str())?;
-                results.push(FileEditResult {
-                    source_file: old_vfs,
-                    display_path: old_display,
-                    modified: content.clone(),
-                    original: content,
-                    outcome: EditOutcome::Rename { new_path: new_vfs },
-                    validation: ValidationResult::Skipped,
-                });
+                results.push(FileEditResult::skipped(
+                    old_vfs,
+                    old_display,
+                    content.clone(),
+                    content,
+                    EditOutcome::Rename { new_path: new_vfs },
+                ));
             }
         }
     }

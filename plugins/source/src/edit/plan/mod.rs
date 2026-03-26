@@ -287,6 +287,26 @@ pub struct FileEditResult {
     /// Tree-sitter validation result for the modified content.
     pub validation: ValidationResult,
 }
+impl FileEditResult {
+    /// Create a result with [`ValidationResult::Skipped`] — used for LSP resource
+    /// operations and resolved text edits where tree-sitter validation is not applicable.
+    pub const fn skipped(
+        source_file: nyne::VfsPath,
+        display_path: String,
+        original: String,
+        modified: String,
+        outcome: EditOutcome,
+    ) -> Self {
+        Self {
+            source_file,
+            display_path,
+            original,
+            modified,
+            outcome,
+            validation: ValidationResult::Skipped,
+        }
+    }
+}
 
 /// Apply a list of [`FileEditResult`]s to the filesystem.
 ///

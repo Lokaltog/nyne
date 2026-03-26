@@ -32,6 +32,21 @@ pub struct CacheKey<'a> {
     /// end-line for range-scoped queries (inlay hints).
     pub param: u32,
 }
+/// Named constants for LSP method keys used in [`CacheKey::method`].
+///
+/// Single source of truth — all cache call sites reference these instead of
+/// string literals.
+impl CacheKey<'_> {
+    pub const DECLARATION: &'static str = "declaration";
+    pub const DEFINITION: &'static str = "definition";
+    pub const HOVER: &'static str = "hover";
+    pub const IMPLEMENTATION: &'static str = "implementation";
+    pub const INCOMING_CALLS: &'static str = "incomingCalls";
+    pub const INLAY_HINT: &'static str = "inlayHint";
+    pub const OUTGOING_CALLS: &'static str = "outgoingCalls";
+    pub const REFERENCES: &'static str = "references";
+    pub const TYPE_DEFINITION: &'static str = "typeDefinition";
+}
 
 /// Display a cache key as `path:method:line:param`.
 ///

@@ -29,7 +29,7 @@ pub struct FileQuery<'a> {
 /// Generate a positional `FileQuery` method: build `CacheKey`, delegate to
 /// the named `LspClient` method, cache the result.
 macro_rules! cached_pos_query {
-    ($(#[doc = $doc:literal])* $name:ident => $client_method:ident, $cache_key:literal -> $ret:ty) => {
+    ($(#[doc = $doc:literal])* $name:ident => $client_method:ident, $cache_key:expr => $ret:ty) => {
         $(#[doc = $doc])*
         pub(crate) fn $name(&self, line: u32, col: u32) -> Result<$ret> {
             let key = CacheKey { path: self.lsp_file, method: $cache_key, line, param: col };
@@ -42,42 +42,42 @@ macro_rules! cached_pos_query {
 impl<'a> FileQuery<'a> {
     cached_pos_query! {
         /// Find all references to the symbol at the given position.
-        references => references, "references" -> Vec<Location>
+        references => references, CacheKey::REFERENCES => Vec<Location>
     }
 
     cached_pos_query! {
         /// Get hover documentation for the symbol at the given position.
-        hover => hover, "hover" -> Option<Hover>
+        hover => hover, CacheKey::HOVER => Option<Hover>
     }
 
     cached_pos_query! {
         /// Find implementations of the symbol at the given position.
-        implementations => implementation, "implementation" -> Vec<Location>
+        implementations => implementation, CacheKey::IMPLEMENTATION => Vec<Location>
     }
 
     cached_pos_query! {
         /// Get incoming calls to the symbol at the given position.
-        incoming_calls => incoming_calls, "incomingCalls" -> Vec<CallHierarchyIncomingCall>
+        incoming_calls => incoming_calls, CacheKey::INCOMING_CALLS => Vec<CallHierarchyIncomingCall>
     }
 
     cached_pos_query! {
         /// Get outgoing calls from the symbol at the given position.
-        outgoing_calls => outgoing_calls, "outgoingCalls" -> Vec<CallHierarchyOutgoingCall>
+        outgoing_calls => outgoing_calls, CacheKey::OUTGOING_CALLS => Vec<CallHierarchyOutgoingCall>
     }
 
     cached_pos_query! {
         /// Find the definition of the symbol at the given position.
-        definition => definition, "definition" -> Vec<Location>
+        definition => definition, CacheKey::DEFINITION => Vec<Location>
     }
 
     cached_pos_query! {
         /// Find the declaration of the symbol at the given position.
-        declaration => declaration, "declaration" -> Vec<Location>
+        declaration => declaration, CacheKey::DECLARATION => Vec<Location>
     }
 
     cached_pos_query! {
         /// Find the type definition of the symbol at the given position.
-        type_definition => type_definition, "typeDefinition" -> Vec<Location>
+        type_definition => type_definition, CacheKey::TYPE_DEFINITION => Vec<Location>
     }
 
     /// Create a new file query handle for the given manager, client, and file.
@@ -106,7 +106,7 @@ impl<'a> FileQuery<'a> {
     pub(crate) fn inlay_hints(&self, range: Range) -> Result<Vec<InlayHint>> {
         let key = CacheKey {
             path: self.lsp_file,
-            method: "inlayHint",
+            method: CacheKey::INLAY_HINT,
             line: range.start.line,
             param: range.end.line,
         };
