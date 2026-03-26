@@ -6,6 +6,15 @@ Git plugin — blame, log, status, branches, diff, history, contributors, notes,
 
 nyne-plugin-coding depends on this crate for symbol-scoped git features (per-symbol blame/history). Public types are re-exported from `lib.rs` — consumers import from the crate root (e.g., `nyne_git::FileViewCtx`), never from internal module paths.
 
+## Extension Traits
+
+History and status methods on `GitRepo` are defined as extension traits to improve discoverability:
+
+- `HistoryQueries` (`provider/history.rs`) — blame, file history, contributors, notes
+- `StatusQueries` (`status.rs`) — working tree status
+
+Consumers must `use` the trait to access these methods (re-exported from `lib.rs`).
+
 ## Project Cloner
 
 `clone.rs` implements `ProjectCloner` (trait defined in nyne core) for overlay lowerdir construction. Registered at link time via `#[distributed_slice(PROJECT_CLONERS)]` — core discovers it without any git-specific knowledge. Supports `Snapshot` (ODB copy of HEAD tree) and `Hardlink` (`git clone --local`) strategies.
