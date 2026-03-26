@@ -91,7 +91,14 @@ fn extract_fn_name(node: TsNode<'_>) -> String {
 
 /// Build a fragment for a `fn_form` or `lambda_form`.
 fn build_fn_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragment {
-    build_fennel_fragment(node, extract_fn_name(node), SymbolKind::Function, parent_name)
+    let doc_range = FennelLanguage::extract_doc_range(node);
+    build_simple_fragment(
+        node,
+        extract_fn_name(node),
+        SymbolKind::Function,
+        doc_range,
+        parent_name,
+    )
 }
 
 /// Extract the binding name from a \``local_form`\` or \``var_form`\` node.
@@ -123,10 +130,12 @@ fn is_require_binding(node: TsNode<'_>) -> bool {
 
 /// Build a fragment for a `local_form` or `var_form`.
 fn build_binding_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Option<Fragment> {
-    Some(build_fennel_fragment(
+    let doc_range = FennelLanguage::extract_doc_range(node);
+    Some(build_simple_fragment(
         node,
         extract_binding_name(node)?,
         SymbolKind::Variable,
+        doc_range,
         parent_name,
     ))
 }
@@ -150,31 +159,12 @@ fn extract_macro_name(node: TsNode<'_>) -> String {
 
 /// Build a fragment for a `macro_form`.
 fn build_macro_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragment {
-    build_fennel_fragment(node, extract_macro_name(node), SymbolKind::Macro, parent_name)
-}
-
-/// Shared builder for Fennel fragment types.
-///
-/// All Fennel symbols share the same structure: extract doc range via the
-/// `LanguageSpec` default, compute the full span, and delegate to
-/// [`build_code_fragment`].
-fn build_fennel_fragment(node: TsNode<'_>, name: String, kind: SymbolKind, parent_name: Option<&str>) -> Fragment {
-    let signature = node.first_line().to_owned();
     let doc_range = FennelLanguage::extract_doc_range(node);
-    let parent = Some(name.clone());
-
-    let children: Vec<Fragment> = Fragment::docstring_child(doc_range, parent).into_iter().collect();
-
-    build_code_fragment(
+    build_simple_fragment(
         node,
-        CodeFragmentSpec {
-            name,
-            kind,
-            signature,
-            name_byte_offset: node.start_byte(),
-            visibility: None,
-            children,
-        },
+        extract_macro_name(node),
+        SymbolKind::Macro,
+        doc_range,
         parent_name,
     )
 }

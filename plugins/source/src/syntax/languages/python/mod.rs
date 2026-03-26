@@ -209,14 +209,8 @@ fn dedent_docstring(content: &str) -> String {
     }
 
     let lines: Vec<&str> = content.lines().collect();
-    if lines.is_empty() {
-        return String::new();
-    }
-
-    let Some(first) = lines.first() else {
-        return String::new();
-    };
-    let first = first.trim_start();
+    #[allow(clippy::indexing_slicing)] // lines is non-empty (content is non-empty)
+    let first = lines[0].trim_start();
     let rest = lines.get(1..).unwrap_or(&[]);
     if rest.is_empty() {
         return first.to_owned();

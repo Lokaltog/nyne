@@ -97,18 +97,10 @@ fn binding_value_kind(node: TsNode<'_>) -> Option<&'static str> {
 /// If the value is an attribute set, recurse into it to create child fragments.
 fn build_binding_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragment {
     let name = extract_binding_name(node);
-    let signature = node.first_line().to_owned();
     let doc_range = NixLanguage::extract_doc_range(node);
 
     let value_kind = binding_value_kind(node);
     let is_attrset = matches!(value_kind, Some("attrset_expression" | "rec_attrset_expression"));
-
-    let parent = Some(name.clone());
-
-    let mut children: Vec<Fragment> = Fragment::docstring_child(doc_range, parent).into_iter().collect();
-    if is_attrset {
-        collect_nix_fragments(node, &mut children, Some(&name));
-    }
 
     let kind = if is_attrset {
         SymbolKind::Module
@@ -116,18 +108,11 @@ fn build_binding_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragme
         SymbolKind::Variable
     };
 
-    build_code_fragment(
-        node,
-        CodeFragmentSpec {
-            name,
-            kind,
-            signature,
-            name_byte_offset: node.start_byte(),
-            visibility: None,
-            children,
-        },
-        parent_name,
-    )
+    let mut frag = build_simple_fragment(node, name.clone(), kind, doc_range, parent_name);
+    if is_attrset {
+        collect_nix_fragments(node, &mut frag.children, Some(&name));
+    }
+    frag
 }
 
 register_syntax!(NixLanguage);

@@ -258,6 +258,37 @@ pub fn build_code_fragment(span_node: TsNode<'_>, spec: CodeFragmentSpec, parent
         parent_name.map(String::from),
     )
 }
+/// Build a [`Fragment`] for nodes with the common pattern: first-line signature,
+/// docstring child from doc range, no extra children, and no visibility.
+///
+/// This covers the majority of simple language symbols (Fennel forms, TOML
+/// tables, Nix bindings without nested attribute sets). Languages with
+/// additional children or custom signatures should use [`build_code_fragment`]
+/// directly.
+pub fn build_simple_fragment(
+    node: TsNode<'_>,
+    name: String,
+    kind: SymbolKind,
+    doc_range: Option<Range<usize>>,
+    parent_name: Option<&str>,
+) -> Fragment {
+    let signature = node.first_line().to_owned();
+    let parent = Some(name.clone());
+    let children: Vec<Fragment> = Fragment::docstring_child(doc_range, parent).into_iter().collect();
+
+    build_code_fragment(
+        node,
+        CodeFragmentSpec {
+            name,
+            kind,
+            signature,
+            name_byte_offset: node.start_byte(),
+            visibility: None,
+            children,
+        },
+        parent_name,
+    )
+}
 
 /// Shared tree-sitter parser wrapper used by all language decomposers.
 ///

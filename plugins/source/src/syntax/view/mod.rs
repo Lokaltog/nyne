@@ -28,14 +28,14 @@ use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata};
 /// with fallback to signature.
 #[derive(Debug)]
 pub struct FragmentView {
-    frag: Fragment,
+    fragment: Fragment,
     shared: Arc<DecomposedSource>,
 }
 
 /// Display implementation for `FragmentView`, showing the fragment name.
 impl fmt::Display for FragmentView {
     /// Displays the fragment name.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.frag.name) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.fragment.name) }
 }
 
 /// Minijinja [`Object`] implementation exposing fragment properties to templates.
@@ -46,28 +46,31 @@ impl Object for FragmentView {
     /// Looks up a template variable by key.
     fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
         match key.as_str()? {
-            "name" => Some(Value::from(self.frag.name.as_str())),
-            "kind" => Some(Value::from(format_kind(&self.frag))),
+            "name" => Some(Value::from(self.fragment.name.as_str())),
+            "kind" => Some(Value::from(self.fragment.kind.short_display())),
             "visibility" => Some(Value::from(self.visibility())),
-            "signature" => self.frag.signature.as_deref().map(Value::from),
+            "signature" => self.fragment.signature.as_deref().map(Value::from),
             "line_range" => {
-                let lr = self.frag.line_range(&self.shared.source);
+                let lr = self.fragment.line_range(&self.shared.source);
                 Some(Value::from(format!("{}-{}", lr.start + 1, lr.end)))
             }
-            "bytes" => Some(Value::from(self.frag.full_span().len())),
-            "children" => Some(fragment_list(&self.frag.children, &self.shared)),
+            "bytes" => Some(Value::from(self.fragment.full_span().len())),
+            "children" => Some(fragment_list(&self.fragment.children, &self.shared)),
             "child_count" => {
                 let count = self
-                    .frag
+                    .fragment
                     .children
                     .iter()
                     .filter(|c| !matches!(c.kind, FragmentKind::CodeBlock { .. }) && !c.kind.is_structural())
                     .count();
                 Some(Value::from(count))
             }
-            "fs_name" => self.frag.fs_name.as_deref().map(Value::from),
-            "code_blocks" => Some(Value::from(code_block_summary(&self.frag.children))),
-            "is_code_block" => Some(Value::from(matches!(self.frag.kind, FragmentKind::CodeBlock { .. }))),
+            "fs_name" => self.fragment.fs_name.as_deref().map(Value::from),
+            "code_blocks" => Some(Value::from(code_block_summary(&self.fragment.children))),
+            "is_code_block" => Some(Value::from(matches!(
+                self.fragment.kind,
+                FragmentKind::CodeBlock { .. }
+            ))),
             _ => None,
         }
     }
@@ -107,13 +110,13 @@ impl Object for FragmentView {
 impl FragmentView {
     /// Extract the description: doc comment first line, or first content line for sections.
     fn description(&self) -> String {
-        if let Some(doc) = self.frag.child_of_kind(&FragmentKind::Docstring) {
+        if let Some(doc) = self.fragment.child_of_kind(&FragmentKind::Docstring) {
             let raw = &self.shared.source[doc.byte_range.clone()];
             return self.shared.decomposer.clean_doc_comment(raw).unwrap_or_default();
         }
-        match &self.frag.metadata {
+        match &self.fragment.metadata {
             Some(FragmentMetadata::Document { .. }) => {
-                let body = &self.shared.source[self.frag.byte_range.clone()];
+                let body = &self.shared.source[self.fragment.byte_range.clone()];
                 section_first_line(body).unwrap_or_default()
             }
             _ => String::new(),
@@ -122,7 +125,7 @@ impl FragmentView {
 
     /// Returns the compact visibility string.
     fn visibility(&self) -> &str {
-        match &self.frag.visibility {
+        match &self.fragment.visibility {
             Some(vis) => compact_visibility(vis),
             None => "",
         }
@@ -142,30 +145,12 @@ pub fn fragment_list(fragments: &[Fragment], shared: &Arc<DecomposedSource>) -> 
             })
             .map(|f| {
                 Value::from_object(FragmentView {
-                    frag: f.clone(),
+                    fragment: f.clone(),
                     shared: Arc::clone(shared),
                 })
             })
             .collect::<Vec<_>>(),
     )
-}
-
-/// Format a fragment's kind for display (e.g. "Struct", "h2").
-///
-/// Produces concise labels for the "Kind" column in OVERVIEW.md symbol tables.
-/// Code blocks include the language tag when available (e.g. "CodeBlock(rust)").
-fn format_kind(frag: &Fragment) -> String {
-    match &frag.kind {
-        FragmentKind::Symbol(k) => k.to_string(),
-        FragmentKind::Docstring => "Docstring".into(),
-        FragmentKind::Imports => "Imports".into(),
-        FragmentKind::Decorator => "Decorator".into(),
-        FragmentKind::Section { level } => format!("h{level}"),
-        FragmentKind::CodeBlock { lang } => lang
-            .as_ref()
-            .map_or_else(|| "CodeBlock".into(), |l| format!("CodeBlock({l})")),
-        FragmentKind::Preamble => "Preamble".into(),
-    }
 }
 
 /// Shorten Rust visibility qualifiers for display.

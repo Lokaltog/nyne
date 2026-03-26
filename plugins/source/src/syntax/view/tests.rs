@@ -34,12 +34,12 @@ fn find_view(shared: &Arc<DecomposedSource>, name: &str) -> FragmentView {
         .find(|f| f.name == name)
         .unwrap_or_else(|| panic!("fragment '{name}' not found"));
     FragmentView {
-        frag: frag.clone(),
+        fragment: frag.clone(),
         shared: Arc::clone(shared),
     }
 }
 
-/// Verifies that format_kind renders fragment kinds to expected display strings.
+/// Verifies that short_display renders fragment kinds to expected display strings.
 #[rstest]
 #[case(FragmentKind::Symbol(SymbolKind::Function), "Function")]
 #[case(FragmentKind::Symbol(SymbolKind::Struct), "Struct")]
@@ -48,11 +48,8 @@ fn find_view(shared: &Arc<DecomposedSource>, name: &str) -> FragmentView {
 #[case(FragmentKind::Section { level: 3 }, "h3")]
 #[case(FragmentKind::CodeBlock { lang: Some("rust".into()) }, "CodeBlock(rust)")]
 #[case(FragmentKind::CodeBlock { lang: None }, "CodeBlock")]
-fn format_kind_renders(#[case] kind: FragmentKind, #[case] expected: &str) {
-    let source = "x";
-    let _ = source;
-    let frag = crate::syntax::fragment::Fragment::new("test".into(), kind, 0..1, None, None, None, 0, Vec::new(), None);
-    assert_eq!(format_kind(&frag), expected);
+fn short_display_renders(#[case] kind: FragmentKind, #[case] expected: &str) {
+    assert_eq!(kind.short_display(), expected);
 }
 
 /// Verifies that compact_visibility shortens Rust visibility modifiers.
@@ -74,7 +71,7 @@ fn code_block_summary_from_fixture() {
     let shared = decompose_fixture(&reg, "md", "section_with_code_blocks.md");
     let view = find_view(&shared, "Getting Started");
     // "Getting Started" has 2 code blocks: rust, sh
-    assert_eq!(code_block_summary(&view.frag.children), "2 blocks (rust, sh)");
+    assert_eq!(code_block_summary(&view.fragment.children), "2 blocks (rust, sh)");
 }
 
 /// Verifies that code_block_summary returns empty string for no children.

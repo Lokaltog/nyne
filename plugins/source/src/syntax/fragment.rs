@@ -96,6 +96,24 @@ impl FragmentKind {
     /// rather than navigable symbols. They should not receive `fs_name` or
     /// appear as `@/` directories in the VFS.
     pub const fn is_structural(&self) -> bool { matches!(self, Self::Docstring | Self::Imports | Self::Decorator) }
+
+    /// Concise display string for OVERVIEW.md symbol tables.
+    ///
+    /// Differs from [`Display`] only for sections (`h2` vs `Section(h2)`) and
+    /// code blocks with a language tag (`CodeBlock(rust)` in both).
+    pub fn short_display(&self) -> String {
+        match self {
+            Self::Symbol(k) => k.to_string(),
+            Self::Docstring => "Docstring".into(),
+            Self::Imports => "Imports".into(),
+            Self::Decorator => "Decorator".into(),
+            Self::Section { level } => format!("h{level}"),
+            Self::CodeBlock { lang } => lang
+                .as_ref()
+                .map_or_else(|| "CodeBlock".into(), |l| format!("CodeBlock({l})")),
+            Self::Preamble => "Preamble".into(),
+        }
+    }
 }
 
 /// Display implementation for `FragmentKind`.

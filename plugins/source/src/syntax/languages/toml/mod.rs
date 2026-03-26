@@ -79,16 +79,13 @@ fn extract_key_name(node: TsNode<'_>) -> String {
     "unknown".to_owned()
 }
 
-/// Build a signature for a table node (e.g. `[package]` or `[[bin]]`).
-fn build_table_signature(node: TsNode<'_>) -> String { node.first_line().to_owned() }
-
 /// Build an opaque fragment for a `table` or `table_array_element` node.
 ///
 /// Tables are not decomposed further — individual key-value pairs inside a
 /// section are part of the section body, not separate symbols.
 fn build_table_fragment(node: TsNode<'_>) -> Fragment {
     let name = extract_key_name(node);
-    let signature = build_table_signature(node);
+    let signature = node.first_line().to_owned();
     let doc_range = TomlLanguage::extract_doc_range(node);
     let parent = Some(name.clone());
 
