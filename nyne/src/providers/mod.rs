@@ -60,6 +60,17 @@ pub fn source_file(ctx: &RouteCtx<'_>) -> Result<VfsPath> { VfsPath::new(ctx.par
 fn is_file_companion(split: &CompanionSplit, real_fs: &dyn RealFs) -> bool {
     real_fs.exists(&split.source_file) && !real_fs.is_dir(&split.source_file)
 }
+/// Parse the companion path from a request and validate the file-only guard.
+///
+/// Returns `None` (→ caller returns `Ok(None)`) when the path is not a
+/// companion path or when `file_only` is set and the source is a directory.
+fn resolve_companion<'a>(ctx: &'a RequestContext<'_>, file_only: bool) -> Option<CompanionSplit<'a>> {
+    let split = split_companion_path(ctx.path)?;
+    if file_only && !is_file_companion(&split, ctx.real_fs) {
+        return None;
+    }
+    Some(split)
+}
 
 use std::sync::Arc;
 
@@ -132,12 +143,9 @@ pub fn dispatch_children<P: Provider>(
     if let Some(nodes) = at_routes.children(provider, ctx)? {
         return Ok(Some(nodes));
     }
-    let Some(split) = split_companion_path(ctx.path) else {
+    let Some(split) = resolve_companion(ctx, file_only) else {
         return Ok(None);
     };
-    if file_only && !is_file_companion(&split, ctx.real_fs) {
-        return Ok(None);
-    }
     companion_children(companion_routes, provider, ctx, &split)
 }
 
@@ -155,12 +163,9 @@ pub fn dispatch_lookup<P: Provider>(
     if let Some(node) = at_routes.lookup(provider, ctx, name)? {
         return Ok(Some(node));
     }
-    let Some(split) = split_companion_path(ctx.path) else {
+    let Some(split) = resolve_companion(ctx, file_only) else {
         return Ok(None);
     };
-    if file_only && !is_file_companion(&split, ctx.real_fs) {
-        return Ok(None);
-    }
     companion_lookup(companion_routes, provider, ctx, &split, name)
 }
 

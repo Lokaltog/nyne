@@ -1,10 +1,7 @@
 //! Common imports for provider implementations.
 //!
 //! Providers start with `use super::prelude::*;` instead of manually
-//! importing the 6+ types every provider needs.
+//! importing the 6+ types every provider needs. Re-exports the public
+//! prelude plus any providers-internal additions.
 
-pub use crate::dispatch::activation::ActivationContext;
-pub use crate::dispatch::context::RequestContext;
-pub use crate::node::{CachePolicy, VirtualNode};
-pub use crate::provider::{Node, Nodes, Provider, ProviderId};
-pub use crate::types::vfs_path::VfsPath;
+pub use crate::prelude::*;
