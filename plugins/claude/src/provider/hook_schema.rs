@@ -179,6 +179,15 @@ pub struct AgentToolInput {
 /// [`HookOutput::block`] — each builder sets the appropriate combination
 /// of fields for the hook event type. Serialized to JSON on stdout via
 /// [`HookOutput::to_bytes`].
+///
+/// # Emptiness protocol
+///
+/// Claude Code distinguishes two output states: **zero bytes** (no-op) vs
+/// **non-empty JSON** (action). Hooks signal "nothing to do" by returning
+/// [`HookOutput::empty()`] (zero bytes), not by constructing a `HookOutput`
+/// with blank fields. When a template renders to only whitespace, callers
+/// should return `empty()` rather than wrapping the blank string in
+/// [`HookOutput::context`].
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HookOutput {
@@ -268,5 +277,17 @@ impl HookOutput {
     pub fn to_bytes(&self) -> Vec<u8> { serde_json::to_vec(self).expect("HookOutput serialization is infallible") }
 
     /// Empty output — no effect on the hook event.
+    ///
+    /// Returns zero bytes (`Vec::new()`), which Claude Code interprets as
+    /// "this hook has nothing to say." This is the canonical way to signal
+    /// a no-op from any hook script:
+    ///
+    /// - **Early exits:** unparseable input, missing fields, guard clauses.
+    /// - **Empty renders:** when a template produces only whitespace after
+    ///   trimming, return `empty()` instead of wrapping blank content in
+    ///   a JSON payload via [`Self::context`].
+    ///
+    /// Contrast with [`Self::to_bytes`], which serializes a populated
+    /// [`HookOutput`] to JSON — always non-empty.
     pub const fn empty() -> Vec<u8> { Vec::new() }
 }
