@@ -67,19 +67,7 @@ impl Script for PostToolUse {
         let tool_name = input.tool_name.as_deref().unwrap_or("");
         let root = ctx.activation().root_prefix();
 
-        #[cfg(feature = "analysis")]
-        let analysis = run_analysis_for_tool(ctx, &input, tool_name, root);
-        #[cfg(feature = "analysis")]
-        let changed = analysis
-            .decomposed
-            .as_deref()
-            .and_then(|d| changed_line_range(&input, tool_name, d));
-        #[cfg(feature = "analysis")]
-        let hints = filter_hints(analysis.hints, changed.as_ref());
-        #[cfg(not(feature = "analysis"))]
-        let hints: Vec<()> = Vec::new();
-        #[cfg(not(feature = "analysis"))]
-        let changed: Option<Range<usize>> = None;
+        let (hints, changed) = run_analysis(ctx, &input, tool_name, root);
 
         let diagnostics = filter_diagnostics(
             fetch_diagnostics_for_tool(ctx, &input, tool_name, root),
@@ -115,10 +103,9 @@ fn build_view(
     let bash_cmd = bash_input.and_then(|b| b.command);
 
     // Bash: extract command name and relative file paths.
-    let (bin, rel_paths) = match &bash_cmd {
-        Some(cmd) => (Some(extract_command_name(cmd)), extract_rel_paths(cmd, root)),
-        None => (None, Vec::new()),
-    };
+    let (bin, rel_paths) = bash_cmd.as_deref().map_or((None, Vec::new()), |cmd| {
+        (Some(extract_command_name(cmd)), extract_rel_paths(cmd, root))
+    });
 
     // Edit/Write: file path, relative path, symbol, VFS status.
     let file_path = tool_file_path(input, tool_name);
@@ -261,8 +248,8 @@ fn source_rel_path(input: &HookInput, tool_name: &str, root: &str) -> Option<Str
 #[cfg(test)]
 mod tests;
 
-/// Analysis results: hints plus the decomposed source for change-range filtering.
-struct AnalysisResult {
+/// Per-file analysis output: hints plus the decomposed source for change-range filtering.
+struct FileAnalysis {
     hints: Vec<HintView>,
     decomposed: Option<Arc<DecomposedSource>>,
 }
@@ -273,8 +260,8 @@ struct AnalysisResult {
 /// Returns hints and the decomposed source (used by the caller to compute
 /// the changed line range for filtering). Returns empty hints for non-file
 /// tools or files without tree-sitter support.
-fn run_analysis_for_tool(ctx: &ScriptContext<'_>, input: &HookInput, tool_name: &str, root: &str) -> AnalysisResult {
-    let empty = AnalysisResult {
+fn run_analysis_for_tool(ctx: &ScriptContext<'_>, input: &HookInput, tool_name: &str, root: &str) -> FileAnalysis {
+    let empty = FileAnalysis {
         hints: Vec::new(),
         decomposed: None,
     };
@@ -300,16 +287,16 @@ fn run_analysis_for_tool(ctx: &ScriptContext<'_>, input: &HookInput, tool_name: 
     };
 
     let Some(tree) = &decomposed.tree else {
-        return AnalysisResult {
-            hints: Vec::new(),
+        return FileAnalysis {
             decomposed: Some(decomposed),
+            ..empty
         };
     };
 
     let Some(engine) = ctx.activation().get::<Arc<AnalysisEngine>>() else {
-        return AnalysisResult {
-            hints: Vec::new(),
+        return FileAnalysis {
             decomposed: Some(decomposed),
+            ..empty
         };
     };
 
@@ -319,7 +306,7 @@ fn run_analysis_for_tool(ctx: &ScriptContext<'_>, input: &HookInput, tool_name: 
     };
 
     let hints = engine.analyze(tree, &analysis_ctx).iter().map(HintView::from).collect();
-    AnalysisResult {
+    FileAnalysis {
         hints,
         decomposed: Some(decomposed),
     }
@@ -466,4 +453,35 @@ fn filter_diagnostics(diagnostics: Vec<DiagnosticRow>, changed: Option<&Range<us
         .into_iter()
         .filter(|d| (d.line as usize) >= range.start && (d.line as usize) < range.end)
         .collect()
+}
+/// Run analysis and compute filtered hints plus the changed line range.
+///
+/// When the `analysis` feature is disabled, returns empty defaults.
+#[cfg(feature = "analysis")]
+fn run_analysis(
+    ctx: &ScriptContext<'_>,
+    input: &HookInput,
+    tool_name: &str,
+    root: &str,
+) -> (Vec<HintView>, Option<Range<usize>>) {
+    let analysis = run_analysis_for_tool(ctx, input, tool_name, root);
+    let changed = analysis
+        .decomposed
+        .as_deref()
+        .and_then(|d| changed_line_range(input, tool_name, d));
+    let hints = filter_hints(analysis.hints, changed.as_ref());
+    (hints, changed)
+}
+
+/// Run analysis and compute filtered hints plus the changed line range.
+///
+/// Stub for when the `analysis` feature is disabled.
+#[cfg(not(feature = "analysis"))]
+fn run_analysis(
+    _ctx: &ScriptContext<'_>,
+    _input: &HookInput,
+    _tool_name: &str,
+    _root: &str,
+) -> (Vec<()>, Option<Range<usize>>) {
+    (Vec::new(), None)
 }
