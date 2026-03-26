@@ -27,8 +27,8 @@ use nyne_git::{
 use nyne_macros::routes;
 
 use crate::providers::fragment_resolver::FragmentResolver;
+use crate::services::SourceServices;
 use crate::syntax::SyntaxRegistry;
-use crate::syntax::decomposed::DecompositionCache;
 
 /// Provider for symbol-scoped git features.
 ///
@@ -88,20 +88,16 @@ impl GitSymbolsProvider {
     }
 
     /// Build a fragment resolver for the given source file.
-    fn fragment_resolver(&self, source: VfsPath) -> Result<FragmentResolver> {
-        let cache = self
-            .ctx
-            .get::<DecompositionCache>()
-            .cloned()
-            .ok_or_else(|| color_eyre::eyre::eyre!("DecompositionCache not available"))?;
-        Ok(FragmentResolver::new(cache, source))
+    fn fragment_resolver(&self, source: VfsPath) -> FragmentResolver {
+        let cache = SourceServices::get(&self.ctx).decomposition.clone();
+        FragmentResolver::new(cache, source)
     }
 
     /// Emit blame, log, and history nodes for a symbol's git directory.
     fn children_symbol_git(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let source = source_file(ctx)?;
         let fragment_path = ctx.params("path").to_vec();
-        let resolver = self.fragment_resolver(source.clone())?;
+        let resolver = self.fragment_resolver(source.clone());
         let repo = self.repo()?;
         let rel = repo.rel_path(&source);
         let secs = repo.file_epoch_secs(&rel);
@@ -134,7 +130,7 @@ impl GitSymbolsProvider {
         };
         let source = source_file(ctx)?;
         let fragment_path = ctx.params("path").to_vec();
-        let resolver = self.fragment_resolver(source.clone())?;
+        let resolver = self.fragment_resolver(source.clone());
         let repo = self.repo()?;
         let fctx = FileViewCtx::new(&repo, repo.rel_path(&source));
         let spec_label = ctx.param("spec");
@@ -156,7 +152,7 @@ impl GitSymbolsProvider {
         };
         let source = source_file(ctx)?;
         let fragment_path = ctx.params("path").to_vec();
-        let resolver = self.fragment_resolver(source.clone())?;
+        let resolver = self.fragment_resolver(source.clone());
         let repo = self.repo()?;
         let fctx = FileViewCtx::new(&repo, repo.rel_path(&source));
         let spec_label = ctx.param("spec");
@@ -175,7 +171,7 @@ impl GitSymbolsProvider {
     fn children_symbol_history(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let source = source_file(ctx)?;
         let fragment_path = ctx.params("path");
-        let Some(line_range) = self.fragment_resolver(source.clone())?.line_range(fragment_path)? else {
+        let Some(line_range) = self.fragment_resolver(source.clone()).line_range(fragment_path)? else {
             return Ok(None);
         };
         let repo = self.repo()?;
