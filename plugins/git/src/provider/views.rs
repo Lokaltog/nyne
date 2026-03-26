@@ -30,18 +30,17 @@ impl GitProvider {
     /// Resolve the `file.rs@/git/` companion directory — blame, log, contributors, notes.
     pub(super) fn resolve_companion_git(&self, repo: &Arc<GitRepo>, rel: String) -> Vec<VirtualNode> {
         let secs = repo.file_epoch_secs(&rel);
-        let fctx = FileViewCtx::new(repo, rel);
         let h = &self.handles;
+        let fctx = FileViewCtx::new(repo, rel);
+        let blame = BlameView(fctx.clone());
+        let log = LogView(fctx.clone());
         let notes = NotesView(fctx.clone());
+        let contributors = ContributorsView(fctx);
         vec![
-            h.blame
-                .node(names::FILE_BLAME, BlameView(fctx.clone()))
-                .with_lifecycle(CommitMtime(secs)),
-            h.log
-                .node(names::FILE_LOG, LogView(fctx.clone()))
-                .with_lifecycle(CommitMtime(secs)),
+            h.blame.node(names::FILE_BLAME, blame).with_lifecycle(CommitMtime(secs)),
+            h.log.node(names::FILE_LOG, log).with_lifecycle(CommitMtime(secs)),
             h.contributors
-                .node(names::FILE_CONTRIBUTORS, ContributorsView(fctx))
+                .node(names::FILE_CONTRIBUTORS, contributors)
                 .with_lifecycle(CommitMtime(secs)),
             h.notes
                 .node(names::FILE_NOTES, notes.clone())

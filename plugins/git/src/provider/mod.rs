@@ -219,11 +219,11 @@ impl GitProvider {
         // e.g., segs=["main","src"] → branch "main", tree_path "src"
         // e.g., segs=["feat","foo","src"] → branch "feat/foo", tree_path "src"
         let branches: HashSet<String> = repo.branches()?.into_iter().collect();
+        #[allow(clippy::indexing_slicing)] // split ∈ 1..=segs.len() — always in bounds
         for split in (1..=segs.len()).rev() {
-            let candidate = segs.get(..split).unwrap_or_default().join("/");
+            let candidate = segs[..split].join("/");
             if branches.contains(&candidate) {
-                let tree_path = segs.get(split..).unwrap_or_default().join("/");
-                return branch_tree_nodes(&repo, &candidate, &tree_path);
+                return branch_tree_nodes(&repo, &candidate, &segs[split..].join("/"));
             }
         }
 

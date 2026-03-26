@@ -103,17 +103,13 @@ impl GitRepo {
         range: &SymbolLineRange,
         limit: usize,
     ) -> Result<Vec<HistoryEntry>> {
-        // Collect candidate entries, then release the lock so other
-        // threads can access the repo between the walk and filter steps.
-        let all = {
-            let repo = self.lock();
-            walk_file_commits(&repo, rel_path, super::log::LOG_LIMIT, |commit, _oid| {
-                commit_entry(commit)
-            })?
-        };
-
-        // Filter by line range (re-acquires lock for diff checks).
+        // Hold a single lock for the entire operation — walk + filter — so
+        // the repo cannot mutate between phases.
         let repo = self.lock();
+        let all = walk_file_commits(&repo, rel_path, super::log::LOG_LIMIT, |commit, _oid| {
+            commit_entry(commit)
+        })?;
+
         let mut opts = diff_opts(rel_path);
         let filtered: Vec<_> = all
             .into_iter()
