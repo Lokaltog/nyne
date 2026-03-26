@@ -22,9 +22,10 @@ pub use self::id::SessionId;
 
 /// Persisted daemon metadata for session discovery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SessionInfo {
     /// Human-readable session ID.
-    pub id: String,
+    pub id: SessionId,
     /// Daemon process PID.
     pub pid: i32,
     /// Canonical mount path the daemon serves.
@@ -58,14 +59,16 @@ pub fn write(id: &SessionId, mount_path: &Path, daemon_pid: i32) -> Result<PathB
     ensure_session_dir()?;
     let path = session_file(id.as_str())?;
 
-    let info = SessionInfo {
-        id: id.to_string(),
-        pid: daemon_pid,
-        mount_path: mount_path.to_path_buf(),
-    };
-
-    let json = serde_json::to_string_pretty(&info).wrap_err("serializing session info")?;
-    fs::write(&path, json).wrap_err_with(|| format!("writing session file {}", path.display()))?;
+    fs::write(
+        &path,
+        serde_json::to_string_pretty(&SessionInfo {
+            id: id.clone(),
+            pid: daemon_pid,
+            mount_path: mount_path.to_path_buf(),
+        })
+        .wrap_err("serializing session info")?,
+    )
+    .wrap_err_with(|| format!("writing session file {}", path.display()))?;
 
     debug!(path = %path.display(), pid = daemon_pid, id = %id, "session file written");
     Ok(path)
@@ -131,10 +134,10 @@ impl SessionRegistry {
     }
 
     /// Check whether a session ID is currently active.
-    pub(crate) fn is_active(&self, id: &str) -> bool { self.sessions.iter().any(|s| s.id == id) }
+    pub(crate) fn is_active(&self, id: &str) -> bool { self.sessions.iter().any(|s| s.id.as_str() == id) }
 
     /// Look up a session by ID.
-    pub(crate) fn get(&self, id: &str) -> Option<&SessionInfo> { self.sessions.iter().find(|s| s.id == id) }
+    pub(crate) fn get(&self, id: &str) -> Option<&SessionInfo> { self.sessions.iter().find(|s| s.id.as_str() == id) }
 
     /// All active sessions.
     pub(crate) fn sessions(&self) -> &[SessionInfo] { &self.sessions }

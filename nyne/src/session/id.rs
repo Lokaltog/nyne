@@ -4,6 +4,7 @@ use std::fmt;
 use std::path::Path;
 
 use color_eyre::eyre::{Result, ensure, eyre};
+use serde::{Deserialize, Serialize};
 
 use super::SessionRegistry;
 use crate::text::slugify_unbounded;
@@ -12,13 +13,14 @@ use crate::text::slugify_unbounded;
 ///
 /// Format: `[a-z0-9][a-z0-9-]*` — derived from the last path component
 /// of the mount directory, or explicitly provided via `id:path` prefix.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct SessionId(String);
 
 /// Construction and validation for session identifiers.
 impl SessionId {
     /// Create a `SessionId` from a pre-validated string.
-    fn new(s: String) -> Result<Self> {
+    pub(crate) fn new(s: String) -> Result<Self> {
         ensure!(!s.is_empty(), "session ID cannot be empty");
         ensure!(
             s.as_bytes().first() != Some(&b'-'),

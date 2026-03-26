@@ -75,8 +75,7 @@ impl RegistrationGuard {
     /// attach session from working.
     fn set_visibility(&self, visibility: ProcessVisibility) {
         let req = sandbox::control::Request::SetVisibility {
-            pid: Some(self.pid),
-            name: None,
+            target: sandbox::control::VisibilityTarget::Pid { pid: self.pid },
             visibility,
         };
         if let Err(e) = sandbox::control::send_request(&self.socket, &req) {
@@ -115,7 +114,7 @@ impl Drop for RegistrationGuard {
 pub fn run(args: &AttachArgs) -> Result<i32> {
     let config = NyneConfig::load(&plugin::instantiate(), None)?;
     let session_info = args.session.resolve()?;
-    let control_socket = session::control_socket(&session_info.id)
+    let control_socket = session::control_socket(session_info.id.as_str())
         .inspect_err(|e| warn!(error = %e, "control socket unavailable — process registration disabled"))
         .ok();
 

@@ -150,5 +150,5 @@ fn discover_socket(id: Option<&str>) -> Result<PathBuf> {
         return Ok(PathBuf::from(socket));
     }
 
-    session::control_socket(&resolve_session(None)?.id)
+    session::control_socket(resolve_session(None)?.id.as_str())
 }

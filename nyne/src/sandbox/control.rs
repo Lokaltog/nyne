@@ -39,6 +39,10 @@ pub const NYNE_CONTROL_SOCKET_ENV: &str = "NYNE_CONTROL_SOCKET";
 /// This enum is the single source of truth for the control protocol.
 /// The `nyne ctl` CLI reads a JSON `Request` directly rather than
 /// maintaining a parallel type.
+///
+/// Note: `deny_unknown_fields` cannot be used here because the
+/// `SetVisibility` variant uses `#[serde(flatten)]` for wire-format
+/// compatibility, which is incompatible with `deny_unknown_fields`.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Request {
@@ -50,16 +54,28 @@ pub enum Request {
     /// Remove an attached process from the process table.
     Unregister { pid: i32 },
     /// Set or query visibility level for a PID or process name.
-    /// Exactly one of `pid` or `name` should be provided.
     SetVisibility {
-        #[serde(default)]
-        pid: Option<i32>,
-        #[serde(default)]
-        name: Option<String>,
+        #[serde(flatten)]
+        target: VisibilityTarget,
         visibility: ProcessVisibility,
     },
     /// Query all attached processes (used by `nyne list`).
     ListProcesses,
+}
+
+/// Identifies the subject of a visibility change — either a specific PID or a
+/// process name pattern.
+///
+/// Wire format (untagged): `{"pid": 123}` or `{"name": "fish"}` or `{}` (query-only).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum VisibilityTarget {
+    /// Target a specific attached process by PID.
+    Pid { pid: i32 },
+    /// Target processes matching a comm name.
+    Name { name: String },
+    /// No target — query current rules without changing anything.
+    Query {},
 }
 
 /// Outbound message types from the control socket.
@@ -67,7 +83,7 @@ pub enum Request {
 /// Each variant corresponds to a specific [`Request`] type, except
 /// [`Error`](Self::Error) which is a catch-all for protocol-level failures.
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum Response {
     /// Successful script execution. `data` is base64-encoded stdout.
     ExecOk { data: String },
@@ -296,10 +312,9 @@ fn dispatch(
         Request::Register { pid, command } => handle_register(pid, command, processes),
         Request::Unregister { pid } => handle_unregister(pid, processes),
         Request::SetVisibility {
-            pid,
-            name,
+            target,
             visibility: vis,
-        } => handle_set_visibility(pid, name, vis, processes, visibility),
+        } => handle_set_visibility(target, vis, processes, visibility),
         Request::ListProcesses => handle_list(processes),
     }
 }
@@ -358,19 +373,13 @@ fn handle_unregister(pid: i32, processes: &ProcessTable) -> Response {
 
 /// Set or query visibility rules for a PID or process name.
 fn handle_set_visibility(
-    pid: Option<i32>,
-    name: Option<String>,
+    target: VisibilityTarget,
     vis: ProcessVisibility,
     processes: &ProcessTable,
     map: &VisibilityMap,
 ) -> Response {
-    match (pid, name) {
-        (Some(_), Some(_)) => {
-            return Response::Error {
-                message: "specify either 'pid' or 'name', not both".into(),
-            };
-        }
-        (Some(pid), None) => {
+    match target {
+        VisibilityTarget::Pid { pid } => {
             if !processes.lock().iter().any(|p| p.pid == pid) {
                 return Response::Error {
                     message: format!(
@@ -381,11 +390,11 @@ fn handle_set_visibility(
             map.set_pid(pid.cast_unsigned(), vis);
             debug!(pid, %vis, "process visibility set");
         }
-        (None, Some(name)) => {
+        VisibilityTarget::Name { name } => {
             debug!(name = %name, %vis, "name visibility rule set");
             map.set_name_rule(&name, vis);
         }
-        (None, None) => {
+        VisibilityTarget::Query {} => {
             debug!("visibility rules queried");
         }
     }

@@ -16,13 +16,13 @@ fn bogus_pid_is_not_alive() {
 #[test]
 fn session_info_roundtrip() {
     let info = SessionInfo {
-        id: "test-session".into(),
+        id: SessionId::new("test-session".into()).unwrap(),
         pid: 12345,
         mount_path: PathBuf::from("/tmp/test"),
     };
     let json = serde_json::to_string(&info).unwrap();
     let parsed: SessionInfo = serde_json::from_str(&json).unwrap();
-    assert_eq!(parsed.id, "test-session");
+    assert_eq!(parsed.id.as_str(), "test-session");
     assert_eq!(parsed.pid, 12345);
     assert_eq!(parsed.mount_path, PathBuf::from("/tmp/test"));
 }
@@ -40,17 +40,17 @@ fn registry_resolve_empty() {
 fn registry_resolve_single_session() {
     let registry = SessionRegistry {
         sessions: vec![SessionInfo {
-            id: "foo".into(),
+            id: SessionId::new("foo".into()).unwrap(),
             pid: 1,
             mount_path: PathBuf::from("/tmp/foo"),
         }],
     };
     // No ID → returns the only session.
     let info = registry.resolve(None).unwrap();
-    assert_eq!(info.id, "foo");
+    assert_eq!(info.id.as_str(), "foo");
     // Explicit ID → returns matching session.
     let info = registry.resolve(Some("foo")).unwrap();
-    assert_eq!(info.id, "foo");
+    assert_eq!(info.id.as_str(), "foo");
     // Wrong ID → error.
     assert!(registry.resolve(Some("bar")).is_err());
 }
@@ -61,12 +61,12 @@ fn registry_resolve_multiple_sessions_requires_id() {
     let registry = SessionRegistry {
         sessions: vec![
             SessionInfo {
-                id: "a".into(),
+                id: SessionId::new("a".into()).unwrap(),
                 pid: 1,
                 mount_path: PathBuf::from("/tmp/a"),
             },
             SessionInfo {
-                id: "b".into(),
+                id: SessionId::new("b".into()).unwrap(),
                 pid: 2,
                 mount_path: PathBuf::from("/tmp/b"),
             },
@@ -75,7 +75,7 @@ fn registry_resolve_multiple_sessions_requires_id() {
     // No ID with multiple → error.
     assert!(registry.resolve(None).is_err());
     // Explicit ID → works.
-    assert_eq!(registry.resolve(Some("b")).unwrap().id, "b");
+    assert_eq!(registry.resolve(Some("b")).unwrap().id.as_str(), "b");
 }
 
 /// Verifies that is_active returns true for known sessions and false for unknown ones.
@@ -83,7 +83,7 @@ fn registry_resolve_multiple_sessions_requires_id() {
 fn registry_is_active() {
     let registry = SessionRegistry {
         sessions: vec![SessionInfo {
-            id: "active".into(),
+            id: SessionId::new("active".into()).unwrap(),
             pid: 1,
             mount_path: PathBuf::from("/tmp/x"),
         }],
