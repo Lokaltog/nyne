@@ -146,9 +146,11 @@ impl TodoScanner {
                 let trimmed = source.get(line_start..line_end)?.trim_start();
 
                 // Quick heuristic: only keep matches in lines that look like comments.
+                // `* ` (star + space) matches block-comment continuation lines
+                // without false-positiving on pointer dereference (`*ptr`).
                 let in_comment = trimmed.starts_with("//")
                     || trimmed.starts_with('#')
-                    || trimmed.starts_with('*')
+                    || trimmed.starts_with("* ")
                     || trimmed.starts_with("/*")
                     || source
                         .get(line_start..byte_offset)
