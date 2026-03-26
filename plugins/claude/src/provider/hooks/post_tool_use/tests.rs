@@ -1,5 +1,7 @@
 use rstest::rstest;
 use serde_json::json;
+#[cfg(feature = "analysis")]
+use {super::analysis::filter_hints, nyne_analysis::HintView};
 
 use super::*;
 
@@ -54,6 +56,7 @@ fn make_decomposed(source: &str) -> DecomposedSource {
 }
 
 /// Builds a `HintView` fixture with the given rule ID and line range.
+#[cfg(feature = "analysis")]
 fn hint(rule_id: &'static str, line_start: usize, line_end: usize) -> HintView {
     HintView {
         rule_id,
@@ -131,6 +134,7 @@ fn changed_line_range_returns_none(
 }
 
 /// Verifies that hints are filtered to the given line range.
+#[cfg(feature = "analysis")]
 #[rstest]
 #[case::no_range_passes_all(
     vec![hint("r1", 1, 1), hint("r2", 50, 50)],

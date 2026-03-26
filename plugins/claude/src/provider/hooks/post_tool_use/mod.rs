@@ -11,8 +11,6 @@ use std::path::Path;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::prelude::*;
 use nyne::templates::TemplateEngine;
-#[cfg(feature = "analysis")]
-use nyne_analysis::{AnalysisContext, AnalysisEngine, HintView};
 use nyne_lsp::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
 use nyne_lsp::lsp::manager::LspManager;
 use nyne_source::providers::names::{self, FILE_OVERVIEW};
@@ -57,7 +55,7 @@ impl PostToolUse {
 
 /// [`Script`] implementation for [`PostToolUse`].
 impl Script for PostToolUse {
-    /// Process post-tool-use hook input and render context hints.
+    /// Process post-tool-use hook input and render analysis context.
     fn exec(&self, ctx: &ScriptContext<'_>, stdin: &[u8]) -> Result<Vec<u8>> {
         let Some(input) = HookInput::parse(stdin) else {
             return Ok(HookOutput::empty());
@@ -65,14 +63,14 @@ impl Script for PostToolUse {
         let tool_name = input.tool_name.as_deref().unwrap_or("");
         let root = ctx.activation().root_prefix();
 
-        let (hints, changed) = run_analysis(ctx, &input, tool_name, root);
+        let (analysis, changed) = run_analysis(ctx, &input, tool_name, root);
 
         let diagnostics = filter_diagnostics(
             fetch_diagnostics_for_tool(ctx, &input, tool_name, root),
             changed.as_ref(),
         );
 
-        let view = build_view(&input, tool_name, root, &hints, &diagnostics);
+        let view = build_view(&input, tool_name, root, &analysis, &diagnostics);
         let rendered = self.engine.render(TMPL_POST, &view);
         let trimmed = rendered.trim();
 
@@ -89,7 +87,7 @@ fn build_view(
     input: &HookInput,
     tool_name: &str,
     root: &str,
-    hints: &[HintView],
+    analysis: &[impl serde::Serialize],
     diagnostics: &[DiagnosticRow],
 ) -> minijinja::Value {
     let tool_input = input.tool_input.clone().unwrap_or(serde_json::Value::Null);
@@ -157,7 +155,7 @@ fn build_view(
         is_vfs,
         ssot,
         overview_rel,
-        hints,
+        analysis,
         diagnostics,
     }
 }
@@ -246,70 +244,6 @@ fn source_rel_path(input: &HookInput, tool_name: &str, root: &str) -> Option<Str
 #[cfg(test)]
 mod tests;
 
-/// Per-file analysis output: hints plus the decomposed source for change-range filtering.
-struct FileAnalysis {
-    hints: Vec<HintView>,
-    decomposed: Option<Arc<DecomposedSource>>,
-}
-
-#[cfg(feature = "analysis")]
-/// Run syntax analysis on the file targeted by an Edit/Write tool call.
-///
-/// Returns hints and the decomposed source (used by the caller to compute
-/// the changed line range for filtering). Returns empty hints for non-file
-/// tools or files without tree-sitter support.
-fn run_analysis_for_tool(ctx: &ScriptContext<'_>, input: &HookInput, tool_name: &str, root: &str) -> FileAnalysis {
-    let empty = FileAnalysis {
-        hints: Vec::new(),
-        decomposed: None,
-    };
-
-    let Some(rel) = source_rel_path(input, tool_name, root) else {
-        return empty;
-    };
-
-    let Ok(vfs_path) = VfsPath::new(&rel) else {
-        return empty;
-    };
-
-    let services = SourceServices::get(ctx.activation());
-
-    // The Edit/Write tool writes directly to the real filesystem, bypassing
-    // the FUSE mount. The inotify watcher will eventually invalidate, but
-    // it's async — by the time this hook runs the cache still holds the
-    // pre-edit parse tree. Invalidate explicitly so we analyze fresh content.
-    services.decomposition.invalidate(&vfs_path);
-
-    let Ok(decomposed) = services.decomposition.get(&vfs_path) else {
-        return empty;
-    };
-
-    let Some(tree) = &decomposed.tree else {
-        return FileAnalysis {
-            decomposed: Some(decomposed),
-            ..empty
-        };
-    };
-
-    let Some(engine) = ctx.activation().get::<Arc<AnalysisEngine>>() else {
-        return FileAnalysis {
-            decomposed: Some(decomposed),
-            ..empty
-        };
-    };
-
-    let analysis_ctx = AnalysisContext {
-        source: &decomposed.source,
-        activation: ctx.activation(),
-    };
-
-    let hints = engine.analyze(tree, &analysis_ctx).iter().map(HintView::from).collect();
-    FileAnalysis {
-        hints,
-        decomposed: Some(decomposed),
-    }
-}
-
 /// Fetch LSP diagnostics for the file targeted by an Edit/Write tool call.
 ///
 /// Returns an empty vec for non-file tools or files without LSP support.
@@ -352,6 +286,7 @@ fn fetch_diagnostics_for_tool(
 
     diagnostics_to_rows(&fq.diagnostics().unwrap_or_default())
 }
+
 /// Compute the 1-based line range affected by an Edit tool call.
 ///
 /// Finds `new_string` in the post-edit source and expands to the enclosing
@@ -399,7 +334,8 @@ fn changed_line_range(input: &HookInput, tool_name: &str, decomposed: &Decompose
         .and_then(|tree| enclosing_scope_lines(tree, byte_start, byte_end))
         .unwrap_or((start_line, end_line));
 
-    // Convert to 1-based to match HintView.line_start and DiagnosticRow.line.
+    // Convert to 1-based to match DiagnosticRow.line (and HintView.line_start
+    // when the analysis feature is enabled).
     Some((scope_start + 1)..(scope_end + 2))
 }
 
@@ -431,17 +367,6 @@ fn enclosing_scope_lines(tree: &tree_sitter::Tree, byte_start: usize, byte_end: 
     }
 }
 
-/// Filter hints to those overlapping the changed line range.
-fn filter_hints(hints: Vec<HintView>, changed: Option<&Range<usize>>) -> Vec<HintView> {
-    let Some(range) = changed else {
-        return hints;
-    };
-    hints
-        .into_iter()
-        .filter(|h| h.line_start < range.end && h.line_end >= range.start)
-        .collect()
-}
-
 /// Filter diagnostics to those within the changed line range.
 fn filter_diagnostics(diagnostics: Vec<DiagnosticRow>, changed: Option<&Range<usize>>) -> Vec<DiagnosticRow> {
     let Some(range) = changed else {
@@ -452,28 +377,14 @@ fn filter_diagnostics(diagnostics: Vec<DiagnosticRow>, changed: Option<&Range<us
         .filter(|d| (d.line as usize) >= range.start && (d.line as usize) < range.end)
         .collect()
 }
-/// Run analysis and compute filtered hints plus the changed line range.
-///
-/// When the `analysis` feature is disabled, returns empty defaults.
-#[cfg(feature = "analysis")]
-fn run_analysis(
-    ctx: &ScriptContext<'_>,
-    input: &HookInput,
-    tool_name: &str,
-    root: &str,
-) -> (Vec<HintView>, Option<Range<usize>>) {
-    let analysis = run_analysis_for_tool(ctx, input, tool_name, root);
-    let changed = analysis
-        .decomposed
-        .as_deref()
-        .and_then(|d| changed_line_range(input, tool_name, d));
-    let hints = filter_hints(analysis.hints, changed.as_ref());
-    (hints, changed)
-}
 
-/// Run analysis and compute filtered hints plus the changed line range.
-///
-/// Stub for when the `analysis` feature is disabled.
+#[cfg(feature = "analysis")]
+mod analysis;
+
+#[cfg(feature = "analysis")]
+use analysis::run_analysis;
+
+/// Stub for when the `analysis` feature is disabled — returns empty defaults.
 #[cfg(not(feature = "analysis"))]
 fn run_analysis(
     _ctx: &ScriptContext<'_>,

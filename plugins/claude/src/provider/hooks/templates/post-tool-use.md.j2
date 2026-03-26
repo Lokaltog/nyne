@@ -39,9 +39,9 @@ For structural navigation, use nyne VFS:
 {% if is_vfs and tool_name in ["Edit", "Write"] and rel %}
 Writes re-parse the file. If you need to access other symbols in {{ rel }}, re-read `{{ rel }}@/symbols/OVERVIEW.md` — names may have shifted.
 {% endif %}
-{% if hints %}
+{% if analysis %}
 Code analysis hints:
-{% for rule_id, group in hints|groupby("rule_id") %}
+{% for rule_id, group in analysis|groupby("rule_id") %}
 {% if group|length >= 3 %}
 - [{{ group[0].severity }}:{{ rule_id }}] ×{{ group|length }} occurrences
 {% else %}
