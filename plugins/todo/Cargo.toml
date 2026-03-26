@@ -16,6 +16,7 @@ nyne-source.workspace = true
 nyne-git = { workspace = true, optional = true }
 
 aho-corasick.workspace = true
+tree-sitter.workspace = true
 color-eyre.workspace = true
 linkme.workspace = true
 minijinja.workspace = true

@@ -1,5 +1,6 @@
 //! TODO scanner — Aho-Corasick automaton for tag detection.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
 use std::str::from_utf8;
@@ -71,8 +72,16 @@ impl TodoScanner {
 
         let line_starts = build_line_starts(source);
 
+        // Use tree-sitter to identify comment regions structurally.
+        // Falls back to prefix heuristic when the parse returns no tree.
+        let comment_ranges = decomposer
+            .decompose(source, 0)
+            .1
+            .map(|tree| collect_comment_ranges(&tree))
+            .unwrap_or_default();
+
         // Find all tag matches with their positions.
-        let matches: Vec<TagMatch> = self.find_tag_matches(source, &line_starts);
+        let matches: Vec<TagMatch> = self.find_tag_matches(source, &line_starts, &comment_ranges);
         if matches.is_empty() {
             return Vec::new();
         }
@@ -112,17 +121,16 @@ impl TodoScanner {
             by_tag.insert(tag.to_string(), Vec::new());
         }
 
-        for file in files {
-            let Some(ext) = file.extension() else {
+        let entries = files.iter().filter_map(|file| {
+            let ext = file.extension()?;
+            let decomposer = syntax.get(ext)?;
+            Some(self.scan_file(file, real_fs, decomposer.as_ref()))
+        });
+        for entry in entries.flatten() {
+            let Some(bucket) = by_tag.get_mut(&*entry.tag) else {
                 continue;
             };
-            let Some(decomposer) = syntax.get(ext) else {
-                continue;
-            };
-
-            for entry in self.scan_file(file, real_fs, decomposer.as_ref()) {
-                by_tag.get_mut(&*entry.tag).expect("pre-initialized tag").push(entry);
-            }
+            bucket.push(entry);
         }
 
         by_tag
@@ -130,32 +138,19 @@ impl TodoScanner {
 
     /// Find all tag matches, filtering to those inside comments.
     ///
-    /// We only keep matches that appear to be in comment context (the line
-    /// starts with a comment prefix character like `//`, `#`, or `/*`).
-    fn find_tag_matches(&self, source: &str, line_starts: &[usize]) -> Vec<TagMatch> {
+    /// Uses tree-sitter comment ranges when available for accurate detection
+    /// across all languages. Falls back to a prefix heuristic when ranges are
+    /// absent (unsupported language or parse failure).
+    fn find_tag_matches(&self, source: &str, line_starts: &[usize], comment_ranges: &[Range<usize>]) -> Vec<TagMatch> {
         self.automaton
             .find_iter(source)
             .filter_map(|mat| {
                 let byte_offset = mat.start();
-                let line = byte_to_line(line_starts, byte_offset);
-                let &line_start = line_starts.get(line)?;
-                let line_end = source
-                    .get(line_start..)
-                    .and_then(|s| s.find('\n'))
-                    .map_or(source.len(), |pos| line_start + pos);
-                let trimmed = source.get(line_start..line_end)?.trim_start();
-
-                // Quick heuristic: only keep matches in lines that look like comments.
-                // `* ` (star + space) matches block-comment continuation lines
-                // without false-positiving on pointer dereference (`*ptr`).
-                let in_comment = trimmed.starts_with("//")
-                    || trimmed.starts_with('#')
-                    || trimmed.starts_with("* ")
-                    || trimmed.starts_with("/*")
-                    || source
-                        .get(line_start..byte_offset)
-                        .is_some_and(|before| before.contains("//") || before.contains('#') || before.contains("/*"));
-
+                let in_comment = if comment_ranges.is_empty() {
+                    prefix_heuristic(source, line_starts, byte_offset)
+                } else {
+                    ranges_contain(comment_ranges, byte_offset)
+                };
                 in_comment.then(|| TagMatch {
                     byte_offset,
                     pattern_id: mat.pattern().as_usize(),
@@ -194,6 +189,75 @@ fn byte_to_line(line_starts: &[usize], byte_offset: usize) -> usize {
         Ok(line) => line,
         Err(line) => line.saturating_sub(1),
     }
+}
+/// Collect sorted, non-overlapping byte ranges of all comment nodes in the tree.
+///
+/// Walks the tree-sitter syntax tree and collects the byte range of every node
+/// whose kind contains `"comment"` (covers `comment`, `line_comment`,
+/// `block_comment`, `comment_block`, etc. across grammars). Ranges are returned
+/// sorted by start offset for binary-search lookup.
+fn collect_comment_ranges(tree: &tree_sitter::Tree) -> Vec<Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut cursor = tree.walk();
+    collect_comments_recursive(&mut cursor, &mut ranges);
+    ranges
+}
+
+/// Depth-first traversal collecting comment node byte ranges.
+fn collect_comments_recursive(cursor: &mut tree_sitter::TreeCursor, out: &mut Vec<Range<usize>>) {
+    loop {
+        let node = cursor.node();
+        if node.kind().contains("comment") {
+            out.push(node.start_byte()..node.end_byte());
+            // Comment nodes have no interesting children — skip descent.
+        } else if cursor.goto_first_child() {
+            collect_comments_recursive(cursor, out);
+            cursor.goto_parent();
+        }
+        if !cursor.goto_next_sibling() {
+            break;
+        }
+    }
+}
+
+/// Check whether `offset` falls inside any of the sorted, non-overlapping `ranges`.
+fn ranges_contain(ranges: &[Range<usize>], offset: usize) -> bool {
+    ranges
+        .binary_search_by(|r| {
+            if offset < r.start {
+                Ordering::Greater
+            } else if offset >= r.end {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
+/// Fallback prefix heuristic for comment detection when tree-sitter is unavailable.
+///
+/// Checks whether a byte offset falls on a line that looks like a comment using
+/// common prefix patterns (`//`, `#`, `/*`, `* `).
+fn prefix_heuristic(source: &str, line_starts: &[usize], byte_offset: usize) -> bool {
+    let line = byte_to_line(line_starts, byte_offset);
+    let Some(&line_start) = line_starts.get(line) else {
+        return false;
+    };
+    let line_end = source
+        .get(line_start..)
+        .and_then(|s| s.find('\n'))
+        .map_or(source.len(), |pos| line_start + pos);
+    let Some(trimmed) = source.get(line_start..line_end).map(str::trim_start) else {
+        return false;
+    };
+    trimmed.starts_with("//")
+        || trimmed.starts_with('#')
+        || trimmed.starts_with("* ")
+        || trimmed.starts_with("/*")
+        || source
+            .get(line_start..byte_offset)
+            .is_some_and(|before| before.contains("//") || before.contains('#') || before.contains("/*"))
 }
 
 /// Find the contiguous comment block containing `byte_offset`.
