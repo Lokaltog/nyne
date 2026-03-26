@@ -52,6 +52,6 @@ impl TodoConfig {
 fn default_todo_tags() -> Vec<String> {
     ["FIXME", "SAFETY", "HACK", "XXX", "TODO"]
         .into_iter()
-        .map(String::from)
+        .map(Into::into)
         .collect()
 }

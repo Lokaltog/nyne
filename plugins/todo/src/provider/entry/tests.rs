@@ -36,7 +36,7 @@ fn fs_name_format() {
     let entry = TodoEntry {
         source_file: VfsPath::new("src/main.rs").unwrap(),
         line: 42,
-        tag: "TODO".to_owned(),
+        tag: Arc::from("TODO"),
         text: "fix frobnicator".to_owned(),
     };
     assert_eq!(entry.fs_name(), "src__main.rs:42--fix-frobnicator");
@@ -49,7 +49,7 @@ fn symlink_target_nested_source_file() {
     let entry = TodoEntry {
         source_file: VfsPath::new("src/dispatch/router.rs").unwrap(),
         line: 10,
-        tag: "FIXME".to_owned(),
+        tag: Arc::from("FIXME"),
         text: "null check".to_owned(),
     };
     // From @/todo/FIXME/ (3 levels) up to mount root, then to target companion.
@@ -65,7 +65,7 @@ fn symlink_target_root_source_file() {
     let entry = TodoEntry {
         source_file: VfsPath::new("ROADMAP.md").unwrap(),
         line: 788,
-        tag: "TODO".to_owned(),
+        tag: Arc::from("TODO"),
         text: "hack".to_owned(),
     };
     assert_eq!(

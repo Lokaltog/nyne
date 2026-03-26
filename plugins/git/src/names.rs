@@ -30,7 +30,7 @@ pub(crate) const FILE_CONTRIBUTORS: &str = "CONTRIBUTORS.md";
 pub(crate) const FILE_NOTES: &str = "NOTES.md";
 
 /// Virtual file for repository-wide git status.
-pub(crate) const FILE_STATUS: &str = "STATUS.md";
+pub(crate) const FILE_GIT_STATUS: &str = "STATUS.md";
 
 /// Virtual file for HEAD working-directory diff.
 pub(crate) const FILE_HEAD_DIFF: &str = "HEAD.diff";
@@ -53,7 +53,7 @@ pub fn handle_builder() -> HandleBuilder {
         FILE_LOG,
         FILE_CONTRIBUTORS,
         FILE_NOTES,
-        FILE_STATUS,
+        FILE_GIT_STATUS,
         FILE_HEAD_DIFF,
     );
     b

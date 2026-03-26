@@ -284,7 +284,7 @@ fn group_by_file(entries: &[&TodoEntry]) -> Vec<FileGroup> {
         if let Some(last) = files.last_mut().filter(|f| f.path == path) {
             last.entries.push(EntryView {
                 line: entry.line,
-                tag: entry.tag.clone(),
+                tag: entry.tag.to_string(),
                 text: entry.text.clone(),
             });
         } else {
@@ -292,7 +292,7 @@ fn group_by_file(entries: &[&TodoEntry]) -> Vec<FileGroup> {
                 path: path.to_owned(),
                 entries: vec![EntryView {
                     line: entry.line,
-                    tag: entry.tag.clone(),
+                    tag: entry.tag.to_string(),
                     text: entry.text.clone(),
                 }],
             });
@@ -316,8 +316,8 @@ fn build_overview_view(index: &TodoIndex, tag_order: &[String]) -> OverviewView 
             .as_str()
             .cmp(b.source_file.as_str())
             .then_with(|| {
-                let pa = priority.get(a.tag.as_str()).copied().unwrap_or(usize::MAX);
-                let pb = priority.get(b.tag.as_str()).copied().unwrap_or(usize::MAX);
+                let pa = priority.get(&*a.tag).copied().unwrap_or(usize::MAX);
+                let pb = priority.get(&*b.tag).copied().unwrap_or(usize::MAX);
                 pa.cmp(&pb)
             })
             .then_with(|| a.line.cmp(&b.line))

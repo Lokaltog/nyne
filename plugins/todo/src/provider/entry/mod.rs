@@ -1,6 +1,7 @@
 //! TODO entry — a single TODO marker in source code.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use nyne::SUBDIR_SYMBOLS;
 use nyne::text::slugify;
@@ -21,7 +22,7 @@ pub(super) struct TodoEntry {
     /// 1-based line number of the tag.
     pub line: usize,
     /// Which tag was matched (canonical case from config, e.g., "TODO", "FIXME").
-    pub tag: String,
+    pub tag: Arc<str>,
     /// Stripped comment text (no comment prefix, no tag prefix).
     pub text: String,
 }

@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
 use std::str::from_utf8;
+use std::sync::Arc;
 
 use aho_corasick::AhoCorasick;
 use nyne::types::real_fs::RealFs;
@@ -18,7 +19,7 @@ use super::entry::TodoEntry;
 pub(super) struct TodoScanner {
     automaton: AhoCorasick,
     /// Canonical tag strings, indexed to match automaton pattern IDs.
-    tags: Vec<String>,
+    tags: Vec<Arc<str>>,
 }
 
 /// Methods for [`TodoScanner`].
@@ -36,7 +37,7 @@ impl TodoScanner {
             .expect("aho-corasick build should not fail for simple string patterns");
         Self {
             automaton,
-            tags: tags.to_vec(),
+            tags: tags.iter().map(|t| Arc::from(t.as_str())).collect(),
         }
     }
 
@@ -90,7 +91,7 @@ impl TodoScanner {
                 (!text.is_empty()).then(|| TodoEntry {
                     source_file: source_file.clone(),
                     line: byte_to_line(&line_starts, m.byte_offset) + 1,
-                    tag: tag.clone(),
+                    tag: Arc::clone(tag),
                     text,
                 })
             })
@@ -108,7 +109,7 @@ impl TodoScanner {
 
         // Pre-initialize with configured tag order.
         for tag in &self.tags {
-            by_tag.insert(tag.clone(), Vec::new());
+            by_tag.insert(tag.to_string(), Vec::new());
         }
 
         for file in files {
@@ -119,9 +120,8 @@ impl TodoScanner {
                 continue;
             };
 
-            let entries = self.scan_file(file, real_fs, decomposer.as_ref());
-            for entry in entries {
-                by_tag.entry(entry.tag.clone()).or_default().push(entry);
+            for entry in self.scan_file(file, real_fs, decomposer.as_ref()) {
+                by_tag.get_mut(&*entry.tag).expect("pre-initialized tag").push(entry);
             }
         }
 

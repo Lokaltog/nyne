@@ -25,8 +25,8 @@ use nyne::{dispatch_children, dispatch_lookup, source_file};
 use nyne_macros::routes;
 
 use crate::names::{
-    self as names, DIR_BRANCHES, DIR_DIFF, DIR_GIT, DIR_HISTORY, DIR_TAGS, FILE_BLAME, FILE_HEAD_DIFF, FILE_LOG,
-    FILE_STATUS,
+    self as names, DIR_BRANCHES, DIR_DIFF, DIR_GIT, DIR_HISTORY, DIR_TAGS, FILE_BLAME, FILE_GIT_STATUS, FILE_HEAD_DIFF,
+    FILE_LOG,
 };
 use crate::repo::GitRepo;
 
@@ -194,7 +194,7 @@ impl GitProvider {
             VirtualNode::directory(DIR_TAGS).with_lifecycle(CommitMtime(secs)),
             self.handles
                 .status
-                .node(FILE_STATUS, GitStatusView { repo })
+                .node(FILE_GIT_STATUS, GitStatusView { repo })
                 .with_cache_policy(CachePolicy::Never)
                 .with_lifecycle(CommitMtime(secs)),
         ]))
