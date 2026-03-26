@@ -109,8 +109,7 @@ impl GitRepo {
             .wrap_err("failed to configure revwalk")?;
         revwalk.push_head().wrap_err("HEAD not found")?;
 
-        let mut path_opts = diff_opts(rel_path);
-        let mut range_opts = diff_opts(rel_path);
+        let mut opts = diff_opts(rel_path);
         let mut results = Vec::new();
         for (walked, oid_result) in revwalk.enumerate() {
             if results.len() >= limit || walked >= MAX_REVWALK {
@@ -118,10 +117,9 @@ impl GitRepo {
             }
             let oid = oid_result?;
             let commit = repo.find_commit(oid)?;
-            if !commit_touches_path(&repo, &commit, &mut path_opts)? {
-                continue;
-            }
-            match commit_touches_range(&repo, oid, &mut range_opts, range) {
+            // Single diff: skip commits that don't touch the path, then check
+            // whether the touched hunks overlap the requested line range.
+            match diff_touches_range(&repo, &commit, &mut opts, range) {
                 Ok(true) => results.push(commit_entry(&commit)),
                 Ok(false) => {}
                 Err(e) => {
@@ -186,23 +184,25 @@ impl GitRepo {
     /// Collect git notes from commits that touched `rel_path`.
     pub(super) fn file_notes(&self, rel_path: &str, limit: usize) -> Result<Vec<NoteEntry>> {
         let repo = self.lock();
-        let commits = walk_file_commits(&repo, rel_path, limit, |commit, oid| (oid, commit_info(commit)))?;
-
         let mut entries = Vec::new();
-        for (oid, info) in commits {
+        walk_file_commits(&repo, rel_path, limit, |commit, oid| {
             let note = match repo.find_note(None, oid) {
                 Ok(note) => note,
-                Err(e) if e.code() == git2::ErrorCode::NotFound => continue,
-                Err(e) => return Err(e.into()),
+                Err(e) if e.code() == git2::ErrorCode::NotFound => return,
+                Err(e) => {
+                    warn!(oid = %oid, "note lookup failed: {e}");
+                    return;
+                }
             };
-            let Some(note_text) = note.message() else { continue };
+            let Some(note_text) = note.message() else { return };
+            let info = commit_info(commit);
             entries.push(NoteEntry {
                 hash: info.hash,
                 date: info.date,
                 commit_message: info.message,
                 note: note_text.to_owned(),
             });
-        }
+        })?;
         Ok(entries)
     }
 
@@ -312,15 +312,18 @@ fn commit_touches_path(
     Ok(commit_diff(repo, commit, opts)?.deltas().next().is_some())
 }
 
-/// Check whether a commit's diff for `rel_path` touches any lines in the given range.
-fn commit_touches_range(
+/// Single-diff check: does this commit touch any lines in `range`?
+///
+/// Computes one diff and inspects its hunks — returns `false` early when the
+/// diff has no deltas (commit doesn't touch the path at all), avoiding the
+/// separate path-touch + range-touch double-diff that was here before.
+fn diff_touches_range(
     repo: &git2::Repository,
-    oid: Oid,
+    commit: &git2::Commit<'_>,
     opts: &mut git2::DiffOptions,
     range: &SymbolLineRange,
 ) -> Result<bool> {
-    let commit = repo.find_commit(oid)?;
-    let diff = commit_diff(repo, &commit, opts)?;
+    let diff = commit_diff(repo, commit, opts)?;
 
     let mut touches = false;
     let result = diff.foreach(
