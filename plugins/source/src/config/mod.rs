@@ -4,6 +4,7 @@
 //! struct is [`SourceConfig`].
 //! Serde's `deny_unknown_fields` is applied on every struct to catch typos early.
 
+use nyne::config::deserialize_plugin_config;
 use serde::{Deserialize, Serialize};
 
 /// Top-level configuration for the source plugin.
@@ -20,7 +21,7 @@ impl SourceConfig {
         let Some(value) = section else {
             return Self::default();
         };
-        serde_json::from_value(value.clone()).unwrap_or_default()
+        deserialize_plugin_config(value)
     }
 }
 

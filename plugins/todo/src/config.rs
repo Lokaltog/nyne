@@ -1,5 +1,6 @@
 //! TODO/FIXME comment aggregation configuration.
 
+use nyne::config::deserialize_plugin_config;
 use nyne::default_true;
 use serde::{Deserialize, Serialize};
 
@@ -40,7 +41,7 @@ impl TodoConfig {
         let Some(value) = section else {
             return Self::default();
         };
-        serde_json::from_value(value.clone()).unwrap_or_default()
+        deserialize_plugin_config(value)
     }
 }
 

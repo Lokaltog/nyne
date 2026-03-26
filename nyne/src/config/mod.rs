@@ -6,9 +6,9 @@
 //! each plugin deserializes its own section independently.
 
 use std::collections::HashMap;
-use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::{any, fs};
 
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
@@ -467,6 +467,23 @@ impl NyneConfig {
         config.validate().wrap_err("config validation failed")?;
         Ok(config)
     }
+}
+/// Deserialize a plugin config from a JSON value, logging a warning and falling back to defaults on failure.
+///
+/// Prefer this over manual `serde_json::from_value` — it borrows the value (no clone),
+/// and surfaces deserialization errors via `tracing::warn` instead of silently discarding them.
+pub fn deserialize_plugin_config<T>(value: &serde_json::Value) -> T
+where
+    T: for<'de> serde::Deserialize<'de> + Default,
+{
+    T::deserialize(value).unwrap_or_else(|err| {
+        tracing::warn!(
+            ?err,
+            std_type = any::type_name::<T>(),
+            "invalid plugin config, using defaults"
+        );
+        T::default()
+    })
 }
 
 /// Unit tests for configuration deserialization and validation.

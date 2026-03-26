@@ -14,6 +14,7 @@ pub use std::sync::Arc;
 
 pub use color_eyre::eyre::Result;
 
+pub use crate::config::deserialize_plugin_config;
 pub use crate::dispatch::activation::ActivationContext;
 pub use crate::dispatch::context::RequestContext;
 pub use crate::dispatch::invalidation::{EventSink, InvalidationEvent};
