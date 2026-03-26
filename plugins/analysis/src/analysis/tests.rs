@@ -2,10 +2,10 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use nyne_source::syntax::fragment::DEFAULT_MAX_DEPTH;
-use nyne_source::test_support::{registry, stub_activation_context};
+use nyne_source::test_support::registry;
 use rstest::rstest;
 
-use super::{AnalysisContext, AnalysisEngine, DEFAULT_DISABLED_RULES, Hint};
+use super::{AnalysisEngine, DEFAULT_DISABLED_RULES, Hint};
 use crate::config::AnalysisConfig;
 
 /// Load a test fixture file relative to this crate's `src/analysis/fixtures/`.
@@ -29,14 +29,9 @@ fn analyze_source(ext: &str, source: &str) -> Vec<Hint> {
     let (_file, tree) = decomposer.decompose(source, DEFAULT_MAX_DEPTH);
     let tree = tree.expect("parse should succeed");
 
-    let activation = stub_activation_context();
     let engine = AnalysisEngine::build();
-    let ctx = AnalysisContext {
-        source,
-        activation: &activation,
-    };
 
-    engine.analyze(&tree, &ctx)
+    engine.analyze(&tree, source)
 }
 
 /// Filter hints to only those matching a specific rule ID.
@@ -253,14 +248,9 @@ fn analyze_source_filtered(ext: &str, source: &str, config: &AnalysisConfig) -> 
     let (_file, tree) = decomposer.decompose(source, DEFAULT_MAX_DEPTH);
     let tree = tree.expect("parse should succeed");
 
-    let activation = stub_activation_context();
     let engine = AnalysisEngine::build_filtered(config);
-    let ctx = AnalysisContext {
-        source,
-        activation: &activation,
-    };
 
-    engine.analyze(&tree, &ctx)
+    engine.analyze(&tree, source)
 }
 
 /// Verifies that default config excludes rules listed in DEFAULT_DISABLED_RULES.

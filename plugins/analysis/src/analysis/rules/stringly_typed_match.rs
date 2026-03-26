@@ -5,7 +5,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "stringly-typed-match";
 /// Minimum string-literal arms before triggering.
@@ -23,7 +23,7 @@ impl AnalysisRule for StringlyTypedMatch {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::MATCH }
 
     /// Checks the given node for stringly-typed match violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let raw = node.raw();
 
         let body = raw.child_by_field_name("body").unwrap_or(raw);

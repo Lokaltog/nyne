@@ -14,8 +14,6 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::sync::Arc;
 
-use nyne::dispatch::activation::ActivationContext;
-
 use crate::TsNode;
 use crate::config::AnalysisConfig;
 
@@ -166,16 +164,6 @@ impl From<&Hint> for HintView {
     }
 }
 
-/// Context provided to analysis rules during inspection.
-///
-/// Gives rules access to the full source text (for byte-range extraction)
-/// and the activation context (for config-dependent thresholds).
-pub struct AnalysisContext<'a> {
-    pub source: &'a str,
-    /// Available for rules that need config or service access.
-    pub activation: &'a ActivationContext,
-}
-
 /// A rule that inspects tree-sitter nodes and produces hints.
 ///
 /// Rules declare which node kinds they're interested in via [`Self::node_kinds`].
@@ -192,7 +180,7 @@ pub trait AnalysisRule: Send + Sync {
     fn node_kinds(&self) -> &'static [&'static str];
 
     /// Inspect a node and optionally produce a hint.
-    fn check(&self, node: TsNode<'_>, context: &AnalysisContext<'_>) -> Option<Hint>;
+    fn check(&self, node: TsNode<'_>) -> Option<Hint>;
 }
 
 /// Collection of analysis rules sharing ownership via `Arc`.
@@ -298,34 +286,28 @@ impl AnalysisEngine {
     ///
     /// Performs a single depth-first walk of the tree, dispatching each node
     /// to interested rules by kind. O(nodes), not O(nodes × rules).
-    pub fn analyze(&self, tree: &tree_sitter::Tree, context: &AnalysisContext<'_>) -> Vec<Hint> {
+    pub fn analyze(&self, tree: &tree_sitter::Tree, source: &str) -> Vec<Hint> {
         let mut hints = Vec::new();
         let mut cursor = tree.walk();
-        let source = context.source.as_bytes();
+        let source_bytes = source.as_bytes();
 
-        self.walk_recursive(&mut cursor, source, context, &mut hints);
+        self.walk_recursive(&mut cursor, source_bytes, &mut hints);
 
         hints
     }
 
     /// Recursively walks the tree-sitter AST, checking each node against active rules.
-    fn walk_recursive(
-        &self,
-        cursor: &mut tree_sitter::TreeCursor<'_>,
-        source: &[u8],
-        context: &AnalysisContext<'_>,
-        hints: &mut Vec<Hint>,
-    ) {
+    fn walk_recursive(&self, cursor: &mut tree_sitter::TreeCursor<'_>, source: &[u8], hints: &mut Vec<Hint>) {
         let node = TsNode::new(cursor.node(), source);
 
-        self.check_node(node, context, hints);
+        self.check_node(node, hints);
 
         // Recurse into children.
         if !cursor.goto_first_child() {
             return;
         }
         loop {
-            self.walk_recursive(cursor, source, context, hints);
+            self.walk_recursive(cursor, source, hints);
             if !cursor.goto_next_sibling() {
                 break;
             }
@@ -334,15 +316,15 @@ impl AnalysisEngine {
     }
 
     /// Dispatch a single node to all interested rules.
-    fn check_node(&self, node: TsNode<'_>, context: &AnalysisContext<'_>, hints: &mut Vec<Hint>) {
+    fn check_node(&self, node: TsNode<'_>, hints: &mut Vec<Hint>) {
         let kind = node.kind();
 
         // Kind-specific rules.
         if let Some(rules) = self.dispatch.get(kind) {
-            hints.extend(rules.iter().filter_map(|r| r.check(node, context)));
+            hints.extend(rules.iter().filter_map(|r| r.check(node)));
         }
 
         // Catch-all rules.
-        hints.extend(self.catch_all.iter().filter_map(|r| r.check(node, context)));
+        hints.extend(self.catch_all.iter().filter_map(|r| r.check(node)));
     }
 }

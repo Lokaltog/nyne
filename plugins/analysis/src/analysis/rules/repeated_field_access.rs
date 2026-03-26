@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "repeated-field-access";
 /// Minimum consecutive sibling statements sharing the same field-access prefix.
@@ -20,7 +20,7 @@ impl AnalysisRule for RepeatedFieldAccess {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::FUNCTION }
 
     /// Checks the given node for repeated field access violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let body = node.raw().child_by_field_name("body")?;
         let source = node.source();
         let mut cursor = body.walk();

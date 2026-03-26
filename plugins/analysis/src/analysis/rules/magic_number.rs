@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "magic-number";
 /// Node kinds for numeric literals (cross-language).
@@ -40,7 +40,7 @@ impl AnalysisRule for MagicNumber {
     fn node_kinds(&self) -> &'static [&'static str] { NUMBER_KINDS }
 
     /// Checks the given node for magic number violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let text = node.text();
 
         if TRIVIAL_VALUES.contains(&text) {

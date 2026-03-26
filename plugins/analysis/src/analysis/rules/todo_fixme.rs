@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "todo-fixme";
 /// Analysis rule that detects TODO and FIXME comments.
@@ -17,7 +17,7 @@ impl AnalysisRule for TodoFixme {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::COMMENT }
 
     /// Checks the given node for TODO/FIXME comment violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         const TAGS: &[&str] = &["FIXME", "SAFETY", "HACK", "XXX", "TODO"];
 
         let text = node.text();

@@ -2,7 +2,7 @@
 
 use super::kinds::{self, node_str};
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "string-concat-loop";
 /// Analysis rule that detects string concatenation in loops.
@@ -17,7 +17,7 @@ impl AnalysisRule for StringConcatLoop {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::LOOP }
 
     /// Checks the given node for string concatenation in loop violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let body = node.raw().child_by_field_name("body")?;
 
         if !has_string_concat(body, node.source()) {

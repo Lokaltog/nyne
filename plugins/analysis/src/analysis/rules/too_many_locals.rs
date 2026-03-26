@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "too-many-locals";
 /// Maximum local variable bindings before triggering.
@@ -20,7 +20,7 @@ impl AnalysisRule for TooManyLocals {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::FUNCTION }
 
     /// Checks the given node for too many local variables violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let body = node.raw().child_by_field_name("body")?;
         let count = count_bindings(body);
 

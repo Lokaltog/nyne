@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "magic-string";
 /// Additional safe parents specific to string literals.
@@ -32,7 +32,7 @@ impl AnalysisRule for MagicString {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::STRING }
 
     /// Checks the given node for magic string violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let text = node.text();
 
         // Strip quotes to get the content.

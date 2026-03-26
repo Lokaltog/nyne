@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "single-use-variable";
 /// Analysis rule that detects single-use variables.
@@ -17,7 +17,7 @@ impl AnalysisRule for SingleUseVariable {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::BINDING }
 
     /// Checks the given node for single-use variable violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();
 

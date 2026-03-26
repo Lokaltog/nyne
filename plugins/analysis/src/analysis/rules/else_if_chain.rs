@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "else-if-chain";
 /// Minimum else-if branches to trigger (3 = if + 3 else-ifs = 4 total).
@@ -20,7 +20,7 @@ impl AnalysisRule for ElseIfChain {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IF }
 
     /// Checks the given node for else-if chain violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         // Only fire on the outermost if — don't re-fire on inner else-ifs.
         if let Some(parent) = node.raw().parent() {
             let pk = parent.kind();

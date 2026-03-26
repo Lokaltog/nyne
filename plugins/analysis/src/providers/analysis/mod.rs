@@ -10,7 +10,7 @@ use nyne::templates::TemplateEngine;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use serde::Serialize;
 
-use crate::{AnalysisContext, AnalysisEngine, Hint, HintView};
+use crate::{AnalysisEngine, Hint, HintView};
 
 /// View for `ANALYSIS.md` — runs static analysis at read time.
 ///
@@ -33,12 +33,11 @@ impl TemplateView for AnalysisContent {
                 .tree
                 .as_ref()
                 .and_then(|tree| {
-                    let analysis_engine = self.activation.get::<Arc<AnalysisEngine>>()?;
-                    let ctx = AnalysisContext {
-                        source: &shared.source,
-                        activation: &self.activation,
-                    };
-                    Some(analysis_engine.analyze(tree, &ctx))
+                    Some(
+                        self.activation
+                            .get::<Arc<AnalysisEngine>>()?
+                            .analyze(tree, &shared.source),
+                    )
                 })
                 .unwrap_or_default();
             build_view(&hints)

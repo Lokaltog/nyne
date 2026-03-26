@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "deprecation-marker";
 /// Patterns that indicate deprecated, legacy, or deferred code.
@@ -62,7 +62,7 @@ impl AnalysisRule for DeprecationMarker {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::COMMENT }
 
     /// Checks the given node for deprecation marker violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let text = node.text().to_ascii_lowercase();
 
         let (pattern, category) = DEPRECATION_PATTERNS.iter().find(|(pat, _)| text.contains(pat))?;

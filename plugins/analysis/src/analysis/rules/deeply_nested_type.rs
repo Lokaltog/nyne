@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "deeply-nested-type";
 /// Maximum nesting depth for generic type parameters.
@@ -20,7 +20,7 @@ impl AnalysisRule for DeeplyNestedType {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::TYPE_ANNOTATION }
 
     /// Checks the given node for deeply nested generic type violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let raw = node.raw();
 
         // Only trigger on the outermost type — skip if parent is also a type.

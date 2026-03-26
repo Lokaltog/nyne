@@ -1,7 +1,7 @@
 //! Analysis rule: detect excessive code nesting.
 
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 /// Maximum nesting depth before triggering a hint.
 const MAX_DEPTH: usize = 3;
@@ -42,7 +42,7 @@ impl AnalysisRule for DeepNesting {
     fn node_kinds(&self) -> &'static [&'static str] { NESTING_KINDS }
 
     /// Checks the given node for excessive code nesting violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let depth = nesting_depth(node);
         if depth <= MAX_DEPTH {
             return None;

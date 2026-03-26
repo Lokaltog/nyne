@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "negated-condition";
 /// Analysis rule that detects negated conditions with else branches.
@@ -17,7 +17,7 @@ impl AnalysisRule for NegatedCondition {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::IF }
 
     /// Checks the given node for negated condition violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let raw = node.raw();
 
         // Must have an else branch.

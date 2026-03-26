@@ -4,12 +4,13 @@
 //! `AnalysisEngine`, etc.) and only exist when the `analysis` feature is enabled.
 //! The public entry point is [`run_analysis`], re-exported into the parent module.
 
-use nyne_analysis::{AnalysisContext, AnalysisEngine, HintView};
+use nyne_analysis::{AnalysisEngine, HintView};
 
 use super::{
     Arc, DecomposedSource, HookInput, Range, ScriptContext, SourceServices, VfsPath, changed_line_range,
     source_rel_path,
 };
+use crate::provider::hook_schema::EditToolInput;
 
 /// Per-file analysis output: hints plus the decomposed source for change-range filtering.
 struct FileAnalysis {
@@ -22,13 +23,19 @@ struct FileAnalysis {
 /// Returns hints and the decomposed source (used by the caller to compute
 /// the changed line range for filtering). Returns empty hints for non-file
 /// tools or files without tree-sitter support.
-fn run_analysis_for_tool(ctx: &ScriptContext<'_>, input: &HookInput, tool_name: &str, root: &str) -> FileAnalysis {
+fn run_analysis_for_tool(
+    ctx: &ScriptContext<'_>,
+    edit_input: Option<&EditToolInput>,
+    input: &HookInput,
+    tool_name: &str,
+    root: &str,
+) -> FileAnalysis {
     let empty = FileAnalysis {
         hints: Vec::new(),
         decomposed: None,
     };
 
-    let Some(rel) = source_rel_path(input, tool_name, root) else {
+    let Some(rel) = source_rel_path(edit_input, input, tool_name, root) else {
         return empty;
     };
 
@@ -62,14 +69,12 @@ fn run_analysis_for_tool(ctx: &ScriptContext<'_>, input: &HookInput, tool_name: 
         };
     };
 
-    let analysis_ctx = AnalysisContext {
-        source: &decomposed.source,
-        activation: ctx.activation(),
-    };
-
-    let hints = engine.analyze(tree, &analysis_ctx).iter().map(HintView::from).collect();
     FileAnalysis {
-        hints,
+        hints: engine
+            .analyze(tree, &decomposed.source)
+            .iter()
+            .map(HintView::from)
+            .collect(),
         decomposed: Some(decomposed),
     }
 }
@@ -91,15 +96,16 @@ pub(super) fn filter_hints(hints: Vec<HintView>, changed: Option<&Range<usize>>)
 /// is used instead (see `mod.rs`).
 pub(super) fn run_analysis(
     ctx: &ScriptContext<'_>,
+    edit_input: Option<&EditToolInput>,
     input: &HookInput,
     tool_name: &str,
     root: &str,
 ) -> (Vec<HintView>, Option<Range<usize>>) {
-    let result = run_analysis_for_tool(ctx, input, tool_name, root);
+    let result = run_analysis_for_tool(ctx, edit_input, input, tool_name, root);
     let changed = result
         .decomposed
         .as_deref()
-        .and_then(|d| changed_line_range(input, tool_name, d));
+        .and_then(|d| changed_line_range(edit_input, d));
     let hints = filter_hints(result.hints, changed.as_ref());
     (hints, changed)
 }

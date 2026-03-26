@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "long-match";
 /// Maximum match arms/cases before triggering.
@@ -20,7 +20,7 @@ impl AnalysisRule for LongMatch {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::MATCH }
 
     /// Checks the given node for overly long match expression violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         // Rust: arms live inside `match_block` (body field).
         // JS/TS: cases are direct children of switch_statement.
         let arm_count = kinds::count_children_of_kind(&node.raw(), "body", kinds::MATCH_ARM);

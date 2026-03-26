@@ -4,7 +4,7 @@
 //! levels). The idiomatic fix is `crate::` absolute paths.
 
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "deep-super-import";
 /// Analysis rule that detects deep `super::` import chains.
@@ -24,7 +24,7 @@ impl AnalysisRule for DeepSuperImport {
     fn node_kinds(&self) -> &'static [&'static str] { USE_DECLARATION }
 
     /// Checks the given node for deep super-chain import violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let text = node.text();
 
         // Count consecutive `super::` segments.

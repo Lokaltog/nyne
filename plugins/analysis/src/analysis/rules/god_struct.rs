@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "god-struct";
 /// Maximum fields before triggering.
@@ -20,7 +20,7 @@ impl AnalysisRule for GodStruct {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::STRUCT_DEF }
 
     /// Checks the given node for god struct violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let count = kinds::count_children_of_kind(&node.raw(), "body", kinds::FIELD_DECLARATION);
 
         if count <= MAX_FIELDS {

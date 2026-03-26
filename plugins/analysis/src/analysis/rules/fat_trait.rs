@@ -5,7 +5,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "fat-trait";
 /// Maximum required methods before triggering.
@@ -36,7 +36,7 @@ impl AnalysisRule for FatTrait {
     fn node_kinds(&self) -> &'static [&'static str] { TRAIT_DEF }
 
     /// Checks the given node for fat trait violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let raw = node.raw();
         let required_count = kinds::count_children_of_kind(&raw, "body", REQUIRED_METHOD);
 

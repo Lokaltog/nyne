@@ -4,7 +4,7 @@
 //! for testability and readability.
 
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "large-closure";
 /// Maximum closure body lines before triggering.
@@ -29,7 +29,7 @@ impl AnalysisRule for LargeClosure {
     fn node_kinds(&self) -> &'static [&'static str] { CLOSURE }
 
     /// Checks the given node for large closure violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let raw = node.raw();
         let start_line = raw.start_position().row;
         let end_line = raw.end_position().row;

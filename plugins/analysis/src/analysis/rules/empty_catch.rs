@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "empty-catch";
 /// Analysis rule that detects empty catch blocks.
@@ -17,7 +17,7 @@ impl AnalysisRule for EmptyCatch {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::CATCH }
 
     /// Checks the given node for empty catch block violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let raw = node.raw();
 
         let body = raw.child_by_field_name("body").or_else(|| {

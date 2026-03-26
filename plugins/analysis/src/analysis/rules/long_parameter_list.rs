@@ -1,7 +1,7 @@
 //! Analysis rule: detect long parameter lists.
 
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "long-parameter-list";
 /// Maximum parameter count before triggering a hint.
@@ -28,7 +28,7 @@ impl AnalysisRule for LongParameterList {
     fn node_kinds(&self) -> &'static [&'static str] { PARAM_LIST_KINDS }
 
     /// Checks the given node for long parameter list violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         // Count named children that are actual parameters (skip delimiters like commas, parens).
         let param_count = node
             .raw()

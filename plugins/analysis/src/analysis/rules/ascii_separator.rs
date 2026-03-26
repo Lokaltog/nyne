@@ -2,7 +2,7 @@
 
 use super::kinds::{self, strip_comment_prefix};
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "ascii-separator";
 /// Minimum consecutive separator characters for a pure separator line.
@@ -27,7 +27,7 @@ impl AnalysisRule for AsciiSeparator {
     fn node_kinds(&self) -> &'static [&'static str] { kinds::COMMENT }
 
     /// Checks the given node for ASCII art separator violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let text = node.text();
 
         // Check each line of the comment (block comments can span multiple lines).

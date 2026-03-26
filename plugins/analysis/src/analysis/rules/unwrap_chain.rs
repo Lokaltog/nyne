@@ -2,7 +2,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisContext, AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
 
 pub const ID: &str = "unwrap-chain";
 /// Minimum `.unwrap()` calls to trigger (in a single statement or consecutive).
@@ -20,7 +20,7 @@ impl AnalysisRule for UnwrapChain {
     fn node_kinds(&self) -> &'static [&'static str] { &[kinds::EXPRESSION_STATEMENT, "let_declaration"] }
 
     /// Checks the given node for unwrap chain violations.
-    fn check(&self, node: TsNode<'_>, _context: &AnalysisContext<'_>) -> Option<Hint> {
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
         let raw = node.raw();
         let source = node.source();
         let count = count_unwrap_calls(raw, source);
