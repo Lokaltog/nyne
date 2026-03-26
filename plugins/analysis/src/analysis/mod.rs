@@ -20,7 +20,7 @@ use crate::config::AnalysisConfig;
 /// Rules disabled by default because they tend to be noisy on most codebases.
 ///
 /// Users can override this by setting `rules = []` (all rules) or listing
-/// specific rules in `[plugin.coding.analysis]`.
+/// specific rules in `[plugin.analysis]`.
 pub const DEFAULT_DISABLED_RULES: &[&str] = &[
     rules::magic_string::ID,
     rules::magic_number::ID,

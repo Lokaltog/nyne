@@ -8,7 +8,7 @@
   [`{{ file.path }}@/symbols/at-line/{{ entry.line }}`]
 {% endfor %}
 {% endfor %}
-{% if files is not defined or files | length == 0 %}
+{% if files | length == 0 %}
 
 No TODO/FIXME comments found.
 {% endif %}

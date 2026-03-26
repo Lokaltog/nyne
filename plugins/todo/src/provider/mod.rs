@@ -137,7 +137,7 @@ impl TodoProvider {
             .collect()
     }
 
-    /// Get the list of files to scan from the git index.
+    /// Returns an empty list when the git feature is disabled.
     #[cfg(not(feature = "git"))]
     fn discover_files(&self) -> Vec<VfsPath> { Vec::new() }
 
@@ -263,6 +263,16 @@ struct EntryView {
     text: String,
 }
 
+impl From<&TodoEntry> for EntryView {
+    fn from(entry: &TodoEntry) -> Self {
+        Self {
+            line: entry.line,
+            tag: entry.tag.to_string(),
+            text: entry.text.clone(),
+        }
+    }
+}
+
 /// Tag view — all entries for a specific tag.
 #[derive(Serialize)]
 struct TagView {
@@ -275,27 +285,16 @@ struct TagView {
 /// Entries must already be sorted with file path as the primary key —
 /// consecutive entries from the same file are merged into one `FileGroup`.
 fn group_by_file(entries: &[&TodoEntry]) -> Vec<FileGroup> {
-    let mut files: Vec<FileGroup> = Vec::new();
-    for entry in entries {
-        let path = entry.source_file.as_str();
-        if let Some(last) = files.last_mut().filter(|f| f.path == path) {
-            last.entries.push(EntryView {
-                line: entry.line,
-                tag: entry.tag.to_string(),
-                text: entry.text.clone(),
-            });
-        } else {
-            files.push(FileGroup {
-                path: path.to_owned(),
-                entries: vec![EntryView {
-                    line: entry.line,
-                    tag: entry.tag.to_string(),
-                    text: entry.text.clone(),
-                }],
-            });
-        }
-    }
-    files
+    entries
+        .chunk_by(|a, b| a.source_file == b.source_file)
+        .filter_map(|chunk| {
+            let first = chunk.first()?;
+            Some(FileGroup {
+                path: first.source_file.as_str().to_owned(),
+                entries: chunk.iter().map(|e| EntryView::from(*e)).collect(),
+            })
+        })
+        .collect()
 }
 
 /// Build the overview view: all tags, grouped by file, entries sorted by
