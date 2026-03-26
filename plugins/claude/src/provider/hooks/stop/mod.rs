@@ -12,10 +12,10 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
+use nyne_coding::providers::names;
 
 use crate::config::StopHookConfig;
-use crate::providers::claude::hook_schema::{HookInput, HookOutput};
-use crate::providers::names;
+use crate::provider::hook_schema::{HookInput, HookOutput};
 
 /// Template key for the stop hook.
 const TMPL_STOP: &str = "claude/stop";
@@ -26,7 +26,7 @@ const TMPL_STOP: &str = "claude/stop";
 /// current turn. If code changes are detected, blocks the stop and
 /// emits a review prompt listing modified files, reminding the agent
 /// to verify SSOT/DRY compliance before concluding.
-pub(in crate::providers::claude) struct Stop {
+pub(in crate::provider) struct Stop {
     engine: Arc<TemplateEngine>,
     config: StopHookConfig,
 }

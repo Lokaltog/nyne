@@ -331,7 +331,6 @@ fn default_passthrough_processes() -> Vec<String> { vec!["git".to_owned()] }
 /// fields that should default to enabled.
 pub const fn default_true() -> bool { true }
 
-
 /// Default implementation for `AgentFilesConfig`.
 impl Default for AgentFilesConfig {
     /// Return agent files config with the default filename list.

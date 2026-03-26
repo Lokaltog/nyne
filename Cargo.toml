@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 nyne.workspace = true
+nyne-claude.workspace = true
 nyne-git.workspace = true
 nyne-coding.workspace = true
 nyne-todo.workspace = true
@@ -38,6 +39,7 @@ publish = false
 nyne = { path = "nyne" }
 nyne-macros = { path = "nyne-macros" }
 nyne-git = { package = "nyne-plugin-git", path = "plugins/git" }
+nyne-claude = { package = "nyne-plugin-claude", path = "plugins/claude" }
 nyne-coding = { package = "nyne-plugin-coding", path = "plugins/coding" }
 nyne-todo = { package = "nyne-plugin-todo", path = "plugins/todo" }
 

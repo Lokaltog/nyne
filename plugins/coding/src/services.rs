@@ -20,15 +20,15 @@ use crate::syntax::decomposed::DecompositionCache;
 /// and makes the plugin's service surface explicit in one place.
 pub struct CodingServices {
     /// Global tree-sitter grammar registry shared across all decompositions.
-    pub(crate) syntax: Arc<SyntaxRegistry>,
+    pub syntax: Arc<SyntaxRegistry>,
     /// Manages LSP server lifecycles and routes queries to the right server.
-    pub(crate) lsp: Arc<LspManager>,
+    pub lsp: Arc<LspManager>,
     /// Caches parsed decompositions keyed by file path and content hash.
-    pub(crate) decomposition: DecompositionCache,
+    pub decomposition: DecompositionCache,
     /// Static analysis engine with configurable rule filtering.
-    pub(crate) analysis: Arc<AnalysisEngine>,
-    /// Resolved plugin configuration (LSP, analysis, Claude hooks).
-    pub(crate) config: CodingConfig,
+    pub analysis: Arc<AnalysisEngine>,
+    /// Resolved plugin configuration (LSP and analysis).
+    pub config: CodingConfig,
 }
 
 impl CodingServices {
@@ -39,8 +39,13 @@ impl CodingServices {
     /// Panics if the coding plugin has not been activated — a programming
     /// error in the plugin lifecycle.
     #[expect(clippy::expect_used, reason = "coding plugin activation is a lifecycle invariant")]
-    pub(crate) fn get(ctx: &ActivationContext) -> &Self {
+    pub fn get(ctx: &ActivationContext) -> &Self {
         ctx.get::<Self>()
             .expect("CodingServices missing — coding plugin was not activated")
     }
+
+    /// Retrieve the coding services from the activation context, if present.
+    ///
+    /// Returns `None` if the coding plugin has not been activated.
+    pub fn try_get(ctx: &ActivationContext) -> Option<&Self> { ctx.get::<Self>() }
 }

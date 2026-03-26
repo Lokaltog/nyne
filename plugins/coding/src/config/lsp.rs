@@ -3,9 +3,8 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
-
 use nyne::default_true;
+use serde::{Deserialize, Serialize};
 
 /// Maps file extensions to LSP language identifiers.
 ///

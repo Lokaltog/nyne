@@ -1,15 +1,24 @@
 # nyne-plugin-coding
 
-Coding plugin — syntax decomposition, LSP integration, AI-assisted editing, developer-experience features. Module structure discoverable via VFS.
+Coding plugin — syntax decomposition, LSP integration, batch editing, developer-experience features. Module structure discoverable via VFS.
 
 ## Dependencies
 
 - **nyne** (core): Provider trait, dispatch types, templates, node abstractions
 - **nyne-plugin-git** (non-optional): `GitRepo` accessed via TypeMap for symbol-scoped git features
 
+## Cross-Crate Consumers
+
+`CodingServices` and selected types are `pub` for downstream plugin crates (`nyne-plugin-claude`). Public surface:
+
+- `services::CodingServices` — bundle of syntax, LSP, decomposition, analysis services
+- `syntax::` — `SyntaxRegistry`, `DecomposedSource`, `Fragment`, `find_fragment_at_line`, `AnalysisEngine`, `AnalysisContext`, `HintView`, `fragment_list`, template partials
+- `lsp::` — `LspManager`, `FileQuery`, `DiagnosticRow`, `diagnostics_to_rows`
+- `providers::names` — VFS name constants, `symbol_from_vfs_path`, `is_symbols_overview`
+
 ## CodingServices
 
-`services.rs` — consolidated bundle of all plugin services. During `activate()`, a single `CodingServices` struct is inserted into the TypeMap containing: `Arc<SyntaxRegistry>`, `Arc<LspManager>`, `DecompositionCache`, `Arc<AnalysisEngine>`, `CodingConfig`. All provider code retrieves services via `CodingServices::get(ctx)` — **never** access individual types from the TypeMap directly.
+`services.rs` — consolidated bundle of all plugin services. During `activate()`, a single `CodingServices` struct is inserted into the TypeMap containing: `Arc<SyntaxRegistry>`, `Arc<LspManager>`, `DecompositionCache`, `Arc<AnalysisEngine>`, `CodingConfig`. Internal provider code retrieves services via `CodingServices::get(ctx)`. External plugins use `CodingServices::try_get(ctx)` for optional access.
 
 `PassthroughProcesses` is still inserted separately (consumed by core, not by plugin providers).
 
@@ -23,8 +32,6 @@ Config is multi-tier: plugin defaults → user config → project config. Merged
 - `config/lsp.rs`: `LspConfig`, `ServerEntry`, `LanguageIdMapping` — LSP server definitions
 - `[plugin.coding.lsp.servers]`: array of server entries (name, command, args, extensions, language_ids, root_markers, enabled). Built-in defaults in `default_servers()`. See `lsp/CLAUDE.md` for config examples.
 - `[plugin.coding.analysis]`: `enabled` (bool), `rules` (optional list — `None` = all except `DEFAULT_DISABLED_RULES`)
-- `[plugin.coding.claude]`: `enabled` (bool, default true) — master toggle for `.claude/` directory and all hooks
-- `[plugin.coding.claude.hooks]`: per-hook toggles — `session_start`, `pre_tool_use`, `post_tool_use`, `stop`, `statusline` (all default true)
 - `DEFAULT_DISABLED_RULES` in `syntax/analysis/mod.rs` is the SSOT for default-excluded rules
 
 ## routes! Macro

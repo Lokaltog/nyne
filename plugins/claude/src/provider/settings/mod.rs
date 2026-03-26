@@ -31,7 +31,7 @@ pub(super) enum HookAction {
 
 /// Grace period (seconds) after a refused raw file access during which
 /// subsequent accesses are allowed through. Stored as atime via `touch -a`.
-pub(in crate::providers::claude) const RAW_FILE_GRACE_SECS: u64 = 300;
+pub(in crate::provider) const RAW_FILE_GRACE_SECS: u64 = 300;
 
 /// Build the hooks that nyne injects into `settings.local.json`.
 ///

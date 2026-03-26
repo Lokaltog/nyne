@@ -6,9 +6,9 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
+use nyne_coding::providers::names;
 
-use crate::providers::claude::hook_schema::HookOutput;
-use crate::providers::names;
+use crate::provider::hook_schema::HookOutput;
 
 /// Template key for the session start hook.
 const TMPL_SESSION_START: &str = "claude/session-start";
@@ -19,7 +19,7 @@ const TMPL_SESSION_START: &str = "claude/session-start";
 /// `@/` paths, navigation patterns) and project context (mount status,
 /// CLAUDE.md instructions) so the agent starts with awareness of the
 /// nyne virtual filesystem.
-pub(in crate::providers::claude) struct SessionStart {
+pub(in crate::provider) struct SessionStart {
     engine: Arc<TemplateEngine>,
 }
 
@@ -38,18 +38,9 @@ impl Script for SessionStart {
     /// Render session start context with mount status and project instructions.
     fn exec(&self, ctx: &ScriptContext<'_>, _stdin: &[u8]) -> Result<Vec<u8>> {
         let activation = ctx.activation();
-        let branch = {
-            #[cfg(feature = "git-symbols")]
-            {
-                activation
-                    .get::<Arc<nyne_git::GitRepo>>()
-                    .map_or_else(|| "(no repo)".to_owned(), |r| r.head_branch())
-            }
-            #[cfg(not(feature = "git-symbols"))]
-            {
-                "(no repo)".to_owned()
-            }
-        };
+        let branch = activation
+            .get::<Arc<nyne_git::GitRepo>>()
+            .map_or_else(|| "(no repo)".to_owned(), |r| r.head_branch());
 
         let view = minijinja::context! {
             current_date => jiff::Zoned::now().strftime("%Y-%m-%d").to_string(),

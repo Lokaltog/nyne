@@ -1445,6 +1445,7 @@ dependencies = [
  "clap",
  "color-eyre",
  "nyne",
+ "nyne-plugin-claude",
  "nyne-plugin-coding",
  "nyne-plugin-git",
  "nyne-plugin-todo",
@@ -1459,6 +1460,32 @@ dependencies = [
  "quote",
  "rstest",
  "syn",
+]
+
+[[package]]
+name = "nyne-plugin-claude"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "crop",
+ "filetime",
+ "humantime-serde",
+ "insta",
+ "jiff",
+ "linkme",
+ "minijinja",
+ "nyne",
+ "nyne-macros",
+ "nyne-plugin-coding",
+ "nyne-plugin-git",
+ "owo-colors",
+ "palette",
+ "rstest",
+ "serde",
+ "serde_json",
+ "toml",
+ "tracing",
+ "tree-sitter",
 ]
 
 [[package]]

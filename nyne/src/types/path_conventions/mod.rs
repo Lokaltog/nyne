@@ -74,3 +74,17 @@ pub fn split_companion_path(path: &VfsPath) -> Option<CompanionSplit<'_>> {
         rest: components.collect(),
     })
 }
+/// The VFS path separator — `COMPANION_SUFFIX` followed by `/`.
+///
+/// Appears in rendered paths as `file.rs@/symbols/...`. Used by path-checking
+/// helpers to detect and split VFS paths from raw filesystem paths.
+pub const VFS_SEPARATOR: &str = concat!("@", "/");
+
+/// Check whether a raw file path contains a VFS companion separator (`@/`).
+pub fn is_vfs_path(path: &str) -> bool { path.contains(VFS_SEPARATOR) }
+
+/// Extract the real source file path from a VFS path (everything before the first `@/`).
+pub fn source_file_of(path: &str) -> &str { path.split(VFS_SEPARATOR).next().unwrap_or(path) }
+
+#[cfg(test)]
+mod tests;

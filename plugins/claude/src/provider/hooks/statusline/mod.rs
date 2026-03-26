@@ -17,7 +17,7 @@ use nyne::dispatch::script::{Script, ScriptContext};
 /// (model, context window usage, cost, rate limits, vim mode) and renders a
 /// multi-line ANSI-colored status bar on stdout. The bar includes a gradient
 /// progress indicator for context window consumption.
-pub(in crate::providers::claude) struct Statusline;
+pub(in crate::provider) struct Statusline;
 
 /// [`Script`] implementation for [`Statusline`].
 impl Script for Statusline {

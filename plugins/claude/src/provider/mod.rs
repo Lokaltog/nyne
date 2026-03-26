@@ -18,14 +18,13 @@ use nyne::dispatch::script::ScriptEntry;
 use nyne::node::Readable;
 use nyne::provider::{ConflictInfo, ConflictParty, ConflictResolution};
 use nyne::templates::{TemplateContent, TemplateEngine, TemplateView, serialize_view};
+use nyne_coding::providers::names;
+use nyne_coding::providers::prelude::*;
+use nyne_coding::providers::util::dominant_ext;
 use nyne_macros::routes;
 use serde::Serialize;
 
-use super::names;
-use super::prelude::*;
-use super::util::dominant_ext;
-use crate::config::CodingConfig;
-use crate::services::CodingServices;
+use crate::config::ClaudePluginConfig;
 
 /// Typed serde schemas for hook inputs and outputs.
 pub mod hook_schema;
@@ -123,6 +122,7 @@ nyne_skills! {
 /// with any pre-existing `.claude/` directory on the real filesystem.
 pub struct ClaudeProvider {
     ctx: Arc<ActivationContext>,
+    config: ClaudePluginConfig,
     routes: RouteTree<Self>,
     templates: Arc<TemplateEngine>,
 }
@@ -130,7 +130,7 @@ pub struct ClaudeProvider {
 /// Methods for [`ClaudeProvider`].
 impl ClaudeProvider {
     /// Create a new Claude provider, registering routes and templates.
-    pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
+    pub(crate) fn new(ctx: Arc<ActivationContext>, config: ClaudePluginConfig) -> Self {
         let mut b = names::handle_builder();
         register_skill_templates(&mut b);
         let output_style_key = b.register("claude/output-style", include_str!("templates/output-style.md.j2"));
@@ -181,7 +181,12 @@ impl ClaudeProvider {
             }
         });
 
-        Self { ctx, routes, templates }
+        Self {
+            ctx,
+            config,
+            routes,
+            templates,
+        }
     }
 
     #[expect(clippy::unused_self, reason = "route handler called as instance method")]
@@ -231,7 +236,7 @@ impl Provider for ClaudeProvider {
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
     /// Activate only when Claude integration is enabled in config.
-    fn should_activate(&self, _ctx: &ActivationContext) -> bool { CodingServices::get(&self.ctx).config.claude.enabled }
+    fn should_activate(&self, _ctx: &ActivationContext) -> bool { self.config.enabled }
 
     /// Handle conflicts by merging with existing `.claude` directories.
     fn on_conflict(
@@ -314,21 +319,21 @@ impl ClaudeProvider {
 ///
 /// Respects both the master `claude.enabled` toggle (returns empty if disabled)
 /// and individual `claude.hooks.*` toggles.
-pub fn script_entries(config: &CodingConfig) -> Vec<ScriptEntry> {
+pub fn script_entries(config: &ClaudePluginConfig) -> Vec<ScriptEntry> {
     use std::sync::Arc;
 
-    if !config.claude.enabled {
+    if !config.enabled {
         return Vec::new();
     }
 
-    let t = &config.claude.hooks;
+    let t = &config.hooks;
     let addr = |name: &str| format!("provider.claude.{name}");
     let mut entries: Vec<ScriptEntry> = Vec::new();
 
     if t.pre_tool_use {
         entries.push((
             addr("pre-tool-use"),
-            Arc::new(hooks::PreToolUse::new(&config.hooks.pre_tool)),
+            Arc::new(hooks::PreToolUse::new(&config.hook_config.pre_tool)),
         ));
     }
     if t.post_tool_use {
@@ -338,7 +343,7 @@ pub fn script_entries(config: &CodingConfig) -> Vec<ScriptEntry> {
         entries.push((addr("session-start"), Arc::new(hooks::SessionStart::new())));
     }
     if t.stop {
-        entries.push((addr("stop"), Arc::new(hooks::Stop::new(&config.hooks.stop))));
+        entries.push((addr("stop"), Arc::new(hooks::Stop::new(&config.hook_config.stop))));
     }
     if t.statusline {
         entries.push((addr("statusline"), Arc::new(hooks::Statusline)));

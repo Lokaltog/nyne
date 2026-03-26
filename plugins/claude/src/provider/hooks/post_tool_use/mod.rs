@@ -13,15 +13,15 @@ use color_eyre::eyre::Result;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
 use nyne::types::vfs_path::VfsPath;
+use nyne_coding::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
+use nyne_coding::providers::names::{self, FILE_OVERVIEW};
+use nyne_coding::services::CodingServices;
+use nyne_coding::syntax::analysis::{AnalysisContext, AnalysisEngine, HintView};
+use nyne_coding::syntax::decomposed::DecomposedSource;
 
-use crate::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
-use crate::providers::claude::hook_schema::{
+use crate::provider::hook_schema::{
     BashToolInput, EditToolInput, HookInput, HookOutput, ReadToolInput, WriteToolInput,
 };
-use crate::providers::names::{self, FILE_OVERVIEW};
-use crate::services::CodingServices;
-use crate::syntax::analysis::{AnalysisContext, AnalysisEngine, HintView};
-use crate::syntax::decomposed::DecomposedSource;
 
 /// Minimum combined old+new line count to trigger SSOT reminder on Edit.
 ///
@@ -40,7 +40,7 @@ const TMPL_POST: &str = "claude/post-tool-use";
 /// to the changed line range. For Bash commands, extracts relative paths
 /// to provide VFS navigation hints. All derived data is passed to a
 /// Jinja template that decides what context to surface.
-pub(in crate::providers::claude) struct PostToolUse {
+pub(in crate::provider) struct PostToolUse {
     engine: Arc<TemplateEngine>,
 }
 

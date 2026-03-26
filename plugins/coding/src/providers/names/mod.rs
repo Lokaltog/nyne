@@ -14,21 +14,6 @@ use nyne::templates::{HandleBuilder, TemplateEngine};
 pub use nyne::types::path_conventions::{COMPANION_SUFFIX, companion_name};
 pub use nyne::{FILE_OVERVIEW, SUBDIR_SYMBOLS};
 
-/// VFS path separator (`@/`).
-///
-/// Delimits the boundary between a real source file path and its virtual
-/// namespace. For example, in `src/main.rs@/symbols/Foo@/body.rs`, the first
-/// `@/` separates the source file from its VFS subtree, and the second
-/// separates the symbol name from its metadata files.
-pub const VFS_SEP: &str = "@/";
-
-/// VFS symbols path segment (`@/symbols/`).
-///
-/// The combined prefix used to locate the symbol namespace within a file's
-/// VFS tree. Used by [`symbol_from_vfs_path`] and other path-parsing helpers
-/// to extract symbol names from full VFS paths.
-pub const VFS_SYMBOLS_SEP: &str = "@/symbols/";
-
 /// Subdirectory for type-filtered symbol views.
 pub const SUBDIR_BY_KIND: &str = "by-kind";
 
@@ -79,15 +64,7 @@ pub const FILE_STAGED_DIFF: &str = "staged.diff";
 /// that templates reference canonical names (e.g. `{{ FILE_OVERVIEW }}`)
 /// instead of hard-coding string literals.
 pub fn register_template_globals(engine: &mut TemplateEngine) {
-    nyne::register_globals!(
-        engine,
-        FILE_OVERVIEW,
-        FILE_DIAGNOSTICS,
-        SUBDIR_SYMBOLS,
-        SUBDIR_ACTIONS,
-        VFS_SEP,
-        VFS_SYMBOLS_SEP,
-    );
+    nyne::register_globals!(engine, FILE_OVERVIEW, FILE_DIAGNOSTICS, SUBDIR_SYMBOLS, SUBDIR_ACTIONS,);
 }
 
 /// Create a [`HandleBuilder`] with coding name globals pre-registered.
@@ -100,22 +77,22 @@ pub fn handle_builder() -> HandleBuilder {
     register_template_globals(b.engine_mut());
     b
 }
-/// Check whether a raw file path is a VFS virtual path (contains `@/`).
-pub fn is_vfs_path(path: &str) -> bool { path.contains(VFS_SEP) }
-
-/// Extract the real source file path from a VFS path (everything before the first `@/`).
-pub fn source_file_of(path: &str) -> &str { path.split(VFS_SEP).next().unwrap_or(path) }
-
 /// Extract the symbol name from a VFS path like `file.rs@/symbols/Foo@/body.rs`.
 ///
-/// Returns `None` when the path does not contain a `@/symbols/` segment or
-/// when the symbol name portion is empty. Only the first symbol name is
-/// extracted — nested `@/` separators after the symbol are ignored.
+/// Looks for the `@/symbols/` segment, then returns the next path component
+/// (up to but not including the following `@/`).
 pub fn symbol_from_vfs_path(path: &str) -> Option<&str> {
-    let after_symbols = path.split(VFS_SYMBOLS_SEP).nth(1)?;
-    let name = after_symbols.split(VFS_SEP).next()?;
+    let symbols_sep = concat!("@", "/symbols/");
+    let after = path.split(symbols_sep).nth(1)?;
+    let name = after.split(nyne::VFS_SEPARATOR).next()?;
     if name.is_empty() { None } else { Some(name) }
 }
 
-/// Check whether a path points to a symbols OVERVIEW.md.
-pub fn is_symbols_overview(path: &str) -> bool { path.contains(VFS_SYMBOLS_SEP) && path.ends_with(FILE_OVERVIEW) }
+/// Check whether a path points to a symbols OVERVIEW.md (`@/symbols/` … `OVERVIEW.md`).
+pub fn is_symbols_overview(path: &str) -> bool {
+    let symbols_sep = concat!("@", "/symbols/");
+    path.contains(symbols_sep) && path.ends_with(FILE_OVERVIEW)
+}
+
+#[cfg(test)]
+mod tests;

@@ -108,17 +108,9 @@ fn project(ctx: &Context<'_>) -> Option<String> {
 
 /// Git branch name.
 fn git_branch(ctx: &Context<'_>) -> Option<String> {
-    #[cfg(feature = "git-symbols")]
-    {
-        ctx.activation
-            .get::<Arc<nyne_git::GitRepo>>()
-            .map(|r| format!("\u{e0a0} {}", r.head_branch().bold()))
-    }
-    #[cfg(not(feature = "git-symbols"))]
-    {
-        let _ = ctx;
-        None
-    }
+    ctx.activation
+        .get::<Arc<nyne_git::GitRepo>>()
+        .map(|r| format!("\u{e0a0} {}", r.head_branch().bold()))
 }
 
 /// Model display name with diamond prefix.

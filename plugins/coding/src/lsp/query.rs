@@ -136,7 +136,7 @@ impl<'a> FileQuery<'a> {
     /// - **Push-only** (no pull capability): returns diagnostics from the
     ///   [`DiagnosticStore`], blocking if the file is dirty until the server
     ///   pushes fresh results or `diagnostics_timeout` expires.
-    pub(crate) fn diagnostics(&self) -> Result<Vec<Diagnostic>> {
+    pub fn diagnostics(&self) -> Result<Vec<Diagnostic>> {
         if self.client.capabilities().diagnostic_provider.is_some() {
             // Pull model: pull directly. The server processes pending
             // didChange notifications before responding, so the result

@@ -18,9 +18,11 @@ FUSE overlay exposing agent-optimized access to decomposed source symbols, LSP i
 | `nyne`               | `nyne/`           | Core library — dispatch, FUSE, nodes, providers, config, templates, types   |
 | `nyne-macros`        | `nyne-macros/`    | Proc macros (`routes!`)                                                     |
 | `nyne-plugin-git`    | `plugins/git/`    | Git providers (blame/log/status/branches/diff/history), git-aware companion |
-| `nyne-plugin-coding` | `plugins/coding/` | Syntax decomposition, LSP, claude integration, batch edits, todo tracking   |
+| `nyne-plugin-coding` | `plugins/coding/` | Syntax decomposition, LSP, batch edits, workspace search                    |
+| `nyne-plugin-claude` | `plugins/claude/` | Claude Code integration — hooks, settings, skills, system prompt            |
+| `nyne-plugin-todo`   | `plugins/todo/`   | TODO/FIXME comment aggregation and scanning                                 |
 
-Plugin crates use `nyne-plugin-*` naming; root binary aliases them as `nyne-git`/`nyne-coding`.
+Plugin crates use `nyne-plugin-*` naming; root binary aliases them as `nyne-git`/`nyne-coding`/`nyne-claude`/`nyne-todo`.
 
 ## CLI Commands
 

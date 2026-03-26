@@ -198,7 +198,7 @@ impl LspManager {
     /// Sends the notification on first call for a given file; subsequent calls
     /// are no-ops until the document is explicitly closed via [`Self::close_document`].
     /// Reads the file content from the overlay path.
-    pub(crate) fn ensure_document_open(&self, lsp_file: &Path, ext: &str) {
+    pub fn ensure_document_open(&self, lsp_file: &Path, ext: &str) {
         // Fast check: already open?
         {
             let docs = self.open_documents.lock();
@@ -258,7 +258,7 @@ impl LspManager {
     /// (the next access will trigger `didOpen` with fresh content).
     ///
     /// Called from the watcher invalidation path when the real file changes.
-    pub(crate) fn invalidate_file(&self, path: &Path) {
+    pub fn invalidate_file(&self, path: &Path) {
         let change = {
             let mut docs = self.open_documents.lock();
             docs.get_mut(path).map(|doc| {
@@ -430,7 +430,7 @@ impl LspManager {
     ///
     /// The returned `FileQuery` encapsulates client routing and cache key
     /// construction — callers never build `CacheKey`s manually.
-    pub(crate) fn file_query<'a>(&'a self, lsp_file: &'a Path, ext: &str) -> Option<super::query::FileQuery<'a>> {
+    pub fn file_query<'a>(&'a self, lsp_file: &'a Path, ext: &str) -> Option<super::query::FileQuery<'a>> {
         let client = self.client_for_ext(ext)?;
         Some(super::query::FileQuery::new(self, client, lsp_file))
     }

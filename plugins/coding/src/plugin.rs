@@ -5,7 +5,6 @@ use color_eyre::eyre::Result;
 use linkme::distributed_slice;
 use nyne::config::NyneConfig;
 use nyne::dispatch::activation::ActivationContext;
-use nyne::dispatch::script::ScriptEntry;
 use nyne::plugin::{PLUGINS, Plugin, PluginFactory};
 use nyne::provider::Provider;
 use nyne::types::PassthroughProcesses;
@@ -15,7 +14,6 @@ use crate::config::CodingConfig;
 use crate::lsp::LspRegistry;
 use crate::lsp::manager::LspManager;
 use crate::lsp::path::LspPathResolver;
-use crate::providers::claude;
 use crate::services::CodingServices;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::analysis::AnalysisEngine;
@@ -103,15 +101,6 @@ impl Plugin for CodingPlugin {
         Ok(())
     }
 
-    /// Returns Claude hook script entries that should be installed in `.claude/`.
-    ///
-    /// Which hooks are emitted depends on the per-hook toggles in
-    /// `[plugin.coding.claude.hooks]`. When the Claude master toggle is off,
-    /// this returns an empty list and no hooks are installed.
-    fn scripts(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<ScriptEntry>> {
-        Ok(claude::script_entries(&CodingServices::get(ctx).config))
-    }
-
     /// Returns the fully resolved coding plugin configuration as JSON.
     ///
     /// Re-derives [`CodingConfig`] from the raw config map so the output
@@ -126,21 +115,19 @@ impl Plugin for CodingPlugin {
 
     /// Instantiates all coding plugin providers from the activated context.
     ///
-    /// The core set is always present: syntax decomposition, Claude hooks,
+    /// The core set is always present: syntax decomposition,
     /// batch edit staging, and workspace symbol search.
     /// When the `git-symbols` feature is enabled **and** the git plugin
     /// has successfully opened a repository, a `GitSymbolsProvider` is
     /// appended for per-symbol blame and history.
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
         use crate::providers::batch::BatchEditProvider;
-        use crate::providers::claude::ClaudeProvider;
         use crate::providers::syntax::SyntaxProvider;
         use crate::providers::workspace_search::WorkspaceSearchProvider;
 
         #[cfg_attr(not(feature = "git-symbols"), allow(unused_mut))]
         let mut providers: Vec<Arc<dyn Provider>> = vec![
             Arc::new(SyntaxProvider::new(Arc::clone(ctx))),
-            Arc::new(ClaudeProvider::new(Arc::clone(ctx))),
             Arc::new(BatchEditProvider::new(Arc::clone(ctx))),
             Arc::new(WorkspaceSearchProvider::new(Arc::clone(ctx))),
         ];

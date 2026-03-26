@@ -86,6 +86,10 @@ pub use node::{CachePolicy, VirtualNode};
 pub use plugin::{PLUGINS, Plugin};
 pub use provider::{ConflictInfo, ConflictParty, ConflictResolution, Node, Nodes, Provider, ProviderId};
 pub use sandbox::{ClonerFactory, PROJECT_CLONERS, ProjectCloner};
+pub use types::path_conventions::{
+    COMPANION_SUFFIX, VFS_SEPARATOR, companion_name, is_vfs_path, source_file_of, split_companion_path,
+    strip_companion_suffix,
+};
 pub use types::{
     ExtensionCounts, FileKind, GitDirName, OsFs, PassthroughProcesses, ProcessVisibility, RealFs, TypeMap, VfsPath,
 };

@@ -45,11 +45,10 @@ fn edit_input(old_string: &str, new_string: &str) -> HookInput {
 
 /// Builds a `DecomposedSource` from raw Rust source for testing.
 fn make_decomposed(source: &str) -> DecomposedSource {
-    let registry = crate::syntax::SyntaxRegistry::global();
     DecomposedSource {
         source: source.to_owned(),
         decomposed: Default::default(),
-        decomposer: Arc::clone(registry.get("rs").unwrap()),
+        decomposer: Arc::clone(nyne_coding::syntax::SyntaxRegistry::global().get("rs").unwrap()),
         tree: None,
     }
 }

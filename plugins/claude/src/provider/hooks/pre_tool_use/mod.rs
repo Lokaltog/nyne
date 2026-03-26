@@ -13,17 +13,17 @@ use color_eyre::eyre::Result;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
 use nyne::types::VfsPath;
+use nyne_coding::providers::names;
+use nyne_coding::services::CodingServices;
+use nyne_coding::syntax::find_fragment_at_line;
+use nyne_coding::syntax::fragment::Fragment;
+use nyne_coding::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, fragment_list};
 
 use crate::config::PreToolHookConfig;
-use crate::providers::claude::hook_schema::{
+use crate::provider::hook_schema::{
     EditToolInput, GrepToolInput, HookInput, HookOutput, ReadToolInput, WriteToolInput,
 };
-use crate::providers::claude::settings::RAW_FILE_GRACE_SECS;
-use crate::providers::names;
-use crate::services::CodingServices;
-use crate::syntax::find_fragment_at_line;
-use crate::syntax::fragment::Fragment;
-use crate::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, fragment_list};
+use crate::provider::settings::RAW_FILE_GRACE_SECS;
 
 /// Master template key for pre-tool-use hook.
 const TMPL_PRE: &str = "claude/pre-tool-use";
@@ -41,7 +41,7 @@ const PARTIAL_GREP: &str = "hooks/pre-tool-use/grep";
 /// and either emits a hint (suggesting the `@/` namespace) or denies the
 /// raw access. For Grep, detects symbol-search patterns and suggests LSP
 /// alternatives like `CALLERS.md` or `REFERENCES.md`.
-pub(in crate::providers::claude) struct PreToolUse {
+pub(in crate::provider) struct PreToolUse {
     engine: Arc<TemplateEngine>,
     config: PreToolHookConfig,
 }
@@ -305,8 +305,7 @@ fn find_line_of_string(overlay_root: &Path, rel: &str, needle: &str) -> Option<u
 
 /// Resolve a 0-based line number to a VFS symbol `fs_name` path.
 fn resolve_symbol_at_line(fragments: &[Fragment], line: usize, source: &str) -> Option<String> {
-    let path = find_fragment_at_line(fragments, line, source)?;
-    Some(path.join(names::VFS_SEP))
+    Some(find_fragment_at_line(fragments, line, source)?.join(nyne::VFS_SEPARATOR))
 }
 #[cfg(test)]
 mod tests;

@@ -14,11 +14,11 @@ mod statusline;
 /// Stop hook -- SSOT/DRY review after turns with code changes.
 mod stop;
 
-pub(in crate::providers::claude) use post_tool_use::PostToolUse;
-pub(in crate::providers::claude) use pre_tool_use::PreToolUse;
-pub(in crate::providers::claude) use session_start::SessionStart;
-pub(in crate::providers::claude) use statusline::Statusline;
-pub(in crate::providers::claude) use stop::Stop;
+pub(in crate::provider) use post_tool_use::PostToolUse;
+pub(in crate::provider) use pre_tool_use::PreToolUse;
+pub(in crate::provider) use session_start::SessionStart;
+pub(in crate::provider) use statusline::Statusline;
+pub(in crate::provider) use stop::Stop;
 
 /// Shared partial template key for VFS hint macros.
 ///
@@ -32,4 +32,5 @@ const PARTIAL_VFS_HINTS: &str = "hooks/vfs-hints";
 /// navigation hints.
 const PARTIAL_VFS_HINTS_SRC: &str = include_str!("templates/vfs-hints.j2");
 
-pub(super) use crate::providers::names::{is_symbols_overview, is_vfs_path, source_file_of, symbol_from_vfs_path};
+pub(super) use nyne::{is_vfs_path, source_file_of};
+pub(super) use nyne_coding::providers::names::{is_symbols_overview, symbol_from_vfs_path};

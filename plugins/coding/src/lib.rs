@@ -8,13 +8,13 @@
 pub(crate) mod edit;
 
 /// LSP client lifecycle, transport, and query abstractions.
-pub(crate) mod lsp;
+pub mod lsp;
 
 /// FUSE providers that expose decomposed source code and LSP intelligence.
-pub(crate) mod providers;
+pub mod providers;
 
 /// Tree-sitter parsing, symbol decomposition, and source analysis.
-pub(crate) mod syntax;
+pub mod syntax;
 
 // Public re-exports for downstream plugin crates.
 pub use providers::names::SUBDIR_AT_LINE;
@@ -29,7 +29,7 @@ mod config;
 mod plugin;
 
 /// Consolidated plugin services bundle.
-pub(crate) mod services;
+pub mod services;
 
 /// Shared test utilities and stub contexts.
 #[cfg(test)]

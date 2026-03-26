@@ -15,7 +15,7 @@ use nyne::cli::{Cli, Command, attach, config, ctl, exec, list, mount};
 // entries are discovered at link time.
 use nyne_coding as _;
 use tracing_subscriber::EnvFilter;
-use {nyne_git as _, nyne_todo as _};
+use {nyne_claude as _, nyne_git as _, nyne_todo as _};
 
 /// Entry point for the nyne CLI.
 ///
