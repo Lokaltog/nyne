@@ -1,7 +1,15 @@
-//! Directory resolution pipeline with provider conflict negotiation.
+//! Directory resolution pipeline with provider capability merging.
 //!
-//! Handles multi-provider directory composition, name conflict detection,
-//! and provider negotiation via the conflict protocol.
+//! When multiple providers emit a node with the same name, the dispatch
+//! merges their capabilities via [`VirtualNode::merge_capabilities_from`].
+//! Non-contested capabilities (different slots) are combined into a single
+//! merged node. Contested capabilities (same slot from 2+ providers) use
+//! the [`on_conflict`](crate::provider::Provider::on_conflict) protocol
+//! (yield/force) to pick a winner.
+//!
+//! This enables plugin composition: e.g. `SyntaxProvider` emits `Foo@/`
+//! with `Unlinkable`, `LspProvider` emits `Foo@/` with `Renameable` →
+//! the merged node gets both capabilities.
 
 use std::any::Any;
 use std::collections::{BTreeSet, HashMap, HashSet};
