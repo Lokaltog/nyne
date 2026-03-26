@@ -146,20 +146,25 @@ fn strip_jsdoc(raw: &str) -> String {
         .strip_prefix("/**")
         .and_then(|s| s.strip_suffix("*/"))
         .unwrap_or(raw);
-    inner
-        .lines()
-        .map(|line| {
-            let trimmed = line.trim();
+    let mut out = String::with_capacity(inner.len());
+    for (i, line) in inner.lines().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let trimmed = line.trim();
+        out.push_str(
             trimmed
                 .strip_prefix("* ")
                 .or_else(|| trimmed.strip_prefix('*'))
-                .unwrap_or(trimmed)
-                .to_owned()
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_owned()
+                .unwrap_or(trimmed),
+        );
+    }
+    let trimmed = out.trim();
+    if trimmed.len() == out.len() {
+        out
+    } else {
+        trimmed.to_owned()
+    }
 }
 
 register_syntax!(TypeScriptLanguage);

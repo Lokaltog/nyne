@@ -220,18 +220,19 @@ pub fn extract_child_visibility(node: TsNode<'_>, kind: &str) -> Option<String> 
 /// Shared helper for languages using line-based doc comments (Rust `///`/`//!`,
 /// TypeScript `///`/`//`). Tries each prefix in order; first match wins.
 pub fn strip_line_comment_prefixes(raw: &str, prefixes: &[&str]) -> String {
-    raw.lines()
-        .map(|line| {
-            let trimmed = line.trim_start();
-            for prefix in prefixes {
-                if let Some(rest) = trimmed.strip_prefix(prefix) {
-                    return rest.strip_prefix(' ').unwrap_or(rest).to_owned();
-                }
-            }
-            line.to_owned()
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    let mut out = String::with_capacity(raw.len());
+    for (i, line) in raw.lines().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let trimmed = line.trim_start();
+        let stripped = prefixes
+            .iter()
+            .find_map(|p| trimmed.strip_prefix(p))
+            .map(|rest| rest.strip_prefix(' ').unwrap_or(rest));
+        out.push_str(stripped.unwrap_or(line));
+    }
+    out
 }
 
 /// Wrap plain text with line-comment doc markers.

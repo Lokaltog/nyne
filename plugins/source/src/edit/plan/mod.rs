@@ -1,5 +1,6 @@
 //! File edit operations and planning.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::ops::Range;
 
@@ -183,7 +184,7 @@ impl EditPlan {
                 }
                 EditOp::Delete { fragment_path } => {
                     let frag = require_fragment(fragments, fragment_path)?;
-                    let range = extend_delete_range(source, &frag.full_span());
+                    let range = extend_delete_range(source, frag.full_span());
                     ResolvedEdit {
                         staged_index: *index,
                         byte_range: range,
@@ -195,7 +196,7 @@ impl EditPlan {
                     let offset = line_start_of(source, frag.full_span().start);
                     // Ensure trailing newline so the inserted content doesn't
                     // join directly to the anchor symbol's first line.
-                    let replacement = ensure_trailing_newline(content);
+                    let replacement = ensure_trailing_newline(content).into_owned();
                     ResolvedEdit {
                         staged_index: *index,
                         byte_range: offset..offset,
@@ -207,7 +208,7 @@ impl EditPlan {
                     let offset = frag.full_span().end;
                     // Ensure leading newline so inserted content doesn't join
                     // directly to the anchor symbol's closing delimiter.
-                    let replacement = ensure_leading_newline(source, offset, content);
+                    let replacement = ensure_leading_newline(source, offset, content).into_owned();
                     ResolvedEdit {
                         staged_index: *index,
                         byte_range: offset..offset,
@@ -220,7 +221,7 @@ impl EditPlan {
                     // (just before the closing brace).
                     let offset = append_offset(source, frag);
                     // Ensure leading newline so appended content is separated.
-                    let replacement = ensure_leading_newline(source, offset, content);
+                    let replacement = ensure_leading_newline(source, offset, content).into_owned();
                     ResolvedEdit {
                         staged_index: *index,
                         byte_range: offset..offset,
@@ -369,23 +370,22 @@ fn append_offset(source: &str, frag: &Fragment) -> usize {
 /// Ensure content has a leading newline separator when the source at `offset`
 /// doesn't already end with one. Prevents inserted/appended content from joining
 /// directly to the previous symbol's closing delimiter.
-fn ensure_leading_newline(source: &str, offset: usize, content: &str) -> String {
+fn ensure_leading_newline<'a>(source: &str, offset: usize, content: &'a str) -> Cow<'a, str> {
     let prev_is_newline = offset > 0 && source.as_bytes().get(offset - 1) == Some(&b'\n');
-    let content_starts_newline = content.starts_with('\n');
-    if prev_is_newline || content_starts_newline {
-        content.to_owned()
+    if prev_is_newline || content.starts_with('\n') {
+        Cow::Borrowed(content)
     } else {
-        format!("\n{content}")
+        Cow::Owned(format!("\n{content}"))
     }
 }
 
 /// Ensure content has a trailing newline so it doesn't join directly to the
 /// following symbol's first line.
-fn ensure_trailing_newline(content: &str) -> String {
+fn ensure_trailing_newline(content: &str) -> Cow<'_, str> {
     if content.ends_with('\n') {
-        content.to_owned()
+        Cow::Borrowed(content)
     } else {
-        format!("{content}\n")
+        Cow::Owned(format!("{content}\n"))
     }
 }
 

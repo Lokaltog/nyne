@@ -90,7 +90,7 @@ impl SyntaxProvider {
         let Some(dctx) = self.decomposition_context(source_file)? else {
             return Ok(None);
         };
-        let mut kinds: Vec<String> = dctx
+        let mut kinds: Vec<&str> = dctx
             .shared
             .decomposed
             .iter()
@@ -99,7 +99,7 @@ impl SyntaxProvider {
                 _ => None,
             })
             .collect();
-        kinds.sort();
+        kinds.sort_unstable();
         kinds.dedup();
         let nodes = kinds.into_iter().map(VirtualNode::directory).collect();
         Ok(Some(nodes))

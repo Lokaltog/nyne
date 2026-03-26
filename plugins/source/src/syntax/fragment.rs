@@ -35,7 +35,25 @@ pub enum SymbolKind {
 /// Display and classification methods for `SymbolKind`.
 impl SymbolKind {
     /// Filesystem directory name for this symbol kind (lowercased display form).
-    pub fn directory_name(self) -> String { self.to_string().to_lowercase() }
+    #[must_use]
+    pub const fn directory_name(self) -> &'static str {
+        match self {
+            Self::Function => "function",
+            Self::Struct => "struct",
+            Self::Enum => "enum",
+            Self::Trait => "trait",
+            Self::Const => "const",
+            Self::Static => "static",
+            Self::TypeAlias => "typealias",
+            Self::Impl => "impl",
+            Self::Macro => "macro",
+            Self::Class => "class",
+            Self::Interface => "interface",
+            Self::Module => "module",
+            Self::Variable => "variable",
+            Self::Decorator => "decorator",
+        }
+    }
 
     /// Whether this symbol kind is a scope that can contain child items.
     ///

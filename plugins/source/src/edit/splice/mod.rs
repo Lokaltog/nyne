@@ -75,17 +75,19 @@ pub fn splice_rope_validate_write(
         )
         .into());
     }
-    // Check whether the source already has errors before splicing.
-    // If it does, skip post-splice validation — we can't make it worse.
-    let pre_splice = rope.to_string();
-    let already_invalid = validate(&pre_splice).is_err();
-
     rope.replace(byte_range.clone(), new_content);
     let spliced = rope.to_string();
-    if !already_invalid {
-        validate(&spliced).map_err(|e| {
-            // io::Error for FUSE errno extraction — see comment above.
-            Error::new(
+
+    // Validate the result. On failure, check whether the source was already
+    // invalid before the splice — if so, allow the edit through (we can't
+    // make it worse). This keeps the pre-splice `to_string()` off the
+    // common (success) path.
+    if let Err(e) = validate(&spliced) {
+        // Re-read the original file (not yet overwritten) to check whether
+        // it was already invalid before the splice. Only pay this cost on
+        // the error path — the common (success) path does zero extra work.
+        if validate(from_utf8(&real_fs.read(source_file)?).unwrap_or("")).is_ok() {
+            return Err(Error::new(
                 ErrorKind::InvalidInput,
                 format!(
                     "{e} (source={source_file}, splice_range={}..{}, new_content_len={}, \
@@ -96,7 +98,8 @@ pub fn splice_rope_validate_write(
                     spliced.len(),
                 ),
             )
-        })?;
+            .into());
+        }
     }
     real_fs.write(source_file, spliced.as_bytes())?;
     Ok(new_content.len())
@@ -141,7 +144,7 @@ pub fn indent_at(source: &str, offset: usize) -> &str {
 /// preceding and following code. This scans forward from `span.end` and
 /// absorbs any lines that consist entirely of whitespace.
 #[must_use]
-pub fn extend_delete_range(source: &str, span: &Range<usize>) -> Range<usize> {
+pub fn extend_delete_range(source: &str, span: Range<usize>) -> Range<usize> {
     let after = &source[span.end..];
     let mut extra = 0;
     for line in after.split_inclusive('\n') {
