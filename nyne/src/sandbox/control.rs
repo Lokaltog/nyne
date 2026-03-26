@@ -9,6 +9,7 @@
 
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::Shutdown;
+use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,6 +19,8 @@ use std::{fs, thread};
 use base64::prelude::{BASE64_STANDARD as BASE64, Engine};
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use parking_lot::Mutex;
+use rustix::event::{PollFd, PollFlags, poll};
+use rustix::pipe::{PipeFlags, pipe_with};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, trace, warn};
 
@@ -115,24 +118,35 @@ pub struct NameVisibility {
 }
 
 /// Handle to a running control server. Joins the IPC thread and removes the socket on drop.
+///
+/// Shutdown uses a pipe: dropping the write end causes `POLLHUP` on the read
+/// end inside the server loop's `poll()`, breaking the accept loop so the
+/// thread exits and `join()` completes.
 pub struct Server {
     socket_path: PathBuf,
+    /// Write end of the shutdown pipe. Dropped to signal the server loop.
+    shutdown_wr: Option<OwnedFd>,
     handle: Option<thread::JoinHandle<()>>,
 }
 
 /// Removes the Unix domain socket file on drop.
 impl Drop for Server {
-    /// Removes the socket file and joins the IPC thread for graceful shutdown.
+    /// Signals the server loop to exit, joins the IPC thread, and removes the socket file.
     fn drop(&mut self) {
-        if let Err(e) = fs::remove_file(&self.socket_path)
-            && e.kind() != io::ErrorKind::NotFound
-        {
-            warn!(path = %self.socket_path.display(), error = %e, "failed to remove control socket");
-        }
+        // Close the write end of the shutdown pipe → POLLHUP on the read end
+        // inside the server loop's poll(), breaking the accept loop.
+        self.shutdown_wr.take();
+
         if let Some(handle) = self.handle.take()
             && let Err(e) = handle.join()
         {
             warn!("control IPC thread panicked: {e:?}");
+        }
+
+        if let Err(e) = fs::remove_file(&self.socket_path)
+            && e.kind() != io::ErrorKind::NotFound
+        {
+            warn!(path = %self.socket_path.display(), error = %e, "failed to remove control socket");
         }
     }
 }
@@ -157,32 +171,74 @@ pub fn start_server(
 
     info!(path = %socket_path.display(), "control server listening");
 
+    let (shutdown_rd, shutdown_wr) = pipe_with(PipeFlags::CLOEXEC).wrap_err("creating control server shutdown pipe")?;
+
     let processes: ProcessTable = Arc::new(Mutex::new(Vec::new()));
     let path_for_thread = socket_path.to_path_buf();
 
     let handle = thread::Builder::new()
         .name("control-ipc".into())
-        .spawn(move || server_loop(&path_for_thread, &listener, &registry, &ctx, &processes, &visibility))
+        .spawn(move || {
+            server_loop(
+                &path_for_thread,
+                &listener,
+                &shutdown_rd,
+                &registry,
+                &ctx,
+                &processes,
+                &visibility,
+            );
+        })
         .wrap_err("spawning control IPC thread")?;
 
     Ok(Server {
         socket_path: socket_path.to_path_buf(),
+        shutdown_wr: Some(shutdown_wr),
         handle: Some(handle),
     })
 }
 
 /// Accept connections on the Unix listener and dispatch each request.
+///
+/// Blocks in `poll()` on both the listener and a shutdown pipe. When the
+/// write end of the pipe is dropped (by [`Server::drop`]), `POLLHUP` wakes
+/// the poll and the loop exits cleanly.
+#[allow(clippy::too_many_arguments)]
 fn server_loop(
     path: &Path,
     listener: &UnixListener,
+    shutdown: &OwnedFd,
     registry: &ScriptRegistry,
     activation: &ActivationContext,
     processes: &ProcessTable,
     visibility: &VisibilityMap,
 ) {
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) =>
+    let listener_fd = listener.as_fd();
+    loop {
+        let mut fds = [
+            PollFd::new(&listener_fd, PollFlags::IN),
+            PollFd::new(&shutdown, PollFlags::IN),
+        ];
+
+        if poll(&mut fds, None).is_err() {
+            break;
+        }
+
+        // Shutdown pipe closed → exit.
+        if fds[1]
+            .revents()
+            .intersects(PollFlags::HUP | PollFlags::IN | PollFlags::ERR)
+        {
+            debug!(path = %path.display(), "control server shutting down");
+            break;
+        }
+
+        // New connection ready.
+        if !fds[0].revents().contains(PollFlags::IN) {
+            continue;
+        }
+        match listener.accept() {
+            Ok((stream, _addr)) =>
                 if let Err(e) = handle_connection(stream, registry, activation, processes, visibility) {
                     warn!(error = format!("{e:#}"), "control request failed");
                 },
