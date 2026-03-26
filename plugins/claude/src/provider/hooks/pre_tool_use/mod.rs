@@ -115,10 +115,10 @@ impl PreToolUse {
     /// File access interception — computes decomposition context, picks hint vs deny.
     fn handle_file_access(&self, ctx: &ScriptContext<'_>, input: &HookInput, tool_name: &str) -> Vec<u8> {
         // Deserialize typed inputs once for reuse across sections.
-        let read_input = (tool_name == "Read")
+        let mut read_input = (tool_name == "Read")
             .then(|| input.tool_input_as::<ReadToolInput>())
             .flatten();
-        let edit_input = (tool_name == "Edit")
+        let mut edit_input = (tool_name == "Edit")
             .then(|| input.tool_input_as::<EditToolInput>())
             .flatten();
         let write_input = (tool_name == "Write")
@@ -126,8 +126,8 @@ impl PreToolUse {
             .flatten();
 
         let file_path = match tool_name {
-            "Read" => read_input.as_ref().and_then(|r| r.file_path.clone()),
-            "Edit" => edit_input.as_ref().and_then(|e| e.file_path.clone()),
+            "Read" => read_input.as_mut().and_then(|r| r.file_path.take()),
+            "Edit" => edit_input.as_mut().and_then(|e| e.file_path.take()),
             "Write" => write_input.and_then(|w| w.file_path),
             _ => return HookOutput::empty(),
         };
@@ -313,7 +313,7 @@ fn find_line_of_string(overlay_root: &Path, rel: &str, needle: &str) -> Option<u
     content
         .lines()
         .position(|line| line.contains(first_line))
-        .map(|i| (i + 1) as u64)
+        .and_then(|i| u64::try_from(i + 1).ok())
 }
 
 /// Resolve a 0-based line number to a VFS symbol `fs_name` path.

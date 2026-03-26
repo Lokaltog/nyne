@@ -206,7 +206,6 @@ impl LspQueryResult {
     ///
     /// Paths from LSP responses (overlay-rooted) are rewritten to FUSE paths
     /// for user-facing display.
-    /// Render this result into template bytes via the appropriate view struct.
     pub(super) fn render_view(self, engine: &TemplateEngine, template: &str, resolver: &LspPathResolver) -> Vec<u8> {
         match self {
             Self::Locations(locs) => engine.render_bytes(template, &LocationsView::from_locations(&locs, resolver)),
@@ -229,7 +228,6 @@ impl LspQueryResult {
     ///
     /// Paths from LSP responses (overlay-rooted) are rewritten to FUSE paths
     /// so that symlink resolution can match against `fuse_root`.
-    /// Extract raw targets for symlink directory population.
     pub(super) fn into_targets(self, resolver: &LspPathResolver) -> Vec<LspTarget> {
         match self {
             Self::Locations(locs) => locs

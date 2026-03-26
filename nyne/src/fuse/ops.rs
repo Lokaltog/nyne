@@ -207,7 +207,7 @@ impl Filesystem for NyneFs {
 
         // Try FUSE kernel passthrough for real files.
         if self.passthrough_enabled.load(Ordering::Relaxed)
-            && let Some(ResolvedInode::Real { ref path, .. }) = resolved
+            && let Some(ResolvedInode::Real { path, .. }) = resolved.as_ref()
             && let Some(file) = self.router.real_fs().open_raw(path)
         {
             match reply.open_backing(&file) {
@@ -231,7 +231,7 @@ impl Filesystem for NyneFs {
         // into memory (critical for large files like git pack files).
         let open_flags = flags.0;
         let mode = super::handles::OpenMode::parse(open_flags);
-        if let Some(ResolvedInode::Real { ref path, .. }) = resolved
+        if let Some(ResolvedInode::Real { path, .. }) = resolved.as_ref()
             && !mode.truncate
             && let Some(file) = self.router.real_fs().open_raw(path)
         {
@@ -245,7 +245,7 @@ impl Filesystem for NyneFs {
         // flush time) ensures the shell redirect `> file` returns EACCES
         // before the command runs — shells don't propagate close() errors.
         if mode.write_intent
-            && let Some(ResolvedInode::Virtual { ref node, .. }) = resolved
+            && let Some(ResolvedInode::Virtual { node, .. }) = resolved.as_ref()
             && node.writable().is_none()
         {
             debug!(target: "nyne::fuse", ino, name = node.name(), "open: write rejected (not writable)");
@@ -254,9 +254,7 @@ impl Filesystem for NyneFs {
         }
 
         // Call lifecycle open hook for virtual nodes.
-        if let Some(ResolvedInode::Virtual {
-            ref node, ref dir_path, ..
-        }) = resolved
+        if let Some(ResolvedInode::Virtual { node, dir_path, .. }) = resolved.as_ref()
             && let Some(lc) = node.lifecycle()
         {
             let ctx = self.router.make_request_context(dir_path);
@@ -466,7 +464,7 @@ impl Filesystem for NyneFs {
             // Deny W_OK on virtual nodes without the Writable capability.
             // Consistent with the open() rejection — tools that probe
             // access before opening get a correct answer.
-            if let Some(ResolvedInode::Virtual { ref node, .. }) = resolved
+            if let Some(ResolvedInode::Virtual { node, .. }) = resolved.as_ref()
                 && node.writable().is_none()
             {
                 reply.error(Errno::EACCES);

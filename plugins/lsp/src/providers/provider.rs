@@ -197,27 +197,27 @@ impl LspProvider {
     fn lookup_fragment_lsp(&self, ctx: &RouteCtx<'_>, name: &str) -> Node {
         let sf = source_file(ctx)?;
 
-        // rename/ is lookup-only (not in readdir) — emit bare directory
-        // when LSP is available.
-        if name == "rename" {
-            return Ok(LspHandle::for_file(&self.ctx, &sf)
+        match name {
+            // rename/ is lookup-only (not in readdir) — emit bare directory
+            // when LSP is available.
+            "rename" => Ok(LspHandle::for_file(&self.ctx, &sf)
                 .is_some()
-                .then(|| VirtualNode::directory(name)));
-        }
+                .then(|| VirtualNode::directory(name))),
 
-        // actions/ — also lookup-only as an alternative entry point.
-        if name == SUBDIR_ACTIONS {
-            let Some(lsp_handle) = LspHandle::for_file(&self.ctx, &sf) else {
-                return Ok(None);
-            };
-            return Ok(lsp_handle
-                .capabilities()
-                .code_action_provider
-                .is_some()
-                .then(|| VirtualNode::directory(name)));
-        }
+            // actions/ — also lookup-only as an alternative entry point.
+            n if n == SUBDIR_ACTIONS => {
+                let Some(lsp_handle) = LspHandle::for_file(&self.ctx, &sf) else {
+                    return Ok(None);
+                };
+                Ok(lsp_handle
+                    .capabilities()
+                    .code_action_provider
+                    .is_some()
+                    .then(|| VirtualNode::directory(name)))
+            }
 
-        Ok(None)
+            _ => Ok(None),
+        }
     }
 
     /// Lookup a symbol rename preview diff.
