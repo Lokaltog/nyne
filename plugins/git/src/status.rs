@@ -43,10 +43,10 @@ impl GitRepo {
     /// Snapshot the full repository status.
     pub(crate) fn status(&self) -> Result<RepoStatus> {
         let branch = self.head_branch();
-        let repo = self.lock();
+        let mut repo = self.lock();
 
+        let stash_count = stash_count(&mut repo);
         let tracking = tracking_info(&repo);
-        let stash_count = stash_count(&repo);
         let recent_commits = recent_commits(&repo, RECENT_COMMITS_LIMIT).unwrap_or_else(|e| {
             warn!(error = %e, "failed to collect recent commits");
             Vec::new()
@@ -156,7 +156,14 @@ fn tracking_info(repo: &git2::Repository) -> Option<TrackingInfo> {
 }
 
 /// Count stash entries. Best-effort — returns 0 on any error.
-fn stash_count(repo: &git2::Repository) -> usize { repo.reflog("refs/stash").map(|log| log.len()).unwrap_or(0) }
+fn stash_count(repo: &mut git2::Repository) -> usize {
+    let mut count = 0;
+    let _ = repo.stash_foreach(|_, _, _| {
+        count += 1;
+        true
+    });
+    count
+}
 
 /// Collect the N most recent commits on HEAD.
 fn recent_commits(repo: &git2::Repository, limit: usize) -> Result<Vec<CommitInfo>> {
@@ -167,7 +174,7 @@ fn recent_commits(repo: &git2::Repository, limit: usize) -> Result<Vec<CommitInf
     for oid_result in revwalk.take(limit) {
         let oid = oid_result?;
         let commit = repo.find_commit(oid)?;
-        commits.push(commit_info(&commit, oid));
+        commits.push(commit_info(&commit));
     }
     Ok(commits)
 }

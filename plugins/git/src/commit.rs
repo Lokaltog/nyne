@@ -1,6 +1,5 @@
 //! Commit information and diff options helpers.
 
-use git2::Oid;
 use nyne::text;
 use serde::Serialize;
 
@@ -29,7 +28,8 @@ impl CommitInfo {
 }
 
 /// Extract [`CommitInfo`] from a `git2::Commit` for template rendering.
-pub fn commit_info(commit: &git2::Commit<'_>, oid: Oid) -> CommitInfo {
+pub fn commit_info(commit: &git2::Commit<'_>) -> CommitInfo {
+    let oid = commit.id();
     let epoch_secs = commit.time().seconds();
     CommitInfo {
         hash: format!("{oid:.7}"),

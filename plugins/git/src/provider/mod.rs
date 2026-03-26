@@ -15,10 +15,9 @@ use nyne::dispatch::invalidation::InvalidationEvent;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::node::{CachePolicy, Lifecycle, NodeAttr, VirtualNode};
-use nyne::provider::{MutationOp, MutationOutcome, Node, Nodes, Provider, ProviderId};
+use nyne::provider::{Node, Nodes, Provider, ProviderId};
 use nyne::templates::{TemplateHandle, TemplateView};
 use nyne::types::GitDirName;
-use nyne::types::real_fs::RealFs;
 use nyne::types::slice::SliceSpec;
 use nyne::types::vfs_path::VfsPath;
 use nyne::{dispatch_children, dispatch_lookup, source_file};
@@ -360,11 +359,6 @@ impl GitProvider {
 impl Provider for GitProvider {
     /// Returns the provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
-
-    /// Handles mutation operations (currently a no-op).
-    fn handle_mutation(&self, _op: &MutationOp<'_>, _real_fs: &dyn RealFs) -> Result<MutationOutcome> {
-        Ok(MutationOutcome::NotHandled)
-    }
 
     /// Dispatches child listing to at-root or companion routes.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes {

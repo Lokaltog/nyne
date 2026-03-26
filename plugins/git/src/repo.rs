@@ -266,10 +266,9 @@ impl GitRepo {
     /// HEAD commit timestamp as seconds since epoch, or 0 for unborn branches.
     pub(crate) fn head_epoch_secs(&self) -> i64 {
         let repo = self.lock();
-        let head = match repo.head() {
-            Ok(h) => h,
-            // UnbornBranch = fresh repo with no commits yet — 0 is correct.
-            Err(e) if e.code() == git2::ErrorCode::UnbornBranch => return 0,
+        let head = match resolve_head(&repo) {
+            Ok(Some(h)) => h,
+            Ok(None) => return 0,
             Err(e) => {
                 warn!(error = %e, "failed to read HEAD");
                 return 0;
@@ -303,10 +302,12 @@ impl GitRepo {
     /// Counts ALL extensions — not filtered by any registry. Consumers who
     /// want a subset can filter the result themselves.
     pub fn extension_counts(&self) -> Result<Vec<(String, usize)>> {
-        let paths = self.index_paths()?;
+        let repo = self.lock();
+        let index = repo.index().wrap_err("failed to read git index")?;
         let mut counts: HashMap<String, usize> = HashMap::new();
-        for path in &paths {
-            if let Some(ext) = Path::new(path.as_str()).extension().and_then(|e| e.to_str()) {
+        for entry in index.iter() {
+            let Ok(path) = from_utf8(&entry.path) else { continue };
+            if let Some(ext) = Path::new(path).extension().and_then(|e| e.to_str()) {
                 *counts.entry(ext.to_owned()).or_default() += 1;
             }
         }
@@ -316,19 +317,25 @@ impl GitRepo {
     }
 }
 
-/// Resolve HEAD to a tree, returning `None` for unborn branches.
-fn head_tree(repo: &git2::Repository) -> Result<Option<git2::Tree<'_>>> {
+/// Resolve HEAD to a reference, returning `None` for unborn branches.
+fn resolve_head(repo: &git2::Repository) -> Result<Option<git2::Reference<'_>>> {
     match repo.head() {
-        Ok(head) => {
-            let tree = head
-                .peel(git2::ObjectType::Tree)?
-                .into_tree()
-                .map_err(|_| color_eyre::eyre::eyre!("HEAD does not resolve to a tree"))?;
-            Ok(Some(tree))
-        }
+        Ok(head) => Ok(Some(head)),
         Err(e) if e.code() == git2::ErrorCode::UnbornBranch => Ok(None),
         Err(e) => Err(e.into()),
     }
+}
+
+/// Resolve HEAD to a tree, returning `None` for unborn branches.
+fn head_tree(repo: &git2::Repository) -> Result<Option<git2::Tree<'_>>> {
+    let Some(head) = resolve_head(repo)? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        head.peel(git2::ObjectType::Tree)?
+            .into_tree()
+            .map_err(|_| eyre!("HEAD does not resolve to a tree"))?,
+    ))
 }
 
 /// Format a `git2::Diff` as a unified diff string.
@@ -345,9 +352,7 @@ fn format_diff(diff: &git2::Diff<'_>) -> Result<String> {
             output.push(origin);
         }
         // File/hunk headers are printed as-is from content
-        if let Ok(content) = from_utf8(line.content()) {
-            output.push_str(content);
-        }
+        output.push_str(&String::from_utf8_lossy(line.content()));
         true
     })?;
     Ok(output)

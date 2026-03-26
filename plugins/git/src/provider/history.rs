@@ -90,7 +90,7 @@ impl GitRepo {
     /// Commits that touched `rel_path`, newest first, capped at `limit`.
     pub(super) fn file_history(&self, rel_path: &str, limit: usize) -> Result<Vec<HistoryEntry>> {
         let repo = self.lock();
-        walk_file_commits(&repo, rel_path, limit, commit_entry)
+        walk_file_commits(&repo, rel_path, limit, |commit, _oid| commit_entry(commit))
     }
 
     /// Commits that touched `rel_path` within the given line range, newest first.
@@ -104,7 +104,9 @@ impl GitRepo {
         // threads can access the repo between the walk and filter steps.
         let all = {
             let repo = self.lock();
-            walk_file_commits(&repo, rel_path, super::log::LOG_LIMIT, commit_entry)?
+            walk_file_commits(&repo, rel_path, super::log::LOG_LIMIT, |commit, _oid| {
+                commit_entry(commit)
+            })?
         };
 
         // Filter by line range (re-acquires lock for diff checks).
@@ -180,7 +182,7 @@ impl GitRepo {
         // Walk commits under lock, then release before note lookup.
         let commits = {
             let repo = self.lock();
-            walk_file_commits(&repo, rel_path, limit, |commit, oid| (oid, commit_info(commit, oid)))?
+            walk_file_commits(&repo, rel_path, limit, |commit, oid| (oid, commit_info(commit)))?
         };
 
         let repo = self.lock();
@@ -235,16 +237,16 @@ fn blame_hunk(repo: &git2::Repository, hunk: &git2::BlameHunk<'_>) -> Result<Bla
         commit: if oid.is_zero() {
             CommitInfo::uncommitted(oid)
         } else {
-            commit_info(&repo.find_commit(oid).wrap_err("blame commit lookup failed")?, oid)
+            commit_info(&repo.find_commit(oid).wrap_err("blame commit lookup failed")?)
         },
     })
 }
 
 /// Convert a `git2::Commit` into a [`HistoryEntry`].
-fn commit_entry(commit: &git2::Commit<'_>, oid: Oid) -> HistoryEntry {
+fn commit_entry(commit: &git2::Commit<'_>) -> HistoryEntry {
     HistoryEntry {
-        oid,
-        commit: commit_info(commit, oid),
+        oid: commit.id(),
+        commit: commit_info(commit),
     }
 }
 
