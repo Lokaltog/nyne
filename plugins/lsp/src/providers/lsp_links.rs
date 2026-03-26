@@ -1,12 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::node::VirtualNode;
-use nyne::provider::Nodes;
-use nyne::types::vfs_path::VfsPath;
+use nyne::prelude::*;
 use nyne::{COMPANION_SUFFIX, SUBDIR_SYMBOLS, companion_name};
 use nyne_source::services::SourceServices;
 use nyne_source::syntax::{find_fragment, find_fragment_at_line};

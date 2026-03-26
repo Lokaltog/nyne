@@ -14,14 +14,13 @@
 //! providers reuse (e.g., [`companion_children`], [`companion_lookup`],
 //! [`dispatch_children`], [`dispatch_lookup`]).
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::eyre;
 
 use crate::dispatch::routing::ctx::RouteCtx;
-use crate::node::VirtualNode;
+use crate::prelude::*;
 use crate::types::path_conventions::{CompanionSplit, split_companion_path};
 pub use crate::types::path_conventions::{companion_name, strip_companion_suffix};
 use crate::types::real_fs::RealFs;
-use crate::types::vfs_path::VfsPath;
 /// Well-known VFS node names used across providers.
 pub mod names;
 use names::SUBDIR_SYMBOLS;
@@ -72,12 +71,8 @@ fn resolve_companion<'a>(ctx: &'a RequestContext<'_>, file_only: bool) -> Option
     Some(split)
 }
 
-use std::sync::Arc;
-
-use crate::dispatch::context::RequestContext;
 use crate::dispatch::routing::params::RouteParams;
 use crate::dispatch::routing::tree::RouteTree;
-use crate::provider::{Node, Nodes, Provider};
 
 /// Build route params from a companion split (SSOT for source param injection).
 fn companion_params(split: &CompanionSplit) -> RouteParams {

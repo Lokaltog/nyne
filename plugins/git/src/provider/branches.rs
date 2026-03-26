@@ -5,12 +5,10 @@
 //! is a valid FUSE directory entry (no `/` in names).
 
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
-use nyne::dispatch::context::{RenameContext, RequestContext};
-use nyne::node::{Readable, Renameable, Unlinkable, VirtualNode};
-use nyne::provider::Nodes;
+use nyne::dispatch::context::RenameContext;
+use nyne::node::{Readable, Renameable, Unlinkable};
+use nyne::prelude::*;
 
 use super::CommitMtime;
 use crate::repo::GitRepo;

@@ -17,12 +17,8 @@
 //! let log = TemplateHandle::new(&engine, log_key);
 //! ```
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
-
-use super::{TemplateContent, TemplateEngine, TemplateView};
-use crate::node::VirtualNode;
+use super::TemplateEngine;
+use crate::prelude::*;
 
 /// A pre-bound template: engine reference + template key.
 ///

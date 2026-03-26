@@ -18,22 +18,19 @@ mod lookup;
 /// Directory listing and parent inode navigation.
 mod readdir;
 
+use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, OnceLock};
 
 use super::cache::{CachedNode, DirState, L1Cache, NodeEntry};
 use super::content_cache::{ContentCache, FileGenerations};
 use super::inode::{InodeEntry, InodeMap};
-use super::invalidation::{EventSink, KernelNotifier};
+use super::invalidation::KernelNotifier;
 use super::path_filter::PathFilter;
 use super::pipeline::Pipeline;
 use super::registry::ProviderRegistry;
-use crate::dispatch::context::RequestContext;
-use crate::node::VirtualNode;
-use crate::provider::{Provider, ProviderId};
+use crate::prelude::*;
 use crate::types::file_kind::FileKind;
 use crate::types::real_fs::RealFs;
-use crate::types::vfs_path::VfsPath;
 
 /// Central dispatch layer that routes FUSE operations to providers.
 ///

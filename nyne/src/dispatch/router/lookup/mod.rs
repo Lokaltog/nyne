@@ -1,15 +1,11 @@
 //! Resolution and name lookup operations.
 
 use std::collections::HashSet;
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
 
 use super::{ResolvedInode, Router};
 use crate::dispatch::cache::{CachedNodeKind, DirHandle, DirState, NodeEntry, NodeSource};
-use crate::dispatch::context::RequestContext;
 use crate::dispatch::resolve;
-use crate::node::CachePolicy;
+use crate::prelude::*;
 use crate::types::file_kind::FileKind;
 
 /// Resolution and name lookup operations for the router.

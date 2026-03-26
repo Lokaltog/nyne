@@ -1,15 +1,12 @@
 //! Registry of activated providers and scripts.
 
 use std::path::Path;
-use std::sync::Arc;
 
 use tracing::warn;
 
 use crate::config::NyneConfig;
-use crate::dispatch::activation::ActivationContext;
-use crate::plugin::PLUGINS;
+use crate::prelude::*;
 use crate::process::Spawner;
-use crate::provider::{Provider, ProviderId};
 use crate::types::real_fs::RealFs;
 
 /// Registry of activated providers, built once per mount session.

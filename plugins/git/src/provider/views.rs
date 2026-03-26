@@ -3,11 +3,8 @@
 //! These handle sliced blame/log and per-file companion directory children.
 //! Symbol-scoped views (`SymbolBlameView`, `SymbolLogView`) live in nyne-coding.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
-use nyne::node::VirtualNode;
-use nyne::templates::{TemplateEngine, TemplateView};
+use nyne::prelude::*;
+use nyne::templates::TemplateEngine;
 use nyne::text;
 use nyne::types::SymbolLineRange;
 use nyne::types::slice::SliceSpec;

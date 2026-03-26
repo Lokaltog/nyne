@@ -9,13 +9,11 @@
 //! post-write hooks run non-fatally -- the write is already committed, so hook
 //! failures are logged but do not roll back the operation.
 
-use color_eyre::eyre::Result;
-
 use crate::dispatch::WriteMode;
-use crate::dispatch::context::{PipelineContext, RequestContext};
+use crate::dispatch::context::PipelineContext;
+use crate::node::WriteOutcome;
 use crate::node::middleware::{PostWriteHook, ReadMiddleware, WriteMiddleware};
-use crate::node::{VirtualNode, WriteOutcome};
-use crate::provider::Provider;
+use crate::prelude::*;
 
 /// Middleware pipeline that executes read/write chains.
 ///

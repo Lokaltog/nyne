@@ -33,15 +33,11 @@
 //! }
 //! ```
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
 use linkme::distributed_slice;
 
 use crate::config::NyneConfig;
-use crate::dispatch::activation::ActivationContext;
 use crate::dispatch::script::ScriptEntry;
-use crate::provider::Provider;
+use crate::prelude::*;
 
 /// A plugin bundles related VFS providers and their supporting services.
 ///

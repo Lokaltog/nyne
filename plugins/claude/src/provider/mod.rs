@@ -11,16 +11,15 @@
 
 use std::path::PathBuf;
 
-use color_eyre::eyre::Result;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::dispatch::script::{ScriptEntry, provider_script_address};
 use nyne::node::Readable;
+use nyne::prelude::*;
 use nyne::provider::{ConflictInfo, ConflictParty, ConflictResolution};
-use nyne::templates::{TemplateContent, TemplateEngine, TemplateView, serialize_view};
+use nyne::templates::{TemplateEngine, serialize_view};
 use nyne_macros::routes;
 use nyne_source::providers::names;
-use nyne_source::providers::prelude::*;
 use nyne_source::providers::util::dominant_ext;
 use serde::Serialize;
 

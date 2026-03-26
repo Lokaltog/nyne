@@ -14,14 +14,10 @@
 use std::iter;
 use std::ops::ControlFlow;
 
-use color_eyre::eyre::Result;
-
 use super::ctx::RouteCtx;
 use super::params::RouteParams;
 use super::segment::{CaptureResult, SegmentMatcher};
-use crate::dispatch::context::RequestContext;
-use crate::node::VirtualNode;
-use crate::provider::{Node, Nodes};
+use crate::prelude::*;
 
 /// A hierarchical route tree for a single provider.
 ///

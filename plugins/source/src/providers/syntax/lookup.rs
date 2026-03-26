@@ -3,13 +3,8 @@
 //! Handles lookup-only paths that are not listed in readdir — shorthand
 //! file symlinks (`Foo.rs`), at-line resolution, and diff preview nodes.
 
-use std::sync::Arc;
-
 use color_eyre::eyre::eyre;
-use nyne::dispatch::context::RequestContext;
-use nyne::node::VirtualNode;
-use nyne::provider::Node;
-use nyne::types::vfs_path::VfsPath;
+use nyne::prelude::*;
 
 use super::SyntaxProvider;
 use super::content::delete;

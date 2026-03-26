@@ -28,12 +28,12 @@
 
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use color_eyre::eyre::{Result, WrapErr};
+use color_eyre::eyre::WrapErr;
 use notify::event::{CreateKind, ModifyKind};
 use notify::{EventKind, RecursiveMode, Watcher};
 use parking_lot::Mutex;
@@ -41,7 +41,7 @@ use tracing::{debug, trace, warn};
 
 use crate::dispatch::Router;
 use crate::dispatch::path_filter::ignore_walk_builder;
-use crate::types::vfs_path::VfsPath;
+use crate::prelude::*;
 
 /// Debounce window: events are coalesced for this duration after the
 /// last event arrives before being flushed to the router.

@@ -25,18 +25,16 @@ pub mod rename;
 mod views;
 
 use std::ops::Range as StdRange;
-use std::sync::Arc;
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::eyre;
 pub(crate) use feature::{LspFeature, LspHandles, LspTarget};
+use nyne::prelude::*;
+use nyne_source::providers::fragment_resolver::FragmentResolver;
 use strum::{EnumCount, IntoEnumIterator};
 use views::{DiagnosticsLspView, SymbolLspView};
 
 /// Error message when the LSP client has become unavailable since resolve time.
 pub const LSP_UNAVAILABLE: &str = "LSP server no longer available";
-
-use nyne::node::VirtualNode;
-use nyne_source::providers::fragment_resolver::FragmentResolver;
 
 use crate::lsp::handle::LspHandle;
 

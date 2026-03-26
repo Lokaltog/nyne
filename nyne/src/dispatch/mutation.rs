@@ -14,18 +14,16 @@
 //! Events are drained and processed before returning.
 
 use std::io::ErrorKind;
-use std::sync::Arc;
 
-use color_eyre::eyre::{Report, Result, bail};
+use color_eyre::eyre::{Report, bail};
 
 use super::cache::{CachedNodeKind, NodeEntry, NodeSource};
 use super::resolve::{self, OwnedNode};
 use super::router::{ResolvedInode, Router};
-use crate::dispatch::context::{RenameContext, RequestContext};
-use crate::err::io_err;
-use crate::provider::{MutationOp, MutationOutcome, Provider, ProviderId};
+use crate::dispatch::context::RenameContext;
+use crate::prelude::*;
+use crate::provider::{MutationOp, MutationOutcome};
 use crate::types::file_kind::FileKind;
-use crate::types::vfs_path::VfsPath;
 
 /// `AlreadyExists` — entry with `name` already present at `path`.
 fn entry_exists(name: &str, path: &VfsPath) -> Report {

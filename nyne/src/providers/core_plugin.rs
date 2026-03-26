@@ -5,14 +5,10 @@
 //! plugin crates. This keeps the plugin discovery mechanism uniform -- core
 //! providers go through the same activation path as plugin providers.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
 use linkme::distributed_slice;
 
-use crate::dispatch::activation::ActivationContext;
-use crate::plugin::{PLUGINS, Plugin, PluginFactory};
-use crate::provider::Provider;
+use crate::plugin::PluginFactory;
+use crate::prelude::*;
 
 /// Plugin wrapping the three core providers that always ship with nyne.
 pub struct CorePlugin;

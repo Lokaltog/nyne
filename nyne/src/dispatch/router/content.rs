@@ -1,17 +1,10 @@
 //! Content I/O operations.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
-
 use super::Router;
 use crate::dispatch::WriteMode;
-use crate::dispatch::context::RequestContext;
-use crate::dispatch::invalidation::InvalidationEvent;
-use crate::node::{CachePolicy, VirtualNode, WriteOutcome};
-use crate::provider::Provider;
+use crate::node::WriteOutcome;
+use crate::prelude::*;
 use crate::types::path_conventions::companion_name;
-use crate::types::vfs_path::VfsPath;
 
 /// Content I/O operations: read/write through the L2 cache and pipeline.
 impl Router {

@@ -85,23 +85,19 @@ mod xattr;
 
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 
-use color_eyre::eyre::{Report, Result, eyre};
+use color_eyre::eyre::{Report, eyre};
 use fuser::{Errno, Request};
 use parking_lot::{Mutex, RwLock};
 use tracing::debug;
 
 use self::handles::HandleTable;
-use crate::dispatch::context::RequestContext;
 use crate::dispatch::{ReaddirEntry, ResolvedInode, Router, WriteMode};
-use crate::node::VirtualNode;
-use crate::provider::Provider;
+use crate::prelude::*;
 use crate::types::ProcessVisibility;
 use crate::types::file_kind::FileKind;
-use crate::types::vfs_path::VfsPath;
 
 /// The FUSE filesystem handler.
 ///

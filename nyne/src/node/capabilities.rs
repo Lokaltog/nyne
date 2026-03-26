@@ -9,12 +9,9 @@
 //! All capability traits require `Send + Sync` because nodes are shared
 //! across FUSE worker threads via `Arc<VirtualNode>`.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
-
 use super::kind::{NodeAttr, WriteOutcome};
-use crate::dispatch::context::{RenameContext, RequestContext};
+use crate::dispatch::context::RenameContext;
+use crate::prelude::*;
 
 /// Content generation capability — the primary interface for reading node data.
 ///

@@ -12,8 +12,7 @@
 use super::ctx::RouteCtx;
 use super::segment::SegmentMatcher;
 use super::tree::{ChildrenHandler, LookupHandler, RouteNode, RouteTree, StaticFileEntry};
-use crate::node::VirtualNode;
-use crate::provider::{Node, Nodes};
+use crate::prelude::*;
 
 /// Builder for constructing route trees programmatically.
 ///

@@ -1,13 +1,10 @@
 //! Diff view — unified diff between versions.
 
 use std::str::from_utf8;
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
-use nyne::dispatch::context::RequestContext;
 use nyne::node::Readable;
+use nyne::prelude::*;
 use nyne::text::unified_diff;
-use nyne::types::vfs_path::VfsPath;
 
 use crate::repo::GitRepo;
 

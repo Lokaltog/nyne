@@ -7,15 +7,12 @@
 use std::io::{Error, ErrorKind};
 use std::ops::Range;
 use std::str::from_utf8;
-use std::sync::Arc;
 
-use color_eyre::eyre::{self, Result};
-use nyne::dispatch::context::RequestContext;
-use nyne::node::VirtualNode;
+use color_eyre::eyre;
 use nyne::node::capabilities::{Readable, Writable};
 use nyne::node::kind::WriteOutcome;
+use nyne::prelude::*;
 use nyne::templates::TemplateHandle;
-use nyne::types::vfs_path::VfsPath;
 
 use super::FragmentResolver;
 use super::overview::SymbolOverviewContent;

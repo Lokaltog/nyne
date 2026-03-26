@@ -10,13 +10,11 @@
 //! through the base node's [`Writable`]. This ensures that any validation
 //! (e.g., tree-sitter syntax checking) runs on the full file content.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::{Result, bail};
+use color_eyre::eyre::bail;
 
 use super::plugin::NodePlugin;
-use super::{Readable, Unlinkable, VirtualNode, Writable, WriteOutcome};
-use crate::dispatch::context::RequestContext;
+use super::{Readable, Unlinkable, Writable, WriteOutcome};
+use crate::prelude::*;
 use crate::types::slice::{SliceSpec, parse_slice_suffix};
 
 /// Plugin that enables `:M-N` line slicing on any readable node.

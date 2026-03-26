@@ -6,18 +6,12 @@ mod entry;
 mod scan;
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 
 use entry::TodoEntry;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::dispatch::context::RequestContext;
-use nyne::dispatch::invalidation::InvalidationEvent;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
-use nyne::node::VirtualNode;
-use nyne::provider::{Nodes, Provider, ProviderId};
+use nyne::prelude::*;
 use nyne::templates::{TemplateHandle, serialize_view};
-use nyne::types::vfs_path::VfsPath;
 use nyne_macros::routes;
 use nyne_source::SyntaxRegistry;
 use parking_lot::RwLock;

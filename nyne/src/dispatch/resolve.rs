@@ -16,14 +16,12 @@ use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic;
 use std::panic::AssertUnwindSafe;
-use std::sync::Arc;
 
-use color_eyre::eyre::{Report, Result, bail};
+use color_eyre::eyre::{Report, bail};
 
 use super::cache::CachedNodeKind;
-use crate::dispatch::context::RequestContext;
-use crate::node::VirtualNode;
-use crate::provider::{ConflictInfo, ConflictResolution, Provider, ProviderId};
+use crate::prelude::*;
+use crate::provider::{ConflictInfo, ConflictResolution};
 
 /// Catch panics from a provider closure, logging them with provider identity.
 ///

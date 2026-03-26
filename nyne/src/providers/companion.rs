@@ -7,9 +7,7 @@
 //! as the mount point for other providers' virtual content (syntax symbols, git
 //! blame, diagnostics, etc.). Without this provider, no `@/` paths would exist.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::eyre;
 use nyne_macros::routes;
 
 use super::names::companion_name;

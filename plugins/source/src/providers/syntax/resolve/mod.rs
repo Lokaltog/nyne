@@ -7,14 +7,8 @@
 mod fragments;
 /// Symbol inventory resolution (symbols root and by-kind filtering).
 mod inventory;
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::dispatch::context::RequestContext;
-use nyne::node::VirtualNode;
+use nyne::prelude::*;
 use nyne::types::SymbolLineRange;
-use nyne::types::vfs_path::VfsPath;
 
 use super::content::{FileOverviewContent, FragmentResolver, LinesContent, LinesWrite, delete};
 use super::{FragmentNodeHook, SyntaxProvider};

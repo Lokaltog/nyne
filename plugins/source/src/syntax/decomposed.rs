@@ -6,11 +6,9 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
+use nyne::prelude::*;
 use nyne::types::real_fs::RealFs;
-use nyne::types::vfs_path::VfsPath;
 use parking_lot::RwLock;
 
 use super::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile};

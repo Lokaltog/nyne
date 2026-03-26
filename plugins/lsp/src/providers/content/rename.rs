@@ -4,13 +4,11 @@
 //! renames (`workspace/willRenameFiles`). Each operation implements [`DiffAction`]
 //! for preview and can be applied via `mv` on the VFS directory.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::{Result, eyre};
-use nyne::dispatch::context::{RenameContext, RequestContext};
+use color_eyre::eyre::eyre;
+use nyne::dispatch::context::RenameContext;
 use nyne::node::capabilities::Renameable;
+use nyne::prelude::*;
 use nyne::types::path_conventions::strip_companion_suffix;
-use nyne::types::vfs_path::VfsPath;
 use nyne_source::edit::diff_action::DiffAction;
 use nyne_source::edit::plan::{FileEditResult, apply_file_edits};
 use nyne_source::syntax::fs_mapping::split_disambiguator;

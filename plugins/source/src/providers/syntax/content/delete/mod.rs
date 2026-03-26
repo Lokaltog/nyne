@@ -3,12 +3,7 @@
 //! Implements [`DiffAction`] so deletions can be previewed as a diff
 //! (`Foo@/delete.diff`) or applied by unlinking the diff node.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::dispatch::context::RequestContext;
-use nyne::types::vfs_path::VfsPath;
+use nyne::prelude::*;
 
 use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOp, EditOpKind, EditOutcome, EditPlan, FileEditResult, ValidationResult};

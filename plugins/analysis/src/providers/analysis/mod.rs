@@ -4,11 +4,9 @@
 //! high-frequency rules into summary groups to keep output readable.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::templates::{TemplateEngine, TemplateView};
+use nyne::prelude::*;
+use nyne::templates::TemplateEngine;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use serde::Serialize;
 

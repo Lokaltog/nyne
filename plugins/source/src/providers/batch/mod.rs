@@ -18,10 +18,9 @@ mod preview;
 mod staging;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use anchors::resolve_anchor;
-use color_eyre::eyre::Result;
+use nyne::prelude::*;
 use parking_lot::RwLock;
 use preview::{CrossFilePreview, StagedActionContent, SymbolPreview};
 use staging::{StagedBatch, StagingKey};
@@ -31,17 +30,14 @@ use staging::{StagedBatch, StagingKey};
 /// to the provider.
 type StagingMap = Arc<RwLock<HashMap<StagingKey, StagedBatch>>>;
 
-use nyne::dispatch::invalidation::InvalidationEvent;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::node::WriteOutcome;
-use nyne::node::builtins::StaticContent;
 use nyne::node::capabilities::{Unlinkable, Writable};
 use nyne::{companion_symbol_path, dispatch_children, dispatch_lookup, source_file};
 use strum::IntoEnumIterator;
 
 use super::names::{FILE_STAGED_DIFF, SUBDIR_EDIT, SUBDIR_STAGED};
-use super::prelude::*;
 use crate::edit::diff_action::{DiffAction, DiffActionNode};
 use crate::edit::plan::EditOpKind;
 use crate::services::SourceServices;

@@ -3,16 +3,13 @@
 //! Overlays core's `CompanionProvider` with `ConflictResolution::Force` to add
 //! git index updates on file renames (`mv old.rs@ new.rs@` → `git mv`).
 
-use std::sync::Arc;
-
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::eyre;
 use nyne::companion_dir;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::dispatch::context::{RenameContext, RequestContext};
+use nyne::dispatch::context::RenameContext;
 use nyne::node::Renameable;
-use nyne::provider::{ConflictInfo, ConflictResolution, Node, Nodes, Provider, ProviderId};
+use nyne::prelude::*;
+use nyne::provider::{ConflictInfo, ConflictResolution};
 use nyne::types::path_conventions::strip_companion_suffix;
-use nyne::types::vfs_path::VfsPath;
 
 use crate::repo::GitRepo;
 

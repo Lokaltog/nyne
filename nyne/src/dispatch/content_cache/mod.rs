@@ -4,12 +4,10 @@
 //! used by both L1 and L2 caches to detect staleness after writes.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use crate::provider::ProviderId;
-use crate::types::vfs_path::VfsPath;
+use crate::prelude::*;
 
 /// Monotonic per-file generation counter for cache freshness.
 ///

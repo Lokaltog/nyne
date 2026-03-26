@@ -1,9 +1,7 @@
 //! Git status view — working tree status and index state.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
-use nyne::templates::{TemplateEngine, TemplateView};
+use nyne::prelude::*;
+use nyne::templates::TemplateEngine;
 
 use crate::repo::GitRepo;
 

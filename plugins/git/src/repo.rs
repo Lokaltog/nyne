@@ -5,9 +5,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::from_utf8;
 
-use color_eyre::eyre::{Result, WrapErr, eyre};
-use nyne::err::io_err;
-use nyne::types::vfs_path::VfsPath;
+use color_eyre::eyre::{WrapErr, eyre};
+use nyne::prelude::*;
 use parking_lot::Mutex;
 use tracing::{debug, warn};
 

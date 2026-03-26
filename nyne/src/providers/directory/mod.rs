@@ -7,14 +7,11 @@
 //! estimates). The template is registered once at activation time and rendered
 //! on each read with live filesystem data.
 
-use std::sync::Arc;
-
 use nyne_macros::routes;
 use serde::Serialize;
 
 use super::names::{self, FILE_OVERVIEW};
 use super::prelude::*;
-use crate::dispatch::invalidation::InvalidationEvent;
 use crate::dispatch::routing::ctx::RouteCtx;
 use crate::dispatch::routing::tree::RouteTree;
 use crate::templates::{TemplateHandle, serialize_view};

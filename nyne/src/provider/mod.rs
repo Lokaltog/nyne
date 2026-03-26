@@ -9,18 +9,11 @@
 //! nodes to the VFS tree. The dispatch layer queries all active providers
 //! on cache misses and merges their results.
 
-use std::sync::Arc;
 use std::{fmt, iter};
 
-use color_eyre::eyre::Result;
-
-use crate::dispatch::activation::ActivationContext;
-use crate::dispatch::context::RequestContext;
-use crate::dispatch::invalidation::InvalidationEvent;
-use crate::node::VirtualNode;
 use crate::node::middleware::{ReadMiddleware, WriteMiddleware};
+use crate::prelude::*;
 use crate::types::real_fs::RealFs;
-use crate::types::vfs_path::VfsPath;
 
 /// A filesystem mutation operation on a real file.
 ///

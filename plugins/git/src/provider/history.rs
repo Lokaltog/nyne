@@ -2,12 +2,11 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 
-use color_eyre::eyre::{Result, WrapErr};
+use color_eyre::eyre::WrapErr;
 use git2::Oid;
-use nyne::dispatch::context::RequestContext;
 use nyne::node::Readable;
+use nyne::prelude::*;
 use nyne::types::SymbolLineRange;
 use tracing::warn;
 

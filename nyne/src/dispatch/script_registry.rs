@@ -9,14 +9,12 @@
 //! the last registration wins, matching HashMap insert semantics.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::eyre;
 use tracing::warn;
 
 use super::script::{Script, ScriptAddress, ScriptContext};
-use crate::dispatch::activation::ActivationContext;
-use crate::plugin::PLUGINS;
+use crate::prelude::*;
 
 /// Registry of named scripts, indexed by fully-qualified dotted address.
 ///

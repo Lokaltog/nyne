@@ -9,12 +9,7 @@
 //! trait which manages provider lifecycle. `NodePlugin` operates at the
 //! individual node level within a provider's namespace.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
-
-use super::VirtualNode;
-use crate::dispatch::context::RequestContext;
+use crate::prelude::*;
 
 /// A composable behavior that derives parametric virtual nodes from a base node.
 ///

@@ -15,11 +15,8 @@
 
 use std::borrow::Borrow;
 use std::fmt;
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
-
-use crate::dispatch::activation::ActivationContext;
+use crate::prelude::*;
 
 /// Namespace separator for script addresses (e.g., `provider.myplugin.my-script`).
 pub const SCRIPT_NS_SEPARATOR: char = '.';

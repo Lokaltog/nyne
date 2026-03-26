@@ -13,12 +13,11 @@ use std::net::Shutdown;
 use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::SystemTime;
 use std::{fs, thread};
 
 use base64::prelude::{BASE64_STANDARD as BASE64, Engine};
-use color_eyre::eyre::{Result, WrapErr, eyre};
+use color_eyre::eyre::{WrapErr, eyre};
 use parking_lot::Mutex;
 use rustix::event::{PollFd, PollFlags, poll};
 use rustix::pipe::{PipeFlags, pipe_with};
@@ -26,9 +25,9 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, trace, warn};
 
 use crate::dispatch::ScriptRegistry;
-use crate::dispatch::activation::ActivationContext;
 use crate::dispatch::script::ScriptContext;
 use crate::fuse::VisibilityMap;
+use crate::prelude::*;
 use crate::session::state;
 use crate::types::ProcessVisibility;
 

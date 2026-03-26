@@ -8,12 +8,9 @@
 //!   filesystem via [`RealFs`](crate::types::real_fs::RealFs). Used by
 //!   providers that overlay virtual structure onto real files.
 
-use color_eyre::eyre::Result;
-
 use super::capabilities::{Readable, Writable};
 use super::kind::WriteOutcome;
-use crate::dispatch::context::RequestContext;
-use crate::types::vfs_path::VfsPath;
+use crate::prelude::*;
 
 /// Readable that returns a compile-time-known byte slice.
 ///

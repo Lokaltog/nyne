@@ -7,12 +7,10 @@
 
 use std::ops::Range;
 use std::path::Path;
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
 use nyne::dispatch::script::{Script, ScriptContext};
+use nyne::prelude::*;
 use nyne::templates::TemplateEngine;
-use nyne::types::vfs_path::VfsPath;
 #[cfg(feature = "analysis")]
 use nyne_analysis::{AnalysisContext, AnalysisEngine, HintView};
 use nyne_lsp::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};

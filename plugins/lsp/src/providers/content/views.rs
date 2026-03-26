@@ -5,11 +5,11 @@
 //! [`LspQueryResult`] is the unified return type from all LSP queries.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::eyre;
 use lsp_types::{CallHierarchyItem, Hover, InlayHint, Location, Position};
-use nyne::templates::{TemplateEngine, TemplateView};
+use nyne::prelude::*;
+use nyne::templates::TemplateEngine;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use serde::Serialize;
 

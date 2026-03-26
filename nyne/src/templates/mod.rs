@@ -13,11 +13,11 @@
 mod handle;
 
 use std::borrow::Cow;
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
 use minijinja::Environment;
 use serde::Serialize;
+
+use crate::prelude::*;
 
 /// Template engine wrapping a `minijinja::Environment`.
 ///
@@ -220,7 +220,6 @@ macro_rules! register_globals {
 }
 
 pub use self::handle::{HandleBuilder, TemplateHandle};
-use crate::dispatch::context::RequestContext;
 use crate::node::Readable;
 
 /// Unit tests.

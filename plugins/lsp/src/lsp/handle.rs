@@ -7,12 +7,10 @@
 // Created at resolve time, stored inside Readable impls, queried at read time.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use crop::Rope;
 use lsp_types::Position;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::types::vfs_path::VfsPath;
+use nyne::prelude::*;
 
 use super::client::LspClient;
 use super::manager::LspManager;

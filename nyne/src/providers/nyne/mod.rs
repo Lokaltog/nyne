@@ -7,20 +7,16 @@
 //! provides an overview of the project (detected languages, structure).
 //! `STATUS.md` shows live runtime data (uptime, active providers, project stats).
 
-use std::sync::Arc;
 use std::time::Instant;
 
-use color_eyre::eyre::Result;
 use nyne_macros::routes;
 use serde::Serialize;
 
 use super::names::{self, COMPANION_SUFFIX, FILE_GUIDE, FILE_MOUNT_STATUS};
 use super::prelude::*;
-use crate::dispatch::activation::ActivationContext;
 use crate::dispatch::routing::ctx::RouteCtx;
 use crate::dispatch::routing::tree::RouteTree;
-use crate::plugin::PLUGINS;
-use crate::templates::{TemplateEngine, TemplateHandle, TemplateView, serialize_view};
+use crate::templates::{TemplateEngine, TemplateHandle, serialize_view};
 use crate::types::ExtensionCounts;
 
 /// Provider for root-level nyne meta files (`@/GUIDE.md`, `@/STATUS.md`).

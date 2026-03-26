@@ -4,13 +4,10 @@
 //! `TypeMap` for other providers (including nyne-coding) to consume.
 
 use std::path::Path;
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
 use linkme::distributed_slice;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::plugin::{PLUGINS, Plugin, PluginFactory};
-use nyne::provider::Provider;
+use nyne::plugin::PluginFactory;
+use nyne::prelude::*;
 use nyne::types::{ExtensionCounts, GitDirName};
 use tracing::{debug, warn};
 

@@ -2,17 +2,12 @@
 
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::Arc;
 
 use lsp_types::SymbolInformation;
 use nyne::SUBDIR_SYMBOLS;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::dispatch::context::RequestContext;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
-use nyne::node::VirtualNode;
-use nyne::provider::{Node, Nodes, Provider, ProviderId};
-use nyne::types::vfs_path::VfsPath;
+use nyne::prelude::*;
 use nyne_source::providers::names::SUBDIR_AT_LINE;
 
 use crate::lsp::manager::LspManager;

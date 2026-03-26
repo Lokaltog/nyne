@@ -16,15 +16,13 @@
 //! This is an **interface module** — the trait may be imported from any tier.
 
 use std::cell::Cell;
-use std::sync::Arc;
 
-use color_eyre::eyre::{Result, bail};
+use color_eyre::eyre::bail;
 
 use super::cache::CachedNodeKind;
 use super::router::Router;
-use crate::node::VirtualNode;
+use crate::prelude::*;
 use crate::types::ProcessVisibility;
-use crate::types::vfs_path::VfsPath;
 
 /// Resolves virtual paths to nodes.
 ///

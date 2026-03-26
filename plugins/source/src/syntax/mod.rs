@@ -31,10 +31,9 @@ pub mod view;
 pub mod languages;
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use color_eyre::eyre::{Result, eyre};
-use nyne::types::vfs_path::VfsPath;
+use color_eyre::eyre::eyre;
+use nyne::prelude::*;
 use spec::Decomposer;
 
 /// Factory function that creates decomposer instances for link-time

@@ -1,12 +1,8 @@
 //! Plugin registration and lifecycle implementation.
 
-use std::sync::Arc;
-
-use color_eyre::eyre::Result;
 use linkme::distributed_slice;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::plugin::{PLUGINS, Plugin, PluginFactory};
-use nyne::provider::Provider;
+use nyne::plugin::PluginFactory;
+use nyne::prelude::*;
 use tracing::info;
 
 use crate::analysis::AnalysisEngine;

@@ -1,18 +1,15 @@
 //! Plugin registration and lifecycle implementation.
 
 use std::path::Path;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 use std::thread;
 
-use color_eyre::eyre::{self, Result};
+use color_eyre::eyre;
 use linkme::distributed_slice;
 use nyne::config::NyneConfig;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::node::VirtualNode;
-use nyne::plugin::{PLUGINS, Plugin, PluginFactory};
-use nyne::provider::Provider;
+use nyne::plugin::PluginFactory;
+use nyne::prelude::*;
 use nyne::types::PassthroughProcesses;
-use nyne::types::vfs_path::VfsPath;
 use nyne_source::providers::syntax::{FileRenameHook, FragmentNodeHook};
 use nyne_source::syntax::SyntaxRegistry;
 use tracing::info;

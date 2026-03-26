@@ -2,15 +2,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound;
-use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use crate::node::{VirtualNode, Visibility};
-use crate::provider::ProviderId;
+use crate::node::Visibility;
+use crate::prelude::*;
 use crate::types::ProcessVisibility;
 use crate::types::file_kind::FileKind;
-use crate::types::vfs_path::VfsPath;
 
 /// How a node entered the cache — determines visibility and generation lifecycle.
 ///

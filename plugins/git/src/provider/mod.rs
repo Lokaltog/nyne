@@ -7,20 +7,14 @@
 //! Symbol-scoped git features (per-symbol blame/history) live in `nyne-coding`.
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
-use color_eyre::eyre::Result;
-use nyne::dispatch::activation::ActivationContext;
-use nyne::dispatch::context::RequestContext;
-use nyne::dispatch::invalidation::InvalidationEvent;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
-use nyne::node::{CachePolicy, Lifecycle, NodeAttr, VirtualNode};
-use nyne::provider::{Node, Nodes, Provider, ProviderId};
-use nyne::templates::{TemplateHandle, TemplateView};
+use nyne::node::{Lifecycle, NodeAttr};
+use nyne::prelude::*;
+use nyne::templates::TemplateHandle;
 use nyne::types::GitDirName;
 use nyne::types::slice::SliceSpec;
-use nyne::types::vfs_path::VfsPath;
 use nyne::{dispatch_children, dispatch_lookup, source_file};
 use nyne_macros::routes;
 

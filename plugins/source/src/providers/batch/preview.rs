@@ -6,13 +6,10 @@
 //! unified diff. Deleting the file applies the edits atomically.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
-use color_eyre::eyre::{Result, eyre};
-use nyne::dispatch::activation::ActivationContext;
-use nyne::dispatch::context::RequestContext;
+use color_eyre::eyre::eyre;
 use nyne::node::capabilities::Readable;
-use nyne::types::vfs_path::VfsPath;
+use nyne::prelude::*;
 
 use super::StagingMap;
 use super::staging::StagingKey;
