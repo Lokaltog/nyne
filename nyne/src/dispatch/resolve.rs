@@ -236,7 +236,7 @@ fn merge_collision_group(
         return base;
     }
 
-    // Contested capabilities: use the same conflict protocol as path conflicts.
+    tracing::debug!(name, "contested capabilities — running conflict resolution");
     let provider_ids = &collisions[name];
     let involved: HashSet<ProviderId> = provider_ids.iter().copied().collect();
     let conflict_infos = ConflictInfo::for_providers(name, provider_ids.iter().copied());
@@ -311,9 +311,6 @@ pub(super) fn resolve_directory(providers: &[Arc<dyn Provider>], ctx: &RequestCo
     if collisions.is_empty() {
         return Ok(all_nodes);
     }
-
-    let collision_names: Vec<&String> = collisions.keys().collect();
-    tracing::debug!(?collision_names, "provider collisions detected");
 
     // Separate non-colliding nodes from colliding ones.
     let mut resolved: Vec<OwnedNode> = Vec::new();
