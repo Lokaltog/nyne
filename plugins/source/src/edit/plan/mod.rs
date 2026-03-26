@@ -124,9 +124,10 @@ impl EditPlan {
     /// range, checks for overlapping edits, and returns resolved edits
     /// sorted bottom-up (descending byte offset) for safe application.
     pub fn resolve(&self, fragments: &[Fragment], source: &str) -> Result<Vec<ResolvedEdit>> {
-        use crate::edit::splice::{extend_delete_range, line_start_of};
+        use crate::edit::splice::{extend_delete_range, line_start_of_rope};
         use crate::syntax::require_fragment;
 
+        let rope = crop::Rope::from(source);
         let mut resolved = Vec::with_capacity(self.ops.len());
 
         for (index, op) in &self.ops {
@@ -139,7 +140,7 @@ impl EditPlan {
                     // to match body.rs read range — ensures round-trip:
                     // `cat body.rs > edit/replace` is a no-op.
                     let span = frag.full_span();
-                    let start = line_start_of(source, span.start);
+                    let start = line_start_of_rope(&rope, span.start);
                     ResolvedEdit {
                         staged_index: *index,
                         byte_range: start..span.end,
@@ -155,7 +156,7 @@ impl EditPlan {
                     }
                 }
                 EditOpKind::InsertBefore => {
-                    let offset = line_start_of(source, frag.full_span().start);
+                    let offset = line_start_of_rope(&rope, frag.full_span().start);
                     // Ensure trailing newline so the inserted content doesn't
                     // join directly to the anchor symbol's first line.
                     let replacement = ensure_trailing_newline(content).into_owned();

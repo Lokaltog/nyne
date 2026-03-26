@@ -26,7 +26,7 @@ pub(super) use self::{
     overview::{FileOverviewContent, OverviewContent},
     write::BodySplice,
 };
-use crate::edit::splice::{line_end_of, line_start_of};
+use crate::edit::splice::{line_end_of_rope, line_start_of_rope};
 pub(super) use crate::providers::fragment_resolver::FragmentResolver;
 use crate::syntax;
 use crate::syntax::fragment::{FragmentKind, find_fragment_of_kind};
@@ -53,25 +53,25 @@ impl Readable for SourceSlice {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let frags = &shared.decomposed;
+        let rope = crop::Rope::from(shared.source.as_str());
 
         let (byte_range, mask_span) = match &self.target {
             SpliceTarget::FragmentBody(path) => {
                 let frag = syntax::require_fragment(frags, path)?;
                 let span = frag.full_span();
-                let body_start = line_start_of(&shared.source, span.start);
+                let body_start = line_start_of_rope(&rope, span.start);
                 match shared.decomposer.splice_mode() {
                     SpliceMode::Line => (body_start..span.end, None),
-                    SpliceMode::Byte => {
-                        let body_end = line_end_of(&shared.source, span.end);
-                        (body_start..body_end, Some(span))
-                    }
+                    SpliceMode::Byte => (body_start..line_end_of_rope(&rope, span.end), Some(span)),
                 }
             }
             SpliceTarget::Imports => {
                 let imports = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Imports)
                     .ok_or_else(|| eyre!("no import span in {}", self.resolver.source_file()))?;
-                let start = line_start_of(&shared.source, imports.byte_range.start);
-                (start..imports.byte_range.end, None)
+                (
+                    line_start_of_rope(&rope, imports.byte_range.start)..imports.byte_range.end,
+                    None,
+                )
             }
             SpliceTarget::CodeBlockBody { parent_path, fs_name } => {
                 let parent = syntax::require_fragment(frags, parent_path)?;

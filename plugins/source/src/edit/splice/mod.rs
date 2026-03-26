@@ -105,45 +105,61 @@ pub fn splice_rope_validate_write(
     Ok(new_content.len())
 }
 
+/// Byte offset of the start of the line containing `offset`, using a pre-built rope.
+///
+/// Prefer this over [`line_start_of`] when the caller already has a `Rope`
+/// or calls multiple line-offset functions on the same source.
+#[must_use]
+pub fn line_start_of_rope(rope: &Rope, offset: usize) -> usize { rope.byte_of_line(rope.line_of_byte(offset)) }
+
 /// Byte offset of the start of the line containing `offset`.
 ///
-/// Uses `crop::Rope` for byte→line conversion rather than manual `\n` scanning.
-/// Used to snap byte-range starts to line boundaries so that sliced content
-/// preserves consistent indentation on every line.
+/// Convenience wrapper that builds a [`crop::Rope`] internally. When calling
+/// multiple line-offset functions on the same source, prefer
+/// [`line_start_of_rope`] with a shared rope.
 #[must_use]
-pub fn line_start_of(source: &str, offset: usize) -> usize {
-    let rope = Rope::from(source);
-    rope.byte_of_line(rope.line_of_byte(offset))
-}
+pub fn line_start_of(source: &str, offset: usize) -> usize { line_start_of_rope(&Rope::from(source), offset) }
 
-/// Byte offset of the end of the line containing `offset`.
+/// Byte offset of the end of the line containing `offset`, using a pre-built rope.
 ///
-/// Returns the byte position just past the `\n` terminator (or `source.len()`
-/// for the final unterminated line). Uses `crop::Rope` for byte→line conversion
-/// rather than manual `\n` scanning.
+/// Returns the byte position just past the `\n` terminator (or `rope.byte_len()`
+/// for the final unterminated line). Prefer this over [`line_end_of`] when the
+/// caller already has a `Rope`.
 #[must_use]
-pub fn line_end_of(source: &str, offset: usize) -> usize {
-    let rope = Rope::from(source);
+pub fn line_end_of_rope(rope: &Rope, offset: usize) -> usize {
     let line = rope.line_of_byte(offset);
     if line + 1 < rope.line_len() {
         rope.byte_of_line(line + 1)
     } else {
-        source.len()
+        rope.byte_len()
     }
+}
+
+/// Byte offset of the end of the line containing `offset`.
+///
+/// Convenience wrapper that builds a [`crop::Rope`] internally. When calling
+/// multiple line-offset functions on the same source, prefer
+/// [`line_end_of_rope`] with a shared rope.
+#[must_use]
+pub fn line_end_of(source: &str, offset: usize) -> usize { line_end_of_rope(&Rope::from(source), offset) }
+
+/// Determine the indentation prefix at a given byte offset, using a pre-built rope.
+///
+/// Finds the line start via the rope, then extracts leading whitespace from
+/// `source`. Prefer this over [`indent_at`] when the caller already has a `Rope`.
+#[must_use]
+pub fn indent_at_rope<'a>(source: &'a str, rope: &Rope, offset: usize) -> &'a str {
+    let line = &source[line_start_of_rope(rope, offset)..offset];
+    &line[..line.find(|c: char| !c.is_whitespace()).unwrap_or(line.len())]
 }
 
 /// Determine the indentation prefix at a given byte offset in source text.
 ///
-/// Uses `crop::Rope` to find the line start, then extracts leading whitespace.
-/// Used to preserve indentation when wrapping doc comments or inserting content.
+/// Convenience wrapper that builds a [`crop::Rope`] internally. When calling
+/// multiple line-offset functions on the same source, prefer
+/// [`indent_at_rope`] with a shared rope.
 #[must_use]
-pub fn indent_at(source: &str, offset: usize) -> &str {
-    let rope = Rope::from(source);
-    let line_start = rope.byte_of_line(rope.line_of_byte(offset));
-    let line = &source[line_start..offset];
-    let non_ws = line.find(|c: char| !c.is_whitespace()).unwrap_or(line.len());
-    &source[line_start..line_start + non_ws]
-}
+pub fn indent_at(source: &str, offset: usize) -> &str { indent_at_rope(source, &Rope::from(source), offset) }
 
 /// Extend a byte range to consume trailing blank-line separators.
 ///

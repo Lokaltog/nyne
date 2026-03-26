@@ -16,7 +16,7 @@ use nyne::templates::TemplateHandle;
 
 use super::FragmentResolver;
 use super::overview::SymbolOverviewContent;
-use crate::edit::splice::{indent_at, line_start_of, splice_validate_write};
+use crate::edit::splice::{indent_at_rope, line_start_of_rope, splice_validate_write};
 use crate::syntax::decomposed::DecomposedSource;
 use crate::syntax::fragment::{Fragment, FragmentKind, find_fragment_of_kind};
 use crate::syntax::spec::{Decomposer, SpliceMode};
@@ -124,7 +124,7 @@ impl Readable for DecoratorsContent {
             .child_of_kind(&FragmentKind::Decorator)
             .map(|c| &c.byte_range)
             .ok_or_else(|| eyre::eyre!("no decorator range on fragment {:?}", self.fragment_path))?;
-        let start = line_start_of(&shared.source, range.start);
+        let start = line_start_of_rope(&crop::Rope::from(shared.source.as_str()), range.start);
         let bytes = shared.source.as_bytes().get(start..range.end).ok_or_else(|| {
             eyre::eyre!(
                 "decorator range {start}..{} out of bounds for {:?}",
@@ -169,28 +169,28 @@ impl MetaSplice {
     /// derives the target range from the current fragment tree.
     fn resolve(&self) -> Result<ResolvedSplice> {
         /// Extend a byte range backward to the start of its first line.
-        fn line_aligned(source: &str, range: Range<usize>) -> Range<usize> {
-            line_start_of(source, range.start)..range.end
+        fn line_aligned(rope: &crop::Rope, range: Range<usize>) -> Range<usize> {
+            line_start_of_rope(rope, range.start)..range.end
         }
 
         let shared = self.resolver.decompose()?;
-        let source = &shared.source;
+        let rope = crop::Rope::from(shared.source.as_str());
         let frags = &shared.decomposed;
         let byte_range = match &self.target {
             SpliceTarget::Imports => {
                 let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Imports)
                     .ok_or_else(|| eyre::eyre!("no import span in {}", self.resolver.source_file()))?;
-                line_aligned(source, frag.byte_range.clone())
+                line_aligned(&rope, frag.byte_range.clone())
             }
             SpliceTarget::FileDoc => {
                 let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)
                     .ok_or_else(|| eyre::eyre!("no file-level doc in {}", self.resolver.source_file()))?;
-                line_aligned(source, frag.byte_range.clone())
+                line_aligned(&rope, frag.byte_range.clone())
             }
             SpliceTarget::FragmentBody(path) => {
                 let frag = syntax::require_fragment(frags, path)?;
                 match shared.decomposer.splice_mode() {
-                    SpliceMode::Line => line_aligned(source, frag.full_span()),
+                    SpliceMode::Line => line_aligned(&rope, frag.full_span()),
                     SpliceMode::Byte => frag.full_span(),
                 }
             }
@@ -200,7 +200,7 @@ impl MetaSplice {
                     .signature
                     .as_deref()
                     .ok_or_else(|| eyre::eyre!("no signature on fragment {:?}", path))?;
-                find_signature_range(source, sig, frag.byte_range.start)
+                find_signature_range(&shared.source, sig, frag.byte_range.start)
             }
             SpliceTarget::FragmentDocComment(path) => {
                 let frag = syntax::require_fragment(frags, path)?;
@@ -213,7 +213,7 @@ impl MetaSplice {
                 let range = frag
                     .child_of_kind(&FragmentKind::Decorator)
                     .ok_or_else(|| eyre::eyre!("no decorator range on fragment {path:?}"))?;
-                line_aligned(source, range.byte_range.clone())
+                line_aligned(&rope, range.byte_range.clone())
             }
             SpliceTarget::CodeBlockBody { parent_path, fs_name } => {
                 let parent = syntax::require_fragment(frags, parent_path)?;
@@ -250,7 +250,8 @@ impl MetaSplice {
         wrap_fn: impl FnOnce(&dyn Decomposer, &str, &str) -> String,
     ) -> Result<WriteOutcome> {
         let resolved = self.resolve()?;
-        let indent = indent_at(&resolved.shared.source, resolved.byte_range.start);
+        let rope = crop::Rope::from(resolved.shared.source.as_str());
+        let indent = indent_at_rope(&resolved.shared.source, &rope, resolved.byte_range.start);
         let wrapped = wrap_fn(resolved.shared.decomposer.as_ref(), plain, indent);
         self.splice_write(ctx, &wrapped)
     }
