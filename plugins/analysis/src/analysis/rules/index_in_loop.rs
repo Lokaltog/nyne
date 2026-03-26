@@ -48,16 +48,13 @@ impl AnalysisRule for IndexInLoop {
             return None;
         }
 
-        let start_line = raw.start_position().row;
-        let end_line = raw.end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: start_line..end_line,
-            message: "Indexing with loop variable inside a `for i in 0..len` loop".into(),
-            suggestions: vec!["Use iterator: `for item in &collection`".into()],
-        })
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Info,
+            "Indexing with loop variable inside a `for i in 0..len` loop".into(),
+            &["Use iterator: `for item in &collection`"],
+        ))
     }
 }
 

@@ -39,18 +39,16 @@ impl AnalysisRule for DeeplyNestedType {
             return None;
         }
 
-        let line = raw.start_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: line..line,
-            message: format!(
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Info,
+            format!(
                 "Type `{}` has {depth} levels of nesting",
                 kinds::node_str(&raw, node.source()).unwrap_or("(complex type)")
             ),
-            suggestions: vec!["Extract a type alias".into()],
-        })
+            &["Extract a type alias"],
+        ))
     }
 }
 

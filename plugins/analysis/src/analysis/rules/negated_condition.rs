@@ -39,16 +39,13 @@ impl AnalysisRule for NegatedCondition {
             return None;
         }
 
-        let start_line = raw.start_position().row;
-        let end_line = raw.end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: start_line..end_line,
-            message: "Negated condition with else branch — flip branches to remove negation".into(),
-            suggestions: vec!["Flip branches to remove negation".into()],
-        })
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Info,
+            "Negated condition with else branch — flip branches to remove negation".into(),
+            &["Flip branches to remove negation"],
+        ))
     }
 }
 

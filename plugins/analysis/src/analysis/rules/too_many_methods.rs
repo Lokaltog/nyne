@@ -37,16 +37,14 @@ impl AnalysisRule for TooManyMethods {
         }
 
         let name = impl_name(raw, node.source()).unwrap_or("(anonymous)");
-        let start_line = raw.start_position().row;
-        let end_line = raw.end_position().row;
 
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: format!("`{name}` impl has {method_count} methods (threshold: {MAX_METHODS})"),
-            suggestions: vec!["Consider splitting into trait impls or helper modules".into()],
-        })
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            format!("`{name}` impl has {method_count} methods (threshold: {MAX_METHODS})"),
+            &["Consider splitting into trait impls or helper modules"],
+        ))
     }
 }
 

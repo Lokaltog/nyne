@@ -28,19 +28,17 @@ impl AnalysisRule for GodStruct {
         }
 
         let name = node.field_text("name").unwrap_or("(anonymous)");
-        let start_line = raw.start_position().row;
-        let end_line = raw.end_position().row;
 
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: format!("`{name}` has {count} fields (threshold: {MAX_FIELDS})"),
-            suggestions: vec![
-                "Consider splitting into smaller structs".into(),
-                "Group related fields into sub-structs".into(),
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            format!("`{name}` has {count} fields (threshold: {MAX_FIELDS})"),
+            &[
+                "Consider splitting into smaller structs",
+                "Group related fields into sub-structs",
             ],
-        })
+        ))
     }
 }
 

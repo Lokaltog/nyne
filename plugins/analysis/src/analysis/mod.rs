@@ -94,7 +94,45 @@ pub struct Hint {
     pub severity: Severity,
     pub line_range: Range<usize>,
     pub message: String,
-    pub suggestions: Vec<String>,
+    pub suggestions: &'static [&'static str],
+}
+
+impl Hint {
+    /// Build a hint spanning the full line range of a tree-sitter node.
+    pub fn from_node(
+        rule: &dyn AnalysisRule,
+        node: TsNode<'_>,
+        severity: Severity,
+        message: String,
+        suggestions: &'static [&'static str],
+    ) -> Self {
+        let raw = node.raw();
+        Self {
+            rule_id: rule.id(),
+            severity,
+            line_range: raw.start_position().row..raw.end_position().row,
+            message,
+            suggestions,
+        }
+    }
+
+    /// Build a hint pointing at a single line (the start of the node).
+    pub fn from_node_line(
+        rule: &dyn AnalysisRule,
+        node: TsNode<'_>,
+        severity: Severity,
+        message: String,
+        suggestions: &'static [&'static str],
+    ) -> Self {
+        let line = node.raw().start_position().row;
+        Self {
+            rule_id: rule.id(),
+            severity,
+            line_range: line..line,
+            message,
+            suggestions,
+        }
+    }
 }
 
 /// Serializable view of a [`Hint`] for template rendering.
@@ -110,7 +148,7 @@ pub struct HintView {
     pub message: String,
     pub line_start: usize,
     pub line_end: usize,
-    pub suggestions: Vec<String>,
+    pub suggestions: &'static [&'static str],
 }
 
 /// Converts a [`Hint`] to its serializable [`HintView`] representation.
@@ -123,7 +161,7 @@ impl From<&Hint> for HintView {
             message: hint.message.clone(),
             line_start: hint.line_range.start + 1,
             line_end: hint.line_range.end + 1,
-            suggestions: hint.suggestions.clone(),
+            suggestions: hint.suggestions,
         }
     }
 }

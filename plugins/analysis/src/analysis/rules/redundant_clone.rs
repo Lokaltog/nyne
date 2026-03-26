@@ -46,15 +46,13 @@ impl AnalysisRule for RedundantClone {
             sibling = s.next_named_sibling();
         }
 
-        let line = raw.start_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: line..line,
-            message: format!("`.clone()` on `{receiver_name}` which is not used after this point"),
-            suggestions: vec!["Remove `.clone()` — value is not used after this".into()],
-        })
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Warning,
+            format!("`.clone()` on `{receiver_name}` which is not used after this point"),
+            &["Remove `.clone()` — value is not used after this"],
+        ))
     }
 }
 

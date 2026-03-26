@@ -72,7 +72,7 @@ const COLLAPSE_THRESHOLD: usize = 3;
 #[derive(Serialize)]
 struct SuggestionRow {
     rule_id: &'static str,
-    text: String,
+    text: &'static str,
 }
 
 /// Rule-level summary messages used when collapsing repeated hits.
@@ -126,12 +126,9 @@ fn build_view(hints: &[Hint]) -> (Vec<HintView>, Vec<CollapsedGroup>, Vec<Sugges
     let mut seen_suggestions: HashSet<(&str, &str)> = HashSet::new();
     let suggestions: Vec<SuggestionRow> = hints
         .iter()
-        .flat_map(|h| h.suggestions.iter().map(move |s| (h.rule_id, s)))
+        .flat_map(|h| h.suggestions.iter().map(move |s| (h.rule_id, *s)))
         .filter(|(rule_id, text)| seen_suggestions.insert((rule_id, text)))
-        .map(|(rule_id, text)| SuggestionRow {
-            rule_id,
-            text: text.clone(),
-        })
+        .map(|(rule_id, text)| SuggestionRow { rule_id, text })
         .collect();
 
     (rows, collapsed, suggestions)

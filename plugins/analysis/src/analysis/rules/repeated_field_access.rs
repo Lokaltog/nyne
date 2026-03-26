@@ -32,7 +32,7 @@ impl AnalysisRule for RepeatedFieldAccess {
             severity: Severity::Info,
             line_range: start_line..end_line,
             message: format!("Repeated `{prefix}` access across consecutive statements"),
-            suggestions: vec![format!("Bind to a local: `let x = {prefix};`")],
+            suggestions: &["Bind the repeated prefix to a local variable"],
         })
     }
 }

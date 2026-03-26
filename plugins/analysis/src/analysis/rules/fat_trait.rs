@@ -51,21 +51,17 @@ impl AnalysisRule for FatTrait {
         }
 
         let name = trait_name(raw, node.source()).unwrap_or("(anonymous)");
-        let start_line = raw.start_position().row;
-        let end_line = raw.end_position().row;
 
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: format!(
-                "Trait `{name}` has {required_count} required methods (threshold: {MAX_REQUIRED_METHODS})"
-            ),
-            suggestions: vec![
-                "Split into smaller, focused traits".into(),
-                "Provide default implementations where possible".into(),
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            format!("Trait `{name}` has {required_count} required methods (threshold: {MAX_REQUIRED_METHODS})"),
+            &[
+                "Split into smaller, focused traits",
+                "Provide default implementations where possible",
             ],
-        })
+        ))
     }
 }
 

@@ -33,19 +33,16 @@ impl AnalysisRule for ElseIfChain {
             return None;
         }
 
-        let start_line = node.raw().start_position().row;
-        let end_line = node.raw().end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: format!("{count} chained else-if branches — consider a `match`/`switch` or lookup map"),
-            suggestions: vec![
-                "Refactor to a match/switch expression".into(),
-                "Use a HashMap/dict lookup for value mapping".into(),
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            format!("{count} chained else-if branches — consider a `match`/`switch` or lookup map"),
+            &[
+                "Refactor to a match/switch expression",
+                "Use a HashMap/dict lookup for value mapping",
             ],
-        })
+        ))
     }
 }
 

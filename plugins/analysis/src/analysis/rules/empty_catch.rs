@@ -34,19 +34,13 @@ impl AnalysisRule for EmptyCatch {
             return None;
         }
 
-        let start_line = raw.start_position().row;
-        let end_line = raw.end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: "Empty catch block swallows errors silently".into(),
-            suggestions: vec![
-                "Don't swallow errors silently".into(),
-                "At minimum, log the error".into(),
-            ],
-        })
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            "Empty catch block swallows errors silently".into(),
+            &["Don't swallow errors silently", "At minimum, log the error"],
+        ))
     }
 }
 

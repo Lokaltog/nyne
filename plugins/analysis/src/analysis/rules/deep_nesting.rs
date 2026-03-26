@@ -47,21 +47,18 @@ impl AnalysisRule for DeepNesting {
             return None;
         }
 
-        let start_line = node.raw().start_position().row;
-        let end_line = node.raw().end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: format!(
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            format!(
                 "Nesting depth {depth} (threshold: {MAX_DEPTH}) — consider early returns, guard clauses, or extracting into a helper function"
             ),
-            suggestions: vec![
-                "Extract the inner block into a separate function".into(),
-                "Use early returns / guard clauses to reduce nesting".into(),
+            &[
+                "Extract the inner block into a separate function",
+                "Use early returns / guard clauses to reduce nesting",
             ],
-        })
+        ))
     }
 }
 

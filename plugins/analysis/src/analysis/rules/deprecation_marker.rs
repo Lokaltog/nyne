@@ -66,18 +66,16 @@ impl AnalysisRule for DeprecationMarker {
 
         let (pattern, category) = DEPRECATION_PATTERNS.iter().find(|(pat, _)| text.contains(pat))?;
 
-        let line = node.raw().start_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: line..line,
-            message: format!("Detected {category}: `{pattern}` — remove or address this code"),
-            suggestions: vec![
-                "Remove deprecated/legacy code instead of keeping it around".into(),
-                "If still needed, create a tracking issue and remove the comment".into(),
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Warning,
+            format!("Detected {category}: `{pattern}` — remove or address this code"),
+            &[
+                "Remove deprecated/legacy code instead of keeping it around",
+                "If still needed, create a tracking issue and remove the comment",
             ],
-        })
+        ))
     }
 }
 

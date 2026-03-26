@@ -4,7 +4,7 @@ use super::{COLLAPSE_THRESHOLD, build_view};
 use crate::analysis::{Hint, Severity};
 
 /// Builds a `Hint` fixture with the given rule ID, line, and suggestions.
-fn hint(rule_id: &'static str, line: usize, suggestions: Vec<String>) -> Hint {
+fn hint(rule_id: &'static str, line: usize, suggestions: &'static [&'static str]) -> Hint {
     Hint {
         rule_id,
         severity: Severity::Info,
@@ -18,8 +18,8 @@ fn hint(rule_id: &'static str, line: usize, suggestions: Vec<String>) -> Hint {
 #[fixture]
 fn below_threshold() -> Vec<Hint> {
     vec![
-        hint("magic-string", 5, vec!["fix it".into()]),
-        hint("magic-string", 10, vec!["fix it".into()]),
+        hint("magic-string", 5, &["fix it"]),
+        hint("magic-string", 10, &["fix it"]),
     ]
 }
 
@@ -27,9 +27,9 @@ fn below_threshold() -> Vec<Hint> {
 #[fixture]
 fn at_threshold() -> Vec<Hint> {
     vec![
-        hint("magic-string", 1, vec!["extract".into()]),
-        hint("magic-string", 5, vec!["extract".into()]),
-        hint("magic-string", 9, vec!["extract".into()]),
+        hint("magic-string", 1, &["extract"]),
+        hint("magic-string", 5, &["extract"]),
+        hint("magic-string", 9, &["extract"]),
     ]
 }
 
@@ -37,10 +37,10 @@ fn at_threshold() -> Vec<Hint> {
 #[fixture]
 fn mixed_rules() -> Vec<Hint> {
     vec![
-        hint("magic-string", 1, vec![]),
-        hint("magic-string", 2, vec![]),
-        hint("magic-string", 3, vec![]),
-        hint("unwrap-chain", 10, vec!["propagate".into()]),
+        hint("magic-string", 1, &[]),
+        hint("magic-string", 2, &[]),
+        hint("magic-string", 3, &[]),
+        hint("unwrap-chain", 10, &["propagate"]),
     ]
 }
 
@@ -48,9 +48,9 @@ fn mixed_rules() -> Vec<Hint> {
 #[fixture]
 fn duplicate_suggestions() -> Vec<Hint> {
     vec![
-        hint("magic-number", 1, vec!["extract const".into(), "add comment".into()]),
-        hint("magic-number", 2, vec!["extract const".into()]),
-        hint("magic-number", 3, vec!["extract const".into(), "add comment".into()]),
+        hint("magic-number", 1, &["extract const", "add comment"]),
+        hint("magic-number", 2, &["extract const"]),
+        hint("magic-number", 3, &["extract const", "add comment"]),
     ]
 }
 

@@ -40,18 +40,16 @@ impl AnalysisRule for TypeInVariableName {
         // Only flag if the name actually contains a type fragment.
         let matched = TYPE_FRAGMENTS.iter().find(|frag| name.contains(**frag))?;
 
-        let line = raw.start_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: line..line,
-            message: format!(
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Info,
+            format!(
                 "Variable `{name}` encodes type `{}` in its name",
                 matched.trim_matches('_'),
             ),
-            suggestions: vec!["Name for purpose, not type — the type is already visible".into()],
-        })
+            &["Name for purpose, not type — the type is already visible"],
+        ))
     }
 }
 

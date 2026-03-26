@@ -23,19 +23,16 @@ impl AnalysisRule for StringConcatLoop {
             return None;
         }
 
-        let start_line = node.raw().start_position().row;
-        let end_line = node.raw().end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: "String concatenation inside loop — use a buffer or collect/join instead".into(),
-            suggestions: vec![
-                "Use `String::with_capacity()` + `push_str()` or `Vec::join()`".into(),
-                "Collect into a `Vec<&str>` and `.join()` after the loop".into(),
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            "String concatenation inside loop — use a buffer or collect/join instead".into(),
+            &[
+                "Use `String::with_capacity()` + `push_str()` or `Vec::join()`",
+                "Collect into a `Vec<&str>` and `.join()` after the loop",
             ],
-        })
+        ))
     }
 }
 

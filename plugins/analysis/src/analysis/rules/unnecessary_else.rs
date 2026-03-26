@@ -37,17 +37,14 @@ impl AnalysisRule for UnnecessaryElse {
             }
         }
 
-        let start_line = else_node.start_position().row;
-        let end_line = else_node.end_position().row;
-
         Some(Hint {
             rule_id: self.id(),
             severity: Severity::Warning,
-            line_range: start_line..end_line,
+            line_range: else_node.start_position().row..else_node.end_position().row,
             message: "Unnecessary `else` — the `if` branch already exits (return/continue/break)".into(),
-            suggestions: vec![
-                "Remove the `else` and dedent the code".into(),
-                "Use early return / guard clause pattern".into(),
+            suggestions: &[
+                "Remove the `else` and dedent the code",
+                "Use early return / guard clause pattern",
             ],
         })
     }

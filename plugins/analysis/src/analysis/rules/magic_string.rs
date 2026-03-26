@@ -50,15 +50,13 @@ impl AnalysisRule for MagicString {
             return None;
         }
 
-        let start_line = node.raw().start_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: start_line..start_line,
-            message: format!("Magic string `{text}` — extract to a named constant for clarity"),
-            suggestions: vec!["Extract to a `const` or `static` with a descriptive name".into()],
-        })
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Info,
+            format!("Magic string `{text}` — extract to a named constant for clarity"),
+            &["Extract to a `const` or `static` with a descriptive name"],
+        ))
     }
 }
 

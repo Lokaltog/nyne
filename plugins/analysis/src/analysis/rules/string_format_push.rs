@@ -36,15 +36,13 @@ impl AnalysisRule for StringFormatPush {
             return None;
         }
 
-        let line = raw.start_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: line..line,
-            message: "`format!()` used for simple concatenation without formatting".into(),
-            suggestions: vec!["Use `push_str()` or string concatenation".into()],
-        })
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Info,
+            "`format!()` used for simple concatenation without formatting".into(),
+            &["Use `push_str()` or string concatenation"],
+        ))
     }
 }
 

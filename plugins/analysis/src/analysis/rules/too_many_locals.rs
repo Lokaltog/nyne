@@ -27,19 +27,16 @@ impl AnalysisRule for TooManyLocals {
             return None;
         }
 
-        let start_line = node.raw().start_position().row;
-        let end_line = node.raw().end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: format!("{count} local bindings (threshold: {MAX_LOCALS}) — function may be doing too much"),
-            suggestions: vec![
-                "Extract related bindings into a helper function".into(),
-                "Group related state into a struct".into(),
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            format!("{count} local bindings (threshold: {MAX_LOCALS}) — function may be doing too much"),
+            &[
+                "Extract related bindings into a helper function",
+                "Group related state into a struct",
             ],
-        })
+        ))
     }
 }
 

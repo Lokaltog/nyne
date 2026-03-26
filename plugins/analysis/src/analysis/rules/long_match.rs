@@ -36,16 +36,13 @@ impl AnalysisRule for LongMatch {
             return None;
         }
 
-        let start_line = raw.start_position().row;
-        let end_line = raw.end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: format!("Match/switch with {arm_count} arms (threshold: {MAX_ARMS})"),
-            suggestions: vec!["Consider a trait, lookup map, or enum dispatch".into()],
-        })
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            format!("Match/switch with {arm_count} arms (threshold: {MAX_ARMS})"),
+            &["Consider a trait, lookup map, or enum dispatch"],
+        ))
     }
 }
 

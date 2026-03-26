@@ -25,22 +25,19 @@ impl AnalysisRule for TodoFixme {
             .iter()
             .find_map(|&tag| extract_marker_text(text, tag).map(|d| (tag, d)))?;
 
-        let start_line = node.raw().start_position().row;
-        let end_line = node.raw().end_position().row;
-
         let suffix = if detail.is_empty() {
             String::new()
         } else {
             format!(": {detail}")
         };
 
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: start_line..end_line,
-            message: format!("{marker} comment found{suffix}"),
-            suggestions: vec![],
-        })
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Info,
+            format!("{marker} comment found{suffix}"),
+            &[],
+        ))
     }
 }
 

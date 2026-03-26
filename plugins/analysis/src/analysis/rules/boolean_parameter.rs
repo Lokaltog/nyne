@@ -31,19 +31,17 @@ impl AnalysisRule for BooleanParameter {
             return None;
         }
 
-        let start_line = raw.start_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: start_line..start_line,
-            message: format!(
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Info,
+            format!(
                 "{} boolean parameter{} in function signature",
                 bool_params.len(),
                 if bool_params.len() == 1 { "" } else { "s" },
             ),
-            suggestions: vec!["Use an enum or separate functions for clarity".into()],
-        })
+            &["Use an enum or separate functions for clarity"],
+        ))
     }
 }
 

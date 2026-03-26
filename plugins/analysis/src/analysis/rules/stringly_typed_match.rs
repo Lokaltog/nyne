@@ -38,21 +38,16 @@ impl AnalysisRule for StringlyTypedMatch {
             return None;
         }
 
-        let start_line = raw.start_position().row;
-        let end_line = raw.end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: format!(
-                "Match with {string_arm_count} string literal arms — consider an enum for type-safe dispatch"
-            ),
-            suggestions: vec![
-                "Define an enum and parse the string at the boundary".into(),
-                "Use `strum::EnumString` or `FromStr` for string-to-enum conversion".into(),
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            format!("Match with {string_arm_count} string literal arms — consider an enum for type-safe dispatch"),
+            &[
+                "Define an enum and parse the string at the boundary",
+                "Use `strum::EnumString` or `FromStr` for string-to-enum conversion",
             ],
-        })
+        ))
     }
 }
 

@@ -28,15 +28,13 @@ impl AnalysisRule for UnwrapChain {
             return None;
         }
 
-        let line = raw.start_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: line..line,
-            message: format!("{count} `.unwrap()` calls in one statement"),
-            suggestions: vec!["Propagate with `?` or use `let...else`".into()],
-        })
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Warning,
+            format!("{count} `.unwrap()` calls in one statement"),
+            &["Propagate with `?` or use `let...else`"],
+        ))
     }
 }
 

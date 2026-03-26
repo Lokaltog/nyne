@@ -32,15 +32,12 @@ impl AnalysisRule for SingleUseVariable {
             return None;
         }
 
-        let start_line = raw.start_position().row;
-        let end_line = next.end_position().row;
-
         Some(Hint {
             rule_id: self.id(),
             severity: Severity::Info,
-            line_range: start_line..end_line,
+            line_range: raw.start_position().row..next.end_position().row,
             message: format!("`{name}` is bound and immediately consumed — consider inlining"),
-            suggestions: vec!["Inline the expression — intermediate binding adds no clarity".into()],
+            suggestions: &["Inline the expression — intermediate binding adds no clarity"],
         })
     }
 }

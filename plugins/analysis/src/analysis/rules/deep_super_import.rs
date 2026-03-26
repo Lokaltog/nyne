@@ -32,15 +32,13 @@ impl AnalysisRule for DeepSuperImport {
             return None;
         }
 
-        let line = node.raw().start_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: line..line,
-            message: format!("`super::` repeated {depth} times — use `crate::` absolute path instead"),
-            suggestions: vec!["Replace `super::super::...` with the equivalent `crate::` path".into()],
-        })
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Warning,
+            format!("`super::` repeated {depth} times — use `crate::` absolute path instead"),
+            &["Replace `super::super::...` with the equivalent `crate::` path"],
+        ))
     }
 }
 

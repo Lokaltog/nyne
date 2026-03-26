@@ -38,13 +38,13 @@ impl AnalysisRule for LargeClosure {
             return None;
         }
 
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: start_line..end_line,
-            message: format!("Closure spans {line_count} lines (threshold: {MAX_CLOSURE_LINES})"),
-            suggestions: vec!["Extract to a named function for testability and readability".into()],
-        })
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Info,
+            format!("Closure spans {line_count} lines (threshold: {MAX_CLOSURE_LINES})"),
+            &["Extract to a named function for testability and readability"],
+        ))
     }
 }
 

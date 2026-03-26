@@ -61,7 +61,7 @@ fn hint(rule_id: &'static str, line_start: usize, line_end: usize) -> HintView {
         message: String::new(),
         line_start,
         line_end,
-        suggestions: vec![],
+        suggestions: &[],
     }
 }
 

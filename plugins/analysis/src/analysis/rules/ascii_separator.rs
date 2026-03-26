@@ -39,20 +39,16 @@ impl AnalysisRule for AsciiSeparator {
             return None;
         }
 
-        let start_line = node.raw().start_position().row;
-        let end_line = node.raw().end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: "ASCII separator line detected — remove it and use doc comments or blank lines for structure"
-                .into(),
-            suggestions: vec![
-                "Delete the separator line".into(),
-                "Replace with a doc comment describing the section".into(),
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            "ASCII separator line detected — remove it and use doc comments or blank lines for structure".into(),
+            &[
+                "Delete the separator line",
+                "Replace with a doc comment describing the section",
             ],
-        })
+        ))
     }
 }
 

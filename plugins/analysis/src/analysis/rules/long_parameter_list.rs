@@ -43,21 +43,18 @@ impl AnalysisRule for LongParameterList {
             return None;
         }
 
-        let start_line = node.raw().start_position().row;
-        let end_line = node.raw().end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Warning,
-            line_range: start_line..end_line,
-            message: format!(
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Warning,
+            format!(
                 "{param_count} parameters (threshold: {MAX_PARAMS}) — consider grouping related parameters into a struct or options object"
             ),
-            suggestions: vec![
-                "Group related parameters into a config/options struct".into(),
-                "Use the builder pattern for complex construction".into(),
+            &[
+                "Group related parameters into a config/options struct",
+                "Use the builder pattern for complex construction",
             ],
-        })
+        ))
     }
 }
 

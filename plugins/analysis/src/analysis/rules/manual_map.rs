@@ -48,16 +48,13 @@ impl AnalysisRule for ManualMap {
             return None;
         }
 
-        let start_line = raw.start_position().row;
-        let end_line = raw.end_position().row;
-
-        Some(Hint {
-            rule_id: self.id(),
-            severity: Severity::Info,
-            line_range: start_line..end_line,
-            message: "`match` on Option with Some → Some, None → None is a manual `.map()`".into(),
-            suggestions: vec!["Use `.map(|v| f(v))`".into()],
-        })
+        Some(Hint::from_node(
+            self,
+            node,
+            Severity::Info,
+            "`match` on Option with Some → Some, None → None is a manual `.map()`".into(),
+            &["Use `.map(|v| f(v))`"],
+        ))
     }
 }
 
