@@ -1,15 +1,17 @@
 //! Plugin registration and lifecycle implementation.
 
+use std::path::Path;
 use std::sync::Arc;
 use std::thread;
 
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{self, Result};
 use linkme::distributed_slice;
 use nyne::config::NyneConfig;
 use nyne::dispatch::activation::ActivationContext;
 use nyne::plugin::{PLUGINS, Plugin, PluginFactory};
 use nyne::provider::Provider;
 use nyne::types::PassthroughProcesses;
+use nyne_source::providers::syntax::FileRenameHook;
 use nyne_source::syntax::SyntaxRegistry;
 use tracing::info;
 
@@ -17,6 +19,7 @@ use crate::config::LspConfig;
 use crate::lsp::LspRegistry;
 use crate::lsp::manager::LspManager;
 use crate::lsp::path::LspPathResolver;
+use crate::providers::provider::LspProvider;
 use crate::providers::workspace_search::WorkspaceSearchProvider;
 
 /// Entry point for the LSP plugin, implementing the [`Plugin`] trait.
@@ -32,8 +35,8 @@ struct LspPlugin;
 /// are eagerly spawned on a background thread so they are warm before the
 /// first workspace query arrives.
 ///
-/// The `providers` phase creates the `WorkspaceSearchProvider` (and later,
-/// `LspProvider` for per-symbol LSP nodes once wiring is complete).
+/// The `providers` phase creates `LspProvider` (per-symbol LSP nodes) and
+/// `WorkspaceSearchProvider` (workspace symbol search).
 impl Plugin for LspPlugin {
     fn id(&self) -> &'static str { "lsp" }
 
@@ -67,6 +70,11 @@ impl Plugin for LspPlugin {
                 .ok();
         }
 
+        // Insert the FileRenameHook so SyntaxProvider can coordinate
+        // file renames with the LSP server.
+        let hook: Arc<dyn FileRenameHook> = Arc::new(LspFileRenameHook(Arc::clone(&lsp)));
+        ctx.insert(hook);
+
         info!("lsp plugin activated");
 
         ctx.insert(lsp);
@@ -75,7 +83,10 @@ impl Plugin for LspPlugin {
     }
 
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
-        Ok(vec![Arc::new(WorkspaceSearchProvider::new(Arc::clone(ctx)))])
+        Ok(vec![
+            Arc::new(LspProvider::new(Arc::clone(ctx))),
+            Arc::new(WorkspaceSearchProvider::new(Arc::clone(ctx))),
+        ])
     }
 
     fn default_config(&self) -> Option<toml::Table> { toml::Table::try_from(LspConfig::default()).ok() }
@@ -83,6 +94,21 @@ impl Plugin for LspPlugin {
     fn resolved_config(&self, config: &NyneConfig) -> Option<serde_json::Value> {
         serde_json::to_value(LspConfig::from_plugin_config(config.plugin.get("lsp"))).ok()
     }
+}
+
+/// File rename hook delegating to [`LspManager`].
+///
+/// Inserted into the `TypeMap` during `activate()` so that
+/// `SyntaxProvider` can coordinate file renames with the LSP server.
+struct LspFileRenameHook(Arc<LspManager>);
+
+impl FileRenameHook for LspFileRenameHook {
+    fn will_rename(&self, old: &Path, new: &Path) -> eyre::Result<()> {
+        self.0.will_rename_file(old, new);
+        Ok(())
+    }
+
+    fn did_rename(&self, old: &Path, new: &Path) { self.0.did_rename_file(old, new); }
 }
 
 /// Link-time registration of the LSP plugin into the global `PLUGINS` slice.

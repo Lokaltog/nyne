@@ -46,7 +46,7 @@ use crate::lsp::handle::LspHandle;
 /// does not support (based on advertised capabilities). Adding a new
 /// LSP feature only requires adding a variant to `LspFeature` — no
 /// changes here.
-pub fn build_lsp_symbol_nodes(
+pub(crate) fn build_lsp_symbol_nodes(
     handle: &Arc<LspHandle>,
     source: &str,
     name_byte_offset: usize,
@@ -85,7 +85,7 @@ pub fn build_lsp_symbol_nodes(
 /// that changes asynchronously — the `DiagnosticStore::get_or_wait`
 /// freshness gate in the read pipeline handles blocking until the LSP
 /// publishes fresh results after a `didChange`.
-pub fn build_diagnostics_node(name: &str, handle: &Arc<LspHandle>, lsp_handles: &LspHandles) -> VirtualNode {
+pub(crate) fn build_diagnostics_node(name: &str, handle: &Arc<LspHandle>, lsp_handles: &LspHandles) -> VirtualNode {
     lsp_handles
         .diagnostics
         .node(name, DiagnosticsLspView(Arc::clone(handle)))

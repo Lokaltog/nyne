@@ -14,7 +14,6 @@ use color_eyre::eyre::{Report, Result, bail};
 use super::cache::CachedNodeKind;
 use crate::dispatch::context::RequestContext;
 use crate::node::VirtualNode;
-use crate::node::kind::NodeKind;
 use crate::provider::{ConflictInfo, ConflictResolution, Provider, ProviderId};
 
 /// Catch panics from a provider closure, logging them with provider identity.
@@ -71,36 +70,20 @@ impl OwnedNode {
         }
     }
 
-    /// Detect name conflicts: names emitted by two or more providers.
+    /// Detect name collisions: names emitted by two or more providers.
     ///
-    /// Returns a map of conflicting name -> list of provider IDs that emitted it.
-    /// Directory-only conflicts are excluded — multiple providers may contribute
-    /// a directory with the same name; the dispatch layer merges their children
-    /// when that directory is resolved.
-    pub(super) fn detect_conflicts(nodes: &[Self]) -> HashMap<String, Vec<ProviderId>> {
-        let mut by_name: HashMap<&str, Vec<(ProviderId, bool)>> = HashMap::new();
+    /// Returns a map of colliding name → list of provider IDs that emitted it.
+    /// All collisions are reported — including same-name directories — so the
+    /// caller can merge capabilities across providers.
+    pub(super) fn detect_collisions(nodes: &[Self]) -> HashMap<String, Vec<ProviderId>> {
+        let mut by_name: HashMap<&str, BTreeSet<ProviderId>> = HashMap::new();
         for owned in nodes {
-            let is_dir = matches!(owned.node.kind(), NodeKind::Directory);
-            by_name
-                .entry(owned.node.name())
-                .or_default()
-                .push((owned.provider_id, is_dir));
+            by_name.entry(owned.node.name()).or_default().insert(owned.provider_id);
         }
 
         by_name
             .into_iter()
-            .filter_map(|(name, entries)| {
-                let all_dirs = entries.iter().all(|(_, is_dir)| *is_dir);
-                let pids: Vec<ProviderId> = entries
-                    .into_iter()
-                    .map(|(pid, _)| pid)
-                    .collect::<BTreeSet<_>>()
-                    .into_iter()
-                    .collect();
-                // Multiple providers for the same name is only a conflict if
-                // at least one is not a directory (dirs merge naturally).
-                (pids.len() > 1 && !all_dirs).then(|| (name.to_owned(), pids))
-            })
+            .filter_map(|(name, pids)| (pids.len() > 1).then(|| (name.to_owned(), pids.into_iter().collect())))
             .collect()
     }
 }
@@ -228,6 +211,69 @@ fn resolve_conflict(
     }
 }
 
+/// Merge a group of nodes that collided on the same name.
+///
+/// Non-contested capabilities are combined into a single node. Contested
+/// capabilities (same slot claimed by 2+ providers) use the standard
+/// conflict resolution protocol (yield/force) to pick a winner.
+fn merge_collision_group(
+    name: &str,
+    mut group: Vec<OwnedNode>,
+    collisions: &HashMap<String, Vec<ProviderId>>,
+    providers: &[Arc<dyn Provider>],
+    ctx: &RequestContext<'_>,
+) -> OwnedNode {
+    // Start with the first node, merge others into it.
+    let mut base = group.remove(0);
+    let mut has_contested = false;
+
+    for other in group {
+        let contested = base.node.merge_capabilities_from(other.node);
+        has_contested |= !contested.is_empty();
+    }
+
+    if !has_contested {
+        return base;
+    }
+
+    // Contested capabilities: use the same conflict protocol as path conflicts.
+    let provider_ids = &collisions[name];
+    let involved: HashSet<ProviderId> = provider_ids.iter().copied().collect();
+    let conflict_infos = ConflictInfo::for_providers(name, provider_ids.iter().copied());
+    let outcome = collect_conflict_responses(providers, &involved, &conflict_infos, ctx);
+
+    match outcome.forces.len() {
+        // All yield: keep the merged base (first provider's contested caps win).
+        0 => base,
+        // Single force: winner's node takes over, with base's non-contested caps merged in.
+        1 => {
+            let Some((winner_pid, nodes)) = outcome.forces.into_iter().next() else {
+                return base;
+            };
+            match nodes.into_iter().next() {
+                Some(mut winner_node) => {
+                    winner_node.merge_capabilities_from(base.node);
+                    OwnedNode {
+                        node: winner_node,
+                        provider_id: winner_pid,
+                    }
+                }
+                None => base,
+            }
+        }
+        // Tied force: keep merged base as-is.
+        n => {
+            let force_pids: Vec<_> = outcome.forces.iter().map(|(pid, _)| pid.to_string()).collect();
+            tracing::warn!(
+                name,
+                providers = ?force_pids,
+                "tied force conflict ({n} providers) on capability merge, keeping base"
+            );
+            base
+        }
+    }
+}
+
 /// Resolve a directory by collecting nodes from all providers and negotiating conflicts.
 pub(super) fn resolve_directory(providers: &[Arc<dyn Provider>], ctx: &RequestContext<'_>) -> Result<Vec<OwnedNode>> {
     let mut all_nodes: Vec<OwnedNode> = Vec::new();
@@ -261,40 +307,27 @@ pub(super) fn resolve_directory(providers: &[Arc<dyn Provider>], ctx: &RequestCo
         return Err(e.wrap_err(format!("all providers failed for {}", ctx.path)));
     }
 
-    let conflicts = OwnedNode::detect_conflicts(&all_nodes);
-    if conflicts.is_empty() {
+    let collisions = OwnedNode::detect_collisions(&all_nodes);
+    if collisions.is_empty() {
         return Ok(all_nodes);
     }
 
-    let conflicting_names: Vec<&String> = conflicts.keys().collect();
-    tracing::debug!(?conflicting_names, "provider-vs-provider conflicts detected");
+    let collision_names: Vec<&String> = collisions.keys().collect();
+    tracing::debug!(?collision_names, "provider collisions detected");
 
-    // Separate non-conflicting nodes.
-    let mut resolved: Vec<OwnedNode> = all_nodes
-        .into_iter()
-        .filter(|owned| !conflicts.contains_key(owned.node.name()))
-        .collect();
-
-    for (name, provider_ids) in &conflicts {
-        let conflict_infos = ConflictInfo::for_providers(name, provider_ids.iter().copied());
-
-        let involved: HashSet<ProviderId> = provider_ids.iter().copied().collect();
-
-        match resolve_conflict(name, providers, &involved, &conflict_infos, ctx) {
-            ConflictResult::Forced(winners) => resolved.extend(winners),
-            ConflictResult::Unforced { retries } if retries.is_empty() => {
-                let pids: Vec<_> = provider_ids.iter().map(ProviderId::as_str).collect();
-                tracing::warn!(name, providers = ?pids, "all providers yielded, dropping conflicting nodes");
-            }
-            ConflictResult::Unforced { retries } => {
-                let retry_conflicts = OwnedNode::detect_conflicts(&retries);
-                if retry_conflicts.contains_key(name.as_str()) {
-                    tracing::warn!(name, "conflict unresolved after retry, dropping nodes");
-                } else {
-                    resolved.extend(retries);
-                }
-            }
+    // Separate non-colliding nodes from colliding ones.
+    let mut resolved: Vec<OwnedNode> = Vec::new();
+    let mut colliding: HashMap<String, Vec<OwnedNode>> = HashMap::new();
+    for owned in all_nodes {
+        if collisions.contains_key(owned.node.name()) {
+            colliding.entry(owned.node.name().to_owned()).or_default().push(owned);
+        } else {
+            resolved.push(owned);
         }
+    }
+
+    for (name, group) in colliding {
+        resolved.push(merge_collision_group(&name, group, &collisions, providers, ctx));
     }
 
     Ok(resolved)

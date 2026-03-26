@@ -56,6 +56,8 @@ impl DiffAction for RenameDiff {
 ///
 /// Attached to fragment directory nodes when an LSP server is available.
 /// Triggered by `mv file.rs@/symbols/OldName@/ file.rs@/symbols/NewName@/`.
+/// The dispatch layer merges this capability onto `SyntaxProvider`'s directory
+/// node via the generalized capability merge.
 pub(crate) struct SymbolRename {
     pub query: SymbolQuery,
 }

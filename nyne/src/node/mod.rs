@@ -425,6 +425,64 @@ impl VirtualNode {
     pub fn write_middlewares(&self) -> &[Box<dyn WriteMiddleware>] {
         self.ext.as_ref().map_or(&[], |e| &e.write_middlewares)
     }
+
+    /// Merge capabilities from `other` into `self`.
+    ///
+    /// For each capability slot, if `self` lacks it but `other` has it, take
+    /// it from `other`. Inline fields (readable, writable, source, props,
+    /// plugins, middlewares) follow the same rule. Returns a list of
+    /// capability names where BOTH nodes had a value (contested slots) —
+    /// the caller uses conflict resolution to pick a winner for those.
+    pub(crate) fn merge_capabilities_from(&mut self, mut other: Self) -> Vec<&'static str> {
+        let mut contested = Vec::new();
+
+        // Inline capabilities
+        match (&self.readable, &other.readable) {
+            (None, Some(_)) => self.readable = other.readable.take(),
+            (Some(_), Some(_)) => contested.push("readable"),
+            _ => {}
+        }
+        match (&self.writable, &other.writable) {
+            (None, Some(_)) => self.writable = other.writable.take(),
+            (Some(_), Some(_)) => contested.push("writable"),
+            _ => {}
+        }
+        if self.source.is_none() && other.source.is_some() {
+            self.source = other.source;
+        }
+        // Explicit permissions from other override auto-derived
+        if self.permissions.is_none() && other.permissions.is_some() {
+            self.permissions = other.permissions;
+        }
+
+        // Extension capabilities — only process if other has extensions
+        if let Some(other_ext) = other.ext.take() {
+            let ext = self.ext_mut();
+
+            macro_rules! merge_slot {
+                ($field:ident, $name:expr) => {
+                    match (&ext.$field, &other_ext.$field) {
+                        (None, Some(_)) => ext.$field = other_ext.$field,
+                        (Some(_), Some(_)) => contested.push($name),
+                        _ => {}
+                    }
+                };
+            }
+            merge_slot!(renameable, "renameable");
+            merge_slot!(unlinkable, "unlinkable");
+            merge_slot!(lifecycle, "lifecycle");
+            merge_slot!(xattrable, "xattrable");
+
+            // Additive collections: append, don't conflict.
+            ext.read_middlewares.extend(other_ext.read_middlewares);
+            ext.write_middlewares.extend(other_ext.write_middlewares);
+            ext.plugins.extend(other_ext.plugins);
+            // Props: first-writer-wins per key.
+            ext.props.merge_from(other_ext.props);
+        }
+
+        contested
+    }
 }
 
 /// Generate a `require_*` method that returns the capability or `PermissionDenied`.

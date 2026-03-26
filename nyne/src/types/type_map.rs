@@ -25,4 +25,12 @@ impl TypeMap {
 
     /// Retrieve a reference to a typed value.
     pub fn get<T: 'static>(&self) -> Option<&T> { self.inner.get(&TypeId::of::<T>())?.downcast_ref() }
+
+    /// Merge entries from `other` into `self`. Existing keys in `self` are
+    /// preserved (first-writer-wins); only missing keys are filled from `other`.
+    pub fn merge_from(&mut self, other: Self) {
+        for (key, value) in other.inner {
+            self.inner.entry(key).or_insert(value);
+        }
+    }
 }
