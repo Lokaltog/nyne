@@ -107,32 +107,39 @@ pub fn splice_rope_validate_write(
 
 /// Byte offset of the start of the line containing `offset`.
 ///
-/// Scans backward from `offset` to the preceding `\n` (or start of string).
+/// Uses `crop::Rope` for byte→line conversion rather than manual `\n` scanning.
 /// Used to snap byte-range starts to line boundaries so that sliced content
 /// preserves consistent indentation on every line.
 #[must_use]
-pub fn line_start_of(source: &str, offset: usize) -> usize { source[..offset].rfind('\n').map_or(0, |pos| pos + 1) }
+pub fn line_start_of(source: &str, offset: usize) -> usize {
+    let rope = Rope::from(source);
+    rope.byte_of_line(rope.line_of_byte(offset))
+}
 
 /// Byte offset of the end of the line containing `offset`.
 ///
-/// Scans forward from `offset` to the next `\n` (inclusive) or end of string.
-/// Used to snap byte-range ends to line boundaries for `SpliceMode::Byte`
-/// masking, where the full lines are read but out-of-span bytes are replaced
-/// with spaces.
+/// Returns the byte position just past the `\n` terminator (or `source.len()`
+/// for the final unterminated line). Uses `crop::Rope` for byte→line conversion
+/// rather than manual `\n` scanning.
 #[must_use]
 pub fn line_end_of(source: &str, offset: usize) -> usize {
-    source[offset..].find('\n').map_or(source.len(), |pos| offset + pos + 1)
+    let rope = Rope::from(source);
+    let line = rope.line_of_byte(offset);
+    if line + 1 < rope.line_len() {
+        rope.byte_of_line(line + 1)
+    } else {
+        source.len()
+    }
 }
 
 /// Determine the indentation prefix at a given byte offset in source text.
 ///
-/// Scans backward from `offset` to the start of the line, collecting
-/// whitespace characters. Used to preserve indentation when wrapping
-/// doc comments or inserting content.
+/// Uses `crop::Rope` to find the line start, then extracts leading whitespace.
+/// Used to preserve indentation when wrapping doc comments or inserting content.
 #[must_use]
 pub fn indent_at(source: &str, offset: usize) -> &str {
-    let before = &source[..offset];
-    let line_start = before.rfind('\n').map_or(0, |pos| pos + 1);
+    let rope = Rope::from(source);
+    let line_start = rope.byte_of_line(rope.line_of_byte(offset));
     let line = &source[line_start..offset];
     let non_ws = line.find(|c: char| !c.is_whitespace()).unwrap_or(line.len());
     &source[line_start..line_start + non_ws]
