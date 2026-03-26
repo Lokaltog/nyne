@@ -277,7 +277,7 @@ fn find_comment_block(source: &str, line_starts: &[usize], byte_offset: usize) -
         return find_block_comment_range(source, byte_offset);
     }
 
-    let prefix = if line_text.starts_with("///") || line_text.starts_with("//!") || line_text.starts_with("//") {
+    let prefix = if line_text.starts_with("//") {
         "//"
     } else if line_text.starts_with('#') {
         "#"

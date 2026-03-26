@@ -5,7 +5,7 @@ mod entry;
 /// TODO scanner -- Aho-Corasick automaton for tag detection.
 mod scan;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use entry::TodoEntry;
 use nyne::dispatch::routing::ctx::RouteCtx;
@@ -51,7 +51,7 @@ struct TodoIndex {
     /// All discovered entries, grouped by tag.
     entries_by_tag: BTreeMap<String, Vec<TodoEntry>>,
     /// Set of files that were scanned (for invalidation).
-    scanned_files: Vec<VfsPath>,
+    scanned_files: HashSet<VfsPath>,
 }
 
 /// Methods for [`TodoProvider`].
@@ -97,18 +97,21 @@ impl TodoProvider {
             return;
         }
 
-        // Discover files from git index.
+        let mut index = self.index.write();
+        // Double-check after acquiring write lock — another thread may have
+        // populated the index while we waited.
+        if index.is_some() {
+            return;
+        }
+
+        // Discover and scan inside the write lock to avoid redundant work
+        // when multiple threads race past the read-lock fast path.
         let files = self.discover_files();
         let entries_by_tag = self.scanner.scan_all(&files, ctx.real_fs, &self.syntax);
-
-        let mut index = self.index.write();
-        // Double-check after acquiring write lock.
-        if index.is_none() {
-            *index = Some(TodoIndex {
-                entries_by_tag,
-                scanned_files: files,
-            });
-        }
+        *index = Some(TodoIndex {
+            entries_by_tag,
+            scanned_files: files.into_iter().collect(),
+        });
     }
 
     /// Get the list of files to scan from the git index.
