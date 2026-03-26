@@ -28,8 +28,8 @@ Lowercased files and directories (`body.{{ ext }}`, `docstring.txt`, etc.) are v
 | Directory overview | Read `src/module@/OVERVIEW.md` |
 | Symbol body | Read/Edit `file.{{ ext }}@/symbols/Foo@/body.{{ ext }}` |
 | Signature only | Read/Edit `file.{{ ext }}@/symbols/Foo@/signature.{{ ext }}` |
-| Symbol docstring | Read/Edit `file.{{ ext }}@/symbols/Foo@/docstring.txt` |
-| File/module docstring | Read/Edit `file.{{ ext }}@/symbols/docstring.txt` |
+| Symbol docstring | Read/Edit `file.{{ ext }}@/symbols/Foo@/docstring.txt` ¹ |
+| File/module docstring | Read/Edit `file.{{ ext }}@/symbols/docstring.txt` ¹ |
 | Decorators/attrs | Read/Edit `file.{{ ext }}@/symbols/Foo@/decorators.{{ ext }}` |
 | Import block | Read/Edit `file.{{ ext }}@/symbols/imports.{{ ext }}` |
 | Generated docs | Read `file.{{ ext }}@/symbols/Foo@/DOC.md` |
@@ -88,6 +88,8 @@ rmdir file.{{ ext }}@/symbols/old_helper@/
 ```
 
 All writes to `@/` paths are tree-sitter validated and safe. Invalid syntax returns an error, not a broken file.
+
+¹ **`docstring.txt` auto-prefixes and auto-strips comment markers.** Read and write `docstring.txt` as plain text — no comment prefix needed. The VFS automatically strips the language-specific comment prefix (`///`, `//!`, `#`, `"""..."""`, etc.) on read, and re-applies the correct prefix based on filetype and location (item vs module) on write. Never include comment prefixes like `///` or `//!` in docstring content.
 
 ## Batch Edit Staging
 
