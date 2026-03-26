@@ -272,6 +272,9 @@ impl NyneFs {
                         .real_fs()
                         .metadata(&real_path)
                         .map(|m| m.file_type)
+                        .inspect_err(
+                            |e| debug!(path = %real_path, error = %e, "metadata failed for passthrough demote"),
+                        )
                         .unwrap_or(FileKind::File);
                     ResolvedInode::Real {
                         file_type,
