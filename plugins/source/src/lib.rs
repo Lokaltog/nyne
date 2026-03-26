@@ -14,8 +14,8 @@ pub mod providers;
 pub mod syntax;
 
 // Public re-exports for downstream plugin crates.
-pub use providers::names::SUBDIR_AT_LINE;
 pub use providers::util::parse_tag_suffix;
+pub use providers::well_known::SUBDIR_AT_LINE;
 pub use syntax::SyntaxRegistry;
 pub use syntax::parser::TsNode;
 pub use syntax::spec::Decomposer;

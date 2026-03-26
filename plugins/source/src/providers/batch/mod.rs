@@ -37,7 +37,7 @@ use nyne::node::capabilities::{Unlinkable, Writable};
 use nyne::{companion_symbol_path, dispatch_children, dispatch_lookup, source_file};
 use strum::IntoEnumIterator;
 
-use super::names::{FILE_STAGED_DIFF, SUBDIR_EDIT, SUBDIR_STAGED};
+use super::well_known::{FILE_STAGED_DIFF, SUBDIR_EDIT, SUBDIR_STAGED};
 use crate::edit::diff_action::{DiffAction, DiffActionNode};
 use crate::edit::plan::EditOpKind;
 use crate::services::SourceServices;

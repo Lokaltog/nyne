@@ -14,7 +14,7 @@ use nyne_source::providers::syntax::{FileRenameHook, FragmentNodeHook};
 use nyne_source::syntax::SyntaxRegistry;
 use tracing::info;
 
-use crate::config::LspConfig;
+use crate::config::Config;
 use crate::lsp::LspRegistry;
 use crate::lsp::handle::LspHandle;
 use crate::lsp::manager::LspManager;
@@ -26,10 +26,10 @@ use crate::providers::workspace_search::WorkspaceSearchProvider;
 /// Entry point for the LSP plugin, implementing the [`Plugin`] trait.
 ///
 /// Registered into the global plugin slice at link time via [`LSP_PLUGIN`].
-/// Caches the resolved [`LspConfig`] from `activate` so `resolved_config`
+/// Caches the resolved [`Config`] from `activate` so `resolved_config`
 /// can return it without re-parsing.
 struct LspPlugin {
-    resolved: OnceLock<LspConfig>,
+    resolved: OnceLock<Config>,
 }
 
 /// Two-phase lifecycle for the LSP plugin.
@@ -45,7 +45,7 @@ impl Plugin for LspPlugin {
     fn id(&self) -> &'static str { "lsp" }
 
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
-        let lsp_config = LspConfig::from_plugin_config(ctx.plugin_config("lsp"));
+        let lsp_config = Config::from_plugin_config(ctx.plugin_config("lsp"));
         let _ = self.resolved.set(lsp_config.clone());
         let sandbox_env = ctx.config().sandbox.env.clone();
         let lsp_registry = LspRegistry::build_with_config(&lsp_config);
@@ -99,14 +99,14 @@ impl Plugin for LspPlugin {
         ])
     }
 
-    fn default_config(&self) -> Option<toml::Table> { toml::Table::try_from(LspConfig::default()).ok() }
+    fn default_config(&self) -> Option<toml::Table> { toml::Table::try_from(Config::default()).ok() }
 
     fn resolved_config(&self, config: &NyneConfig) -> Option<serde_json::Value> {
         let cfg = self
             .resolved
             .get()
             .cloned()
-            .unwrap_or_else(|| LspConfig::from_plugin_config(config.plugin.get("lsp")));
+            .unwrap_or_else(|| Config::from_plugin_config(config.plugin.get("lsp")));
         serde_json::to_value(cfg).ok()
     }
 }

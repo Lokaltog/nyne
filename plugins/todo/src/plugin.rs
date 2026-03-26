@@ -5,7 +5,7 @@ use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use tracing::info;
 
-use crate::config::TodoConfig;
+use crate::config::Config;
 use crate::provider::TodoProvider;
 
 /// Entry point for the todo plugin.
@@ -15,7 +15,7 @@ impl Plugin for TodoPlugin {
     fn id(&self) -> &'static str { "todo" }
 
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
-        let config = TodoConfig::from_plugin_config(ctx.plugin_config("todo"));
+        let config = Config::from_plugin_config(ctx.plugin_config("todo"));
         info!("todo plugin activated");
         Ok(vec![Arc::new(TodoProvider::new(Arc::clone(ctx), config))])
     }

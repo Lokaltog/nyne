@@ -59,7 +59,9 @@ pub struct NyneConfig {
     #[serde(default = "default_passthrough_processes")]
     pub passthrough_processes: Vec<String>,
 
-    /// Per-plugin configuration sections.
+    /// Plugin configuration values. Stored as JSON despite TOML source — the
+    /// TOML→JSON conversion is intentional to support JSON-based merge with
+    /// CLI overrides.
     ///
     /// Each key is a plugin ID (e.g., `"coding"`, `"git"`). Values are
     /// opaque JSON values -- plugins deserialize their own config.

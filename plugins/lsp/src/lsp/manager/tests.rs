@@ -5,14 +5,14 @@ use std::sync::Arc;
 use nyne::process::Spawner;
 use nyne_source::SyntaxRegistry;
 
-use crate::config::LspConfig;
+use crate::config::Config;
 use crate::lsp::LspRegistry;
 use crate::lsp::manager::LspManager;
 
 /// Build a manager with the given config pointing at a non-existent root.
 ///
 /// Useful for testing gating/routing logic without spawning real servers.
-fn test_manager_with_config(config: LspConfig) -> LspManager {
+fn test_manager_with_config(config: Config) -> LspManager {
     let registry = LspRegistry::build_with_config(&config);
     let syntax = SyntaxRegistry::global();
     let spawner = Arc::new(Spawner::new());
@@ -25,7 +25,7 @@ fn test_manager_with_config(config: LspConfig) -> LspManager {
 /// Build a manager with default config (enabled/disabled) pointing at a
 /// non-existent root.
 fn test_manager(enabled: bool) -> LspManager {
-    let mut config = LspConfig::default();
+    let mut config = Config::default();
     config.enabled = enabled;
     test_manager_with_config(config)
 }

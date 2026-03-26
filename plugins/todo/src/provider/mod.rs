@@ -18,7 +18,7 @@ use parking_lot::RwLock;
 use scan::TodoScanner;
 use serde::Serialize;
 
-use crate::config::TodoConfig;
+use crate::config::Config;
 
 /// TODO directory name at the `@/` root level.
 const DIR_TODO: &str = "todo";
@@ -31,7 +31,7 @@ const DIR_TODO: &str = "todo";
 /// cached index when scanned files change on disk.
 pub struct TodoProvider {
     ctx: Arc<ActivationContext>,
-    config: TodoConfig,
+    config: Config,
     syntax: Arc<SyntaxRegistry>,
     scanner: TodoScanner,
     index: RwLock<Option<TodoIndex>>,
@@ -57,7 +57,7 @@ struct TodoIndex {
 /// Methods for [`TodoProvider`].
 impl TodoProvider {
     /// Create a new TODO provider with route tree and scanner.
-    pub(crate) fn new(ctx: Arc<ActivationContext>, config: TodoConfig) -> Self {
+    pub(crate) fn new(ctx: Arc<ActivationContext>, config: Config) -> Self {
         let tags = config.tags.clone();
         let scanner = TodoScanner::new(&tags);
         let syntax = SyntaxRegistry::global();

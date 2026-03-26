@@ -5,17 +5,17 @@
 //! expose capabilities ranging from syntax decomposition and batch editing to
 //! workspace-wide symbol search.
 //!
-//! Shared utilities live in [`prelude`], [`names`], [`util`], and
+//! Shared utilities live in [`prelude`], [`well_known`], [`util`], and
 //! [`fragment_resolver`]; the remaining modules are self-contained providers.
 
 /// Shared resolver for lazily accessing decomposed source files.
 pub mod fragment_resolver;
-/// VFS name constants for coding-provided virtual paths.
-pub mod names;
 /// Common imports re-exported for use across coding providers.
 pub mod prelude;
 /// Provider utilities for nyne-coding.
 pub mod util;
+/// Well-known VFS name constants for coding-provided virtual paths.
+pub mod well_known;
 
 /// Batch editing provider — tracks staged edit operations and applies them atomically.
 pub mod batch;

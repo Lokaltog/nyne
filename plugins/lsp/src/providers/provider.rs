@@ -15,7 +15,7 @@ use nyne::types::path_conventions::split_companion_path;
 use nyne::{SUBDIR_SYMBOLS, companion_children, companion_lookup, companion_name, source_file};
 use nyne_source::edit::diff_action::DiffActionNode;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
-use nyne_source::providers::names::handle_builder;
+use nyne_source::providers::well_known::handle_builder;
 use nyne_source::services::SourceServices;
 use nyne_source::syntax::{SyntaxRegistry, find_fragment};
 use strum::IntoEnumIterator;

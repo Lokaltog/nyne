@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// for scanning, grouping, directory layout, and template rendering.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct TodoConfig {
+pub struct Config {
     /// Whether the todo provider is enabled.
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -24,8 +24,8 @@ pub struct TodoConfig {
     pub tags: Vec<String>,
 }
 
-/// Default implementation for `TodoConfig`.
-impl Default for TodoConfig {
+/// Default implementation for `Config`.
+impl Default for Config {
     /// Returns the default value.
     fn default() -> Self {
         Self {
@@ -35,7 +35,7 @@ impl Default for TodoConfig {
     }
 }
 
-impl TodoConfig {
+impl Config {
     /// Deserialize from the plugin config section, falling back to defaults.
     pub fn from_plugin_config(section: Option<&serde_json::Value>) -> Self {
         let Some(value) = section else {

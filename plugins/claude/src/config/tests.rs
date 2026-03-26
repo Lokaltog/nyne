@@ -4,14 +4,14 @@ use rstest::rstest;
 
 use super::*;
 
-/// Parses a TOML string into a `ClaudePluginConfig` for testing.
-fn parse_config(toml_str: &str) -> ClaudePluginConfig {
+/// Parses a TOML string into a `Config` for testing.
+fn parse_config(toml_str: &str) -> Config {
     let value: serde_json::Value = toml::from_str(toml_str).unwrap();
-    ClaudePluginConfig::from_plugin_config(Some(&value))
+    Config::from_plugin_config(Some(&value))
 }
 
-/// Loads a `ClaudePluginConfig` from a named test fixture file.
-fn load_fixture(name: &str) -> ClaudePluginConfig {
+/// Loads a `Config` from a named test fixture file.
+fn load_fixture(name: &str) -> Config {
     let path = format!("{}/src/config/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
     let content = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read fixture {name}: {e}"));
     parse_config(&content)
@@ -147,7 +147,7 @@ fn config_from_pre_tool_fixture() {
 
 #[test]
 fn stop_defaults() {
-    let stop = &ClaudePluginConfig::default().hook_config.stop;
+    let stop = &Config::default().hook_config.stop;
     assert_eq!(stop.min_files, 2);
     assert!(stop.ignore_extensions.contains(&"toml".to_owned()));
     assert!(stop.ignore_extensions.contains(&"md".to_owned()));
@@ -163,7 +163,7 @@ fn stop_config_from_fixture() {
 
 #[test]
 fn claude_defaults_all_enabled() {
-    let config = ClaudePluginConfig::default();
+    let config = Config::default();
     assert!(config.enabled);
     assert!(config.hooks.session_start);
     assert!(config.hooks.pre_tool_use);
@@ -183,7 +183,7 @@ fn claude_overrides_from_fixture() {
 
 #[test]
 fn missing_section_returns_defaults() {
-    let config = ClaudePluginConfig::from_plugin_config(None);
+    let config = Config::from_plugin_config(None);
     assert!(config.enabled);
     assert_eq!(config.hook_config.pre_tool.resolve("Rust").deny_lines_threshold(), 60);
 }

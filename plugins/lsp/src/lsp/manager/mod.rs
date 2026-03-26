@@ -24,7 +24,7 @@ use tracing::{debug, warn};
 use super::LspRegistry;
 use super::cache::LspCache;
 use super::client::LspClient;
-use crate::config::LspConfig;
+use crate::config::Config;
 
 /// Tracked state for a document opened via `textDocument/didOpen`.
 struct OpenDocument {
@@ -68,7 +68,7 @@ pub struct LspManager {
     /// Syntax registry — for gating LSP on tree-sitter support.
     syntax: Arc<SyntaxRegistry>,
     /// Global LSP settings from config.
-    config: LspConfig,
+    config: Config,
     /// Spawner for launching LSP servers as direct daemon children.
     spawner: Arc<Spawner>,
     /// Extra environment variables from sandbox config, merged into LSP
@@ -96,7 +96,7 @@ impl LspManager {
     pub(crate) fn new(
         registry: LspRegistry,
         syntax: Arc<SyntaxRegistry>,
-        config: LspConfig,
+        config: Config,
         spawner: Arc<Spawner>,
         sandbox_env: HashMap<String, String>,
         path_resolver: super::path::LspPathResolver,

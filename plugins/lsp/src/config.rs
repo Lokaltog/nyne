@@ -117,7 +117,7 @@ impl ServerEntry {
 /// being buried inside plugin-specific config.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LspConfig {
+pub struct Config {
     /// Whether LSP integration is enabled at all.
     #[serde(default = "default_true")]
     pub(crate) enabled: bool,
@@ -150,7 +150,7 @@ pub struct LspConfig {
     #[serde(default = "default_workspace_symbol_limit")]
     pub(crate) workspace_symbol_limit: usize,
 }
-impl LspConfig {
+impl Config {
     /// Deserialize from the plugin config section, falling back to defaults.
     pub fn from_plugin_config(section: Option<&serde_json::Value>) -> Self {
         let Some(value) = section else {
@@ -160,7 +160,7 @@ impl LspConfig {
     }
 }
 
-impl Default for LspConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             enabled: default_true(),

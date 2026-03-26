@@ -37,7 +37,7 @@ use std::collections::{HashMap, HashSet};
 use nyne_source::syntax::SyntaxRegistry;
 use spec::LspServerDef;
 
-use crate::config::{LspConfig, ServerEntry};
+use crate::config::{Config, ServerEntry};
 
 /// Extension-indexed registry of LSP server definitions.
 ///
@@ -58,7 +58,7 @@ impl LspRegistry {
     /// Later entries override earlier ones (per field), and disabled
     /// entries are filtered out.
     #[expect(clippy::excessive_nesting, reason = "entry > extensions > ext is inherent")]
-    pub(crate) fn build_with_config(config: &LspConfig) -> Self {
+    pub(crate) fn build_with_config(config: &Config) -> Self {
         let syntax = SyntaxRegistry::global();
         let resolved = Self::resolve_servers(&config.servers);
 

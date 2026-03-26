@@ -10,7 +10,7 @@ use super::SyntaxProvider;
 use super::content::delete;
 use super::resolve::fragment_body_path;
 use crate::edit::diff_action::DiffActionNode;
-use crate::providers::names::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
+use crate::providers::well_known::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
 use crate::services::SourceServices;
 use crate::syntax::{find_fragment, find_nearest_fragment_at_line};
 

@@ -8,7 +8,7 @@ use nyne::SUBDIR_SYMBOLS;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::prelude::*;
-use nyne_source::providers::names::SUBDIR_AT_LINE;
+use nyne_source::providers::well_known::SUBDIR_AT_LINE;
 
 use crate::lsp::manager::LspManager;
 use crate::lsp::uri::uri_to_file_path;

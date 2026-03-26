@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 /// Deserialized from the `[plugin.claude]` section of `config.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ClaudePluginConfig {
+#[allow(clippy::struct_field_names)] // hook_config is the natural TOML key
+pub struct Config {
     /// Master toggle — `false` disables the entire `.claude/` directory
     /// and all associated hooks/scripts.
     #[serde(default = "default_true")]
@@ -20,24 +21,24 @@ pub struct ClaudePluginConfig {
 
     /// Per-hook toggles.
     #[serde(default)]
-    pub hooks: ClaudeHooksToggle,
+    pub hooks: HooksToggle,
 
     /// Hook behavior configuration.
     #[serde(default)]
     pub hook_config: HookConfig,
 }
 
-impl Default for ClaudePluginConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             enabled: true,
-            hooks: ClaudeHooksToggle::default(),
+            hooks: HooksToggle::default(),
             hook_config: HookConfig::default(),
         }
     }
 }
 
-impl ClaudePluginConfig {
+impl Config {
     /// Deserialize from the plugin config section, falling back to defaults.
     pub fn from_plugin_config(section: Option<&serde_json::Value>) -> Self {
         let Some(value) = section else {
@@ -55,7 +56,7 @@ impl ClaudePluginConfig {
 /// to disable specific hooks while keeping the rest active.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ClaudeHooksToggle {
+pub struct HooksToggle {
     /// Session-start hook (mount status, project context).
     #[serde(default = "default_true")]
     pub session_start: bool,
@@ -77,8 +78,8 @@ pub struct ClaudeHooksToggle {
     pub statusline: bool,
 }
 
-/// Default implementation for `ClaudeHooksToggle`.
-impl Default for ClaudeHooksToggle {
+/// Default implementation for `HooksToggle`.
+impl Default for HooksToggle {
     /// Returns the default value.
     fn default() -> Self {
         Self {

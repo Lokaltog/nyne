@@ -13,7 +13,7 @@ Source plugin — syntax decomposition, batch editing, developer-experience feat
 
 - `services::SourceServices` — bundle of syntax and decomposition services
 - `syntax::` — `SyntaxRegistry`, `TsNode`, `DecomposedSource`, `Fragment`, `find_fragment_at_line`, `fragment_list`, template partials
-- `providers::names` — VFS name constants, `symbol_from_vfs_path`, `is_symbols_overview`
+- `providers::well_known` — VFS name constants, `symbol_from_vfs_path`, `is_symbols_overview`
 - `providers::syntax::FileRenameHook` — trait for external file-rename coordination (implemented by LSP plugin)
 
 ## SourceServices

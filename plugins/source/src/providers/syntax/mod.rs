@@ -7,8 +7,8 @@ use nyne::templates::TemplateHandle;
 use nyne::types::RealFs;
 use nyne::types::path_conventions::split_companion_path;
 
-use super::names::{self, SUBDIR_AT_LINE, SUBDIR_SYMBOLS, companion_name};
 use super::prelude::*;
+use super::well_known::{self as names, SUBDIR_AT_LINE, SUBDIR_SYMBOLS, companion_name};
 use crate::services::SourceServices;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::spec::Decomposer;

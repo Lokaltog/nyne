@@ -13,7 +13,7 @@ use nyne::types::SymbolLineRange;
 use super::content::{FileOverviewContent, FragmentResolver, LinesContent, LinesWrite, delete};
 use super::{FragmentNodeHook, SyntaxProvider};
 use crate::edit::diff_action::DiffActionNode;
-use crate::providers::names::{COMPANION_SUFFIX, FILE_BODY, FILE_OVERVIEW, SUBDIR_SYMBOLS, companion_name};
+use crate::providers::well_known::{COMPANION_SUFFIX, FILE_BODY, FILE_OVERVIEW, SUBDIR_SYMBOLS, companion_name};
 use crate::services::SourceServices;
 use crate::syntax::decomposed::DecomposedSource;
 use crate::syntax::find_fragment;

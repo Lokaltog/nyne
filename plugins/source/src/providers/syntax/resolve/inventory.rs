@@ -1,11 +1,11 @@
 use nyne::prelude::*;
 
 use super::{build_fragment_nodes, fragment_body_path};
-use crate::providers::names::{FILE_DOCSTRING, FILE_IMPORTS, FILE_OVERVIEW, SUBDIR_BY_KIND, SUBDIR_SYMBOLS};
 use crate::providers::syntax::content::{
     FileDocstringContent, FileDocstringSplice, MetaSplice, OverviewContent, SourceSlice, SpliceTarget,
 };
 use crate::providers::syntax::{SyntaxProvider, newline};
+use crate::providers::well_known::{FILE_DOCSTRING, FILE_IMPORTS, FILE_OVERVIEW, SUBDIR_BY_KIND, SUBDIR_SYMBOLS};
 use crate::syntax::fragment::{FragmentKind, find_fragment_of_kind};
 
 /// Symbol inventory methods for [`SyntaxProvider`].
