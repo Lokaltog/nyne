@@ -26,3 +26,5 @@ Plugin config: `[plugin.analysis]` in `~/.config/nyne/config.toml` or project-le
 ## Rule Registration
 
 Rules use `register_analysis_rule!` macro with `linkme::distributed_slice(ANALYSIS_RULE_FACTORIES)`. Adding a new rule: create a file in `analysis/rules/`, implement `AnalysisRule`, call `register_analysis_rule!(MyRule)`.
+
+Every rule module must define `pub const ID: &str = "rule-name"` and return it from `id()`. Reference these constants (not string literals) in `DEFAULT_DISABLED_RULES` and `collapse_summary`.
