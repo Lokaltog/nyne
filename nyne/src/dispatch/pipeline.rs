@@ -46,18 +46,12 @@ impl Pipeline {
         provider: &dyn Provider,
         ctx: &RequestContext<'_>,
     ) -> Result<Vec<u8>> {
-        let readable = node.require_readable()?;
-        let mut data = readable.read(ctx)?;
+        let mut data = node.require_readable()?.read(ctx)?;
         let mut pctx = PipelineContext::new(ctx);
 
         // Middleware pipeline: node (innermost) → provider → global (outermost).
         let provider_mws = provider.read_middlewares();
-        for mw in node
-            .read_middlewares()
-            .iter()
-            .chain(provider_mws.iter())
-            .chain(self.global_read_middlewares.iter())
-        {
+        for mw in middleware_chain(node.read_middlewares(), &provider_mws, &self.global_read_middlewares) {
             data = mw.process_read(data, &mut pctx)?;
         }
 
@@ -82,12 +76,7 @@ impl Pipeline {
 
         // Middleware pipeline: node (innermost) → provider → global (outermost).
         let provider_mws = provider.write_middlewares();
-        for mw in node
-            .write_middlewares()
-            .iter()
-            .chain(provider_mws.iter())
-            .chain(self.global_write_middlewares.iter())
-        {
+        for mw in middleware_chain(node.write_middlewares(), &provider_mws, &self.global_write_middlewares) {
             data = mw.process_write(data, &mut pctx)?;
         }
 
@@ -106,4 +95,19 @@ impl Pipeline {
 
         Ok(outcome)
     }
+}
+/// Build the three-tier middleware chain: node (innermost) → provider → global (outermost).
+///
+/// Extracted to deduplicate the identical chain construction in `execute_read` and
+/// `execute_write`.
+fn middleware_chain<'a, T: ?Sized>(
+    node_mws: &'a [Box<T>],
+    provider_mws: &'a [Box<T>],
+    global_mws: &'a [Box<T>],
+) -> impl Iterator<Item = &'a T> {
+    node_mws
+        .iter()
+        .chain(provider_mws.iter())
+        .chain(global_mws.iter())
+        .map(|b| &**b)
 }

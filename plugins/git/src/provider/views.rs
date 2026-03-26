@@ -11,7 +11,7 @@ use nyne::types::slice::SliceSpec;
 
 use super::blame::BlameView;
 use super::contributors::ContributorsView;
-use super::history::HistoryEntry;
+use super::history::{HistoryEntry, HistoryQueries as _};
 use super::log::LogView;
 use super::notes::NotesView;
 use super::repo::FileViewCtx;

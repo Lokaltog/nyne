@@ -4,6 +4,7 @@ use nyne::prelude::*;
 use nyne::templates::TemplateEngine;
 
 use crate::repo::GitRepo;
+use crate::status::StatusQueries as _;
 
 /// Git status view — renders working tree and index state.
 ///

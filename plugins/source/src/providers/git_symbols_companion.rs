@@ -16,8 +16,8 @@ use nyne::types::slice::{SliceSpec, parse_spec};
 use nyne::{companion_children, companion_lookup, source_file};
 use nyne_git::names::{self, FILE_BLAME, FILE_LOG};
 use nyne_git::{
-    BLAME_TEMPLATE, CommitMtimeExt as _, FileViewCtx, GitRepo, HISTORY_LIMIT, LOG_TEMPLATE, history_filename,
-    hunk_overlaps_range,
+    BLAME_TEMPLATE, CommitMtimeExt as _, FileViewCtx, GitRepo, HISTORY_LIMIT, HistoryQueries as _, LOG_TEMPLATE,
+    history_filename, hunk_overlaps_range,
 };
 use nyne_macros::routes;
 

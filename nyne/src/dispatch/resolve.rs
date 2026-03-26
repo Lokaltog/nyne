@@ -47,6 +47,10 @@ fn catch_provider<T>(pid: ProviderId, op: &str, f: impl FnOnce() -> Result<Optio
 }
 
 /// Extract a human-readable message from a panic payload.
+///
+/// Mirrors the standard library's `PanicHookInfo::payload()` approach:
+/// panic payloads are `Box<dyn Any + Send>`, and the two concrete types
+/// produced by `panic!()` / `panic_any()` are `&str` and `String`.
 fn panic_message(payload: &(dyn Any + Send)) -> Cow<'_, str> {
     if let Some(s) = payload.downcast_ref::<&str>() {
         Cow::Borrowed(s)

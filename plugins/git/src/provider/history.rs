@@ -47,14 +47,14 @@ pub struct HistoryEntry {
 
 /// An author with commit count.
 #[derive(serde::Serialize)]
-pub(super) struct Contributor {
+pub struct Contributor {
     pub name: String,
     pub commits: usize,
 }
 
 /// A git note attached to a commit.
 #[derive(serde::Serialize)]
-pub(super) struct NoteEntry {
+pub struct NoteEntry {
     pub hash: String,
     pub date: String,
     pub commit_message: String,
@@ -74,14 +74,48 @@ impl Readable for HistoryVersionContent {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.repo.blob_at(&self.rel_path, self.oid) }
 }
 
-/// History-related methods on [`GitRepo`] — blame, file history, contributors, and notes.
-impl GitRepo {
+/// History-related queries on [`GitRepo`] — blame, file history, contributors, and notes.
+///
+/// Defined as an extension trait to make the module origin explicit: these methods
+/// live in `provider::history` and are available wherever the trait is in scope.
+pub trait HistoryQueries {
+    /// Collect blame hunks for a file, including uncommitted changes.
+    fn blame(&self, rel_path: &str) -> Result<Vec<BlameHunk>>;
+
+    /// Commits that touched `rel_path`, newest first, capped at `limit`.
+    fn file_history(&self, rel_path: &str, limit: usize) -> Result<Vec<HistoryEntry>>;
+
+    /// Commits that touched `rel_path` within the given line range, newest first.
+    fn file_history_in_range(&self, rel_path: &str, range: &SymbolLineRange, limit: usize)
+    -> Result<Vec<HistoryEntry>>;
+
+    /// Most recent commit that touched `rel_path`, as seconds since epoch.
+    ///
+    /// Falls back to HEAD time if the revwalk finds nothing.
+    fn file_epoch_secs(&self, rel_path: &str) -> i64;
+
+    /// Retrieve file content at a specific commit.
+    fn blob_at(&self, rel_path: &str, oid: Oid) -> Result<Vec<u8>>;
+
+    /// Unique authors sorted by commit count for a given file.
+    fn contributors(&self, rel_path: &str) -> Result<Vec<Contributor>>;
+
+    /// Collect git notes from commits that touched `rel_path`.
+    fn file_notes(&self, rel_path: &str, limit: usize) -> Result<Vec<NoteEntry>>;
+
+    /// Set or remove a git note on the most recent commit touching `rel_path`.
+    ///
+    /// Empty or whitespace-only `message` removes the existing note.
+    fn set_note(&self, rel_path: &str, message: &str) -> Result<()>;
+}
+
+impl HistoryQueries for GitRepo {
     /// Collect blame hunks for a file, including uncommitted changes.
     ///
     /// Safe to call during FUSE callbacks — the repo is opened via
     /// the overlay merged path, so workdir reads resolve against the overlay
     /// (not through FUSE).
-    pub fn blame(&self, rel_path: &str) -> Result<Vec<BlameHunk>> {
+    fn blame(&self, rel_path: &str) -> Result<Vec<BlameHunk>> {
         let repo = self.lock();
 
         let blame = repo
@@ -95,13 +129,13 @@ impl GitRepo {
     }
 
     /// Commits that touched `rel_path`, newest first, capped at `limit`.
-    pub(super) fn file_history(&self, rel_path: &str, limit: usize) -> Result<Vec<HistoryEntry>> {
+    fn file_history(&self, rel_path: &str, limit: usize) -> Result<Vec<HistoryEntry>> {
         let repo = self.lock();
         walk_file_commits(&repo, rel_path, limit, |commit, _oid| commit_entry(commit))
     }
 
     /// Commits that touched `rel_path` within the given line range, newest first.
-    pub fn file_history_in_range(
+    fn file_history_in_range(
         &self,
         rel_path: &str,
         range: &SymbolLineRange,
@@ -138,7 +172,7 @@ impl GitRepo {
     /// Most recent commit that touched `rel_path`, as seconds since epoch.
     ///
     /// Falls back to HEAD time if the revwalk finds nothing.
-    pub fn file_epoch_secs(&self, rel_path: &str) -> i64 {
+    fn file_epoch_secs(&self, rel_path: &str) -> i64 {
         let result = {
             let repo = self.lock();
             match walk_file_commits(&repo, rel_path, 1, |c, _| c.time().seconds()) {
@@ -153,7 +187,7 @@ impl GitRepo {
     }
 
     /// Retrieve file content at a specific commit.
-    pub fn blob_at(&self, rel_path: &str, oid: Oid) -> Result<Vec<u8>> {
+    fn blob_at(&self, rel_path: &str, oid: Oid) -> Result<Vec<u8>> {
         let repo = self.lock();
         let commit = repo.find_commit(oid).wrap_err("commit not found")?;
         let tree = commit.tree()?;
@@ -165,7 +199,7 @@ impl GitRepo {
     }
 
     /// Unique authors sorted by commit count for a given file.
-    pub(super) fn contributors(&self, rel_path: &str) -> Result<Vec<Contributor>> {
+    fn contributors(&self, rel_path: &str) -> Result<Vec<Contributor>> {
         let authors = {
             let repo = self.lock();
             walk_file_commits(&repo, rel_path, CONTRIBUTORS_LIMIT, |commit, _| {
@@ -187,7 +221,7 @@ impl GitRepo {
     }
 
     /// Collect git notes from commits that touched `rel_path`.
-    pub(super) fn file_notes(&self, rel_path: &str, limit: usize) -> Result<Vec<NoteEntry>> {
+    fn file_notes(&self, rel_path: &str, limit: usize) -> Result<Vec<NoteEntry>> {
         let repo = self.lock();
         let mut entries = Vec::new();
         walk_file_commits(&repo, rel_path, limit, |commit, oid| {
@@ -214,7 +248,7 @@ impl GitRepo {
     /// Set or remove a git note on the most recent commit touching `rel_path`.
     ///
     /// Empty or whitespace-only `message` removes the existing note.
-    pub(super) fn set_note(&self, rel_path: &str, message: &str) -> Result<()> {
+    fn set_note(&self, rel_path: &str, message: &str) -> Result<()> {
         let repo = self.lock();
         let oid = first_file_commit(&repo, rel_path)?;
         let sig = repo.signature().wrap_err("git user.name/user.email not configured")?;

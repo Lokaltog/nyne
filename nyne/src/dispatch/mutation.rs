@@ -15,7 +15,7 @@
 
 use std::io::ErrorKind;
 
-use color_eyre::eyre::{Report, bail};
+use color_eyre::eyre::bail;
 
 use super::cache::{CachedNodeKind, NodeEntry, NodeSource};
 use super::resolve::{self, OwnedNode};
@@ -24,30 +24,6 @@ use crate::dispatch::context::RenameContext;
 use crate::prelude::*;
 use crate::provider::{MutationOp, MutationOutcome};
 use crate::types::file_kind::FileKind;
-
-/// `AlreadyExists` — entry with `name` already present at `path`.
-fn entry_exists(name: &str, path: &VfsPath) -> Report {
-    io_err(
-        ErrorKind::AlreadyExists,
-        format!("entry \"{name}\" already exists at {path}"),
-    )
-}
-
-/// `NotFound` — inode could not be resolved back to a node.
-fn inode_not_found(inode: u64, name: &str) -> Report {
-    io_err(
-        ErrorKind::NotFound,
-        format!("failed to resolve inode {inode} for \"{name}\""),
-    )
-}
-
-/// `NotFound` — named entry missing from its parent directory.
-fn entry_not_found(name: &str, path: &VfsPath) -> Report {
-    io_err(ErrorKind::NotFound, format!("entry \"{name}\" not found at {path}"))
-}
-
-/// `NotFound` — directory itself is missing from L1 cache.
-fn dir_not_found(path: &VfsPath) -> Report { io_err(ErrorKind::NotFound, format!("directory not found: {path}")) }
 
 /// Mutation dispatch methods: create, remove, rename, and real-FS fallback.
 impl Router {
@@ -136,7 +112,10 @@ impl Router {
         if let Some(handle) = self.cache.get(ctx.path) {
             let dir = handle.read();
             if dir.get(name).is_some() {
-                return Err(entry_exists(name, ctx.path));
+                return Err(io_err(
+                    ErrorKind::AlreadyExists,
+                    format!("entry \"{name}\" already exists at {}", ctx.path),
+                ));
             }
         }
 
@@ -175,7 +154,10 @@ impl Router {
         let inode = self.lookup_inode_in_dir(name, ctx)?;
 
         let Some(resolved) = self.resolve_inode(inode) else {
-            return Err(inode_not_found(inode, name));
+            return Err(io_err(
+                ErrorKind::NotFound,
+                format!("failed to resolve inode {inode} for \"{name}\""),
+            ));
         };
 
         match resolved {
@@ -244,7 +226,10 @@ impl Router {
         let inode = self.lookup_inode_in_dir(src_name, src_ctx)?;
 
         let Some(resolved) = self.resolve_inode(inode) else {
-            return Err(inode_not_found(inode, src_name));
+            return Err(io_err(
+                ErrorKind::NotFound,
+                format!("failed to resolve inode {inode} for \"{src_name}\""),
+            ));
         };
 
         let target_path = target_dir.join(target_name)?;
@@ -385,9 +370,20 @@ impl Router {
     /// is missing — used by `remove_node` and `rename_node` to avoid
     /// duplicating the same lookup + error construction.
     fn lookup_inode_in_dir(&self, name: &str, ctx: &RequestContext<'_>) -> Result<u64> {
-        let handle = self.cache.get(ctx.path).ok_or_else(|| dir_not_found(ctx.path))?;
+        let handle = self
+            .cache
+            .get(ctx.path)
+            .ok_or_else(|| io_err(ErrorKind::NotFound, format!("directory not found: {}", ctx.path)))?;
         let dir = handle.read();
-        let inode = dir.get(name).ok_or_else(|| entry_not_found(name, ctx.path))?.inode;
+        let inode = dir
+            .get(name)
+            .ok_or_else(|| {
+                io_err(
+                    ErrorKind::NotFound,
+                    format!("entry \"{name}\" not found at {}", ctx.path),
+                )
+            })?
+            .inode;
         Ok(inode)
     }
 }

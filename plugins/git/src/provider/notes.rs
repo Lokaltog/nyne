@@ -6,6 +6,8 @@ use color_eyre::eyre::{Result, WrapErr};
 use nyne::dispatch::context::RequestContext;
 use nyne::node::{Writable, WriteOutcome};
 
+use super::history::HistoryQueries as _;
+
 /// Default cap on notes entries scanned per file.
 const NOTES_LIMIT: usize = 50;
 

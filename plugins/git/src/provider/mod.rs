@@ -6,6 +6,7 @@
 //!
 //! Symbol-scoped git features (per-symbol blame/history) live in `nyne-coding`.
 
+use history::HistoryQueries as _;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::node::{Lifecycle, NodeAttr};

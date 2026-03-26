@@ -38,10 +38,17 @@ pub struct StatusEntry {
     pub(crate) label: &'static str,
 }
 
-/// Status-related methods on [`GitRepo`].
-impl GitRepo {
+/// Status-related queries on [`GitRepo`].
+///
+/// Defined as an extension trait to make the module origin explicit: these methods
+/// live in `status` and are available wherever the trait is in scope.
+pub trait StatusQueries {
     /// Snapshot the full repository status.
-    pub(crate) fn status(&self) -> Result<RepoStatus> {
+    fn status(&self) -> Result<RepoStatus>;
+}
+
+impl StatusQueries for GitRepo {
+    fn status(&self) -> Result<RepoStatus> {
         let branch = self.head_branch();
         let mut repo = self.lock();
 
