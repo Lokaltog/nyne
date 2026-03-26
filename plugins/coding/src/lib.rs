@@ -16,6 +16,12 @@ pub(crate) mod providers;
 /// Tree-sitter parsing, symbol decomposition, and source analysis.
 pub(crate) mod syntax;
 
+// Public re-exports for downstream plugin crates.
+pub use providers::names::SUBDIR_AT_LINE;
+pub use providers::util::parse_tag_suffix;
+pub use syntax::SyntaxRegistry;
+pub use syntax::spec::Decomposer;
+
 /// Plugin configuration types and deserialization.
 mod config;
 

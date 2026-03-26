@@ -325,6 +325,12 @@ pub(crate) fn default_agent_filenames() -> Vec<String> { vec!["CLAUDE.md".to_own
 /// it directly accesses `.git/` internals via mmap and inotify. Adding it
 /// to passthrough avoids subtle corruption and performance issues.
 fn default_passthrough_processes() -> Vec<String> { vec!["git".to_owned()] }
+/// Serde default function returning `true`.
+///
+/// Use with `#[serde(default = "nyne::config::default_true")]` for boolean
+/// fields that should default to enabled.
+pub const fn default_true() -> bool { true }
+
 
 /// Default implementation for `AgentFilesConfig`.
 impl Default for AgentFilesConfig {

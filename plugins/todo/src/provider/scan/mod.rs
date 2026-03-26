@@ -7,10 +7,9 @@ use std::str::from_utf8;
 use aho_corasick::AhoCorasick;
 use nyne::types::real_fs::RealFs;
 use nyne::types::vfs_path::VfsPath;
+use nyne_coding::{Decomposer, SyntaxRegistry};
 
 use super::entry::TodoEntry;
-use crate::syntax::SyntaxRegistry;
-use crate::syntax::spec::Decomposer;
 
 /// Pre-built scanner for TODO/FIXME/etc. tags.
 ///
@@ -282,9 +281,9 @@ fn find_block_comment_range(source: &str, byte_offset: usize) -> Option<Range<us
 
 /// Strip the tag prefix from comment text, requiring a colon separator.
 ///
-/// Delegates to [`super::parse_tag_suffix`] for the colon requirement.
+/// Delegates to [`nyne_coding::parse_tag_suffix`] for the colon requirement.
 fn strip_tag_prefix(text: &str, tag: &str) -> Option<String> {
-    super::parse_tag_suffix(&text[tag.len()..]).map(str::to_owned)
+    nyne_coding::parse_tag_suffix(&text[tag.len()..]).map(str::to_owned)
 }
 
 /// Unit tests.

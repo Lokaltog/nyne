@@ -1447,6 +1447,7 @@ dependencies = [
  "nyne",
  "nyne-plugin-coding",
  "nyne-plugin-git",
+ "nyne-plugin-todo",
  "tracing-subscriber",
 ]
 
@@ -1520,6 +1521,27 @@ dependencies = [
  "parking_lot",
  "rstest",
  "serde",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "nyne-plugin-todo"
+version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+ "color-eyre",
+ "insta",
+ "linkme",
+ "minijinja",
+ "nyne",
+ "nyne-macros",
+ "nyne-plugin-coding",
+ "nyne-plugin-git",
+ "parking_lot",
+ "rstest",
+ "serde",
+ "serde_json",
  "tempfile",
  "tracing",
 ]

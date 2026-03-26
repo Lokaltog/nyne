@@ -2,11 +2,13 @@
 
 use std::path::PathBuf;
 
+use nyne::SUBDIR_SYMBOLS;
 use nyne::text::slugify;
 use nyne::types::path_conventions::COMPANION_SUFFIX;
 use nyne::types::vfs_path::VfsPath;
+use nyne_coding::SUBDIR_AT_LINE;
 
-use crate::providers::names::{DIR_TODO, SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
+use super::DIR_TODO;
 
 /// A single TODO/FIXME/etc. found in a source file.
 ///

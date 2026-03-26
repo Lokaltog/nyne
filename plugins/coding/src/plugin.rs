@@ -127,7 +127,7 @@ impl Plugin for CodingPlugin {
     /// Instantiates all coding plugin providers from the activated context.
     ///
     /// The core set is always present: syntax decomposition, Claude hooks,
-    /// todo tracking, batch edit staging, and workspace symbol search.
+    /// batch edit staging, and workspace symbol search.
     /// When the `git-symbols` feature is enabled **and** the git plugin
     /// has successfully opened a repository, a `GitSymbolsProvider` is
     /// appended for per-symbol blame and history.
@@ -135,14 +135,12 @@ impl Plugin for CodingPlugin {
         use crate::providers::batch::BatchEditProvider;
         use crate::providers::claude::ClaudeProvider;
         use crate::providers::syntax::SyntaxProvider;
-        use crate::providers::todo::TodoProvider;
         use crate::providers::workspace_search::WorkspaceSearchProvider;
 
         #[cfg_attr(not(feature = "git-symbols"), allow(unused_mut))]
         let mut providers: Vec<Arc<dyn Provider>> = vec![
             Arc::new(SyntaxProvider::new(Arc::clone(ctx))),
             Arc::new(ClaudeProvider::new(Arc::clone(ctx))),
-            Arc::new(TodoProvider::new(Arc::clone(ctx))),
             Arc::new(BatchEditProvider::new(Arc::clone(ctx))),
             Arc::new(WorkspaceSearchProvider::new(Arc::clone(ctx))),
         ];

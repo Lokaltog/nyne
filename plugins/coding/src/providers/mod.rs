@@ -26,7 +26,5 @@ pub mod claude;
 pub mod git_symbols_companion;
 /// Syntax decomposition provider — tree-sitter parsing, symbol resolution, and content access.
 pub mod syntax;
-/// TODO/FIXME provider — scans source files for TODO markers.
-pub mod todo;
 /// Workspace symbol search provider — exposes `@/search/symbols/{query}`.
 pub mod workspace_search;

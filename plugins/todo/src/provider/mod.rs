@@ -6,42 +6,28 @@ mod entry;
 mod scan;
 
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 use entry::TodoEntry;
+use nyne::dispatch::activation::ActivationContext;
+use nyne::dispatch::context::RequestContext;
 use nyne::dispatch::invalidation::InvalidationEvent;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
-use nyne::templates::{TemplateHandle, serialize_view};
+use nyne::node::VirtualNode;
+use nyne::provider::{Nodes, Provider, ProviderId};
+use nyne::templates::{HandleBuilder, TemplateHandle, serialize_view};
+use nyne::types::vfs_path::VfsPath;
+use nyne_coding::SyntaxRegistry;
 use nyne_macros::routes;
 use parking_lot::RwLock;
 use scan::TodoScanner;
 use serde::Serialize;
 
-use super::names::{self, DIR_TODO};
-use super::prelude::*;
-use crate::services::CodingServices;
+use crate::config::TodoConfig;
 
-/// Given text immediately after a tag keyword (e.g. the `": fix this"` in
-/// `TODO: fix this`), skip an optional `(annotation)` and require a colon.
-///
-/// Returns `None` if no colon follows the tag — bare mentions are not actionable.
-///
-/// # Examples
-///
-/// - `": fix this"` → `Some("fix this")`
-/// - `"(user): fix"` → `Some("fix")`
-/// - `" bare mention"` → `None`
-pub fn parse_tag_suffix(after_tag: &str) -> Option<&str> {
-    // Skip optional parenthesized annotation like `(scope)`.
-    let rest = if after_tag.starts_with('(') {
-        after_tag.find(')').map_or(after_tag, |pos| &after_tag[pos + 1..])
-    } else {
-        after_tag
-    };
-    // Require a colon — bare mentions are not actionable.
-    let after_colon = rest.strip_prefix(':')?;
-    Some(after_colon.trim())
-}
+/// TODO directory name at the `@/` root level.
+const DIR_TODO: &str = "todo";
 
 /// TODO provider — aggregates TODO/FIXME markers from source files.
 ///
@@ -51,6 +37,8 @@ pub fn parse_tag_suffix(after_tag: &str) -> Option<&str> {
 /// cached index when scanned files change on disk.
 pub struct TodoProvider {
     ctx: Arc<ActivationContext>,
+    config: TodoConfig,
+    syntax: Arc<SyntaxRegistry>,
     scanner: TodoScanner,
     index: RwLock<Option<TodoIndex>>,
     overview_tmpl: TemplateHandle,
@@ -75,11 +63,12 @@ struct TodoIndex {
 /// Methods for [`TodoProvider`].
 impl TodoProvider {
     /// Create a new TODO provider with route tree and scanner.
-    pub(crate) fn new(ctx: Arc<ActivationContext>) -> Self {
-        let tags = CodingServices::get(&ctx).config.todo.tags.clone();
+    pub(crate) fn new(ctx: Arc<ActivationContext>, config: TodoConfig) -> Self {
+        let tags = config.tags.clone();
         let scanner = TodoScanner::new(&tags);
+        let syntax = SyntaxRegistry::global();
 
-        let mut b = names::handle_builder();
+        let mut b = HandleBuilder::new();
         let overview_key = b.register("todo/overview", include_str!("templates/overview.md.j2"));
         let tag_key = b.register("todo/tag", include_str!("templates/tag.md.j2"));
         let engine = b.finish();
@@ -96,6 +85,8 @@ impl TodoProvider {
 
         Self {
             ctx,
+            config,
+            syntax,
             scanner,
             index: RwLock::new(None),
             overview_tmpl,
@@ -114,9 +105,7 @@ impl TodoProvider {
 
         // Discover files from git index.
         let files = self.discover_files();
-        let entries_by_tag = self
-            .scanner
-            .scan_all(&files, ctx.real_fs, &CodingServices::get(&self.ctx).syntax);
+        let entries_by_tag = self.scanner.scan_all(&files, ctx.real_fs, &self.syntax);
 
         let mut index = self.index.write();
         // Double-check after acquiring write lock.
@@ -129,7 +118,7 @@ impl TodoProvider {
     }
 
     /// Get the list of files to scan from the git index.
-    #[cfg(feature = "git-symbols")]
+    #[cfg(feature = "git")]
     fn discover_files(&self) -> Vec<VfsPath> {
         let Some(repo) = self.ctx.get::<Arc<nyne_git::GitRepo>>() else {
             return Vec::new();
@@ -138,7 +127,7 @@ impl TodoProvider {
             return Vec::new();
         };
 
-        let syntax = &CodingServices::get(&self.ctx).syntax;
+        let syntax = &self.syntax;
         paths
             .into_iter()
             .filter_map(|p| {
@@ -152,7 +141,7 @@ impl TodoProvider {
     }
 
     /// Get the list of files to scan from the git index.
-    #[cfg(not(feature = "git-symbols"))]
+    #[cfg(not(feature = "git"))]
     fn discover_files(&self) -> Vec<VfsPath> { Vec::new() }
 
     /// At `@/` level — contribute the "todo" directory.
@@ -214,15 +203,15 @@ impl Provider for TodoProvider {
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
     /// Activate when the workspace is a git repository.
-    fn should_activate(&self, ctx: &ActivationContext) -> bool {
-        if !CodingServices::get(ctx).config.todo.enabled {
+    fn should_activate(&self, _ctx: &ActivationContext) -> bool {
+        if !self.config.enabled {
             return false;
         }
-        #[cfg(feature = "git-symbols")]
+        #[cfg(feature = "git")]
         {
-            ctx.get::<Arc<nyne_git::GitRepo>>().is_some()
+            self.ctx.get::<Arc<nyne_git::GitRepo>>().is_some()
         }
-        #[cfg(not(feature = "git-symbols"))]
+        #[cfg(not(feature = "git"))]
         {
             false
         }

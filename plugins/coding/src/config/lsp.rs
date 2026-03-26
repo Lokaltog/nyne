@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use super::default_true;
+use nyne::default_true;
 
 /// Maps file extensions to LSP language identifiers.
 ///

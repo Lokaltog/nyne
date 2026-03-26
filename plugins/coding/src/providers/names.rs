@@ -73,9 +73,6 @@ pub const SUBDIR_STAGED: &str = "staged";
 /// it (writing empty content) discards all staged edits without applying.
 pub const FILE_STAGED_DIFF: &str = "staged.diff";
 
-/// TODO directory name at the `@/` root level.
-pub const DIR_TODO: &str = "todo";
-
 /// Register coding name constants as template globals.
 ///
 /// Makes file-name and separator constants available in Jinja templates so

@@ -14,6 +14,7 @@ path = "src/main.rs"
 nyne.workspace = true
 nyne-git.workspace = true
 nyne-coding.workspace = true
+nyne-todo.workspace = true
 clap.workspace = true
 color-eyre.workspace = true
 tracing-subscriber.workspace = true
@@ -38,6 +39,7 @@ nyne = { path = "nyne" }
 nyne-macros = { path = "nyne-macros" }
 nyne-git = { package = "nyne-plugin-git", path = "plugins/git" }
 nyne-coding = { package = "nyne-plugin-coding", path = "plugins/coding" }
+nyne-todo = { package = "nyne-plugin-todo", path = "plugins/todo" }
 
 # Core
 aho-corasick = { version = "1.1.4", features = ["logging"] }

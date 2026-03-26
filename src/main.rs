@@ -14,8 +14,8 @@ use nyne::cli::{Cli, Command, attach, config, ctl, exec, list, mount};
 // Ensure plugin crates are linked — their `linkme` distributed slice
 // entries are discovered at link time.
 use nyne_coding as _;
-use nyne_git as _;
 use tracing_subscriber::EnvFilter;
+use {nyne_git as _, nyne_todo as _};
 
 /// Entry point for the nyne CLI.
 ///

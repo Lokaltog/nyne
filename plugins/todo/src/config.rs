@@ -1,8 +1,7 @@
 //! TODO/FIXME comment aggregation configuration.
 
+use nyne::default_true;
 use serde::{Deserialize, Serialize};
-
-use super::default_true;
 
 /// TODO/FIXME comment aggregation configuration.
 ///
@@ -32,6 +31,16 @@ impl Default for TodoConfig {
             enabled: true,
             tags: default_todo_tags(),
         }
+    }
+}
+
+impl TodoConfig {
+    /// Deserialize from the plugin config section, falling back to defaults.
+    pub fn from_plugin_config(section: Option<&serde_json::Value>) -> Self {
+        let Some(value) = section else {
+            return Self::default();
+        };
+        serde_json::from_value(value.clone()).unwrap_or_default()
     }
 }
 

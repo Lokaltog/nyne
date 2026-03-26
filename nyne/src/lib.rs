@@ -33,6 +33,7 @@ pub mod dispatch;
 /// Shared text utilities: slugification, date formatting, diffs.
 pub mod text;
 // Re-export provider helpers for plugin crates.
+pub use config::default_true;
 pub use providers::names::{FILE_OVERVIEW, SUBDIR_SYMBOLS};
 pub use providers::{
     companion_children, companion_dir, companion_lookup, companion_symbol_path, dispatch_children, dispatch_lookup,

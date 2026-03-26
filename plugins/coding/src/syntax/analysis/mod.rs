@@ -134,6 +134,8 @@ impl From<&Hint> for HintView {
 /// and the activation context (for config-dependent thresholds).
 pub struct AnalysisContext<'a> {
     pub source: &'a str,
+    /// Available for rules that need config or service access.
+    #[expect(dead_code, reason = "API surface for analysis rules — not all rules use every field")]
     pub activation: &'a ActivationContext,
 }
 

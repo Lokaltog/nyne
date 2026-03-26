@@ -8,16 +8,13 @@
 /// LSP configuration types.
 pub mod lsp;
 
-/// TODO/FIXME comment aggregation configuration.
-pub mod todo;
-
 use std::collections::{HashMap, HashSet};
 
+use nyne::default_true;
 use nyne::json::deep_merge_non_null;
 use serde::{Deserialize, Serialize};
 
 use self::lsp::LspConfig;
-use self::todo::TodoConfig;
 
 /// Top-level configuration for the coding plugin.
 ///
@@ -28,10 +25,6 @@ pub struct CodingConfig {
     /// LSP configuration.
     #[serde(default)]
     pub lsp: LspConfig,
-
-    /// TODO/FIXME comment aggregation configuration.
-    #[serde(default)]
-    pub todo: TodoConfig,
 
     /// Code analysis configuration.
     #[serde(default)]
@@ -276,9 +269,6 @@ impl Default for AnalysisConfig {
         }
     }
 }
-
-/// Serde default function returning `true`.
-const fn default_true() -> bool { true }
 
 /// Deserialization and config loading methods.
 impl CodingConfig {
