@@ -18,15 +18,15 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "string-format-push";
 /// Analysis rule that detects format! used as `push_str` argument.
 struct StringFormatPush;
 
-/// [`AnalysisRule`] implementation for `StringFormatPush`.
-impl AnalysisRule for StringFormatPush {
+/// [`Rule`] implementation for `StringFormatPush`.
+impl Rule for StringFormatPush {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

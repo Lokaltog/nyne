@@ -21,7 +21,7 @@ use crate::names::{
     self as names, DIR_BRANCHES, DIR_DIFF, DIR_GIT, DIR_HISTORY, DIR_TAGS, FILE_BLAME, FILE_GIT_STATUS, FILE_HEAD_DIFF,
     FILE_LOG,
 };
-use crate::repo::GitRepo;
+use crate::repo::Repo;
 
 /// Define a per-file git view struct backed by `FileViewCtx`.
 ///
@@ -72,7 +72,7 @@ pub mod views;
 
 use branches::{branch_segments_at_prefix, branch_tree_nodes};
 use diff::{DiffContent, DiffTarget};
-use status::GitStatusView;
+use status::StatusView;
 use views::{SlicedBlameView, SlicedLogView};
 
 /// Lifecycle that reports a git commit timestamp as the node's mtime.
@@ -105,7 +105,7 @@ impl CommitMtimeExt for VirtualNode {
 }
 
 /// Template handles for git-backed virtual files.
-pub(crate) struct GitHandles {
+pub(crate) struct Handles {
     pub(crate) blame: TemplateHandle,
     pub(crate) log: TemplateHandle,
     pub(crate) contributors: TemplateHandle,
@@ -120,7 +120,7 @@ pub(crate) struct GitHandles {
 /// nyne-coding's git-symbols extension.
 pub(crate) struct GitProvider {
     ctx: Arc<ActivationContext>,
-    handles: GitHandles,
+    handles: Handles,
     git_dir_component: Option<String>,
     at_routes: RouteTree<Self>,
     companion_routes: RouteTree<Self>,
@@ -142,7 +142,7 @@ impl GitProvider {
         let status_key = b.register("git/status", include_str!("templates/status.md.j2"));
         let notes_key = b.register("git/notes", include_str!("templates/notes.md.j2"));
         let engine = b.finish();
-        let handles = GitHandles {
+        let handles = Handles {
             blame: TemplateHandle::new(&engine, blame_key),
             log: TemplateHandle::new(&engine, log_key),
             contributors: TemplateHandle::new(&engine, contributors_key),
@@ -183,15 +183,15 @@ impl GitProvider {
     }
 
     /// Returns the shared git repository.
-    fn repo(&self) -> Result<Arc<GitRepo>> {
+    fn repo(&self) -> Result<Arc<Repo>> {
         self.ctx
-            .get::<Arc<GitRepo>>()
+            .get::<Arc<Repo>>()
             .cloned()
             .ok_or_else(|| color_eyre::eyre::eyre!("git repo not available"))
     }
 
     /// Extracts the source file, git repo, and repo-relative path from a route context.
-    fn file_ctx(&self, ctx: &RouteCtx<'_>) -> Result<(VfsPath, Arc<GitRepo>, String)> {
+    fn file_ctx(&self, ctx: &RouteCtx<'_>) -> Result<(VfsPath, Arc<Repo>, String)> {
         let source = source_file(ctx)?;
         let repo = self.repo()?;
         let rel = repo.rel_path(&source);
@@ -207,7 +207,7 @@ impl GitProvider {
             VirtualNode::directory(DIR_TAGS).with_mtime(secs),
             self.handles
                 .status
-                .node(FILE_GIT_STATUS, GitStatusView { repo })
+                .node(FILE_GIT_STATUS, StatusView { repo })
                 .with_cache_policy(CachePolicy::Never)
                 .with_mtime(secs),
         ]))

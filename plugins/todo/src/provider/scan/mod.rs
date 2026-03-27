@@ -1,6 +1,6 @@
 //! TODO scanner — Aho-Corasick automaton for tag detection.
 //!
-//! [`TodoScanner`] pre-compiles configured tags (TODO, FIXME, HACK, etc.)
+//! [`Scanner`] pre-compiles configured tags (TODO, FIXME, HACK, etc.)
 //! into an Aho-Corasick automaton for efficient multi-pattern scanning.
 //! Matches are filtered to only those occurring inside comments, using
 //! tree-sitter comment node ranges when available and falling back to a
@@ -20,20 +20,20 @@ use nyne::types::real_fs::RealFs;
 use nyne::types::vfs_path::VfsPath;
 use nyne_source::{Decomposer, SyntaxRegistry};
 
-use super::entry::TodoEntry;
+use super::entry::Entry;
 
 /// Pre-built scanner for TODO/FIXME/etc. tags.
 ///
 /// The automaton is built once from the configured tags and reused for all
 /// file scans. Tag order in the config determines priority (index 0 = highest).
-pub(super) struct TodoScanner {
+pub(super) struct Scanner {
     automaton: AhoCorasick,
     /// Canonical tag strings, indexed to match automaton pattern IDs.
     tags: Vec<Arc<str>>,
 }
 
-/// Methods for [`TodoScanner`].
-impl TodoScanner {
+/// Methods for [`Scanner`].
+impl Scanner {
     /// Build a scanner from the configured tags.
     ///
     /// Tags are matched case-insensitively; the canonical case from the
@@ -62,12 +62,7 @@ impl TodoScanner {
     /// 3. Find all tag match positions and their line numbers
     /// 4. For each match, extract the comment block from the source text
     /// 5. Strip comment prefixes using the decomposer
-    pub fn scan_file(
-        &self,
-        source_file: &VfsPath,
-        real_fs: &dyn RealFs,
-        decomposer: &dyn Decomposer,
-    ) -> Vec<TodoEntry> {
+    pub fn scan_file(&self, source_file: &VfsPath, real_fs: &dyn RealFs, decomposer: &dyn Decomposer) -> Vec<Entry> {
         let Ok(bytes) = real_fs.read(source_file) else {
             return Vec::new();
         };
@@ -106,7 +101,7 @@ impl TodoScanner {
                 let tag = self.tags.get(m.pattern_id)?;
                 let stripped = strip_tag_prefix(raw_comment, tag)?;
                 let text = decomposer.strip_doc_comment(&stripped).trim().to_owned();
-                (!text.is_empty()).then(|| TodoEntry {
+                (!text.is_empty()).then(|| Entry {
                     source_file: source_file.clone(),
                     line: byte_to_line(&line_starts, m.byte_offset) + 1,
                     tag: Arc::clone(tag),
@@ -122,8 +117,8 @@ impl TodoScanner {
         files: &[VfsPath],
         real_fs: &dyn RealFs,
         syntax: &SyntaxRegistry,
-    ) -> BTreeMap<String, Vec<TodoEntry>> {
-        let mut by_tag: BTreeMap<String, Vec<TodoEntry>> = BTreeMap::new();
+    ) -> BTreeMap<String, Vec<Entry>> {
+        let mut by_tag: BTreeMap<String, Vec<Entry>> = BTreeMap::new();
 
         // Pre-initialize with configured tag order.
         for tag in &self.tags {

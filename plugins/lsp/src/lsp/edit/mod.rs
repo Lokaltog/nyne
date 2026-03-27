@@ -4,12 +4,12 @@
 //! The core pipeline is shared between the two modes:
 //! 1. Collect text edits from the `WorkspaceEdit` (both `changes` and
 //!    `document_changes` fields).
-//! 2. Read each affected file's content through the [`LspPathResolver`]
+//! 2. Read each affected file's content through the [`PathResolver`]
 //!    (which rewrites FUSE paths to overlay paths, avoiding re-entrancy).
 //! 3. Apply edits to a [`Rope`] in reverse position order so byte offsets
 //!    remain stable across mutations.
 //!
-//! [`LspPathResolver`]: super::path::LspPathResolver
+//! [`PathResolver`]: super::path::LspPathResolver
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -25,7 +25,7 @@ use tracing::{debug, warn};
 use super::uri::position_to_byte_offset;
 
 /// Apply a `WorkspaceEdit` to files on disk via the FUSE-safe `resolver`.
-pub fn apply_workspace_edit(edit: &WorkspaceEdit, resolver: &super::path::LspPathResolver) -> Result<()> {
+pub fn apply_workspace_edit(edit: &WorkspaceEdit, resolver: &super::path::PathResolver) -> Result<()> {
     let results = resolve_edits(edit, resolver)?;
 
     if results.is_empty() {
@@ -58,7 +58,7 @@ pub fn apply_workspace_edit(edit: &WorkspaceEdit, resolver: &super::path::LspPat
 }
 
 /// Convert a `WorkspaceEdit` to a unified diff string without modifying any files.
-pub fn workspace_edit_to_diff(edit: &WorkspaceEdit, resolver: &super::path::LspPathResolver) -> Result<String> {
+pub fn workspace_edit_to_diff(edit: &WorkspaceEdit, resolver: &super::path::PathResolver) -> Result<String> {
     let mut results = resolve_edits(edit, resolver)?;
 
     if results.is_empty() {
@@ -189,7 +189,7 @@ struct ResolvedFileEdit {
 /// Shared pipeline for both `apply_workspace_edit` (write-back) and
 /// `workspace_edit_to_diff` (preview). FUSE-safe: reads files through
 /// `resolver`, which rewrites FUSE-based LSP paths to overlay paths.
-fn resolve_edits(edit: &WorkspaceEdit, resolver: &super::path::LspPathResolver) -> Result<Vec<ResolvedFileEdit>> {
+fn resolve_edits(edit: &WorkspaceEdit, resolver: &super::path::PathResolver) -> Result<Vec<ResolvedFileEdit>> {
     let file_edits = collect_all_edits(edit);
 
     file_edits
@@ -219,7 +219,7 @@ fn resolve_edits(edit: &WorkspaceEdit, resolver: &super::path::LspPathResolver) 
 /// [`DiffAction`]: crate::edit::diff_action::DiffAction
 pub fn resolve_workspace_edit(
     edit: &WorkspaceEdit,
-    resolver: &super::path::LspPathResolver,
+    resolver: &super::path::PathResolver,
 ) -> Result<Vec<FileEditResult>> {
     use nyne_source::edit::plan::EditOutcome;
 
@@ -270,7 +270,7 @@ pub fn resolve_workspace_edit(
 /// duplicated. `Delete` supersedes any prior edits for the same path.
 fn collect_resource_op(
     op: &lsp_types::ResourceOp,
-    resolver: &super::path::LspPathResolver,
+    resolver: &super::path::PathResolver,
     to_paths: &impl Fn(&str) -> Result<(VfsPath, String)>,
     results: &mut Vec<FileEditResult>,
 ) -> Result<()> {

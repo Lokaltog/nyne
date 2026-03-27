@@ -35,7 +35,7 @@ pub fn load_fixture(module: &str, name: &str) -> String {
 
 /// Create a stub `ActivationContext` for testing.
 ///
-/// Inserts a [`SourceServices`] bundle with default config and a real syntax
+/// Inserts a [`Services`] bundle with default config and a real syntax
 /// registry. This mirrors production activation so tests exercise the same
 /// code paths.
 pub fn stub_activation_context() -> Arc<nyne::dispatch::activation::ActivationContext> {
@@ -43,8 +43,8 @@ pub fn stub_activation_context() -> Arc<nyne::dispatch::activation::ActivationCo
     use nyne::process::Spawner;
     use nyne::types::OsFs;
 
-    use crate::config::SourceConfig;
-    use crate::services::SourceServices;
+    use crate::config::Config;
+    use crate::services::Services;
     use crate::syntax::decomposed::DecompositionCache;
 
     let tmp = std::env::temp_dir().join("nyne-source-test");
@@ -53,9 +53,9 @@ pub fn stub_activation_context() -> Arc<nyne::dispatch::activation::ActivationCo
     let spawner = Arc::new(Spawner::new());
     let mut ctx = ActivationContext::new(tmp.clone(), tmp.clone(), tmp.clone(), real_fs.clone(), config, spawner);
 
-    let source_config = SourceConfig::default();
+    let source_config = Config::default();
     let syntax = Arc::new(registry());
-    ctx.insert(SourceServices {
+    ctx.insert(Services {
         decomposition: DecompositionCache::new(real_fs, Arc::clone(&syntax)),
         syntax,
         config: source_config,

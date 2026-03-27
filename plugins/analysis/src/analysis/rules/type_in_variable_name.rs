@@ -19,7 +19,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "type-in-variable-name";
@@ -34,8 +34,8 @@ const TYPE_FRAGMENTS: &[&str] = &[
 /// Analysis rule that detects type names in variable names.
 struct TypeInVariableName;
 
-/// [`AnalysisRule`] implementation for `TypeInVariableName`.
-impl AnalysisRule for TypeInVariableName {
+/// [`Rule`] implementation for `TypeInVariableName`.
+impl Rule for TypeInVariableName {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

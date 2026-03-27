@@ -4,7 +4,7 @@
 //! for testability and readability.
 
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "large-closure";
@@ -21,8 +21,8 @@ const CLOSURE: &[&str] = &[
 /// Analysis rule that detects closures with large bodies.
 struct LargeClosure;
 
-/// [`AnalysisRule`] implementation for `LargeClosure`.
-impl AnalysisRule for LargeClosure {
+/// [`Rule`] implementation for `LargeClosure`.
+impl Rule for LargeClosure {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

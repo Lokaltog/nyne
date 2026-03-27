@@ -21,15 +21,15 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "single-use-variable";
 /// Analysis rule that detects single-use variables.
 struct SingleUseVariable;
 
-/// [`AnalysisRule`] implementation for `SingleUseVariable`.
-impl AnalysisRule for SingleUseVariable {
+/// [`Rule`] implementation for `SingleUseVariable`.
+impl Rule for SingleUseVariable {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

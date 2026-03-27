@@ -16,7 +16,7 @@ use nyne::{SUBDIR_SYMBOLS, companion_children, companion_lookup, companion_name,
 use nyne_source::edit::diff_action::DiffActionNode;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use nyne_source::providers::well_known::handle_builder;
-use nyne_source::services::SourceServices;
+use nyne_source::services::Services;
 use nyne_source::syntax::{SyntaxRegistry, find_fragment};
 use strum::IntoEnumIterator;
 
@@ -25,10 +25,10 @@ const FILE_DIAGNOSTICS: &str = "DIAGNOSTICS.md";
 /// Subdirectory name for LSP code actions under a symbol's companion directory.
 const SUBDIR_ACTIONS: &str = "actions";
 
-use crate::lsp::handle::LspHandle;
-use crate::lsp::manager::LspManager;
+use crate::lsp::handle::Handle;
+use crate::lsp::manager::Manager;
 use crate::providers::content::rename::{FileRenameDiff, RenameDiff};
-use crate::providers::content::{LspFeature, LspHandles, build_diagnostics_node, build_lsp_symbol_nodes};
+use crate::providers::content::{Feature, Handles, build_diagnostics_node, build_lsp_symbol_nodes};
 use crate::providers::lsp_links;
 
 /// LSP provider — contributes LSP-powered nodes to companion symbol directories.
@@ -38,7 +38,7 @@ use crate::providers::lsp_links;
 /// gain LSP nodes when this plugin is loaded.
 pub struct LspProvider {
     ctx: Arc<ActivationContext>,
-    lsp: LspHandles,
+    lsp: Handles,
     routes: RouteTree<Self>,
 }
 
@@ -56,10 +56,10 @@ impl LspProvider {
         b.register_partial("syntax/lsp/_locations", include_str!("templates/lsp/_locations.md.j2"));
 
         // Register file name globals so templates can reference e.g. FILE_DEFINITION.
-        LspFeature::register_globals(b.engine_mut());
+        Feature::register_globals(b.engine_mut());
 
         // Per-feature LSP templates — order derived from LspFeature::iter().
-        let lsp_keys: Vec<_> = LspFeature::iter()
+        let lsp_keys: Vec<_> = Feature::iter()
             .map(|f| {
                 let (name, src) = f.template();
                 b.register(name, src)
@@ -77,7 +77,7 @@ impl LspProvider {
 
         Self {
             ctx,
-            lsp: LspHandles {
+            lsp: Handles {
                 #[expect(clippy::expect_used, reason = "length matches LspFeature::COUNT by construction")]
                 features: array::from_fn(|_| {
                     TemplateHandle::new(&engine, lsp_keys.next().expect("LspFeature::COUNT mismatch"))
@@ -108,7 +108,7 @@ impl LspProvider {
     }
 
     /// Return the source services from the activation context.
-    fn services(&self) -> &SourceServices { SourceServices::get(&self.ctx) }
+    fn services(&self) -> &Services { Services::get(&self.ctx) }
 }
 
 /// Route tree handler methods.
@@ -120,7 +120,7 @@ impl LspProvider {
         // DIAGNOSTICS.md — lookup-only, hidden from readdir.
         if name == FILE_DIAGNOSTICS {
             return Ok(
-                LspHandle::for_file(&self.ctx, &sf).map(|h| build_diagnostics_node(FILE_DIAGNOSTICS, &h, &self.lsp))
+                Handle::for_file(&self.ctx, &sf).map(|h| build_diagnostics_node(FILE_DIAGNOSTICS, &h, &self.lsp))
             );
         }
 
@@ -148,7 +148,7 @@ impl LspProvider {
         let parent = sf.parent().unwrap_or(VfsPath::root());
         parent.join(new_filename)?;
 
-        let Some(handle) = LspHandle::for_file(&self.ctx, &sf) else {
+        let Some(handle) = Handle::for_file(&self.ctx, &sf) else {
             return Ok(None);
         };
 
@@ -174,7 +174,7 @@ impl LspProvider {
             return Ok(None);
         };
 
-        let Some(lsp_handle) = LspHandle::for_file(&self.ctx, &sf) else {
+        let Some(lsp_handle) = Handle::for_file(&self.ctx, &sf) else {
             return Ok(None);
         };
 
@@ -205,13 +205,13 @@ impl LspProvider {
         match name {
             // rename/ is lookup-only (not in readdir) — emit bare directory
             // when LSP is available.
-            "rename" => Ok(LspHandle::for_file(&self.ctx, &sf)
+            "rename" => Ok(Handle::for_file(&self.ctx, &sf)
                 .is_some()
                 .then(|| VirtualNode::directory(name))),
 
             // actions/ — also lookup-only as an alternative entry point.
             n if n == SUBDIR_ACTIONS => {
-                let Some(lsp_handle) = LspHandle::for_file(&self.ctx, &sf) else {
+                let Some(lsp_handle) = Handle::for_file(&self.ctx, &sf) else {
                     return Ok(None);
                 };
                 Ok(lsp_handle
@@ -247,7 +247,7 @@ impl LspProvider {
             return Ok(None);
         };
 
-        let Some(lsp_handle) = LspHandle::for_file(&self.ctx, &sf) else {
+        let Some(lsp_handle) = Handle::for_file(&self.ctx, &sf) else {
             return Ok(None);
         };
 
@@ -268,7 +268,7 @@ impl LspProvider {
     /// List LSP feature symlink nodes for a symbol.
     fn children_lsp_dir(&self, ctx: &RouteCtx<'_>) -> Nodes {
         let lsp_dir = ctx.param("lsp_dir");
-        if LspFeature::from_dir_name(lsp_dir).is_none() {
+        if Feature::from_dir_name(lsp_dir).is_none() {
             return Ok(None);
         }
         let path = ctx.params("path");
@@ -299,7 +299,7 @@ impl Provider for LspProvider {
 
     /// Invalidate LSP caches for changed source files.
     fn on_fs_change(&self, changed: &[VfsPath]) -> Vec<InvalidationEvent> {
-        let Some(lsp) = self.ctx.get::<Arc<LspManager>>() else {
+        let Some(lsp) = self.ctx.get::<Arc<Manager>>() else {
             return Vec::new();
         };
         let registry = SyntaxRegistry::global();

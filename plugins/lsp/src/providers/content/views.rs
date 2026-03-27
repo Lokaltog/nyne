@@ -2,7 +2,7 @@
 //!
 //! Each LSP feature has a corresponding view struct that transforms raw LSP
 //! protocol responses into serializable data for template rendering.
-//! [`LspQueryResult`] is the unified return type from all LSP queries.
+//! [`QueryResult`] is the unified return type from all LSP queries.
 
 use std::path::PathBuf;
 
@@ -13,11 +13,11 @@ use nyne::templates::TemplateEngine;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use serde::Serialize;
 
-use super::feature::{LspFeature, LspTarget};
+use super::feature::{Feature, Target};
 use super::format::{extract_hover_content, extract_inlay_label};
 use crate::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
-use crate::lsp::handle::{LspHandle, SymbolQuery};
-use crate::lsp::path::LspPathResolver;
+use crate::lsp::handle::{Handle, SymbolQuery};
+use crate::lsp::path::PathResolver;
 use crate::lsp::uri::uri_to_file_path;
 
 /// Per-symbol LSP view — acquires a `FileQuery` at read time and
@@ -26,7 +26,7 @@ use crate::lsp::uri::uri_to_file_path;
 /// Replaces the previous 5 separate `TemplateView` impls with one.
 pub(super) struct SymbolLspView {
     pub query: SymbolQuery,
-    pub feature: LspFeature,
+    pub feature: Feature,
     pub resolver: FragmentResolver,
     pub fragment_path: Arc<[String]>,
 }
@@ -48,7 +48,7 @@ impl TemplateView for SymbolLspView {
 }
 
 /// File-level diagnostics view — not position-scoped.
-pub(super) struct DiagnosticsLspView(pub Arc<LspHandle>);
+pub(super) struct DiagnosticsLspView(pub Arc<Handle>);
 
 /// [`TemplateView`] implementation for [`DiagnosticsLspView`].
 impl TemplateView for DiagnosticsLspView {
@@ -79,7 +79,7 @@ struct LocationRow {
 /// Methods for [`LocationsView`].
 impl LocationsView {
     /// Build a locations view from raw LSP locations.
-    pub(super) fn from_locations(locs: &[Location], resolver: &LspPathResolver) -> Self {
+    pub(super) fn from_locations(locs: &[Location], resolver: &PathResolver) -> Self {
         Self {
             locations: locs
                 .iter()
@@ -141,7 +141,7 @@ pub(super) fn hierarchy_item(item: CallHierarchyItem) -> HierarchyRow {
 
 /// View for inlay hints rendering.
 #[derive(Serialize)]
-pub(super) struct InlayHintsRenderView {
+pub(super) struct InlayHintsView {
     hints: Vec<InlayHintRow>,
 }
 
@@ -154,8 +154,8 @@ struct InlayHintRow {
     kind: &'static str,
 }
 
-/// Methods for [`InlayHintsRenderView`].
-impl InlayHintsRenderView {
+/// Methods for [`InlayHintsView`].
+impl InlayHintsView {
     /// Build an inlay hints view from raw LSP hints.
     pub(super) fn from_hints(raw: &[InlayHint]) -> Self {
         Self {
@@ -193,20 +193,20 @@ pub(super) struct DiagnosticsView<'a> {
 /// Both markdown views (`render_view`) and symlink targets (`into_targets`)
 /// consume this, eliminating the previous duplication between view render
 /// methods and `query_targets`.
-pub(super) enum LspQueryResult {
+pub(super) enum QueryResult {
     Locations(Vec<Location>),
     HierarchyItems(Vec<HierarchyRow>),
     Hover(Option<Hover>),
     InlayHints(Vec<InlayHint>),
 }
 
-/// Methods for [`LspQueryResult`].
-impl LspQueryResult {
+/// Methods for [`QueryResult`].
+impl QueryResult {
     /// Render this result into template bytes via the appropriate view struct.
     ///
     /// Paths from LSP responses (overlay-rooted) are rewritten to FUSE paths
     /// for user-facing display.
-    pub(super) fn render_view(self, engine: &TemplateEngine, template: &str, resolver: &LspPathResolver) -> Vec<u8> {
+    pub(super) fn render_view(self, engine: &TemplateEngine, template: &str, resolver: &PathResolver) -> Vec<u8> {
         match self {
             Self::Locations(locs) => engine.render_bytes(template, &LocationsView::from_locations(&locs, resolver)),
             Self::HierarchyItems(items) => {
@@ -220,7 +220,7 @@ impl LspQueryResult {
                 engine.render_bytes(template, &HierarchyListView { items: &fuse_items })
             }
             Self::Hover(hover) => engine.render_bytes(template, &HoverView::new(hover.as_ref())),
-            Self::InlayHints(hints) => engine.render_bytes(template, &InlayHintsRenderView::from_hints(&hints)),
+            Self::InlayHints(hints) => engine.render_bytes(template, &InlayHintsView::from_hints(&hints)),
         }
     }
 
@@ -228,11 +228,11 @@ impl LspQueryResult {
     ///
     /// Paths from LSP responses (overlay-rooted) are rewritten to FUSE paths
     /// so that symlink resolution can match against `fuse_root`.
-    pub(super) fn into_targets(self, resolver: &LspPathResolver) -> Vec<LspTarget> {
+    pub(super) fn into_targets(self, resolver: &PathResolver) -> Vec<Target> {
         match self {
             Self::Locations(locs) => locs
                 .iter()
-                .map(|loc| LspTarget {
+                .map(|loc| Target {
                     abs_path: resolver.rewrite_to_fuse(&uri_to_file_path(&loc.uri)),
                     line: loc.range.start.line,
                     name: None,
@@ -240,7 +240,7 @@ impl LspQueryResult {
                 .collect(),
             Self::HierarchyItems(items) => items
                 .into_iter()
-                .map(|item| LspTarget {
+                .map(|item| Target {
                     abs_path: resolver.rewrite_to_fuse(&item.file),
                     line: item.line.saturating_sub(1), // HierarchyRow stores 1-based
                     name: Some(item.name).filter(|n| !n.is_empty()),

@@ -10,20 +10,20 @@ use nyne::templates::TemplateEngine;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use serde::Serialize;
 
-use crate::{AnalysisEngine, Hint, HintView};
+use crate::{Engine, Hint, HintView};
 
 /// View for `ANALYSIS.md` — runs static analysis at read time.
 ///
 /// Surfaces code-quality suggestions (magic numbers, single-use variables, etc.)
 /// from nyne's built-in analysis engine. Analysis is run lazily on each read so
 /// results always reflect current source.
-pub struct AnalysisContent {
+pub struct Content {
     pub resolver: FragmentResolver,
     pub activation: Arc<ActivationContext>,
 }
 
-/// [`TemplateView`] implementation for [`AnalysisContent`].
-impl TemplateView for AnalysisContent {
+/// [`TemplateView`] implementation for [`Content`].
+impl TemplateView for Content {
     /// Run analysis and render hints via template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
@@ -32,13 +32,7 @@ impl TemplateView for AnalysisContent {
             let hints: Vec<Hint> = shared
                 .tree
                 .as_ref()
-                .and_then(|tree| {
-                    Some(
-                        self.activation
-                            .get::<Arc<AnalysisEngine>>()?
-                            .analyze(tree, &shared.source),
-                    )
-                })
+                .and_then(|tree| Some(self.activation.get::<Arc<Engine>>()?.analyze(tree, &shared.source)))
                 .unwrap_or_default();
             build_view(&hints)
         };

@@ -9,7 +9,7 @@
 //!
 //! LSP servers run as daemon children and see the overlay filesystem,
 //! while users and the VFS agent see FUSE mount paths.
-//! [`LspPathResolver`] is the single source of truth for translating
+//! [`PathResolver`] is the single source of truth for translating
 //! between these two path spaces, preventing FUSE re-entrancy and
 //! ensuring LSP responses render with user-visible paths.
 
@@ -30,7 +30,7 @@ use color_eyre::eyre::{Result, WrapErr};
 /// Without this, LSP responses would contain overlay paths that are
 /// meaningless to the agent, and agent-provided paths would not resolve
 /// to files the LSP server can read.
-pub struct LspPathResolver {
+pub struct PathResolver {
     /// FUSE mount path — the path the user and agent see (e.g., `/code`).
     fuse_root: PathBuf,
     /// Overlay storage path — the path the daemon and LSP servers use for I/O.
@@ -38,7 +38,7 @@ pub struct LspPathResolver {
 }
 
 /// Path translation between FUSE mount paths and overlay storage paths.
-impl LspPathResolver {
+impl PathResolver {
     /// Creates a new path resolver with the given FUSE and overlay roots.
     pub(crate) const fn new(fuse_root: PathBuf, overlay_root: PathBuf) -> Self {
         Self {

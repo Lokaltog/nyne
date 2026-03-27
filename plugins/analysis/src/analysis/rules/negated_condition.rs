@@ -22,15 +22,15 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "negated-condition";
 /// Analysis rule that detects negated conditions with else branches.
 struct NegatedCondition;
 
-/// [`AnalysisRule`] implementation for `NegatedCondition`.
-impl AnalysisRule for NegatedCondition {
+/// [`Rule`] implementation for `NegatedCondition`.
+impl Rule for NegatedCondition {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

@@ -5,8 +5,8 @@ use nyne_source::syntax::fragment::DEFAULT_MAX_DEPTH;
 use nyne_source::test_support::registry;
 use rstest::rstest;
 
-use super::{AnalysisEngine, DEFAULT_DISABLED_RULES, Hint};
-use crate::config::AnalysisConfig;
+use super::{DEFAULT_DISABLED_RULES, Engine, Hint};
+use crate::config::Config;
 
 /// Load a test fixture file relative to this crate's `src/analysis/fixtures/`.
 fn load_fixture(name: &str) -> String {
@@ -29,7 +29,7 @@ fn analyze_source(ext: &str, source: &str) -> Vec<Hint> {
     let (_file, tree) = decomposer.decompose(source, DEFAULT_MAX_DEPTH);
     let tree = tree.expect("parse should succeed");
 
-    let engine = AnalysisEngine::build();
+    let engine = Engine::build();
 
     engine.analyze(&tree, source)
 }
@@ -242,13 +242,13 @@ fn debug_dump_tree_kinds() {
 }
 
 /// Analyze inline source with a filtered AnalysisConfig and return all hints.
-fn analyze_source_filtered(ext: &str, source: &str, config: &AnalysisConfig) -> Vec<Hint> {
+fn analyze_source_filtered(ext: &str, source: &str, config: &Config) -> Vec<Hint> {
     let reg = registry();
     let decomposer = reg.get(ext).expect("no decomposer for extension");
     let (_file, tree) = decomposer.decompose(source, DEFAULT_MAX_DEPTH);
     let tree = tree.expect("parse should succeed");
 
-    let engine = AnalysisEngine::build_filtered(config);
+    let engine = Engine::build_filtered(config);
 
     engine.analyze(&tree, source)
 }
@@ -256,8 +256,8 @@ fn analyze_source_filtered(ext: &str, source: &str, config: &AnalysisConfig) -> 
 /// Verifies that default config excludes rules listed in DEFAULT_DISABLED_RULES.
 #[test]
 fn default_config_excludes_noisy_rules() {
-    let config = AnalysisConfig::default();
-    let engine = AnalysisEngine::build_filtered(&config);
+    let config = Config::default();
+    let engine = Engine::build_filtered(&config);
 
     // Default-disabled rules should not appear in dispatch.
     for rule_id in DEFAULT_DISABLED_RULES {
@@ -275,12 +275,12 @@ fn default_config_excludes_noisy_rules() {
 /// Verifies that an explicit empty rules set runs all rules including disabled ones.
 #[test]
 fn explicit_empty_rules_runs_all() {
-    let config = AnalysisConfig {
+    let config = Config {
         enabled: true,
         rules: Some(HashSet::new()),
     };
-    let all = AnalysisEngine::build();
-    let filtered = AnalysisEngine::build_filtered(&config);
+    let all = Engine::build();
+    let filtered = Engine::build_filtered(&config);
 
     assert_eq!(all.dispatch.len(), filtered.dispatch.len());
     assert_eq!(all.catch_all.len(), filtered.catch_all.len());
@@ -289,7 +289,7 @@ fn explicit_empty_rules_runs_all() {
 /// Verifies that a filtered config keeps only the named rules.
 #[test]
 fn filtered_keeps_only_named_rules() {
-    let config = AnalysisConfig {
+    let config = Config {
         enabled: true,
         rules: Some(HashSet::from(["deep-nesting".into()])),
     };
@@ -306,7 +306,7 @@ fn filtered_keeps_only_named_rules() {
 /// Verifies that a filtered config excludes rules not in the selected set.
 #[test]
 fn filtered_excludes_unselected_rules() {
-    let config = AnalysisConfig {
+    let config = Config {
         enabled: true,
         rules: Some(HashSet::from(["deep-nesting".into()])),
     };
@@ -322,7 +322,7 @@ fn filtered_excludes_unselected_rules() {
 /// Verifies that a disabled analysis engine produces no hints.
 #[test]
 fn disabled_produces_no_hints() {
-    let config = AnalysisConfig {
+    let config = Config {
         enabled: false,
         rules: None,
     };

@@ -5,7 +5,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "stringly-typed-match";
@@ -15,8 +15,8 @@ const MIN_STRING_ARMS: usize = 3;
 /// Analysis rule that detects string-literal match dispatching.
 struct StringlyTypedMatch;
 
-/// [`AnalysisRule`] implementation for `StringlyTypedMatch`.
-impl AnalysisRule for StringlyTypedMatch {
+/// [`Rule`] implementation for `StringlyTypedMatch`.
+impl Rule for StringlyTypedMatch {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

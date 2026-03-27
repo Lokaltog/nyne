@@ -11,7 +11,7 @@ use nyne::node::{Readable, Renameable, Unlinkable};
 use nyne::prelude::*;
 
 use super::CommitMtimeExt as _;
-use crate::repo::GitRepo;
+use crate::repo::Repo;
 
 /// Renameable capability for branch directory nodes.
 ///
@@ -21,7 +21,7 @@ use crate::repo::GitRepo;
 /// For slashed branches, only the leaf segment is renamed — the prefix is preserved.
 /// Renaming `branches/feat/old` to `new` produces git branch `feat/new`.
 pub(super) struct BranchRename {
-    pub repo: Arc<GitRepo>,
+    pub repo: Arc<Repo>,
     pub branch_name: String,
 }
 
@@ -42,7 +42,7 @@ impl Renameable for BranchRename {
 /// this deletes the branch via libgit2 — but only if the branch is fully
 /// merged into HEAD.
 pub(super) struct BranchRemove {
-    pub repo: Arc<GitRepo>,
+    pub repo: Arc<Repo>,
     pub branch_name: String,
 }
 
@@ -63,7 +63,7 @@ impl Unlinkable for BranchRemove {
 ///
 /// If a name is both a leaf and an intermediate (branch `feat` coexisting with
 /// `feat/foo`), it is emitted as a leaf with `BranchRename`.
-pub(super) fn branch_segments_at_prefix(repo: &Arc<GitRepo>, prefix: &str) -> Nodes {
+pub(super) fn branch_segments_at_prefix(repo: &Arc<Repo>, prefix: &str) -> Nodes {
     let head_mtime = repo.head_epoch_secs();
     let branches = repo.branches()?;
 
@@ -116,7 +116,7 @@ pub(super) fn branch_segments_at_prefix(repo: &Arc<GitRepo>, prefix: &str) -> No
 
 /// File content from a branch's tree — reads the blob at `path` on `branch`.
 pub(super) struct BranchBlobContent {
-    pub repo: Arc<GitRepo>,
+    pub repo: Arc<Repo>,
     pub branch: String,
     pub path: String,
 }
@@ -131,7 +131,7 @@ impl Readable for BranchBlobContent {
 ///
 /// Directories become `VirtualNode::directory`, files become readable nodes
 /// backed by [`BranchBlobContent`].
-pub(super) fn branch_tree_nodes(repo: &Arc<GitRepo>, branch: &str, tree_path: &str) -> Nodes {
+pub(super) fn branch_tree_nodes(repo: &Arc<Repo>, branch: &str, tree_path: &str) -> Nodes {
     let entries = repo.ref_tree_entries(branch, tree_path)?;
     Ok(Some(
         entries

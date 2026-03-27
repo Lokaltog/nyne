@@ -5,11 +5,11 @@ use lsp_types::{Position, Range, TextEdit, WorkspaceEdit};
 
 use super::*;
 
-/// Build an `LspPathResolver` that passes paths through unchanged.
+/// Build an `PathResolver` that passes paths through unchanged.
 ///
 /// Tests use temp files outside any project root, so rewriting is a no-op.
-fn passthrough_resolver() -> crate::lsp::path::LspPathResolver {
-    crate::lsp::path::LspPathResolver::new("/nonexistent-root".into(), "/nonexistent-root".into())
+fn passthrough_resolver() -> crate::lsp::path::PathResolver {
+    crate::lsp::path::PathResolver::new("/nonexistent-root".into(), "/nonexistent-root".into())
 }
 
 /// Helper: create an `lsp_types::Uri` from a filesystem path string.

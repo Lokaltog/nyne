@@ -1,6 +1,6 @@
 //! Git repository wrapper — HEAD blob, diff, index ops, branch/tag listing.
 //!
-//! [`GitRepo`] wraps a `git2::Repository` behind a `Mutex` and provides
+//! [`Repo`] wraps a `git2::Repository` behind a `Mutex` and provides
 //! high-level methods for all git operations needed by the VFS provider.
 //! The repository is opened once during plugin activation using pre-mount
 //! real paths and shared via `Arc<GitRepo>` across all providers.
@@ -24,7 +24,7 @@ use crate::commit::diff_opts;
 ///
 /// Wraps `git2::Repository` in a `Mutex` (`Repository` is `Send` but not `Sync`).
 /// Computes and caches the path prefix to convert `VfsPath` → git-relative path.
-pub struct GitRepo {
+pub struct Repo {
     repo: Mutex<git2::Repository>,
     /// Prefix to prepend to `VfsPath` for git-relative paths.
     /// Empty when source dir == workdir.
@@ -32,7 +32,7 @@ pub struct GitRepo {
 }
 
 /// Core git operations — open, blob retrieval, diff, index, branches, and tags.
-impl GitRepo {
+impl Repo {
     /// Discover and open the git repository containing `source_dir`.
     pub(crate) fn open(source_dir: &Path) -> Result<Self> {
         let repo = git2::Repository::discover(source_dir)

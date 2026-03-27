@@ -17,7 +17,7 @@
 //! ```
 
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "long-parameter-list";
@@ -36,8 +36,8 @@ const PARAM_LIST_KINDS: &[&str] = &[
 /// Analysis rule that detects long parameter lists.
 struct LongParameterList;
 
-/// [`AnalysisRule`] implementation for `LongParameterList`.
-impl AnalysisRule for LongParameterList {
+/// [`Rule`] implementation for `LongParameterList`.
+impl Rule for LongParameterList {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

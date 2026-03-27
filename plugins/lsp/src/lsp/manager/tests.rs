@@ -6,25 +6,25 @@ use nyne::process::Spawner;
 use nyne_source::SyntaxRegistry;
 
 use crate::config::Config;
-use crate::lsp::LspRegistry;
-use crate::lsp::manager::LspManager;
+use crate::lsp::Registry;
+use crate::lsp::manager::Manager;
 
 /// Build a manager with the given config pointing at a non-existent root.
 ///
 /// Useful for testing gating/routing logic without spawning real servers.
-fn test_manager_with_config(config: Config) -> LspManager {
-    let registry = LspRegistry::build_with_config(&config);
+fn test_manager_with_config(config: Config) -> Manager {
+    let registry = Registry::build_with_config(&config);
     let syntax = SyntaxRegistry::global();
     let spawner = Arc::new(Spawner::new());
 
     let path_resolver =
-        crate::lsp::path::LspPathResolver::new(PathBuf::from("/nonexistent"), PathBuf::from("/nonexistent"));
-    LspManager::new(registry, syntax, config, spawner, HashMap::new(), path_resolver)
+        crate::lsp::path::PathResolver::new(PathBuf::from("/nonexistent"), PathBuf::from("/nonexistent"));
+    Manager::new(registry, syntax, config, spawner, HashMap::new(), path_resolver)
 }
 
 /// Build a manager with default config (enabled/disabled) pointing at a
 /// non-existent root.
-fn test_manager(enabled: bool) -> LspManager {
+fn test_manager(enabled: bool) -> Manager {
     let mut config = Config::default();
     config.enabled = enabled;
     test_manager_with_config(config)

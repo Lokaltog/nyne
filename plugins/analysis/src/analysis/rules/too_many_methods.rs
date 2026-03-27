@@ -12,7 +12,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "too-many-methods";
@@ -22,8 +22,8 @@ const MAX_METHODS: usize = 15;
 /// Analysis rule that detects impl blocks with too many methods.
 struct TooManyMethods;
 
-/// [`AnalysisRule`] implementation for `TooManyMethods`.
-impl AnalysisRule for TooManyMethods {
+/// [`Rule`] implementation for `TooManyMethods`.
+impl Rule for TooManyMethods {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

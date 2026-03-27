@@ -1,6 +1,6 @@
 //! TODO entry — a single TODO marker found in source code.
 //!
-//! [`TodoEntry`] captures the tag, file path, line number, and comment text.
+//! [`Entry`] captures the tag, file path, line number, and comment text.
 //! Entries are surfaced as symlinks in the VFS: `@/todo/TODO/src__main.rs:42--fix-bug`
 //! pointing back to the source file at the marker's line via `at-line/`.
 
@@ -16,11 +16,11 @@ use nyne_source::SUBDIR_AT_LINE;
 use super::DIR_TODO;
 /// A single TODO/FIXME/etc. found in a source file.
 ///
-/// Discovered by [`TodoScanner`](super::scan::TodoScanner) and exposed as
+/// Discovered by [`Scanner`](super::scan::TodoScanner) and exposed as
 /// symlinks under `@/todo/<TAG>/`. Each entry knows its source location
 /// and can generate a filesystem-safe name and a relative symlink target.
 #[derive(Debug, Clone)]
-pub(super) struct TodoEntry {
+pub(super) struct Entry {
     /// Relative path of the source file (e.g., "src/main.rs").
     pub source_file: VfsPath,
     /// 1-based line number of the tag.
@@ -31,8 +31,8 @@ pub(super) struct TodoEntry {
     pub text: String,
 }
 
-/// Methods for [`TodoEntry`].
-impl TodoEntry {
+/// Methods for [`Entry`].
+impl Entry {
     /// Filesystem-safe entry name: `src__main.rs:42--fix-frobnicator`
     pub fn fs_name(&self) -> String {
         let path_slug = self.source_file.as_str().replace('/', "__");

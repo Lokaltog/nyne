@@ -82,13 +82,13 @@ struct CacheEntry {
 ///
 /// Thread-safe via `RwLock` (reads don't block reads). Values are stored
 /// as type-erased `Box<dyn Any>` — no serde round-trip on access.
-pub struct LspCache {
+pub struct Cache {
     entries: RwLock<HashMap<String, CacheEntry>>,
     ttl: Duration,
 }
 
 /// Methods for querying, caching, and invalidating LSP results.
-impl LspCache {
+impl Cache {
     /// Create a new cache with the given time-to-live for entries.
     pub(crate) fn new(ttl: Duration) -> Self {
         Self {

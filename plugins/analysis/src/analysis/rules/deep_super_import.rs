@@ -4,7 +4,7 @@
 //! levels). The idiomatic fix is `crate::` absolute paths.
 
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "deep-super-import";
@@ -16,8 +16,8 @@ struct DeepSuperImport;
 /// Currently only Rust has this pattern, but the array is extensible.
 const USE_DECLARATION: &[&str] = &["use_declaration"];
 
-/// [`AnalysisRule`] implementation for `DeepSuperImport`.
-impl AnalysisRule for DeepSuperImport {
+/// [`Rule`] implementation for `DeepSuperImport`.
+impl Rule for DeepSuperImport {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

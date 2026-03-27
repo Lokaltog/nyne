@@ -4,11 +4,10 @@
 //! `AnalysisEngine`, etc.) and only exist when the `analysis` feature is enabled.
 //! The public entry point is [`run_analysis`], re-exported into the parent module.
 
-use nyne_analysis::{AnalysisEngine, HintView};
+use nyne_analysis::{Engine, HintView};
 
 use super::{
-    Arc, DecomposedSource, HookInput, Range, ScriptContext, SourceServices, VfsPath, changed_line_range,
-    source_rel_path,
+    Arc, DecomposedSource, HookInput, Range, ScriptContext, Services, VfsPath, changed_line_range, source_rel_path,
 };
 use crate::provider::hook_schema::EditToolInput;
 
@@ -43,7 +42,7 @@ fn run_analysis_for_tool(
         return empty;
     };
 
-    let services = SourceServices::get(ctx.activation());
+    let services = Services::get(ctx.activation());
 
     // The Edit/Write tool writes directly to the real filesystem, bypassing
     // the FUSE mount. The inotify watcher will eventually invalidate, but
@@ -62,7 +61,7 @@ fn run_analysis_for_tool(
         };
     };
 
-    let Some(engine) = ctx.activation().get::<Arc<AnalysisEngine>>() else {
+    let Some(engine) = ctx.activation().get::<Arc<Engine>>() else {
         return FileAnalysis {
             decomposed: Some(decomposed),
             ..empty

@@ -14,7 +14,7 @@ use nyne_source::edit::plan::{FileEditResult, apply_file_edits};
 use nyne_source::syntax::fs_mapping::split_disambiguator;
 
 use crate::lsp::edit::resolve_workspace_edit;
-use crate::lsp::handle::{LspHandle, SymbolQuery};
+use crate::lsp::handle::{Handle, SymbolQuery};
 use crate::lsp::uri;
 
 /// Shared rename computation — implements [`DiffAction`] for preview.
@@ -93,7 +93,7 @@ impl Renameable for SymbolRename {
 /// [`DiffAction`]: crate::edit::diff_action::DiffAction
 #[derive(Clone)]
 pub(crate) struct FileRenameDiff {
-    pub handle: Arc<LspHandle>,
+    pub handle: Arc<Handle>,
     pub source_file: VfsPath,
     pub new_filename: String,
 }

@@ -21,7 +21,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "magic-string";
@@ -43,8 +43,8 @@ const MIN_LENGTH: usize = 4;
 /// Analysis rule that detects magic strings.
 struct MagicString;
 
-/// [`AnalysisRule`] implementation for `MagicString`.
-impl AnalysisRule for MagicString {
+/// [`Rule`] implementation for `MagicString`.
+impl Rule for MagicString {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

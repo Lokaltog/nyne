@@ -40,7 +40,7 @@ use strum::IntoEnumIterator;
 use super::well_known::{FILE_STAGED_DIFF, SUBDIR_EDIT, SUBDIR_STAGED};
 use crate::edit::diff_action::{DiffAction, DiffActionNode};
 use crate::edit::plan::EditOpKind;
-use crate::services::SourceServices;
+use crate::services::Services;
 
 /// Provider for staging and applying batch edits across symbols and files.
 ///
@@ -96,7 +96,7 @@ impl BatchEditProvider {
     fn has_syntax_support(&self, source_file: &VfsPath) -> bool {
         source_file
             .extension()
-            .is_some_and(|ext| SourceServices::get(&self.ctx).syntax.get(ext).is_some())
+            .is_some_and(|ext| Services::get(&self.ctx).syntax.get(ext).is_some())
     }
 
     /// Check whether any batches are staged.
@@ -262,9 +262,7 @@ impl Writable for StagingWriter {
     /// Decompose at write time, resolve the anchor, and stage the resulting action.
     fn write(&self, ctx: &RequestContext<'_>, data: &[u8]) -> Result<WriteOutcome> {
         // Decompose at write time — validates against current source state.
-        let parsed = SourceServices::get(&self.ctx)
-            .decomposition
-            .get(&self.key.source_file)?;
+        let parsed = Services::get(&self.ctx).decomposition.get(&self.key.source_file)?;
 
         let action = resolve_anchor(self.anchor, &self.key.fragment_path, data, &parsed.decomposed)?;
 

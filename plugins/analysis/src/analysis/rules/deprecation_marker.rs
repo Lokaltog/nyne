@@ -16,7 +16,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "deprecation-marker";
@@ -68,8 +68,8 @@ const DEPRECATION_PATTERNS: &[(&str, &str)] = &[
 /// Analysis rule that detects deprecation markers in comments.
 struct DeprecationMarker;
 
-/// [`AnalysisRule`] implementation for `DeprecationMarker`.
-impl AnalysisRule for DeprecationMarker {
+/// [`Rule`] implementation for `DeprecationMarker`.
+impl Rule for DeprecationMarker {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

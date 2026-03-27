@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct AnalysisConfig {
+pub struct Config {
     /// Global kill switch for all code analysis. Default: `true`.
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -33,8 +33,8 @@ pub struct AnalysisConfig {
     pub rules: Option<HashSet<String>>,
 }
 
-/// Default implementation for `AnalysisConfig`.
-impl Default for AnalysisConfig {
+/// Default implementation for `Config`.
+impl Default for Config {
     /// Returns the default value.
     fn default() -> Self {
         Self {
@@ -44,7 +44,7 @@ impl Default for AnalysisConfig {
     }
 }
 
-impl AnalysisConfig {
+impl Config {
     /// Deserialize from the plugin config section, falling back to defaults.
     pub fn from_plugin_config(section: Option<&serde_json::Value>) -> Self {
         let Some(value) = section else {

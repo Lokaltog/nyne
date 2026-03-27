@@ -1,6 +1,6 @@
 //! Background threads that own the LSP server's stdio file descriptors.
 //!
-//! Two threads run per `LspClient`:
+//! Two threads run per `Client`:
 //! - **Writer** ([`writer_loop`]): drains a channel of outbound JSON-RPC messages
 //!   and writes them to the server's stdin with Content-Length framing.
 //! - **Reader** ([`reader_loop`]): reads all inbound messages from the server's
@@ -29,7 +29,7 @@ use crate::lsp::uri::uri_to_file_path;
 
 /// Pending response map: JSON-RPC request id to a oneshot sender for the result.
 ///
-/// Shared between `LspClient` (which inserts entries before sending a request)
+/// Shared between `Client` (which inserts entries before sending a request)
 /// and the reader thread (which removes entries when dispatching responses).
 /// Protected by a `Mutex` because insertions and removals happen on different
 /// threads. The lock is held only briefly -- never across I/O.

@@ -210,9 +210,9 @@ mod sliced_content_tests {
         log: TemplateHandle,
     }
 
-    /// Create a temp git repo with a committed file, returning the `GitRepo`
+    /// Create a temp git repo with a committed file, returning the `Repo`
     /// handle and the `TempDir` guard (must be kept alive).
-    fn test_repo_with_file(filename: &str, content: &str) -> (Arc<crate::repo::GitRepo>, tempfile::TempDir) {
+    fn test_repo_with_file(filename: &str, content: &str) -> (Arc<crate::repo::Repo>, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("create temp dir");
         let git_repo = git2::Repository::init(dir.path()).expect("git init");
 
@@ -231,7 +231,7 @@ mod sliced_content_tests {
             .commit(Some("HEAD"), &sig, &sig, "initial commit", &tree, &[])
             .expect("commit");
 
-        let repo = crate::repo::GitRepo::open(dir.path()).expect("open GitRepo");
+        let repo = crate::repo::Repo::open(dir.path()).expect("open GitRepo");
         (Arc::new(repo), dir)
     }
 
@@ -375,10 +375,10 @@ mod branch_segment_tests {
 
     use rstest::rstest;
 
-    use crate::repo::GitRepo;
+    use crate::repo::Repo;
 
     /// Create a temp repo and add the given branch names (on top of the initial commit).
-    fn repo_with_branches(branch_names: &[&str]) -> (Arc<GitRepo>, tempfile::TempDir) {
+    fn repo_with_branches(branch_names: &[&str]) -> (Arc<Repo>, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("create temp dir");
         let git_repo = git2::Repository::init(dir.path()).expect("git init");
 
@@ -394,12 +394,12 @@ mod branch_segment_tests {
             git_repo.branch(name, &commit, false).expect("create branch");
         }
 
-        let repo = GitRepo::open(dir.path()).expect("open");
+        let repo = Repo::open(dir.path()).expect("open");
         (Arc::new(repo), dir)
     }
 
     /// Collect sorted (name, has_rename, has_unlink) tuples from `branch_segments_at_prefix`.
-    fn segments(repo: &Arc<GitRepo>, prefix: &str) -> Vec<(String, bool, bool)> {
+    fn segments(repo: &Arc<Repo>, prefix: &str) -> Vec<(String, bool, bool)> {
         let Some(nodes) = super::branches::branch_segments_at_prefix(repo, prefix).expect("should not error") else {
             return Vec::new();
         };
@@ -438,11 +438,11 @@ mod branch_segment_tests {
 mod delete_branch_tests {
     use std::sync::Arc;
 
-    use crate::repo::GitRepo;
+    use crate::repo::Repo;
 
     /// Create a temp repo with an initial commit on the default branch,
     /// plus additional branches. Returns (repo, tempdir, initial_commit_oid).
-    fn repo_with_branches(branch_names: &[&str]) -> (Arc<GitRepo>, tempfile::TempDir, git2::Oid) {
+    fn repo_with_branches(branch_names: &[&str]) -> (Arc<Repo>, tempfile::TempDir, git2::Oid) {
         let dir = tempfile::tempdir().expect("create temp dir");
         let git_repo = git2::Repository::init(dir.path()).expect("git init");
 
@@ -458,7 +458,7 @@ mod delete_branch_tests {
             git_repo.branch(name, &commit, false).expect("create branch");
         }
 
-        let repo = GitRepo::open(dir.path()).expect("open");
+        let repo = Repo::open(dir.path()).expect("open");
         (Arc::new(repo), dir, commit_oid)
     }
 
@@ -513,10 +513,10 @@ mod branch_tree_tests {
 
     use rstest::rstest;
 
-    use crate::repo::GitRepo;
+    use crate::repo::Repo;
 
     /// Create a temp repo with branches and committed files.
-    fn repo_with_files(branch_names: &[&str], files: &[(&str, &str)]) -> (Arc<GitRepo>, tempfile::TempDir) {
+    fn repo_with_files(branch_names: &[&str], files: &[(&str, &str)]) -> (Arc<Repo>, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("create temp dir");
         let git_repo = git2::Repository::init(dir.path()).expect("git init");
 
@@ -542,12 +542,12 @@ mod branch_tree_tests {
             git_repo.branch(name, &commit, false).expect("create branch");
         }
 
-        let repo = GitRepo::open(dir.path()).expect("open");
+        let repo = Repo::open(dir.path()).expect("open");
         (Arc::new(repo), dir)
     }
 
     /// Collect sorted (name, is_file) pairs from `branch_tree_nodes`.
-    fn tree_entries(repo: &Arc<GitRepo>, branch: &str, path: &str) -> Vec<(String, bool)> {
+    fn tree_entries(repo: &Arc<Repo>, branch: &str, path: &str) -> Vec<(String, bool)> {
         let Some(nodes) = super::branches::branch_tree_nodes(repo, branch, path).expect("should not error") else {
             return Vec::new();
         };

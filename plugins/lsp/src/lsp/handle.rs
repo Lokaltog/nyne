@@ -1,14 +1,14 @@
 // Provider-facing LSP handle — bridges ActivationContext into cached LSP queries.
 //
 // Two levels:
-//   `LspHandle`    — file-level: manager + real path + ext (shared across symbols)
+//   `Handle`    — file-level: manager + real path + ext (shared across symbols)
 //   `SymbolQuery`  — symbol-level: handle + pre-computed LSP position (per fragment)
 //
 // Created at resolve time, stored inside Readable impls, queried at read time.
 
 //! Per-file and per-symbol LSP query handles.
 //!
-//! [`LspHandle`] is the resolve-time entry point: it acquires the appropriate
+//! [`Handle`] is the resolve-time entry point: it acquires the appropriate
 //! LSP client for a source file's extension and caches the overlay-rooted
 //! path for downstream queries. [`SymbolQuery`] narrows the scope to a
 //! single symbol position, enabling position-sensitive LSP features (hover,
@@ -24,24 +24,24 @@ use crop::Rope;
 use lsp_types::Position;
 use nyne::prelude::*;
 
-use super::client::LspClient;
-use super::manager::LspManager;
+use super::client::Client;
+use super::manager::Manager;
 use super::query::FileQuery;
 use super::uri::byte_offset_to_position;
 
 /// Per-file handle to an LSP language server.
 ///
 /// Created by [`Self::for_file`] during provider resolve, which acquires
-/// the appropriate [`LspClient`] based on file extension. The handle caches
+/// the appropriate [`Client`] based on file extension. The handle caches
 /// the client reference and overlay-rooted file path so that downstream
 /// queries (hover, references, rename, etc.) avoid repeated lookups.
 ///
 /// Use [`at`](Self::at) to create a position-scoped [`SymbolQuery`] for
 /// symbol-level operations.
-pub struct LspHandle {
-    manager: Arc<LspManager>,
+pub struct Handle {
+    manager: Arc<Manager>,
     /// Cached client — acquired at resolve time for capability checks.
-    client: Arc<LspClient>,
+    client: Arc<Client>,
     /// File path using the overlay root — matches the workspace root
     /// that LSP servers see (they run as daemon children on the overlay).
     lsp_file: PathBuf,
@@ -50,7 +50,7 @@ pub struct LspHandle {
 }
 
 /// Per-file LSP handle for querying language server features.
-impl LspHandle {
+impl Handle {
     /// Create a handle for the given source file, or `None` if no LSP server
     /// is available for this file's extension.
     ///
@@ -61,7 +61,7 @@ impl LspHandle {
     /// "opening" the file in an editor.
     pub(crate) fn for_file(ctx: &ActivationContext, source_file: &VfsPath) -> Option<Arc<Self>> {
         let ext = source_file.extension()?;
-        let lsp = Arc::clone(ctx.get::<Arc<LspManager>>()?);
+        let lsp = Arc::clone(ctx.get::<Arc<Manager>>()?);
 
         let client = lsp.client_for_ext(ext)?;
         // Use overlay_root — LSP servers run as daemon children and see
@@ -105,13 +105,13 @@ impl LspHandle {
     pub(crate) fn lsp_file(&self) -> &Path { &self.lsp_file }
 
     /// The LSP client for this file's language server.
-    pub(crate) fn client(&self) -> &LspClient { &self.client }
+    pub(crate) fn client(&self) -> &Client { &self.client }
 
     /// Path resolver for rewriting LSP URIs from FUSE paths to overlay paths.
-    pub(crate) fn path_resolver(&self) -> &super::path::LspPathResolver { self.manager.path_resolver() }
+    pub(crate) fn path_resolver(&self) -> &super::path::PathResolver { self.manager.path_resolver() }
 }
 
-/// Symbol-level LSP query context — an [`LspHandle`] bound to a specific position.
+/// Symbol-level LSP query context — an [`Handle`] bound to a specific position.
 ///
 /// Created by [`LspHandle::at`] with a byte offset that is converted to an
 /// LSP `Position`. Clone-friendly (`Arc<LspHandle>` inside) for embedding
@@ -119,7 +119,7 @@ impl LspHandle {
 /// for the same symbol share a cloned `SymbolQuery`).
 #[derive(Clone)]
 pub struct SymbolQuery {
-    handle: Arc<LspHandle>,
+    handle: Arc<Handle>,
     /// LSP position (line + UTF-16 character offset) this query is bound to.
     position: Position,
 }
@@ -131,9 +131,9 @@ impl SymbolQuery {
 }
 
 /// Auto-delegates `file_query`, `lsp_file`, `path_resolver`, etc. to the
-/// inner [`LspHandle`] — avoids pure-forwarding boilerplate.
+/// inner [`Handle`] — avoids pure-forwarding boilerplate.
 impl Deref for SymbolQuery {
-    type Target = LspHandle;
+    type Target = Handle;
 
-    fn deref(&self) -> &LspHandle { &self.handle }
+    fn deref(&self) -> &Handle { &self.handle }
 }

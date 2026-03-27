@@ -11,7 +11,7 @@ use super::content::delete;
 use super::resolve::fragment_body_path;
 use crate::edit::diff_action::DiffActionNode;
 use crate::providers::well_known::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
-use crate::services::SourceServices;
+use crate::services::Services;
 use crate::syntax::{find_fragment, find_nearest_fragment_at_line};
 
 /// Symbol lookup methods for [`SyntaxProvider`].
@@ -31,7 +31,7 @@ impl SyntaxProvider {
         let Some(stem) = name.strip_suffix(&suffix) else {
             return Ok(None);
         };
-        let shared = SourceServices::get(&self.ctx).decomposition.get(source_file)?;
+        let shared = Services::get(&self.ctx).decomposition.get(source_file)?;
         // Verify the fragment actually exists at the top level.
         let exists = shared.decomposed.iter().any(|f| f.fs_name.as_deref() == Some(stem));
         if !exists {
@@ -55,7 +55,7 @@ impl SyntaxProvider {
         if self.decomposer_for(source_file).is_none() {
             return Ok(None);
         }
-        let shared = SourceServices::get(&self.ctx).decomposition.get(source_file)?;
+        let shared = Services::get(&self.ctx).decomposition.get(source_file)?;
         let Some(_frag) = find_fragment(&shared.decomposed, fragment_path) else {
             return Ok(None);
         };
@@ -82,7 +82,7 @@ impl SyntaxProvider {
         let Some(decomposer) = self.decomposer_for(source_file) else {
             return Ok(None);
         };
-        let shared = SourceServices::get(&self.ctx).decomposition.get(source_file)?;
+        let shared = Services::get(&self.ctx).decomposition.get(source_file)?;
         let ext = decomposer.file_extension();
 
         // at-line/ uses 1-based lines; fragment functions use 0-based.

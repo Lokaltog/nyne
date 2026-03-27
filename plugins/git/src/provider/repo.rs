@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::repo::GitRepo;
+use crate::repo::Repo;
 
 /// Context for a git view — repo handle and the git-relative path being inspected.
 ///
@@ -10,14 +10,14 @@ use crate::repo::GitRepo;
 /// via the [`git_template_view!`](super::git_template_view) macro.
 #[derive(Clone)]
 pub struct FileViewCtx {
-    pub repo: Arc<GitRepo>,
+    pub repo: Arc<Repo>,
     pub rel_path: String,
 }
 
 /// Constructor for [`FileViewCtx`].
 impl FileViewCtx {
     /// Creates a new file view context for the given repository path.
-    pub fn new(repo: &Arc<GitRepo>, rel_path: String) -> Self {
+    pub fn new(repo: &Arc<Repo>, rel_path: String) -> Self {
         Self {
             repo: Arc::clone(repo),
             rel_path,

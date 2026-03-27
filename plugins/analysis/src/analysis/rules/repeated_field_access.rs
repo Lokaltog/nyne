@@ -18,7 +18,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "repeated-field-access";
@@ -28,8 +28,8 @@ const MIN_REPETITIONS: usize = 3;
 /// Analysis rule that detects repeated field access chains.
 struct RepeatedFieldAccess;
 
-/// [`AnalysisRule`] implementation for `RepeatedFieldAccess`.
-impl AnalysisRule for RepeatedFieldAccess {
+/// [`Rule`] implementation for `RepeatedFieldAccess`.
+impl Rule for RepeatedFieldAccess {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

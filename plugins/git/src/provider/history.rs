@@ -1,6 +1,6 @@
 //! History data types and git querying — blame hunks, commits, contributors, notes.
 //!
-//! Defines the [`HistoryQueries`] extension trait on [`GitRepo`] providing
+//! Defines the [`HistoryQueries`] extension trait on [`Repo`] providing
 //! blame, file history, contributor ranking, and git notes. All queries
 //! operate on pre-mount real paths. History walks are capped at
 //! [`MAX_REVWALK`] to prevent unbounded traversal on repositories with
@@ -20,7 +20,7 @@ use nyne::types::SymbolLineRange;
 use tracing::warn;
 
 use crate::commit::{CommitInfo, commit_info, diff_opts};
-use crate::repo::GitRepo;
+use crate::repo::Repo;
 
 /// Safety cap on revwalk iterations to prevent unbounded history walks.
 const MAX_REVWALK: usize = 5000;
@@ -72,7 +72,7 @@ pub struct NoteEntry {
 
 /// Returns the raw file content at a specific commit.
 pub struct HistoryVersionContent {
-    pub repo: Arc<GitRepo>,
+    pub repo: Arc<Repo>,
     pub rel_path: Arc<str>,
     pub oid: Oid,
 }
@@ -83,7 +83,7 @@ impl Readable for HistoryVersionContent {
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.repo.blob_at(&self.rel_path, self.oid) }
 }
 
-/// History-related queries on [`GitRepo`] — blame, file history, contributors, and notes.
+/// History-related queries on [`Repo`] — blame, file history, contributors, and notes.
 ///
 /// Defined as an extension trait to make the module origin explicit: these methods
 /// live in `provider::history` and are available wherever the trait is in scope.
@@ -118,12 +118,12 @@ pub trait HistoryQueries {
     fn set_note(&self, rel_path: &str, message: &str) -> Result<()>;
 }
 
-/// [`HistoryQueries`] implementation for [`GitRepo`].
+/// [`HistoryQueries`] implementation for [`Repo`].
 ///
 /// All methods operate on the real filesystem (pre-mount paths) to avoid
 /// FUSE recursion. History walks are capped at [`MAX_REVWALK`] iterations
 /// to prevent unbounded traversal on large repositories.
-impl HistoryQueries for GitRepo {
+impl HistoryQueries for Repo {
     /// Collect blame hunks for a file, including uncommitted changes.
     ///
     /// Safe to call during FUSE callbacks — the repo is opened via

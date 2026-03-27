@@ -22,15 +22,15 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "manual-map";
 /// Analysis rule that detects manual map patterns.
 struct ManualMap;
 
-/// [`AnalysisRule`] implementation for `ManualMap`.
-impl AnalysisRule for ManualMap {
+/// [`Rule`] implementation for `ManualMap`.
+impl Rule for ManualMap {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

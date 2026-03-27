@@ -17,7 +17,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "deeply-nested-type";
@@ -27,8 +27,8 @@ const MAX_TYPE_DEPTH: usize = 3;
 /// Analysis rule that detects deeply nested generic types.
 struct DeeplyNestedType;
 
-/// [`AnalysisRule`] implementation for `DeeplyNestedType`.
-impl AnalysisRule for DeeplyNestedType {
+/// [`Rule`] implementation for `DeeplyNestedType`.
+impl Rule for DeeplyNestedType {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

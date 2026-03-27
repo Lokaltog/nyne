@@ -12,16 +12,16 @@ use std::sync::Arc;
 
 use nyne::prelude::*;
 use nyne::{COMPANION_SUFFIX, SUBDIR_SYMBOLS, companion_name};
-use nyne_source::services::SourceServices;
+use nyne_source::services::Services;
 use nyne_source::syntax::decomposed::DecomposedSource;
 use nyne_source::syntax::fragment::Fragment;
 use nyne_source::syntax::{find_fragment, find_fragment_at_line};
 
-use crate::lsp::handle::LspHandle;
-use crate::providers::content::{LspTarget, actions, query_lsp_targets};
+use crate::lsp::handle::Handle;
+use crate::providers::content::{Target, actions, query_lsp_targets};
 
 /// Resolved fragment context: shared decomposition, the fragment, and its LSP handle.
-type FragmentContext = (Arc<DecomposedSource>, Fragment, Arc<LspHandle>);
+type FragmentContext = (Arc<DecomposedSource>, Fragment, Arc<Handle>);
 
 /// Build a companion `VfsPath` to a specific symbol in a decomposed target file.
 ///
@@ -34,7 +34,7 @@ fn resolve_symbol_link(
     target_line: u32,
     base: &VfsPath,
 ) -> Option<PathBuf> {
-    let services = SourceServices::get(ctx);
+    let services = Services::get(ctx);
     services.syntax.decomposer_for(target_vfs)?;
     let target_shared = services.decomposition.get(target_vfs).ok()?;
     let frag_path = find_fragment_at_line(&target_shared.decomposed, target_line as usize, &target_shared.source)?;
@@ -73,7 +73,7 @@ fn build_symlink_base(source_file: &VfsPath, fragment_path: &[String], lsp_dir: 
 }
 
 /// Build a display name for an LSP target link.
-fn target_link_name(target: &LspTarget) -> String {
+fn target_link_name(target: &Target) -> String {
     let file_basename = target
         .abs_path
         .file_name()
@@ -96,7 +96,7 @@ fn resolve_fragment_handle(
     source_file: &VfsPath,
     fragment_path: &[String],
 ) -> Result<Option<FragmentContext>> {
-    let services = SourceServices::get(ctx);
+    let services = Services::get(ctx);
     let Some(_decomposer) = services.syntax.decomposer_for(source_file) else {
         return Ok(None);
     };
@@ -106,7 +106,7 @@ fn resolve_fragment_handle(
     };
     let frag = frag.clone();
 
-    let Some(lsp_handle) = LspHandle::for_file(ctx, source_file) else {
+    let Some(lsp_handle) = Handle::for_file(ctx, source_file) else {
         return Ok(None);
     };
 
@@ -151,7 +151,7 @@ pub fn resolve_lsp_symlink_dir(
 /// For each target, attempts to resolve a symbol-level link via tree-sitter
 /// decomposition of the target file. Falls back to a line-slice link when
 /// symbol resolution fails (e.g. the target file has no decomposer).
-fn build_target_nodes(ctx: &ActivationContext, targets: &[LspTarget], root: &Path, base: &VfsPath) -> Vec<VirtualNode> {
+fn build_target_nodes(ctx: &ActivationContext, targets: &[Target], root: &Path, base: &VfsPath) -> Vec<VirtualNode> {
     let mut nodes = Vec::new();
     let mut seen = HashSet::new();
 

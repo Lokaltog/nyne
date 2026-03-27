@@ -11,18 +11,18 @@ use nyne::prelude::*;
 use nyne::provider::{ConflictInfo, ConflictResolution};
 use nyne::types::path_conventions::strip_companion_suffix;
 
-use crate::repo::GitRepo;
+use crate::repo::Repo;
 
 /// Companion overlay that adds git-aware renames to file companion directories.
 ///
 /// Registers on the same routes as core's `CompanionProvider` and wins via
 /// `ConflictResolution::Force`. Only activates when a git repo is present.
-pub struct GitCompanionProvider {
+pub struct CompanionProvider {
     ctx: Arc<ActivationContext>,
 }
 
 /// Associated constants and constructor for [`GitCompanionProvider`].
-impl GitCompanionProvider {
+impl CompanionProvider {
     /// Provider identifier for the git companion.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("git-companion");
 
@@ -31,7 +31,7 @@ impl GitCompanionProvider {
 }
 
 /// [`Provider`] implementation for [`GitCompanionProvider`].
-impl Provider for GitCompanionProvider {
+impl Provider for CompanionProvider {
     /// Returns the provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
@@ -59,7 +59,7 @@ impl Provider for GitCompanionProvider {
             return Ok(None);
         }
 
-        let repo = self.ctx.get::<Arc<GitRepo>>();
+        let repo = self.ctx.get::<Arc<Repo>>();
         let node = companion_dir(name).with_renameable(GitFileRename {
             repo: repo.cloned(),
             source_file: real_path,
@@ -75,7 +75,7 @@ impl Provider for GitCompanionProvider {
 /// performs both the real filesystem rename and a `git mv` equivalent
 /// (removing the old path and adding the new path in the git index).
 struct GitFileRename {
-    repo: Option<Arc<GitRepo>>,
+    repo: Option<Arc<Repo>>,
     source_file: VfsPath,
 }
 

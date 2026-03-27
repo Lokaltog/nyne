@@ -25,7 +25,7 @@
 //! `NESTING_KINDS` maps control-flow node kinds from multiple grammars.
 
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Maximum nesting depth before triggering a hint.
 const MAX_DEPTH: usize = 3;
@@ -58,8 +58,8 @@ pub const ID: &str = "deep-nesting";
 /// Analysis rule that detects excessive code nesting depth.
 struct DeepNesting;
 
-/// [`AnalysisRule`] implementation for `DeepNesting`.
-impl AnalysisRule for DeepNesting {
+/// [`Rule`] implementation for `DeepNesting`.
+impl Rule for DeepNesting {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

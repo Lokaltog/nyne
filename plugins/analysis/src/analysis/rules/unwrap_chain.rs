@@ -19,7 +19,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "unwrap-chain";
@@ -29,8 +29,8 @@ const MIN_UNWRAPS: usize = 2;
 /// Analysis rule that detects chained unwrap calls.
 struct UnwrapChain;
 
-/// [`AnalysisRule`] implementation for `UnwrapChain`.
-impl AnalysisRule for UnwrapChain {
+/// [`Rule`] implementation for `UnwrapChain`.
+impl Rule for UnwrapChain {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

@@ -1,6 +1,6 @@
 //! Plugin registration and activation for the git plugin.
 //!
-//! Opens the git repository during activation and inserts [`GitRepo`] into the
+//! Opens the git repository during activation and inserts [`Repo`] into the
 //! `TypeMap` for other providers (including nyne-coding) to consume.
 
 use std::path::Path;
@@ -11,14 +11,14 @@ use nyne::prelude::*;
 use nyne::types::{ExtensionCounts, GitDirName};
 use tracing::{debug, warn};
 
-use crate::companion::GitCompanionProvider;
+use crate::companion::CompanionProvider;
 use crate::provider::GitProvider;
-use crate::repo::GitRepo;
+use crate::repo::Repo;
 
 /// Git plugin entry point — opens the repo and creates providers.
 ///
 /// During activation, discovers the git repository for the source directory
-/// and inserts a shared [`GitRepo`] into the `TypeMap`. If no repo is found,
+/// and inserts a shared [`Repo`] into the `TypeMap`. If no repo is found,
 /// gracefully disables itself by returning no providers.
 pub struct GitPlugin;
 
@@ -29,7 +29,7 @@ impl Plugin for GitPlugin {
 
     /// Opens the git repo and inserts shared state into the activation context.
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
-        match GitRepo::open(ctx.overlay_root()) {
+        match Repo::open(ctx.overlay_root()) {
             Ok(repo) => {
                 let repo = Arc::new(repo);
                 debug!("git repo opened at {}", ctx.overlay_root().display());
@@ -52,12 +52,12 @@ impl Plugin for GitPlugin {
 
     /// Creates git and git-companion providers if a repo is available.
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
-        if ctx.get::<Arc<GitRepo>>().is_none() {
+        if ctx.get::<Arc<Repo>>().is_none() {
             return Ok(vec![]);
         }
         Ok(vec![
             Arc::new(GitProvider::new(Arc::clone(ctx))),
-            Arc::new(GitCompanionProvider::new(Arc::clone(ctx))),
+            Arc::new(CompanionProvider::new(Arc::clone(ctx))),
         ])
     }
 }

@@ -20,15 +20,15 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "unnecessary-else";
 /// Analysis rule that detects unnecessary else blocks.
 struct UnnecessaryElse;
 
-/// [`AnalysisRule`] implementation for `UnnecessaryElse`.
-impl AnalysisRule for UnnecessaryElse {
+/// [`Rule`] implementation for `UnnecessaryElse`.
+impl Rule for UnnecessaryElse {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

@@ -4,9 +4,7 @@
 use nyne::prelude::*;
 
 use super::{build_fragment_nodes, code_block_extension};
-use crate::providers::syntax::content::{
-    BodySplice, FragmentPath, MetaSplice, SourceSlice, SpliceTarget, build_meta_nodes,
-};
+use crate::providers::syntax::content::{BodySplice, FragmentPath, MetaSplice, Slice, SpliceTarget, build_meta_nodes};
 use crate::providers::syntax::{SyntaxProvider, newline};
 use crate::providers::well_known::{FILE_BODY, SUBDIR_CODE};
 use crate::syntax::fragment::FragmentKind;
@@ -40,7 +38,7 @@ impl SyntaxProvider {
         // Byte range is resolved lazily at read time by SourceSlice.
         let body_name = format!("{FILE_BODY}.{}", dctx.ext);
         let frag_path = FragmentPath::new(fragment_path);
-        let body_node = VirtualNode::file(&body_name, SourceSlice {
+        let body_node = VirtualNode::file(&body_name, Slice {
             resolver: resolver.clone(),
             target: SpliceTarget::FragmentBody(frag_path.clone()),
         })
@@ -120,7 +118,7 @@ impl SyntaxProvider {
                     fs_name: fs_name.to_owned(),
                 };
 
-                let node = VirtualNode::file(&filename, SourceSlice {
+                let node = VirtualNode::file(&filename, Slice {
                     resolver: resolver.clone(),
                     target: target(),
                 })

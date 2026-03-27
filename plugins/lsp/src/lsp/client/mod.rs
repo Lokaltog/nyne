@@ -91,8 +91,8 @@ impl FilePosition<'_> {
 ///
 /// This eliminates Mutex contention on stdio from FUSE handler threads —
 /// they only block on a bounded channel recv with a deadline.
-pub struct LspClient {
-    /// Server name (for logging and `LspManager` keying).
+pub struct Client {
+    /// Server name (for logging and `Manager` keying).
     name: String,
     /// Channel to the writer thread. Carries framed JSON-RPC messages.
     ///
@@ -116,17 +116,17 @@ pub struct LspClient {
 }
 
 /// Core LSP client lifecycle: spawning, initialization, and shutdown.
-impl LspClient {
+impl Client {
     /// Spawn a language server as a direct child of the daemon, perform the
     /// initialize handshake, and return a ready-to-use client.
     ///
-    /// `name` is used for logging and as the key in `LspManager`.
+    /// `name` is used for logging and as the key in `Manager`.
     /// `root_dir` is the overlay merged path where the LSP server operates.
     ///
     /// Starts two background threads (reader + writer) that own the server's
     /// stdio fds. All subsequent communication goes through channels.
     pub(crate) fn spawn(
-        server: &super::spec::LspServerDef,
+        server: &super::spec::ServerDef,
         root_dir: &Path,
         spawner: &Spawner,
         response_timeout: Duration,
@@ -367,7 +367,7 @@ impl LspClient {
 /// the LSP lifecycle contract. Shutdown errors are logged but cannot
 /// propagate from `Drop` -- the server process is reaped by the `Spawner`
 /// regardless.
-impl Drop for LspClient {
+impl Drop for Client {
     fn drop(&mut self) {
         if let Err(e) = self.shutdown() {
             warn!(target: "nyne::lsp", server = %self.name, error = %e, "LSP shutdown failed");

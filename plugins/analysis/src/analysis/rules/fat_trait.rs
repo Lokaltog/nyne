@@ -5,7 +5,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "fat-trait";
@@ -28,8 +28,8 @@ const REQUIRED_METHOD: &[&str] = &[
 /// Analysis rule that detects traits with too many required methods.
 struct FatTrait;
 
-/// [`AnalysisRule`] implementation for `FatTrait`.
-impl AnalysisRule for FatTrait {
+/// [`Rule`] implementation for `FatTrait`.
+impl Rule for FatTrait {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

@@ -15,7 +15,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "too-many-locals";
@@ -25,8 +25,8 @@ const MAX_LOCALS: usize = 10;
 /// Analysis rule that detects functions with too many local variables.
 struct TooManyLocals;
 
-/// [`AnalysisRule`] implementation for `TooManyLocals`.
-impl AnalysisRule for TooManyLocals {
+/// [`Rule`] implementation for `TooManyLocals`.
+impl Rule for TooManyLocals {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

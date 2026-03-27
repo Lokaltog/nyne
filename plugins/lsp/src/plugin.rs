@@ -15,10 +15,10 @@ use nyne_source::syntax::SyntaxRegistry;
 use tracing::info;
 
 use crate::config::Config;
-use crate::lsp::LspRegistry;
-use crate::lsp::handle::LspHandle;
-use crate::lsp::manager::LspManager;
-use crate::lsp::path::LspPathResolver;
+use crate::lsp::Registry;
+use crate::lsp::handle::Handle;
+use crate::lsp::manager::Manager;
+use crate::lsp::path::PathResolver;
 use crate::providers::content::rename::SymbolRename;
 use crate::providers::provider::LspProvider;
 use crate::providers::workspace_search::WorkspaceSearchProvider;
@@ -48,7 +48,7 @@ impl Plugin for LspPlugin {
         let lsp_config = Config::from_plugin_config(ctx.plugin_config("lsp"));
         let _ = self.resolved.set(lsp_config.clone());
         let sandbox_env = ctx.config().sandbox.env.clone();
-        let lsp_registry = LspRegistry::build_with_config(&lsp_config);
+        let lsp_registry = Registry::build_with_config(&lsp_config);
 
         // Contribute LSP server commands to the passthrough set so those
         // processes see only the real filesystem (not virtual content).
@@ -56,13 +56,13 @@ impl Plugin for LspPlugin {
             lsp_registry.server_commands().into_iter().map(str::to_owned).collect(),
         ));
 
-        let lsp = Arc::new(LspManager::new(
+        let lsp = Arc::new(Manager::new(
             lsp_registry,
             SyntaxRegistry::global(),
             lsp_config,
             Arc::clone(ctx.spawner()),
             sandbox_env,
-            LspPathResolver::new(ctx.root().to_owned(), ctx.overlay_root().to_owned()),
+            PathResolver::new(ctx.root().to_owned(), ctx.overlay_root().to_owned()),
         ));
 
         // Eagerly spawn LSP servers in the background so they're warm
@@ -112,13 +112,13 @@ impl Plugin for LspPlugin {
     }
 }
 
-/// File rename hook delegating to [`LspManager`].
+/// File rename hook delegating to [`Manager`].
 ///
 /// Inserted into the `TypeMap` during `activate()` so that
 /// `SyntaxProvider` can coordinate file renames with the LSP server.
-struct LspFileRenameHook(Arc<LspManager>);
+struct LspFileRenameHook(Arc<Manager>);
 
-/// Delegates file rename lifecycle events to [`LspManager`].
+/// Delegates file rename lifecycle events to [`Manager`].
 impl FileRenameHook for LspFileRenameHook {
     /// Compute and apply import-path updates before the rename.
     fn will_rename(&self, old: &Path, new: &Path) -> eyre::Result<()> {
@@ -145,7 +145,7 @@ impl FragmentNodeHook for LspFragmentNodeHook {
         source: &str,
         name_byte_offset: usize,
     ) -> VirtualNode {
-        let Some(handle) = LspHandle::for_file(activation, source_file) else {
+        let Some(handle) = Handle::for_file(activation, source_file) else {
             return node;
         };
         let query = handle.at(source, name_byte_offset);

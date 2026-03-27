@@ -14,7 +14,7 @@ use super::content::{FileOverviewContent, FragmentResolver, LinesContent, LinesW
 use super::{FragmentNodeHook, SyntaxProvider};
 use crate::edit::diff_action::DiffActionNode;
 use crate::providers::well_known::{COMPANION_SUFFIX, FILE_BODY, FILE_OVERVIEW, SUBDIR_SYMBOLS, companion_name};
-use crate::services::SourceServices;
+use crate::services::Services;
 use crate::syntax::decomposed::DecomposedSource;
 use crate::syntax::find_fragment;
 use crate::syntax::fragment::{Fragment, FragmentKind};
@@ -44,14 +44,14 @@ impl SyntaxProvider {
         let Some(decomposer) = self.decomposer_for(source_file) else {
             return Ok(None);
         };
-        let shared = SourceServices::get(&self.ctx).decomposition.get(source_file)?;
+        let shared = Services::get(&self.ctx).decomposition.get(source_file)?;
         let ext = decomposer.file_extension();
         Ok(Some(DecompositionContext { shared, ext }))
     }
 
     /// Build a [`FragmentResolver`] for lazy decomposition of a source file.
     pub(super) fn resolver_for(&self, source_file: &VfsPath) -> FragmentResolver {
-        let cache = SourceServices::get(&self.ctx).decomposition.clone();
+        let cache = Services::get(&self.ctx).decomposition.clone();
         FragmentResolver::new(cache, source_file.clone())
     }
 }

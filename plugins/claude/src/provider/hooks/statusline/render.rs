@@ -109,7 +109,7 @@ fn project(ctx: &Context<'_>) -> Option<String> {
 /// Git branch name.
 fn git_branch(ctx: &Context<'_>) -> Option<String> {
     ctx.activation
-        .get::<Arc<nyne_git::GitRepo>>()
+        .get::<Arc<nyne_git::Repo>>()
         .map(|r| format!("\u{e0a0} {}", r.head_branch().bold()))
 }
 

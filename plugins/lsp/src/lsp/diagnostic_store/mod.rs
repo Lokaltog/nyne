@@ -34,7 +34,7 @@ struct FileEntry {
 /// Stores push diagnostics from LSP servers and signals waiting readers.
 ///
 /// Thread safety model:
-/// - The reader thread (one per `LspClient`) calls [`publish`] when a
+/// - The reader thread (one per `Client`) calls [`publish`] when a
 ///   `textDocument/publishDiagnostics` notification arrives.
 /// - FUSE threads (up to 4) call [`get_or_wait`] when reading DIAGNOSTICS.md.
 /// - [`mark_dirty`] is called from `invalidate_file` after sending `didChange`.

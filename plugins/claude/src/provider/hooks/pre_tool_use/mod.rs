@@ -11,7 +11,7 @@ use std::time::SystemTime;
 use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::prelude::*;
 use nyne::templates::TemplateEngine;
-use nyne_source::services::SourceServices;
+use nyne_source::services::Services;
 use nyne_source::syntax::find_fragment_at_line;
 use nyne_source::syntax::fragment::Fragment;
 use nyne_source::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, fragment_list};
@@ -148,7 +148,7 @@ impl PreToolUse {
         let Ok(vfs_path) = VfsPath::new(rel) else {
             return HookOutput::empty();
         };
-        let Ok(decomposed) = SourceServices::get(activation).decomposition.get(&vfs_path) else {
+        let Ok(decomposed) = Services::get(activation).decomposition.get(&vfs_path) else {
             return HookOutput::empty();
         };
         if decomposed.decomposed.is_empty() {

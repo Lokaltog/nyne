@@ -17,7 +17,7 @@ fn key<'a>(path: &'a str, method: &'a str, line: u32, param: u32) -> CacheKey<'a
 /// Tests that inserting a value and retrieving it returns the same value.
 #[test]
 fn insert_and_get() {
-    let cache = LspCache::new(Duration::from_secs(60));
+    let cache = Cache::new(Duration::from_secs(60));
     let values = vec!["alpha".to_owned(), "beta".to_owned()];
     let k = key("/src/main.rs", "references", 10, 5);
     cache.insert(&k, values.clone());
@@ -29,7 +29,7 @@ fn insert_and_get() {
 /// Tests that querying an empty cache returns `None`.
 #[test]
 fn miss_on_empty() {
-    let cache = LspCache::new(Duration::from_secs(60));
+    let cache = Cache::new(Duration::from_secs(60));
     let k = key("/src/main.rs", "references", 1, 0);
     let result: Option<Vec<String>> = cache.get(&k);
     assert_eq!(result, None);
@@ -38,7 +38,7 @@ fn miss_on_empty() {
 /// Tests that entries expire after the configured TTL.
 #[test]
 fn ttl_expiry() {
-    let cache = LspCache::new(Duration::from_millis(1));
+    let cache = Cache::new(Duration::from_millis(1));
     let k = key("/src/main.rs", "hover", 5, 3);
     cache.insert(&k, 42_i32);
 
@@ -51,7 +51,7 @@ fn ttl_expiry() {
 /// Tests that invalidating a file clears only that file's entries.
 #[test]
 fn invalidate_file() {
-    let cache = LspCache::new(Duration::from_secs(60));
+    let cache = Cache::new(Duration::from_secs(60));
     let main_key = key("/src/main.rs", "references", 10, 5);
     let lib_key = key("/src/lib.rs", "references", 1, 0);
     cache.insert(&main_key, "main_ref".to_owned());
@@ -68,7 +68,7 @@ fn invalidate_file() {
 /// Tests that clearing the cache removes all entries.
 #[test]
 fn clear() {
-    let cache = LspCache::new(Duration::from_secs(60));
+    let cache = Cache::new(Duration::from_secs(60));
     let k1 = key("/a", "hover", 0, 0);
     let k2 = key("/b", "hover", 0, 0);
     cache.insert(&k1, 1_i32);
@@ -85,7 +85,7 @@ fn clear() {
 /// Tests that `len` and `is_empty` reflect the number of cached entries.
 #[test]
 fn len_and_is_empty() {
-    let cache = LspCache::new(Duration::from_secs(60));
+    let cache = Cache::new(Duration::from_secs(60));
     assert!(cache.is_empty());
     assert_eq!(cache.len(), 0);
 
@@ -102,7 +102,7 @@ fn len_and_is_empty() {
 /// Tests that requesting a cached value as a different type returns `None`.
 #[test]
 fn type_mismatch_returns_none() {
-    let cache = LspCache::new(Duration::from_secs(60));
+    let cache = Cache::new(Duration::from_secs(60));
     let k = key("/src/main.rs", "hover", 1, 0);
     cache.insert(&k, 42_i32);
 
@@ -114,7 +114,7 @@ fn type_mismatch_returns_none() {
 /// Tests that `get_with_age` returns the cached value along with its age.
 #[test]
 fn get_with_age_returns_age() {
-    let cache = LspCache::new(Duration::from_secs(60));
+    let cache = Cache::new(Duration::from_secs(60));
     let k = key("/src/main.rs", "hover", 1, 0);
     cache.insert(&k, "value".to_owned());
 

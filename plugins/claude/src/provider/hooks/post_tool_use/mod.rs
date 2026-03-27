@@ -12,9 +12,9 @@ use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::prelude::*;
 use nyne::templates::TemplateEngine;
 use nyne_lsp::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
-use nyne_lsp::lsp::manager::LspManager;
+use nyne_lsp::lsp::manager::Manager;
 use nyne_source::providers::well_known::FILE_OVERVIEW;
-use nyne_source::services::SourceServices;
+use nyne_source::services::Services;
 use nyne_source::syntax::decomposed::DecomposedSource;
 
 use crate::provider::hook_schema::{
@@ -268,7 +268,7 @@ fn fetch_diagnostics_for_tool(
         return Vec::new();
     };
 
-    let Some(lsp) = ctx.activation().get::<Arc<LspManager>>() else {
+    let Some(lsp) = ctx.activation().get::<Arc<Manager>>() else {
         return Vec::new();
     };
 

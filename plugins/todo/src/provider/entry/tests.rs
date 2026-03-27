@@ -33,7 +33,7 @@ fn slugify_empty() {
 /// Tests the filesystem-safe name format for todo entries.
 #[test]
 fn fs_name_format() {
-    let entry = TodoEntry {
+    let entry = Entry {
         source_file: VfsPath::new("src/main.rs").unwrap(),
         line: 42,
         tag: Arc::from("TODO"),
@@ -46,7 +46,7 @@ fn fs_name_format() {
 /// Paths are mount-root-relative: base includes the `@` companion prefix.
 #[test]
 fn symlink_target_nested_source_file() {
-    let entry = TodoEntry {
+    let entry = Entry {
         source_file: VfsPath::new("src/dispatch/router.rs").unwrap(),
         line: 10,
         tag: Arc::from("FIXME"),
@@ -62,7 +62,7 @@ fn symlink_target_nested_source_file() {
 /// Same test with a root-level file — ensures depth computation works at all levels.
 #[test]
 fn symlink_target_root_source_file() {
-    let entry = TodoEntry {
+    let entry = Entry {
         source_file: VfsPath::new("ROADMAP.md").unwrap(),
         line: 788,
         tag: Arc::from("TODO"),

@@ -13,7 +13,7 @@ mod scan;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use entry::TodoEntry;
+use entry::Entry;
 use nyne::dispatch::routing::ctx::RouteCtx;
 use nyne::dispatch::routing::tree::RouteTree;
 use nyne::prelude::*;
@@ -21,7 +21,7 @@ use nyne::templates::{TemplateHandle, serialize_view};
 use nyne_macros::routes;
 use nyne_source::SyntaxRegistry;
 use parking_lot::RwLock;
-use scan::TodoScanner;
+use scan::Scanner;
 use serde::Serialize;
 
 use crate::config::Config;
@@ -39,8 +39,8 @@ pub struct TodoProvider {
     ctx: Arc<ActivationContext>,
     config: Config,
     syntax: Arc<SyntaxRegistry>,
-    scanner: TodoScanner,
-    index: RwLock<Option<TodoIndex>>,
+    scanner: Scanner,
+    index: RwLock<Option<Index>>,
     overview_tmpl: TemplateHandle,
     tag_tmpl: TemplateHandle,
     /// Canonical tag list from config (SSOT for priority order).
@@ -53,9 +53,9 @@ pub struct TodoProvider {
 /// Built lazily on first access by scanning all git-tracked files.
 /// Invalidated via `on_fs_change` when any of the `scanned_files` is
 /// modified, causing a full re-scan on the next read.
-struct TodoIndex {
+struct Index {
     /// All discovered entries, grouped by tag.
-    entries_by_tag: BTreeMap<String, Vec<TodoEntry>>,
+    entries_by_tag: BTreeMap<String, Vec<Entry>>,
     /// Set of files that were scanned (for invalidation).
     scanned_files: HashSet<VfsPath>,
 }
@@ -65,7 +65,7 @@ impl TodoProvider {
     /// Create a new TODO provider with route tree and scanner.
     pub(crate) fn new(ctx: Arc<ActivationContext>, config: Config) -> Self {
         let tags = config.tags.clone();
-        let scanner = TodoScanner::new(&tags);
+        let scanner = Scanner::new(&tags);
         let syntax = SyntaxRegistry::global();
 
         let mut b = nyne::handle_builder();
@@ -114,7 +114,7 @@ impl TodoProvider {
         // when multiple threads race past the read-lock fast path.
         let files = self.discover_files();
         let entries_by_tag = self.scanner.scan_all(&files, ctx.real_fs, &self.syntax);
-        *index = Some(TodoIndex {
+        *index = Some(Index {
             entries_by_tag,
             scanned_files: files.into_iter().collect(),
         });
@@ -123,7 +123,7 @@ impl TodoProvider {
     /// Get the list of files to scan from the git index.
     #[cfg(feature = "git")]
     fn discover_files(&self) -> Vec<VfsPath> {
-        let Some(repo) = self.ctx.get::<Arc<nyne_git::GitRepo>>() else {
+        let Some(repo) = self.ctx.get::<Arc<nyne_git::Repo>>() else {
             return Vec::new();
         };
         let Ok(paths) = repo.index_paths() else {
@@ -212,7 +212,7 @@ impl Provider for TodoProvider {
         }
         #[cfg(feature = "git")]
         {
-            self.ctx.get::<Arc<nyne_git::GitRepo>>().is_some()
+            self.ctx.get::<Arc<nyne_git::Repo>>().is_some()
         }
         #[cfg(not(feature = "git"))]
         {
@@ -269,9 +269,9 @@ struct EntryView {
     text: String,
 }
 
-/// Convert a [`TodoEntry`] to a serializable [`EntryView`] for template rendering.
-impl From<&TodoEntry> for EntryView {
-    fn from(entry: &TodoEntry) -> Self {
+/// Convert a [`Entry`] to a serializable [`EntryView`] for template rendering.
+impl From<&Entry> for EntryView {
+    fn from(entry: &Entry) -> Self {
         Self {
             line: entry.line,
             tag: entry.tag.to_string(),
@@ -291,7 +291,7 @@ struct TagView {
 ///
 /// Entries must already be sorted with file path as the primary key —
 /// consecutive entries from the same file are merged into one `FileGroup`.
-fn group_by_file(entries: &[&TodoEntry]) -> Vec<FileGroup> {
+fn group_by_file(entries: &[&Entry]) -> Vec<FileGroup> {
     entries
         .chunk_by(|a, b| a.source_file == b.source_file)
         .filter_map(|chunk| {
@@ -306,12 +306,12 @@ fn group_by_file(entries: &[&TodoEntry]) -> Vec<FileGroup> {
 
 /// Build the overview view: all tags, grouped by file, entries sorted by
 /// priority and line number.
-fn build_overview_view(index: &TodoIndex, tag_order: &[String]) -> OverviewView {
+fn build_overview_view(index: &Index, tag_order: &[String]) -> OverviewView {
     // Build a priority map from tag order (SSOT).
     let priority: HashMap<&str, usize> = tag_order.iter().enumerate().map(|(i, t)| (t.as_str(), i)).collect();
 
     // Collect all entries, flatten across tags.
-    let mut all_entries: Vec<&TodoEntry> = index.entries_by_tag.values().flat_map(|v| v.iter()).collect();
+    let mut all_entries: Vec<&Entry> = index.entries_by_tag.values().flat_map(|v| v.iter()).collect();
 
     // Sort by file path, then by tag priority, then by line number.
     all_entries.sort_by(|a, b| {
@@ -332,8 +332,8 @@ fn build_overview_view(index: &TodoIndex, tag_order: &[String]) -> OverviewView 
 }
 
 /// Build a per-tag view: entries for a single tag, grouped by file.
-fn build_tag_view(tag: &str, entries: &[TodoEntry]) -> TagView {
-    let mut sorted: Vec<&TodoEntry> = entries.iter().collect();
+fn build_tag_view(tag: &str, entries: &[Entry]) -> TagView {
+    let mut sorted: Vec<&Entry> = entries.iter().collect();
     sorted.sort_by(|a, b| {
         a.source_file
             .as_str()

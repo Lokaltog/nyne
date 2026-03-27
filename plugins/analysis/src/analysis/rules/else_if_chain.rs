@@ -23,7 +23,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "else-if-chain";
@@ -33,8 +33,8 @@ const MIN_ELSE_IFS: usize = 3;
 /// Analysis rule that detects long else-if chains.
 struct ElseIfChain;
 
-/// [`AnalysisRule`] implementation for `ElseIfChain`.
-impl AnalysisRule for ElseIfChain {
+/// [`Rule`] implementation for `ElseIfChain`.
+impl Rule for ElseIfChain {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

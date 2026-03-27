@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use nyne::dispatch::activation::ActivationContext;
 
-use crate::config::SourceConfig;
+use crate::config::Config;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::decomposed::DecompositionCache;
 
@@ -16,16 +16,16 @@ use crate::syntax::decomposed::DecompositionCache;
 /// Bundling avoids the fragility of N separate `TypeMap` insertions
 /// (where forgetting one causes a runtime panic at an arbitrary call site)
 /// and makes the plugin's service surface explicit in one place.
-pub struct SourceServices {
+pub struct Services {
     /// Global tree-sitter grammar registry shared across all decompositions.
     pub syntax: Arc<SyntaxRegistry>,
     /// Caches parsed decompositions keyed by file path and content hash.
     pub decomposition: DecompositionCache,
     /// Resolved plugin configuration.
-    pub config: SourceConfig,
+    pub config: Config,
 }
 
-impl SourceServices {
+impl Services {
     /// Retrieve the source services from the activation context.
     ///
     /// # Panics

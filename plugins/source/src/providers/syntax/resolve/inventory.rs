@@ -5,7 +5,7 @@ use nyne::prelude::*;
 
 use super::{build_fragment_nodes, fragment_body_path};
 use crate::providers::syntax::content::{
-    FileDocstringContent, FileDocstringSplice, MetaSplice, OverviewContent, SourceSlice, SpliceTarget,
+    FileDocstringContent, FileDocstringSplice, MetaSplice, OverviewContent, Slice, SpliceTarget,
 };
 use crate::providers::syntax::{SyntaxProvider, newline};
 use crate::providers::well_known::{FILE_DOCSTRING, FILE_IMPORTS, FILE_OVERVIEW, SUBDIR_BY_KIND, SUBDIR_SYMBOLS};
@@ -36,7 +36,7 @@ impl SyntaxProvider {
         // Imports file (if present). Byte range resolved lazily by SourceSlice.
         if find_fragment_of_kind(&dctx.shared.decomposed, &FragmentKind::Imports).is_some() {
             let name = format!("{FILE_IMPORTS}.{}", dctx.ext);
-            let node = VirtualNode::file(name, SourceSlice {
+            let node = VirtualNode::file(name, Slice {
                 resolver: resolver.clone(),
                 target: SpliceTarget::Imports,
             })

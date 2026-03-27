@@ -12,7 +12,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "long-match";
@@ -22,8 +22,8 @@ const MAX_ARMS: usize = 8;
 /// Analysis rule that detects match expressions with too many arms.
 struct LongMatch;
 
-/// [`AnalysisRule`] implementation for `LongMatch`.
-impl AnalysisRule for LongMatch {
+/// [`Rule`] implementation for `LongMatch`.
+impl Rule for LongMatch {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

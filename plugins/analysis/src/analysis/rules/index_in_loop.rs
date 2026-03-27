@@ -20,15 +20,15 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "index-in-loop";
 /// Analysis rule that detects array indexing inside loops.
 struct IndexInLoop;
 
-/// [`AnalysisRule`] implementation for `IndexInLoop`.
-impl AnalysisRule for IndexInLoop {
+/// [`Rule`] implementation for `IndexInLoop`.
+impl Rule for IndexInLoop {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

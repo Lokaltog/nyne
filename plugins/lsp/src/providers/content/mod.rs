@@ -2,7 +2,7 @@
 //!
 //! Bridges the LSP client with the VFS by turning LSP responses (hover, references,
 //! callers, definitions, etc.) into readable virtual files and symlink directories.
-//! [`LspFeature`] is the single source of truth for supported features — adding a
+//! [`Feature`] is the single source of truth for supported features — adding a
 //! new one requires only a variant there plus a Jinja template.
 //!
 //! Architecture:
@@ -27,7 +27,7 @@ mod views;
 use std::ops::Range as StdRange;
 
 use color_eyre::eyre::eyre;
-pub(crate) use feature::{LspFeature, LspHandles, LspTarget};
+pub(crate) use feature::{Feature, Handles, Target};
 use nyne::prelude::*;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use strum::{EnumCount, IntoEnumIterator};
@@ -36,27 +36,27 @@ use views::{DiagnosticsLspView, SymbolLspView};
 /// Error message when the LSP client has become unavailable since resolve time.
 pub const LSP_UNAVAILABLE: &str = "LSP server no longer available";
 
-use crate::lsp::handle::LspHandle;
+use crate::lsp::handle::Handle;
 
 /// Build LSP-backed virtual file nodes for a single symbol.
 ///
-/// Iterates all [`LspFeature`] variants, skipping features the server
+/// Iterates all [`Feature`] variants, skipping features the server
 /// does not support (based on advertised capabilities). Adding a new
-/// LSP feature only requires adding a variant to `LspFeature` — no
+/// LSP feature only requires adding a variant to `Feature` — no
 /// changes here.
 pub(crate) fn build_lsp_symbol_nodes(
-    handle: &Arc<LspHandle>,
+    handle: &Arc<Handle>,
     source: &str,
     name_byte_offset: usize,
-    lsp_handles: &LspHandles,
+    lsp_handles: &Handles,
     resolver: &FragmentResolver,
     fragment_path: &Arc<[String]>,
 ) -> Vec<VirtualNode> {
     let sym = handle.at(source, name_byte_offset);
     let caps = handle.capabilities();
-    let mut nodes = Vec::with_capacity(LspFeature::COUNT * 2);
+    let mut nodes = Vec::with_capacity(Feature::COUNT * 2);
 
-    for feature in LspFeature::iter() {
+    for feature in Feature::iter() {
         if !feature.is_supported(caps) {
             continue;
         }
@@ -83,7 +83,7 @@ pub(crate) fn build_lsp_symbol_nodes(
 /// that changes asynchronously — the `DiagnosticStore::get_or_wait`
 /// freshness gate in the read pipeline handles blocking until the LSP
 /// publishes fresh results after a `didChange`.
-pub(crate) fn build_diagnostics_node(name: &str, handle: &Arc<LspHandle>, lsp_handles: &LspHandles) -> VirtualNode {
+pub(crate) fn build_diagnostics_node(name: &str, handle: &Arc<Handle>, lsp_handles: &Handles) -> VirtualNode {
     lsp_handles
         .diagnostics
         .node(name, DiagnosticsLspView(Arc::clone(handle)))
@@ -95,13 +95,13 @@ pub(crate) fn build_diagnostics_node(name: &str, handle: &Arc<LspHandle>, lsp_ha
 /// Looks up the feature by directory name and delegates to
 /// `LspFeature::query()` → `LspQueryResult::into_targets()`.
 pub(crate) fn query_lsp_targets(
-    handle: &Arc<LspHandle>,
+    handle: &Arc<Handle>,
     source: &str,
     name_byte_offset: usize,
     lsp_dir: &str,
     line_range: &StdRange<usize>,
-) -> Result<Vec<LspTarget>> {
-    let Some(feature) = LspFeature::from_dir_name(lsp_dir) else {
+) -> Result<Vec<Target>> {
+    let Some(feature) = Feature::from_dir_name(lsp_dir) else {
         return Ok(Vec::new());
     };
     let sym = handle.at(source, name_byte_offset);

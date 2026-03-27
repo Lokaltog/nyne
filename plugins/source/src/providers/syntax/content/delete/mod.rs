@@ -7,7 +7,7 @@ use nyne::prelude::*;
 
 use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOp, EditOpKind, EditOutcome, EditPlan, FileEditResult, ValidationResult};
-use crate::services::SourceServices;
+use crate::services::Services;
 use crate::syntax::decomposed::DecomposedSource;
 
 /// Delete a symbol from its source file.
@@ -30,7 +30,7 @@ pub(in crate::providers::syntax) struct SymbolDelete {
 impl SymbolDelete {
     /// Decompose the source file and return the shared decomposition.
     fn decomposed(&self) -> Result<Arc<DecomposedSource>> {
-        SourceServices::get(&self.ctx).decomposition.get(&self.source_file)
+        Services::get(&self.ctx).decomposition.get(&self.source_file)
     }
 }
 
@@ -68,9 +68,7 @@ impl DiffAction for SymbolDelete {
     fn on_applied(&self, _ctx: &RequestContext<'_>) -> Result<()> {
         // Invalidate the decomposition cache so subsequent reads
         // (OVERVIEW, body, docstring, etc.) re-decompose from disk.
-        SourceServices::get(&self.ctx)
-            .decomposition
-            .invalidate(&self.source_file);
+        Services::get(&self.ctx).decomposition.invalidate(&self.source_file);
         Ok(())
     }
 }

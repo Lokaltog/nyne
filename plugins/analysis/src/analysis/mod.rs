@@ -15,7 +15,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use crate::TsNode;
-use crate::config::AnalysisConfig;
+use crate::config::Config;
 
 /// Rules disabled by default because they tend to be noisy on most codebases.
 ///
@@ -46,11 +46,11 @@ pub const DEFAULT_DISABLED_RULES: &[&str] = &[
 /// Registered via the `register_analysis_rule!` macro into the
 /// [`ANALYSIS_RULE_FACTORIES`] distributed slice. Each factory may
 /// return multiple rules (e.g. a single module registering related checks).
-pub type AnalysisRuleFactory = fn() -> Vec<Box<dyn AnalysisRule>>;
+pub type RuleFactory = fn() -> Vec<Box<dyn Rule>>;
 
 /// Distributed slice collecting all registered analysis rule factories.
 #[linkme::distributed_slice]
-pub(crate) static ANALYSIS_RULE_FACTORIES: [AnalysisRuleFactory];
+pub(crate) static ANALYSIS_RULE_FACTORIES: [RuleFactory];
 
 /// Register one or more analysis rules for link-time auto-discovery.
 ///
@@ -64,7 +64,7 @@ macro_rules! register_analysis_rule {
     ($($rule:expr),+ $(,)?) => {
         #[allow(unsafe_code)]
         #[linkme::distributed_slice($crate::analysis::ANALYSIS_RULE_FACTORIES)]
-        static _ANALYSIS_RULE: $crate::analysis::AnalysisRuleFactory = || {
+        static _ANALYSIS_RULE: $crate::analysis::RuleFactory = || {
             vec![$(Box::new($rule)),+]
         };
     };
@@ -98,7 +98,7 @@ pub struct Hint {
 impl Hint {
     /// Build a hint spanning the full line range of a tree-sitter node.
     pub fn from_node(
-        rule: &dyn AnalysisRule,
+        rule: &dyn Rule,
         node: TsNode<'_>,
         severity: Severity,
         message: String,
@@ -116,7 +116,7 @@ impl Hint {
 
     /// Build a hint pointing at a single line (the start of the node).
     pub fn from_node_line(
-        rule: &dyn AnalysisRule,
+        rule: &dyn Rule,
         node: TsNode<'_>,
         severity: Severity,
         message: String,
@@ -169,7 +169,7 @@ impl From<&Hint> for HintView {
 /// Rules declare which node kinds they're interested in via [`Self::node_kinds`].
 /// The analysis engine only calls [`Self::check`] for matching nodes — no
 /// per-rule full-tree walks.
-pub trait AnalysisRule: Send + Sync {
+pub trait Rule: Send + Sync {
     /// Unique identifier for this rule (e.g. `"deep-nesting"`).
     fn id(&self) -> &'static str;
 
@@ -184,12 +184,12 @@ pub trait AnalysisRule: Send + Sync {
 }
 
 /// Collection of analysis rules sharing ownership via `Arc`.
-type RuleVec = Vec<Arc<dyn AnalysisRule>>;
+type RuleVec = Vec<Arc<dyn Rule>>;
 /// Node-kind to rules mapping for O(1) dispatch during tree walks.
 type DispatchMap = HashMap<&'static str, RuleVec>;
 
 /// Collected analysis rules, indexed by node kind for O(1) dispatch.
-pub struct AnalysisEngine {
+pub struct Engine {
     /// Rules keyed by the node kinds they handle.
     dispatch: DispatchMap,
     /// Rules that want all nodes (empty `node_kinds`).
@@ -197,14 +197,14 @@ pub struct AnalysisEngine {
 }
 
 /// Construction, filtering, and tree-walking methods for the analysis engine.
-impl AnalysisEngine {
+impl Engine {
     /// Build the engine from all registered rule factories.
     ///
     /// Cheap to construct — just indexes rule factories into a dispatch map.
     /// Callers own the instance; no global state, no locking.
     #[cfg(test)]
     pub fn build() -> Self {
-        let rules: Vec<Arc<dyn AnalysisRule>> = ANALYSIS_RULE_FACTORIES
+        let rules: Vec<Arc<dyn Rule>> = ANALYSIS_RULE_FACTORIES
             .iter()
             .flat_map(|factory| factory())
             .map(Arc::from)
@@ -221,7 +221,7 @@ impl AnalysisEngine {
     /// - `rules = Some(set)` → only matching rule IDs.
     ///
     /// Unknown rule names in `config.rules` produce a warning at startup.
-    pub(crate) fn build_filtered(config: &AnalysisConfig) -> Self {
+    pub(crate) fn build_filtered(config: &Config) -> Self {
         if !config.enabled {
             return Self {
                 dispatch: DispatchMap::new(),

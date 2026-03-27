@@ -10,7 +10,7 @@ use nyne::dispatch::routing::tree::RouteTree;
 use nyne::prelude::*;
 use nyne_source::providers::well_known::SUBDIR_AT_LINE;
 
-use crate::lsp::manager::LspManager;
+use crate::lsp::manager::Manager;
 use crate::lsp::uri::uri_to_file_path;
 
 /// Workspace symbol search provider.
@@ -55,7 +55,7 @@ impl WorkspaceSearchProvider {
     /// Extracted as a dedicated method so callers can reuse it (and a cache
     /// layer can be inserted here in the future without changing call sites).
     fn query_symbols(&self, query: &str) -> Vec<SymbolInformation> {
-        let Some(lsp_manager) = self.ctx.get::<Arc<LspManager>>() else {
+        let Some(lsp_manager) = self.ctx.get::<Arc<Manager>>() else {
             return Vec::new();
         };
         lsp_manager.workspace_symbols(query)
@@ -93,7 +93,7 @@ impl Provider for WorkspaceSearchProvider {
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }
 
     /// Activate when LSP workspace symbol search is available.
-    fn should_activate(&self, ctx: &ActivationContext) -> bool { ctx.get::<Arc<LspManager>>().is_some() }
+    fn should_activate(&self, ctx: &ActivationContext) -> bool { ctx.get::<Arc<Manager>>().is_some() }
 
     /// Dispatch children through the route tree.
     fn children(self: Arc<Self>, ctx: &RequestContext<'_>) -> Nodes { self.routes.children(&self, ctx) }

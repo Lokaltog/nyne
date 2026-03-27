@@ -43,13 +43,13 @@ use crate::syntax::spec::SpliceMode;
 /// This keeps column alignment intact while extracting only the target
 /// symbol — essential for Lisp-family languages where multiple expressions
 /// share a line.
-pub(super) struct SourceSlice {
+pub(super) struct Slice {
     pub resolver: FragmentResolver,
     pub target: SpliceTarget,
 }
 
-/// [`Readable`] implementation for [`SourceSlice`].
-impl Readable for SourceSlice {
+/// [`Readable`] implementation for [`Slice`].
+impl Readable for Slice {
     /// Read the targeted byte range from the source, applying byte-masking if needed.
     fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;

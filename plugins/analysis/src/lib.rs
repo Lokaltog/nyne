@@ -9,5 +9,5 @@ pub mod config;
 mod plugin;
 mod providers;
 
-pub use analysis::{AnalysisEngine, Hint, HintView};
+pub use analysis::{Engine, Hint, HintView};
 pub use nyne_source::TsNode;

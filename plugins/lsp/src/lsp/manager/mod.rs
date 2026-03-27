@@ -1,9 +1,9 @@
 //! Central coordinator for LSP server lifecycle, document tracking, and query routing.
 //!
-//! [`LspManager`] is the entry point for all LSP interactions in the plugin.
-//! It owns the set of active [`LspClient`] instances, tracks which documents
+//! [`Manager`] is the entry point for all LSP interactions in the plugin.
+//! It owns the set of active [`Client`] instances, tracks which documents
 //! have been opened via `textDocument/didOpen`, and routes queries through a
-//! TTL-based [`LspCache`] to avoid redundant server round-trips.
+//! TTL-based [`Cache`] to avoid redundant server round-trips.
 //!
 //! Servers are spawned lazily on first access for a file extension, but can
 //! also be warmed eagerly at activation via [`LspManager::spawn_all_applicable`].
@@ -21,9 +21,9 @@ use nyne_source::syntax::SyntaxRegistry;
 use parking_lot::{Mutex, RwLock};
 use tracing::{debug, warn};
 
-use super::LspRegistry;
-use super::cache::LspCache;
-use super::client::LspClient;
+use super::Registry;
+use super::cache::Cache;
+use super::client::Client;
 use crate::config::Config;
 
 /// Tracked state for a document opened via `textDocument/didOpen`.
@@ -62,9 +62,9 @@ impl OpenDocument {
 /// LSP is gated on syntax support -- if no tree-sitter grammar is registered
 /// for a file extension, no LSP server will be spawned for it. This ensures
 /// the decomposition layer is always available when LSP features are active.
-pub struct LspManager {
+pub struct Manager {
     /// LSP server registry (built-in defaults + config overrides).
-    registry: LspRegistry,
+    registry: Registry,
     /// Syntax registry — for gating LSP on tree-sitter support.
     syntax: Arc<SyntaxRegistry>,
     /// Global LSP settings from config.
@@ -75,7 +75,7 @@ pub struct LspManager {
     /// server processes on top of the default propagated set.
     sandbox_env: HashMap<String, String>,
     /// Active clients, keyed by server name.
-    clients: RwLock<HashMap<String, Arc<LspClient>>>,
+    clients: RwLock<HashMap<String, Arc<Client>>>,
     /// Documents opened via `textDocument/didOpen`, tracked for lifecycle
     /// management. Maps overlay path → `(extension, version)`.
     ///
@@ -85,23 +85,23 @@ pub struct LspManager {
     /// and used for the `VersionedTextDocumentIdentifier`.
     open_documents: Mutex<HashMap<PathBuf, OpenDocument>>,
     /// TTL-based result cache.
-    cache: LspCache,
+    cache: Cache,
     /// Path resolver for LSP URIs (`fuse_root` → `overlay_root` rewriting).
-    path_resolver: super::path::LspPathResolver,
+    path_resolver: super::path::PathResolver,
 }
 
 /// Manages LSP client lifecycle, document tracking, and query routing.
-impl LspManager {
+impl Manager {
     /// Create a new manager with the given registry, config, and process spawner.
     pub(crate) fn new(
-        registry: LspRegistry,
+        registry: Registry,
         syntax: Arc<SyntaxRegistry>,
         config: Config,
         spawner: Arc<Spawner>,
         sandbox_env: HashMap<String, String>,
-        path_resolver: super::path::LspPathResolver,
+        path_resolver: super::path::PathResolver,
     ) -> Self {
-        let cache = LspCache::new(config.cache_ttl);
+        let cache = Cache::new(config.cache_ttl);
         Self {
             registry,
             syntax,
@@ -120,7 +120,7 @@ impl LspManager {
 
     /// Return the unique set of server command names across all extensions.
     ///
-    /// Delegates to the underlying `LspRegistry` -- avoids rebuilding the
+    /// Delegates to the underlying `Registry` -- avoids rebuilding the
     /// registry when only the command list is needed.
     pub(crate) fn server_commands(&self) -> HashSet<&str> { self.registry.server_commands() }
 
@@ -140,7 +140,7 @@ impl LspManager {
     /// - No LSP server is registered for this extension
     /// - Detection fails (project markers not found)
     /// - Server fails to spawn
-    pub(crate) fn client_for_ext(&self, ext: &str) -> Option<Arc<LspClient>> {
+    pub(crate) fn client_for_ext(&self, ext: &str) -> Option<Arc<Client>> {
         if !self.has_lsp_support(ext) {
             return None;
         }
@@ -161,7 +161,7 @@ impl LspManager {
     /// Unlike `client_for_ext` which returns only the primary, this spawns
     /// and returns all applicable servers. Used when we want to query
     /// multiple servers (e.g., diagnostics from both a type checker and a linter).
-    pub(crate) fn all_clients_for_ext(&self, ext: &str) -> Vec<Arc<LspClient>> {
+    pub(crate) fn all_clients_for_ext(&self, ext: &str) -> Vec<Arc<Client>> {
         if !self.has_lsp_support(ext) {
             return Vec::new();
         }
@@ -189,13 +189,13 @@ impl LspManager {
     }
 
     /// Access the underlying cache directly.
-    pub(crate) const fn cache(&self) -> &LspCache { &self.cache }
+    pub(crate) const fn cache(&self) -> &Cache { &self.cache }
 
     /// Get the diagnostics timeout from config.
     pub(crate) const fn diagnostics_timeout(&self) -> Duration { self.config.diagnostics_timeout }
 
     /// Path resolver for rewriting LSP URIs from FUSE paths to overlay paths.
-    pub(crate) const fn path_resolver(&self) -> &super::path::LspPathResolver { &self.path_resolver }
+    pub(crate) const fn path_resolver(&self) -> &super::path::PathResolver { &self.path_resolver }
 
     /// Ensure a document is opened in the LSP server via `textDocument/didOpen`.
     ///
@@ -393,7 +393,7 @@ impl LspManager {
     ///
     /// Returns `None` if no LSP client is available for the file's
     /// extension or if the paths cannot be converted to file URIs.
-    fn resolve_rename_uris(&self, old_path: &Path, new_path: &Path) -> Option<(Arc<LspClient>, String, String)> {
+    fn resolve_rename_uris(&self, old_path: &Path, new_path: &Path) -> Option<(Arc<Client>, String, String)> {
         let ext = old_path.extension().and_then(|e| e.to_str()).unwrap_or_default();
         let client = self.client_for_ext(ext)?;
 
@@ -416,7 +416,7 @@ impl LspManager {
     ///
     /// Returns `true` if the notification was sent successfully, `false` if
     /// the file could not be read (e.g., deleted) or the notification failed.
-    fn send_did_change(client: &LspClient, path: &Path, version: i32) -> bool {
+    fn send_did_change(client: &Client, path: &Path, version: i32) -> bool {
         // Read from overlay (not FUSE — avoids re-entrancy).
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
@@ -497,7 +497,7 @@ impl LspManager {
     /// lock, and finally the write lock re-checks before inserting. If
     /// another thread won the race, the redundant client is dropped (its
     /// `Drop` impl shuts it down gracefully).
-    fn get_or_spawn(&self, def: &super::spec::LspServerDef) -> Option<Arc<LspClient>> {
+    fn get_or_spawn(&self, def: &super::spec::ServerDef) -> Option<Arc<Client>> {
         // Fast path: already running.
         if let Some(client) = self.clients.read().get(def.name()) {
             return Some(Arc::clone(client));
@@ -505,7 +505,7 @@ impl LspManager {
 
         // Slow path: spawn as a direct daemon child. LSP servers use
         // the overlay path (not FUSE) to avoid re-entrancy deadlocks.
-        match LspClient::spawn(
+        match Client::spawn(
             def,
             self.path_resolver.overlay_root(),
             &self.spawner,

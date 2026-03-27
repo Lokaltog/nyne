@@ -1,6 +1,6 @@
 //! Git repository integration for nyne.
 //!
-//! Provides [`GitRepo`] for git operations and `GitPlugin`
+//! Provides [`Repo`] for git operations and `GitPlugin`
 //! which inserts the repo into the activation context's `TypeMap`.
 
 /// Git-backed project cloning for overlay lowerdirs.
@@ -25,5 +25,5 @@ pub use provider::history::HistoryQueries;
 pub use provider::repo::FileViewCtx;
 pub use provider::views::{BLAME_TEMPLATE, HISTORY_LIMIT, LOG_TEMPLATE, history_filename, hunk_overlaps_range};
 pub use provider::{CommitMtime, CommitMtimeExt};
-pub use repo::GitRepo;
+pub use repo::Repo;
 pub use status::RepoStatus;

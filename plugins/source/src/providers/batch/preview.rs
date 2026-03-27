@@ -15,7 +15,7 @@ use super::StagingMap;
 use super::staging::StagingKey;
 use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOutcome, EditPlan, FileEditResult, ValidationResult};
-use crate::services::SourceServices;
+use crate::services::Services;
 use crate::syntax::decomposed::DecomposedSource;
 
 /// [`DiffAction`] for a single symbol's staged edits.
@@ -62,9 +62,7 @@ impl DiffAction for SymbolPreview {
             return Ok(Vec::new());
         }
 
-        let parsed = SourceServices::get(&self.ctx)
-            .decomposition
-            .get(&self.key.source_file)?;
+        let parsed = Services::get(&self.ctx).decomposition.get(&self.key.source_file)?;
 
         let plan = batch.to_edit_plan();
         Ok(vec![resolve_and_preview(&self.key.source_file, &plan, &parsed)?])
@@ -115,7 +113,7 @@ impl DiffAction for CrossFilePreview {
             }
         }
 
-        let services = SourceServices::get(&self.ctx);
+        let services = Services::get(&self.ctx);
         let mut results = Vec::new();
         for (source_file, plans) in &by_file {
             let Ok(parsed) = services.decomposition.get(source_file) else {

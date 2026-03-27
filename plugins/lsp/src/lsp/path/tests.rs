@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use super::*;
 
 /// Build a test resolver mapping `/code` to an overlay path.
-fn test_resolver() -> LspPathResolver {
-    LspPathResolver::new("/code".into(), "/tmp/nyne-merged-123/home/user/project".into())
+fn test_resolver() -> PathResolver {
+    PathResolver::new("/code".into(), "/tmp/nyne-merged-123/home/user/project".into())
 }
 
 /// Tests that rewrite replaces the display root prefix with the overlay root.

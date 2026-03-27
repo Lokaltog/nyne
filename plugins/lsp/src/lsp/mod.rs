@@ -4,7 +4,7 @@
 //! subprocesses, sending JSON-RPC messages over stdio, caching query results,
 //! and exposing scoped query handles for both file-level and symbol-level
 //! operations. Language servers are built from config-driven definitions
-//! and looked up by file extension through [`LspRegistry`].
+//! and looked up by file extension through [`Registry`].
 #![allow(dead_code)]
 
 /// TTL-based cache for LSP query results.
@@ -35,7 +35,7 @@ pub mod uri;
 use std::collections::{HashMap, HashSet};
 
 use nyne_source::syntax::SyntaxRegistry;
-use spec::LspServerDef;
+use spec::ServerDef;
 
 use crate::config::{Config, ServerEntry};
 
@@ -43,15 +43,15 @@ use crate::config::{Config, ServerEntry};
 ///
 /// Built from the merged config server list at startup. Provides O(1)
 /// lookup by file extension.
-pub struct LspRegistry {
+pub struct Registry {
     /// extension -> list of server definitions (ordered by priority)
-    servers: HashMap<String, Vec<LspServerDef>>,
+    servers: HashMap<String, Vec<ServerDef>>,
     /// extension -> LSP language identifier (for `textDocument/didOpen`)
     language_ids: HashMap<String, String>,
 }
 
 /// Construction, lookup, and introspection for the extension-indexed server registry.
-impl LspRegistry {
+impl Registry {
     /// Build the registry from the merged config server list.
     ///
     /// Server entries may contain duplicates from different config layers
@@ -63,7 +63,7 @@ impl LspRegistry {
         let syntax = SyntaxRegistry::global();
         let resolved = Self::resolve_servers(&config.servers);
 
-        let mut servers: HashMap<String, Vec<LspServerDef>> = HashMap::new();
+        let mut servers: HashMap<String, Vec<ServerDef>> = HashMap::new();
         let mut language_ids: HashMap<String, String> = HashMap::new();
 
         for entry in &resolved {
@@ -76,7 +76,7 @@ impl LspRegistry {
                 continue;
             };
 
-            let def = LspServerDef::from_entry(entry);
+            let def = ServerDef::from_entry(entry);
 
             for ext in extensions.iter().filter(|e| syntax.get(e.as_str()).is_some()) {
                 servers.entry(ext.clone()).or_default().push(def.clone());
@@ -104,7 +104,7 @@ impl LspRegistry {
     }
 
     /// Get server definitions for a file extension.
-    pub(crate) fn servers_for(&self, ext: &str) -> &[LspServerDef] { self.servers.get(ext).map_or(&[], Vec::as_slice) }
+    pub(crate) fn servers_for(&self, ext: &str) -> &[ServerDef] { self.servers.get(ext).map_or(&[], Vec::as_slice) }
 
     /// Get the LSP language identifier for a file extension (for `textDocument/didOpen`).
     pub(crate) fn language_id_for(&self, ext: &str) -> Option<&str> { self.language_ids.get(ext).map(String::as_str) }
@@ -122,7 +122,7 @@ impl LspRegistry {
     /// only the real filesystem so they index the actual source, not virtual
     /// content.
     pub(crate) fn server_commands(&self) -> HashSet<&str> {
-        self.servers.values().flatten().map(LspServerDef::command_str).collect()
+        self.servers.values().flatten().map(ServerDef::command_str).collect()
     }
 }
 

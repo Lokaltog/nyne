@@ -16,13 +16,13 @@ use nyne::types::slice::{SliceSpec, parse_spec};
 use nyne::{companion_children, companion_lookup, source_file};
 use nyne_git::names::{self, FILE_BLAME, FILE_LOG};
 use nyne_git::{
-    BLAME_TEMPLATE, CommitMtimeExt as _, FileViewCtx, GitRepo, HISTORY_LIMIT, HistoryQueries as _, LOG_TEMPLATE,
+    BLAME_TEMPLATE, CommitMtimeExt as _, FileViewCtx, HISTORY_LIMIT, HistoryQueries as _, LOG_TEMPLATE, Repo,
     history_filename, hunk_overlaps_range,
 };
 use nyne_macros::routes;
 
 use crate::providers::fragment_resolver::FragmentResolver;
-use crate::services::SourceServices;
+use crate::services::Services;
 use crate::syntax::SyntaxRegistry;
 
 /// Provider for symbol-scoped git features.
@@ -75,16 +75,16 @@ impl GitSymbolsProvider {
     }
 
     /// Retrieve the git repository from the activation context.
-    fn repo(&self) -> Result<Arc<GitRepo>> {
+    fn repo(&self) -> Result<Arc<Repo>> {
         self.ctx
-            .get::<Arc<GitRepo>>()
+            .get::<Arc<Repo>>()
             .cloned()
             .ok_or_else(|| color_eyre::eyre::eyre!("git repo not available"))
     }
 
     /// Build a fragment resolver for the given source file.
     fn fragment_resolver(&self, source: VfsPath) -> FragmentResolver {
-        let cache = SourceServices::get(&self.ctx).decomposition.clone();
+        let cache = Services::get(&self.ctx).decomposition.clone();
         FragmentResolver::new(cache, source)
     }
 
@@ -289,7 +289,7 @@ impl TemplateView for SymbolLogView {
 /// across all [`SymbolHistoryVersionContent`] nodes for that symbol.
 /// Avoids redundant repository and registry lookups per version.
 struct SymbolHistoryCtx {
-    repo: Arc<GitRepo>,
+    repo: Arc<Repo>,
     rel_path: String,
     ext: String,
     fragment_path: Vec<String>,

@@ -1,6 +1,6 @@
 //! LSP feature definitions and query dispatch.
 //!
-//! [`LspFeature`] is the single source of truth for all per-symbol LSP features.
+//! [`Feature`] is the single source of truth for all per-symbol LSP features.
 //! Adding a new feature requires only a new variant with a `meta!("slug")` arm,
 //! an `is_supported` capability check, a `query` arm, and a Jinja template file.
 
@@ -14,7 +14,7 @@ use lsp_types::Position;
 use nyne::templates::{TemplateEngine, TemplateHandle};
 use strum::{EnumCount, IntoEnumIterator};
 
-use super::views::{LspQueryResult, hierarchy_item};
+use super::views::{QueryResult, hierarchy_item};
 use crate::lsp::query::FileQuery;
 use crate::lsp::uri::line_range_to_lsp_range;
 
@@ -38,7 +38,7 @@ struct FeatureMeta {
 /// variant here plus a template file.
 #[derive(Clone, Copy, strum::EnumIter, strum::EnumCount)]
 #[repr(u8)]
-pub(crate) enum LspFeature {
+pub(crate) enum Feature {
     Definition,
     Declaration,
     TypeDefinition,
@@ -50,14 +50,14 @@ pub(crate) enum LspFeature {
     Hints,
 }
 
-/// Methods for [`LspFeature`].
-impl LspFeature {
+/// Methods for [`Feature`].
+impl Feature {
     /// Cached metadata for all variants, computed once on first access.
     ///
     /// Returns a `&'static` reference — no per-call allocation.
     fn metadata(self) -> &'static FeatureMeta {
         static TABLE: LazyLock<Vec<FeatureMeta>> =
-            LazyLock::new(|| LspFeature::iter().map(LspFeature::build_metadata).collect());
+            LazyLock::new(|| Feature::iter().map(Feature::build_metadata).collect());
         // SAFETY: TABLE has exactly LspFeature::COUNT entries (one per variant),
         // and `self as usize` is always a valid variant index.
         #[expect(clippy::indexing_slicing, reason = "variant index is always in bounds")]
@@ -136,7 +136,7 @@ impl LspFeature {
         }
     }
 
-    /// Index into a `LspHandles` array to get the handle for this feature.
+    /// Index into a `Handles` array to get the handle for this feature.
     pub(crate) const fn handle_index(self) -> usize { self as usize }
 
     /// Look up a feature by its symlink directory name.
@@ -160,35 +160,30 @@ impl LspFeature {
     }
 
     /// Execute the LSP query for this feature and return results as
-    /// an `LspQueryResult`. This is the **single dispatch point** —
+    /// an `QueryResult`. This is the **single dispatch point** —
     /// both markdown views and symlink directory population use it.
-    pub(super) fn query(
-        self,
-        fq: &FileQuery<'_>,
-        pos: Position,
-        line_range: &StdRange<usize>,
-    ) -> Result<LspQueryResult> {
+    pub(super) fn query(self, fq: &FileQuery<'_>, pos: Position, line_range: &StdRange<usize>) -> Result<QueryResult> {
         Ok(match self {
-            Self::Definition => LspQueryResult::Locations(fq.definition(pos.line, pos.character)?),
-            Self::Declaration => LspQueryResult::Locations(fq.declaration(pos.line, pos.character)?),
-            Self::TypeDefinition => LspQueryResult::Locations(fq.type_definition(pos.line, pos.character)?),
-            Self::References => LspQueryResult::Locations(fq.references(pos.line, pos.character)?),
-            Self::Implementation => LspQueryResult::Locations(fq.implementations(pos.line, pos.character)?),
+            Self::Definition => QueryResult::Locations(fq.definition(pos.line, pos.character)?),
+            Self::Declaration => QueryResult::Locations(fq.declaration(pos.line, pos.character)?),
+            Self::TypeDefinition => QueryResult::Locations(fq.type_definition(pos.line, pos.character)?),
+            Self::References => QueryResult::Locations(fq.references(pos.line, pos.character)?),
+            Self::Implementation => QueryResult::Locations(fq.implementations(pos.line, pos.character)?),
             Self::Callers => {
                 let calls = fq.incoming_calls(pos.line, pos.character)?;
-                LspQueryResult::HierarchyItems(calls.into_iter().map(|c| hierarchy_item(c.from)).collect())
+                QueryResult::HierarchyItems(calls.into_iter().map(|c| hierarchy_item(c.from)).collect())
             }
             Self::Deps => {
                 let calls = fq.outgoing_calls(pos.line, pos.character)?;
-                LspQueryResult::HierarchyItems(calls.into_iter().map(|c| hierarchy_item(c.to)).collect())
+                QueryResult::HierarchyItems(calls.into_iter().map(|c| hierarchy_item(c.to)).collect())
             }
             Self::Doc => {
                 let hover = fq.hover(pos.line, pos.character)?;
-                LspQueryResult::Hover(hover)
+                QueryResult::Hover(hover)
             }
             Self::Hints => {
                 let range = line_range_to_lsp_range(line_range);
-                LspQueryResult::InlayHints(fq.inlay_hints(range)?)
+                QueryResult::InlayHints(fq.inlay_hints(range)?)
             }
         })
     }
@@ -196,8 +191,8 @@ impl LspFeature {
 
 /// Template handles for all per-symbol LSP features, indexed by
 /// [`LspFeature::handle_index()`].
-pub(crate) struct LspHandles {
-    pub features: [TemplateHandle; LspFeature::COUNT],
+pub(crate) struct Handles {
+    pub features: [TemplateHandle; Feature::COUNT],
     pub diagnostics: TemplateHandle,
 }
 
@@ -206,7 +201,7 @@ pub(crate) struct LspHandles {
 /// Produced by [`LspQueryResult::into_targets`] and consumed by
 /// [`SyntaxProvider::build_target_nodes`](crate::providers::syntax::resolve::lsp_links)
 /// to create symlink nodes pointing at the target symbol's body file.
-pub(crate) struct LspTarget {
+pub(crate) struct Target {
     /// Absolute file path from the LSP URI.
     pub abs_path: PathBuf,
     /// 0-based line number from the LSP result.

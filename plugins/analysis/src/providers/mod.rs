@@ -13,7 +13,7 @@ use nyne::types::path_conventions::split_companion_path;
 use nyne::{companion_children, source_file};
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use nyne_source::providers::well_known::handle_builder;
-use nyne_source::services::SourceServices;
+use nyne_source::services::Services;
 use nyne_source::syntax::find_fragment;
 
 const FILE_ANALYSIS: &str = "ANALYSIS.md";
@@ -67,15 +67,15 @@ impl AnalysisProvider {
         }
 
         let resolver = FragmentResolver::new(services.decomposition.clone(), sf);
-        let node = self.analysis.node(FILE_ANALYSIS, analysis::AnalysisContent {
+        let node = self.analysis.node(FILE_ANALYSIS, analysis::Content {
             resolver,
             activation: Arc::clone(&self.ctx),
         });
         Ok(Some(vec![node]))
     }
 
-    /// Shorthand to retrieve [`SourceServices`] from the activation context.
-    fn services(&self) -> &SourceServices { SourceServices::get(&self.ctx) }
+    /// Shorthand to retrieve [`Services`] from the activation context.
+    fn services(&self) -> &Services { Services::get(&self.ctx) }
 }
 
 /// [`Provider`] implementation that routes companion-path requests to the

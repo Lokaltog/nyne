@@ -6,7 +6,7 @@ use nyne::node::Readable;
 use nyne::prelude::*;
 use nyne::text::unified_diff;
 
-use crate::repo::GitRepo;
+use crate::repo::Repo;
 
 /// Target for diff comparison — working tree or a named ref.
 ///
@@ -22,7 +22,7 @@ pub(super) enum DiffTarget {
 
 /// Diff content — produces unified diff on read.
 pub(super) struct DiffContent {
-    pub repo: Arc<GitRepo>,
+    pub repo: Arc<Repo>,
     pub rel_path: String,
     pub target: DiffTarget,
 }

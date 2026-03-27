@@ -9,7 +9,7 @@ use nyne::types::path_conventions::split_companion_path;
 
 use super::prelude::*;
 use super::well_known::{self as names, SUBDIR_AT_LINE, SUBDIR_SYMBOLS, companion_name};
-use crate::services::SourceServices;
+use crate::services::Services;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::spec::Decomposer;
 use crate::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC};
@@ -111,7 +111,7 @@ impl SyntaxProvider {
     }
 
     /// Return a reference to the syntax registry.
-    fn registry(&self) -> &SyntaxRegistry { &SourceServices::get(&self.ctx).syntax }
+    fn registry(&self) -> &SyntaxRegistry { &Services::get(&self.ctx).syntax }
 
     /// Return the decomposer for a source file, if supported.
     fn decomposer_for(&self, source_file: &VfsPath) -> Option<&Arc<dyn Decomposer>> {
@@ -236,7 +236,7 @@ impl Provider for SyntaxProvider {
 
     /// Invalidate decomposition caches for changed source files.
     fn on_fs_change(&self, changed: &[VfsPath]) -> Vec<InvalidationEvent> {
-        let services = SourceServices::get(&self.ctx);
+        let services = Services::get(&self.ctx);
         changed
             .iter()
             .filter(|p| self.decomposer_for(p).is_some())

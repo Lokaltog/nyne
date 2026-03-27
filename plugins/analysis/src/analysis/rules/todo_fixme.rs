@@ -18,15 +18,15 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "todo-fixme";
 /// Analysis rule that detects TODO and FIXME comments.
 struct TodoFixme;
 
-/// [`AnalysisRule`] implementation for `TodoFixme`.
-impl AnalysisRule for TodoFixme {
+/// [`Rule`] implementation for `TodoFixme`.
+impl Rule for TodoFixme {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

@@ -17,7 +17,7 @@ use super::notes::NotesView;
 use super::repo::FileViewCtx;
 use super::{CommitMtimeExt as _, GitProvider};
 use crate::names;
-use crate::repo::GitRepo;
+use crate::repo::Repo;
 
 /// Default cap on history entries listed in readdir.
 pub const HISTORY_LIMIT: usize = 50;
@@ -25,7 +25,7 @@ pub const HISTORY_LIMIT: usize = 50;
 /// View-related methods on [`GitProvider`].
 impl GitProvider {
     /// Resolve the `file.rs@/git/` companion directory — blame, log, contributors, notes.
-    pub(super) fn resolve_companion_git(&self, repo: &Arc<GitRepo>, rel: String) -> Vec<VirtualNode> {
+    pub(super) fn resolve_companion_git(&self, repo: &Arc<Repo>, rel: String) -> Vec<VirtualNode> {
         let secs = repo.file_epoch_secs(&rel);
         let h = &self.handles;
         let fctx = FileViewCtx::new(repo, rel);

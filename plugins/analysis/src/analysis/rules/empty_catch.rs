@@ -21,15 +21,15 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "empty-catch";
 /// Analysis rule that detects empty catch blocks.
 struct EmptyCatch;
 
-/// [`AnalysisRule`] implementation for `EmptyCatch`.
-impl AnalysisRule for EmptyCatch {
+/// [`Rule`] implementation for `EmptyCatch`.
+impl Rule for EmptyCatch {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

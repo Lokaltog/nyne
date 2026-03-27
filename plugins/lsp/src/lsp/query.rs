@@ -6,7 +6,7 @@
 
 //! Cached LSP query handle scoped to a single file.
 //!
-//! [`FileQuery`] wraps an [`LspClient`] and a file path, providing
+//! [`FileQuery`] wraps an [`Client`] and a file path, providing
 //! cache-aware query methods for all file-level LSP operations.
 //! Each method constructs the appropriate [`CacheKey`] and delegates
 //! through [`LspManager::cached_query`], so callers never build keys
@@ -27,21 +27,21 @@ use lsp_types::{
 };
 
 use super::cache::CacheKey;
-use super::client::{FilePosition, LspClient};
-use super::manager::LspManager;
+use super::client::{Client, FilePosition};
+use super::manager::Manager;
 
 /// Scoped LSP query handle for a single file.
 ///
 /// Each method constructs the appropriate `CacheKey` and delegates through
 /// `LspManager::cached_query`, so callers never build keys manually.
 pub struct FileQuery<'a> {
-    manager: &'a LspManager,
-    client: Arc<LspClient>,
+    manager: &'a Manager,
+    client: Arc<Client>,
     lsp_file: &'a Path,
 }
 
 /// Generate a positional `FileQuery` method: build `CacheKey`, delegate to
-/// the named `LspClient` method, cache the result.
+/// the named `Client` method, cache the result.
 macro_rules! cached_pos_query {
     ($(#[doc = $doc:literal])* $name:ident => $client_method:ident, $cache_key:expr => $ret:ty) => {
         $(#[doc = $doc])*
@@ -95,7 +95,7 @@ impl<'a> FileQuery<'a> {
     }
 
     /// Create a new file query handle for the given manager, client, and file.
-    pub(crate) const fn new(manager: &'a LspManager, client: Arc<LspClient>, lsp_file: &'a Path) -> Self {
+    pub(crate) const fn new(manager: &'a Manager, client: Arc<Client>, lsp_file: &'a Path) -> Self {
         Self {
             manager,
             client,

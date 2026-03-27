@@ -1,7 +1,7 @@
 //! LSP server definition -- runtime representation of a config-driven server entry.
 //!
-//! [`LspServerDef`] is built from resolved [`ServerEntry`] config during
-//! [`LspRegistry`](super::LspRegistry) construction. It holds the command,
+//! [`ServerDef`] is built from resolved [`ServerEntry`] config during
+//! [`Registry`](super::LspRegistry) construction. It holds the command,
 //! arguments, and root markers needed to spawn and gate a language server.
 //! This is the boundary between config types (serde) and runtime types
 //! (spawn logic).
@@ -14,7 +14,7 @@ use crate::config::ServerEntry;
 ///
 /// Built from resolved [`ServerEntry`] config during registry construction.
 #[derive(Clone)]
-pub struct LspServerDef {
+pub struct ServerDef {
     /// Unique server name (e.g., "rust-analyzer").
     name: String,
     /// Command to spawn. Defaults to name.
@@ -27,7 +27,7 @@ pub struct LspServerDef {
 }
 
 /// Construction, accessors, and project-root applicability checks.
-impl LspServerDef {
+impl ServerDef {
     /// Build from a resolved server entry (all required fields must be present).
     pub(crate) fn from_entry(entry: &ServerEntry) -> Self {
         Self {

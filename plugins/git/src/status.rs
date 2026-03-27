@@ -1,7 +1,7 @@
 //! Repository status: branch, tracking, dirty state, recent commits.
 //!
 //! Defines [`RepoStatus`] for full working-tree snapshots and the
-//! [`StatusQueries`] extension trait on [`GitRepo`]. The status query
+//! [`StatusQueries`] extension trait on [`Repo`]. The status query
 //! operates on real filesystem paths (pre-mount) to avoid FUSE recursion.
 //! Results are classified into staged, modified, untracked, and conflicted
 //! buckets for template rendering in `STATUS.md`.
@@ -10,7 +10,7 @@ use color_eyre::eyre::Result;
 use tracing::warn;
 
 use crate::commit::{CommitInfo, commit_info};
-use crate::repo::GitRepo;
+use crate::repo::Repo;
 
 /// Full repository status snapshot for template rendering.
 ///
@@ -44,7 +44,7 @@ pub struct StatusEntry {
     pub(crate) label: &'static str,
 }
 
-/// Status-related queries on [`GitRepo`].
+/// Status-related queries on [`Repo`].
 ///
 /// Defined as an extension trait to make the module origin explicit: these methods
 /// live in `status` and are available wherever the trait is in scope.
@@ -53,12 +53,12 @@ pub trait StatusQueries {
     fn status(&self) -> Result<RepoStatus>;
 }
 
-/// [`StatusQueries`] implementation for [`GitRepo`].
+/// [`StatusQueries`] implementation for [`Repo`].
 ///
 /// Queries the real filesystem directly (pre-mount paths) to avoid FUSE
 /// recursion. Classifies each entry into staged, modified, untracked, or
 /// conflicted buckets for template rendering.
-impl StatusQueries for GitRepo {
+impl StatusQueries for Repo {
     /// Snapshot the full repository status: branch, tracking, stashes,
     /// recent commits, and per-file index/workdir state.
     fn status(&self) -> Result<RepoStatus> {

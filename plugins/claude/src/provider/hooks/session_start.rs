@@ -38,7 +38,7 @@ impl Script for SessionStart {
     fn exec(&self, ctx: &ScriptContext<'_>, _stdin: &[u8]) -> Result<Vec<u8>> {
         let activation = ctx.activation();
         let branch = activation
-            .get::<Arc<nyne_git::GitRepo>>()
+            .get::<Arc<nyne_git::Repo>>()
             .map_or_else(|| "(no repo)".to_owned(), |r| r.head_branch());
 
         let view = minijinja::context! {

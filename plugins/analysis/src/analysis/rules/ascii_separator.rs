@@ -18,7 +18,7 @@
 
 use super::kinds::{self, strip_comment_prefix};
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for the ASCII separator rule, used in config and hint output.
 pub const ID: &str = "ascii-separator";
@@ -35,8 +35,8 @@ const SEPARATOR_CHARS: &[char] = &['-', '=', '─', '═', '━', '~', '*'];
 /// Analysis rule that detects ASCII art separator lines in comments.
 struct AsciiSeparator;
 
-/// [`AnalysisRule`] implementation for `AsciiSeparator`.
-impl AnalysisRule for AsciiSeparator {
+/// [`Rule`] implementation for `AsciiSeparator`.
+impl Rule for AsciiSeparator {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 

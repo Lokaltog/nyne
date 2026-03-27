@@ -1,4 +1,4 @@
-//! LSP query methods on [`LspClient`](super::LspClient).
+//! LSP query methods on [`Client`](super::LspClient).
 //!
 //! Declarative macros eliminate boilerplate for method families that share
 //! the same structure:
@@ -25,7 +25,7 @@ use lsp_types::{
 };
 use tracing::debug;
 
-use super::{FilePosition, LspClient, uri};
+use super::{Client, FilePosition, uri};
 
 /// Early-return `Ok(Default::default())` if the server lacks a capability.
 ///
@@ -94,7 +94,7 @@ macro_rules! hierarchy_query {
 }
 
 /// LSP query methods (goto, hover, diagnostics, rename, code actions).
-impl LspClient {
+impl Client {
     goto_method! {
         /// Find the definition of the symbol at the given position.
         definition, definition_provider, "definition", lsp_req::GotoDefinition::METHOD

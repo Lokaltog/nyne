@@ -4,8 +4,8 @@ use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use tracing::info;
 
-use crate::config::SourceConfig;
-use crate::services::SourceServices;
+use crate::config::Config;
+use crate::services::Services;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::decomposed::DecompositionCache;
 
@@ -14,14 +14,14 @@ use crate::syntax::decomposed::DecompositionCache;
 /// This is a unit struct that serves as the anchor for plugin lifecycle
 /// methods. It is instantiated by [`SOURCE_PLUGIN`] and registered into the
 /// global plugin slice at link time. All mutable state lives in
-/// [`SourceServices`], which is inserted into the `TypeMap` during activation.
+/// [`Services`], which is inserted into the `TypeMap` during activation.
 pub struct SourcePlugin;
 
 /// Two-phase lifecycle for the source plugin.
 ///
 /// During `activate`, all heavyweight services (syntax registry,
 /// decomposition cache, analysis engine) are constructed and bundled into a
-/// single [`SourceServices`] inserted into the `TypeMap`. The `providers`
+/// single [`Services`] inserted into the `TypeMap`. The `providers`
 /// phase then creates provider instances that read from that bundle.
 impl Plugin for SourcePlugin {
     /// Returns the unique identifier for this plugin (`"source"`).
@@ -31,17 +31,17 @@ impl Plugin for SourcePlugin {
     ///
     /// This is the "heavy" phase: it builds the syntax registry and
     /// creates the decomposition cache, then assembles the
-    /// [`SourceServices`] bundle inserted into the `TypeMap`.
+    /// [`Services`] bundle inserted into the `TypeMap`.
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
         let syntax = SyntaxRegistry::global();
 
-        let source_config = SourceConfig::from_plugin_config(ctx.plugin_config("source"));
+        let source_config = Config::from_plugin_config(ctx.plugin_config("source"));
 
         let decomposition = DecompositionCache::new(Arc::clone(ctx.real_fs()), Arc::clone(&syntax));
 
         info!(languages = syntax.extensions().len(), "source plugin activated",);
 
-        ctx.insert(SourceServices {
+        ctx.insert(Services {
             syntax,
             decomposition,
             config: source_config,
@@ -52,11 +52,11 @@ impl Plugin for SourcePlugin {
 
     /// Returns the fully resolved source plugin configuration as JSON.
     ///
-    /// Re-derives [`SourceConfig`] from the raw config map so the output
+    /// Re-derives [`Config`] from the raw config map so the output
     /// reflects all defaults, not just what the user explicitly set. Used
     /// by `nyne config` to show the effective configuration.
     fn resolved_config(&self, config: &NyneConfig) -> Option<serde_json::Value> {
-        let resolved = SourceConfig::from_plugin_config(config.plugin.get("source"));
+        let resolved = Config::from_plugin_config(config.plugin.get("source"));
         serde_json::to_value(&resolved).ok()
     }
 
@@ -64,7 +64,7 @@ impl Plugin for SourcePlugin {
     ///
     /// Used by the config system to populate missing fields before
     /// [`resolved_config`] is called.
-    fn default_config(&self) -> Option<toml::Table> { toml::Table::try_from(SourceConfig::default()).ok() }
+    fn default_config(&self) -> Option<toml::Table> { toml::Table::try_from(Config::default()).ok() }
 
     /// Instantiates all source plugin providers from the activated context.
     ///
@@ -86,7 +86,7 @@ impl Plugin for SourcePlugin {
         // Symbol-scoped git features (per-symbol blame/history) — only
         // when the git plugin has opened a repo.
         #[cfg(feature = "git-symbols")]
-        if ctx.get::<Arc<nyne_git::GitRepo>>().is_some() {
+        if ctx.get::<Arc<nyne_git::Repo>>().is_some() {
             use crate::providers::git_symbols_companion::GitSymbolsProvider;
             providers.push(Arc::new(GitSymbolsProvider::new(Arc::clone(ctx))));
         }

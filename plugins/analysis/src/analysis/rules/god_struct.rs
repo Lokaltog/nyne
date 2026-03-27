@@ -15,7 +15,7 @@
 
 use super::kinds;
 use crate::TsNode;
-use crate::analysis::{AnalysisRule, Hint, Severity, register_analysis_rule};
+use crate::analysis::{Hint, Rule, Severity, register_analysis_rule};
 
 /// Unique identifier for this rule, used in configuration and hint output.
 pub const ID: &str = "god-struct";
@@ -25,8 +25,8 @@ const MAX_FIELDS: usize = 10;
 /// Analysis rule that detects structs with too many fields.
 struct GodStruct;
 
-/// [`AnalysisRule`] implementation for `GodStruct`.
-impl AnalysisRule for GodStruct {
+/// [`Rule`] implementation for `GodStruct`.
+impl Rule for GodStruct {
     /// Returns the rule identifier.
     fn id(&self) -> &'static str { ID }
 
