@@ -5,20 +5,20 @@ Source plugin — syntax decomposition, batch editing, developer-experience feat
 ## Dependencies
 
 - **nyne** (core): Provider trait, dispatch types, templates, node abstractions
-- **nyne-plugin-git** (non-optional): `GitRepo` accessed via TypeMap for symbol-scoped git features
+- **nyne-plugin-git** (non-optional): `Repo` accessed via TypeMap for symbol-scoped git features
 
 ## Cross-Crate Consumers
 
-`SourceServices` and selected types are `pub` for downstream plugin crates (`nyne-plugin-claude`). Public surface:
+`Services` and selected types are `pub` for downstream plugin crates (`nyne-plugin-claude`). Public surface:
 
-- `services::SourceServices` — bundle of syntax and decomposition services
+- `Services` (re-exported at crate root) — bundle of syntax and decomposition services
 - `syntax::` — `SyntaxRegistry`, `TsNode`, `DecomposedSource`, `Fragment`, `find_fragment_at_line`, `fragment_list`, template partials
 - `providers::well_known` — VFS name constants, `symbol_from_vfs_path`, `is_symbols_overview`
 - `providers::syntax::FileRenameHook` — trait for external file-rename coordination (implemented by LSP plugin)
 
-## SourceServices
+## Services
 
-`services.rs` — consolidated bundle of all plugin services. During `activate()`, a single `SourceServices` struct is inserted into the TypeMap containing: `Arc<SyntaxRegistry>`, `DecompositionCache`, `SourceConfig`. Internal provider code retrieves services via `SourceServices::get(ctx)`.
+`plugin.rs` — consolidated bundle of all plugin services, colocated with the plugin lifecycle. During `activate()`, a single `Services` struct is inserted into the TypeMap containing: `Arc<SyntaxRegistry>`, `DecompositionCache`, `Config`. Internal provider code retrieves services via `Services::get(ctx)`. Downstream crates import via `nyne_source::Services`.
 
 ## Config
 

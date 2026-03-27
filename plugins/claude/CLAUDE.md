@@ -5,10 +5,10 @@ Claude Code integration — hooks, settings, skills, and system prompt injection
 ## Dependencies
 
 - **nyne** (core): Provider trait, dispatch types, templates, script system
-- **nyne-plugin-source**: `SourceServices` for decomposition in hooks
-- **nyne-plugin-lsp**: `LspManager` for diagnostics in post_tool_use (via TypeMap)
-- **nyne-plugin-analysis** (optional, feature-gated): `AnalysisEngine` for code smell hints in post_tool_use
-- **nyne-plugin-git**: `GitRepo` for branch display in session-start and statusline hooks
+- **nyne-plugin-source**: `Services` for decomposition in hooks
+- **nyne-plugin-lsp**: `Manager` for diagnostics in post_tool_use (via TypeMap)
+- **nyne-plugin-analysis** (optional, feature-gated): `Engine` for code smell hints in post_tool_use
+- **nyne-plugin-git**: `Repo` for branch display in session-start and statusline hooks
 
 ## Config
 
@@ -22,7 +22,7 @@ Plugin config: `[plugin.claude]` in `~/.config/nyne/config.toml` or project-leve
 
 ## Hook Scripts
 
-Scripts are registered via `script_entries()` in `provider/mod.rs` (driven by `HOOK_REGISTRY` in `settings/mod.rs`) and execute as `Script` trait objects. Each hook accesses `SourceServices` from the TypeMap for decomposition, `LspManager` for diagnostics, and `AnalysisEngine` for code smell hints — all with graceful degradation when absent.
+Scripts are registered via `script_entries()` in `provider/mod.rs` (driven by `HOOK_REGISTRY` in `settings/mod.rs`) and execute as `Script` trait objects. Each hook accesses `Services` from the TypeMap for decomposition, `Manager` for diagnostics, and `Engine` for code smell hints — all with graceful degradation when absent.
 
 - `pre_tool_use` — intercepts Read/Edit/Write/Bash/Grep, provides VFS hints or denies broad reads
 - `post_tool_use` — runs analysis + fetches LSP diagnostics scoped to the changed region

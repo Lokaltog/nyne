@@ -15,7 +15,7 @@ Progressive disclosure: when the LSP plugin is loaded, symbol directories gain L
 
 ## TypeMap
 
-- **Inserts:** `Arc<LspManager>`, `PassthroughProcesses`, `Arc<dyn FileRenameHook>`
+- **Inserts:** `Arc<Manager>`, `PassthroughProcesses`, `Arc<dyn FileRenameHook>`
 - **Reads:** `Arc<SyntaxRegistry>` (from source plugin)
 
 ## Config
