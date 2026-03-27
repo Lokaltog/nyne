@@ -1,0 +1,75 @@
+//! Analysis rule: detect type names encoded in variable names.
+//!
+//! Triggers on `let` bindings whose names contain type-related fragments like
+//! `_string`, `_vec`, `_map`, `_list`, `_hash`, `_array`, etc. The type
+//! system already provides this information.
+//!
+//! **Why it matters:** Names like `name_string` or `users_vec` are redundant
+//! when the type is visible. Prefer semantic names (`name`, `users`) that
+//! describe purpose rather than encoding the container type.
+//!
+//! **Example trigger:**
+//! ```rust
+//! let user_string = user.to_string();
+//! // Prefer: let display_name = user.to_string();
+//! ```
+//!
+//! **Caveat:** Disabled by default (`DEFAULT_DISABLED_RULES`) because some
+//! codebases use type-encoding as a disambiguation convention.
+
+use super::kinds;
+use crate::TsNode;
+use crate::engine::{Hint, Rule, Severity, register_analysis_rule};
+
+/// Unique identifier for this rule, used in configuration and hint output.
+pub const ID: &str = "type-in-variable-name";
+/// Type-related suffixes/infixes that indicate encoding the type in the name.
+const TYPE_FRAGMENTS: &[&str] = &[
+    "_string", "_str", "_vec", "_map", "_hash", "_list", "_array", "_set", "_dict", "_tuple", "_bool", "_int",
+    "_float", "_i32", "_i64", "_u32", "_u64", "_f32", "_f64", "_usize", "_isize", "string_", "str_", "vec_", "map_",
+    "hash_", "list_", "array_", "set_", "dict_", "tuple_", "bool_", "int_", "float_", "i32_", "i64_", "u32_", "u64_",
+    "f32_", "f64_", "usize_", "isize_",
+];
+
+/// Analysis rule that detects type names in variable names.
+struct TypeInVariableName;
+
+/// [`Rule`] implementation for `TypeInVariableName`.
+impl Rule for TypeInVariableName {
+    /// Returns the rule identifier.
+    fn id(&self) -> &'static str { ID }
+
+    /// Returns the tree-sitter node kinds this rule applies to.
+    fn node_kinds(&self) -> &'static [&'static str] { kinds::BINDING }
+
+    /// Checks the given node for type name in variable name violations.
+    fn check(&self, node: TsNode<'_>) -> Option<Hint> {
+        let raw = node.raw();
+        let source = node.source();
+
+        let name_node = raw
+            .child_by_field_name("name")
+            .or_else(|| raw.child_by_field_name("pattern"))?;
+        if name_node.kind() != kinds::IDENTIFIER {
+            return None;
+        }
+
+        let name = kinds::node_str(&name_node, source)?;
+
+        // Only flag if the name actually contains a type fragment.
+        let matched = TYPE_FRAGMENTS.iter().find(|frag| name.contains(**frag))?;
+
+        Some(Hint::from_node_line(
+            self,
+            node,
+            Severity::Info,
+            format!(
+                "Variable `{name}` encodes type `{}` in its name",
+                matched.trim_matches('_'),
+            ),
+            &["Name for purpose, not type — the type is already visible"],
+        ))
+    }
+}
+
+register_analysis_rule!(TypeInVariableName);

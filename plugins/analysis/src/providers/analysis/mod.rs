@@ -68,7 +68,7 @@ struct SuggestionRow {
 
 /// Rule-level summary messages used when collapsing repeated hits.
 fn collapse_summary(rule_id: &str) -> &'static str {
-    use crate::analysis::rules::{magic_number, magic_string, redundant_clone, single_use_variable, unwrap_chain};
+    use crate::engine::rules::{magic_number, magic_string, redundant_clone, single_use_variable, unwrap_chain};
 
     match rule_id {
         magic_string::ID => "multiple magic strings — extract to named constants for clarity",

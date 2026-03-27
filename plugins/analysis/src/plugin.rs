@@ -5,8 +5,8 @@ use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use tracing::info;
 
-use crate::analysis::Engine;
 use crate::config::Config;
+use crate::engine::Engine;
 use crate::providers::AnalysisProvider;
 
 /// Entry point for the analysis plugin.
