@@ -10,8 +10,8 @@ use super::SyntaxProvider;
 use super::content::delete;
 use super::resolve::fragment_body_path;
 use crate::edit::diff_action::DiffActionNode;
+use crate::plugin::Services;
 use crate::providers::well_known::{SUBDIR_AT_LINE, SUBDIR_SYMBOLS};
-use crate::services::Services;
 use crate::syntax::{find_fragment, find_nearest_fragment_at_line};
 
 /// Symbol lookup methods for [`SyntaxProvider`].

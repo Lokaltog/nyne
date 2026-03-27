@@ -40,7 +40,7 @@ use strum::IntoEnumIterator;
 use super::well_known::{FILE_STAGED_DIFF, SUBDIR_EDIT, SUBDIR_STAGED};
 use crate::edit::diff_action::{DiffAction, DiffActionNode};
 use crate::edit::plan::EditOpKind;
-use crate::services::Services;
+use crate::plugin::Services;
 
 /// Provider for staging and applying batch edits across symbols and files.
 ///

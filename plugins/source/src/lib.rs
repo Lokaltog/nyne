@@ -23,11 +23,10 @@ pub use syntax::spec::Decomposer;
 /// Plugin configuration types and deserialization.
 mod config;
 
-/// Plugin registration and lifecycle implementation.
+/// Plugin registration, lifecycle implementation, and service bundle.
 mod plugin;
 
-/// Consolidated plugin services bundle.
-pub mod services;
+pub use plugin::Services;
 
 /// Shared test utilities and stub contexts.
 #[cfg(any(test, feature = "test-support"))]

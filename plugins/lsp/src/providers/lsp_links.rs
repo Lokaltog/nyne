@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use nyne::prelude::*;
 use nyne::{COMPANION_SUFFIX, SUBDIR_SYMBOLS, companion_name};
-use nyne_source::services::Services;
+use nyne_source::Services;
 use nyne_source::syntax::decomposed::DecomposedSource;
 use nyne_source::syntax::fragment::Fragment;
 use nyne_source::syntax::{find_fragment, find_fragment_at_line};

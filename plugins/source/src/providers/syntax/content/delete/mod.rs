@@ -7,7 +7,7 @@ use nyne::prelude::*;
 
 use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOp, EditOpKind, EditOutcome, EditPlan, FileEditResult, ValidationResult};
-use crate::services::Services;
+use crate::plugin::Services;
 use crate::syntax::decomposed::DecomposedSource;
 
 /// Delete a symbol from its source file.

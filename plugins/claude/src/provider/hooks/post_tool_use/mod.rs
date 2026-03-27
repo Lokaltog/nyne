@@ -13,8 +13,8 @@ use nyne::prelude::*;
 use nyne::templates::TemplateEngine;
 use nyne_lsp::session::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
 use nyne_lsp::session::manager::Manager;
+use nyne_source::Services;
 use nyne_source::providers::well_known::FILE_OVERVIEW;
-use nyne_source::services::Services;
 use nyne_source::syntax::decomposed::DecomposedSource;
 
 use crate::provider::hook_schema::{

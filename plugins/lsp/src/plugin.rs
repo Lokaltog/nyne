@@ -15,8 +15,8 @@ use nyne_source::syntax::SyntaxRegistry;
 use tracing::info;
 
 use crate::config::Config;
+use crate::providers::LspProvider;
 use crate::providers::content::rename::SymbolRename;
-use crate::providers::provider::LspProvider;
 use crate::providers::workspace_search::WorkspaceSearchProvider;
 use crate::session::Registry;
 use crate::session::handle::Handle;

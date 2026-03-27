@@ -11,9 +11,9 @@ use nyne::prelude::*;
 use nyne::templates::TemplateHandle;
 use nyne::types::path_conventions::split_companion_path;
 use nyne::{companion_children, source_file};
+use nyne_source::Services;
 use nyne_source::providers::fragment_resolver::FragmentResolver;
 use nyne_source::providers::well_known::handle_builder;
-use nyne_source::services::Services;
 use nyne_source::syntax::find_fragment;
 
 const FILE_ANALYSIS: &str = "ANALYSIS.md";

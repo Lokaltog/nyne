@@ -9,7 +9,7 @@ use nyne::types::path_conventions::split_companion_path;
 
 use super::prelude::*;
 use super::well_known::{self as names, SUBDIR_AT_LINE, SUBDIR_SYMBOLS, companion_name};
-use crate::services::Services;
+use crate::plugin::Services;
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::spec::Decomposer;
 use crate::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC};

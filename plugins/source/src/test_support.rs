@@ -44,7 +44,7 @@ pub fn stub_activation_context() -> Arc<nyne::dispatch::activation::ActivationCo
     use nyne::types::OsFs;
 
     use crate::config::Config;
-    use crate::services::Services;
+    use crate::plugin::Services;
     use crate::syntax::decomposed::DecompositionCache;
 
     let tmp = std::env::temp_dir().join("nyne-source-test");

@@ -21,8 +21,8 @@ use nyne_git::{
 };
 use nyne_macros::routes;
 
+use crate::plugin::Services;
 use crate::providers::fragment_resolver::FragmentResolver;
-use crate::services::Services;
 use crate::syntax::SyntaxRegistry;
 
 /// Provider for symbol-scoped git features.

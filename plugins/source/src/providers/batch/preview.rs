@@ -15,7 +15,7 @@ use super::StagingMap;
 use super::staging::StagingKey;
 use crate::edit::diff_action::DiffAction;
 use crate::edit::plan::{EditOutcome, EditPlan, FileEditResult, ValidationResult};
-use crate::services::Services;
+use crate::plugin::Services;
 use crate::syntax::decomposed::DecomposedSource;
 
 /// [`DiffAction`] for a single symbol's staged edits.
