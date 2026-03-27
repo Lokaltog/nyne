@@ -134,6 +134,6 @@ fn query_symbols_returns_empty_without_lsp() {
     let ctx = stub_activation_context();
     let provider = WorkspaceSearchProvider::new(ctx);
 
-    // No LspManager in stub context → returns empty (would cause ENOENT in lookup).
+    // No Manager in stub context → returns empty (would cause ENOENT in lookup).
     assert!(provider.query_symbols("anything").is_empty());
 }

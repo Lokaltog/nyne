@@ -16,7 +16,7 @@ use nyne_source::SUBDIR_AT_LINE;
 use super::DIR_TODO;
 /// A single TODO/FIXME/etc. found in a source file.
 ///
-/// Discovered by [`Scanner`](super::scan::TodoScanner) and exposed as
+/// Discovered by [`Scanner`](super::scan::Scanner) and exposed as
 /// symlinks under `@/todo/<TAG>/`. Each entry knows its source location
 /// and can generate a filesystem-safe name and a relative symlink target.
 #[derive(Debug, Clone)]

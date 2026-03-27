@@ -40,7 +40,7 @@ impl Services {
     #[expect(clippy::expect_used, reason = "source plugin activation is a lifecycle invariant")]
     pub fn get(ctx: &ActivationContext) -> &Self {
         ctx.get::<Self>()
-            .expect("SourceServices missing — source plugin was not activated")
+            .expect("Services missing — source plugin was not activated")
     }
 
     /// Retrieve the source services from the activation context, if present.

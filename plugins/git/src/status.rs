@@ -15,7 +15,7 @@ use crate::repo::Repo;
 /// Full repository status snapshot for template rendering.
 ///
 /// Captures branch, tracking, stash, recent commits, and per-file status
-/// in a single pass via `GitRepo::status()`. Serialized into the
+/// in a single pass via `Repo::status()`. Serialized into the
 /// `STATUS.md` Jinja template.
 #[derive(serde::Serialize)]
 pub struct RepoStatus {

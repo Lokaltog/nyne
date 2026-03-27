@@ -3,7 +3,7 @@
 //! [`Repo`] wraps a `git2::Repository` behind a `Mutex` and provides
 //! high-level methods for all git operations needed by the VFS provider.
 //! The repository is opened once during plugin activation using pre-mount
-//! real paths and shared via `Arc<GitRepo>` across all providers.
+//! real paths and shared via `Arc<Repo>` across all providers.
 //!
 //! **Threading:** All methods acquire the mutex internally via [`lock()`],
 //! so callers can use `&self` without external synchronization.

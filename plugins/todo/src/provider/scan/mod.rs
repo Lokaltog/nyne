@@ -167,7 +167,7 @@ impl Scanner {
 /// A single Aho-Corasick match in the source text.
 ///
 /// Raw match before validation — may be inside a string literal or
-/// non-comment context. [`TodoScanner::find_tag_matches`] filters
+/// non-comment context. [`Scanner::find_tag_matches`] filters
 /// these to only those inside actual comment blocks.
 struct TagMatch {
     /// Byte offset of the match start in the source.

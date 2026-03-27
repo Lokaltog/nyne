@@ -83,7 +83,7 @@ impl Readable for Slice {
             }
             // Other SpliceTarget variants are handled by their own Readable types
             // (SignatureContent, DocstringContent, DecoratorsContent).
-            target => eyre::bail!("SourceSlice does not handle {target:?}"),
+            target => eyre::bail!("Slice does not handle {target:?}"),
         };
 
         let slice = shared.source.as_bytes().get(byte_range.clone()).unwrap_or(&[]);

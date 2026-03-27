@@ -1,7 +1,7 @@
 //! All analysis-feature-gated code consolidated behind a single `#[cfg]` boundary.
 //!
 //! This module contains types and helpers that depend on `nyne_analysis` (`HintView`,
-//! `AnalysisEngine`, etc.) and only exist when the `analysis` feature is enabled.
+//! `Engine`, etc.) and only exist when the `analysis` feature is enabled.
 //! The public entry point is [`run_analysis`], re-exported into the parent module.
 
 use nyne_analysis::{Engine, HintView};

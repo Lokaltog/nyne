@@ -51,7 +51,7 @@ impl CacheKey<'_> {
 /// Display a cache key as `path:method:line:param`.
 ///
 /// This format is also used as the `HashMap` key string. The path-prefix
-/// property enables [`LspCache::invalidate_file`] to match entries by
+/// property enables [`Cache::invalidate_file`] to match entries by
 /// checking `key.starts_with(path)`.
 impl fmt::Display for CacheKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

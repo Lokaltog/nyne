@@ -6,8 +6,8 @@
 //! new one requires only a variant there plus a Jinja template.
 //!
 //! Architecture:
-//!   - **resolve time** — `LspHandle::for_file` gates on LSP availability,
-//!     `LspHandle::at` pre-computes the LSP position.
+//!   - **resolve time** — `Handle::for_file` gates on LSP availability,
+//!     `Handle::at` pre-computes the LSP position.
 //!   - **read time** — `TemplateView` impls acquire a `FileQuery`, execute
 //!     the cached LSP call, and render via template.
 //!   - **symlink dirs** — emitted as `VirtualNode::directory` at resolve time,
@@ -93,7 +93,7 @@ pub(crate) fn build_diagnostics_node(name: &str, handle: &Arc<Handle>, lsp_handl
 /// Query the LSP for symlink directory targets.
 ///
 /// Looks up the feature by directory name and delegates to
-/// `LspFeature::query()` → `LspQueryResult::into_targets()`.
+/// `Feature::query()` → `QueryResult::into_targets()`.
 pub(crate) fn query_lsp_targets(
     handle: &Arc<Handle>,
     source: &str,

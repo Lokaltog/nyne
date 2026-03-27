@@ -9,7 +9,7 @@
 //! 3. Apply edits to a [`Rope`] in reverse position order so byte offsets
 //!    remain stable across mutations.
 //!
-//! [`PathResolver`]: super::path::LspPathResolver
+//! [`PathResolver`]: super::path::PathResolver
 
 use std::collections::HashMap;
 use std::path::Path;

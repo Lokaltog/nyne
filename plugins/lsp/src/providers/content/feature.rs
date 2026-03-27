@@ -58,7 +58,7 @@ impl Feature {
     fn metadata(self) -> &'static FeatureMeta {
         static TABLE: LazyLock<Vec<FeatureMeta>> =
             LazyLock::new(|| Feature::iter().map(Feature::build_metadata).collect());
-        // SAFETY: TABLE has exactly LspFeature::COUNT entries (one per variant),
+        // SAFETY: TABLE has exactly Feature::COUNT entries (one per variant),
         // and `self as usize` is always a valid variant index.
         #[expect(clippy::indexing_slicing, reason = "variant index is always in bounds")]
         &TABLE[self as usize]
@@ -116,7 +116,7 @@ impl Feature {
     /// Template registration key and source for this feature.
     ///
     /// Used by `SyntaxProvider::new()` to build the handles array by
-    /// iterating `LspFeature::iter()` — no positional coupling.
+    /// iterating `Feature::iter()` — no positional coupling.
     pub(crate) fn template(self) -> (&'static str, &'static str) {
         let m = self.metadata();
         (m.template_key, m.template_src)
@@ -190,7 +190,7 @@ impl Feature {
 }
 
 /// Template handles for all per-symbol LSP features, indexed by
-/// [`LspFeature::handle_index()`].
+/// [`Feature::handle_index()`].
 pub(crate) struct Handles {
     pub features: [TemplateHandle; Feature::COUNT],
     pub diagnostics: TemplateHandle,
@@ -198,7 +198,7 @@ pub(crate) struct Handles {
 
 /// A raw LSP result target before reverse-mapping to symbols.
 ///
-/// Produced by [`LspQueryResult::into_targets`] and consumed by
+/// Produced by [`QueryResult::into_targets`] and consumed by
 /// [`SyntaxProvider::build_target_nodes`](crate::providers::syntax::resolve::lsp_links)
 /// to create symlink nodes pointing at the target symbol's body file.
 pub(crate) struct Target {

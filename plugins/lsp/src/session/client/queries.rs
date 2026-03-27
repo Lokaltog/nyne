@@ -1,4 +1,4 @@
-//! LSP query methods on [`Client`](super::LspClient).
+//! LSP query methods on [`Client`](super::Client).
 //!
 //! Declarative macros eliminate boilerplate for method families that share
 //! the same structure:

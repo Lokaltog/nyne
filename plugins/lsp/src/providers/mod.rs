@@ -63,7 +63,7 @@ impl LspProvider {
         // Register file name globals so templates can reference e.g. FILE_DEFINITION.
         Feature::register_globals(b.engine_mut());
 
-        // Per-feature LSP templates — order derived from LspFeature::iter().
+        // Per-feature LSP templates — order derived from Feature::iter().
         let lsp_keys: Vec<_> = Feature::iter()
             .map(|f| {
                 let (name, src) = f.template();
@@ -83,9 +83,9 @@ impl LspProvider {
         Self {
             ctx,
             lsp: Handles {
-                #[expect(clippy::expect_used, reason = "length matches LspFeature::COUNT by construction")]
+                #[expect(clippy::expect_used, reason = "length matches Feature::COUNT by construction")]
                 features: array::from_fn(|_| {
-                    TemplateHandle::new(&engine, lsp_keys.next().expect("LspFeature::COUNT mismatch"))
+                    TemplateHandle::new(&engine, lsp_keys.next().expect("Feature::COUNT mismatch"))
                 }),
                 diagnostics: TemplateHandle::new(&engine, diagnostics_key),
             },

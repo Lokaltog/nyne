@@ -21,7 +21,7 @@ pub struct CompanionProvider {
     ctx: Arc<ActivationContext>,
 }
 
-/// Associated constants and constructor for [`GitCompanionProvider`].
+/// Associated constants and constructor for [`CompanionProvider`].
 impl CompanionProvider {
     /// Provider identifier for the git companion.
     pub(crate) const PROVIDER_ID: ProviderId = ProviderId::new("git-companion");
@@ -30,7 +30,7 @@ impl CompanionProvider {
     pub(crate) const fn new(ctx: Arc<ActivationContext>) -> Self { Self { ctx } }
 }
 
-/// [`Provider`] implementation for [`GitCompanionProvider`].
+/// [`Provider`] implementation for [`CompanionProvider`].
 impl Provider for CompanionProvider {
     /// Returns the provider identifier.
     fn id(&self) -> ProviderId { Self::PROVIDER_ID }

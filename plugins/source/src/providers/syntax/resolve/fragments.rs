@@ -35,7 +35,7 @@ impl SyntaxProvider {
         let resolver = self.resolver_for(source_file);
 
         // The fragment's full definition (decorators + docstring + signature + body).
-        // Byte range is resolved lazily at read time by SourceSlice.
+        // Byte range is resolved lazily at read time by Slice.
         let body_name = format!("{FILE_BODY}.{}", dctx.ext);
         let frag_path = FragmentPath::new(fragment_path);
         let body_node = VirtualNode::file(&body_name, Slice {

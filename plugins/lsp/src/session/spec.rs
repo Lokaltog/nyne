@@ -1,7 +1,7 @@
 //! LSP server definition -- runtime representation of a config-driven server entry.
 //!
 //! [`ServerDef`] is built from resolved [`ServerEntry`] config during
-//! [`Registry`](super::LspRegistry) construction. It holds the command,
+//! [`Registry`](super::Registry) construction. It holds the command,
 //! arguments, and root markers needed to spawn and gate a language server.
 //! This is the boundary between config types (serde) and runtime types
 //! (spawn logic).

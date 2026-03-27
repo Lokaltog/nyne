@@ -35,7 +35,7 @@ struct LspPlugin {
 /// Two-phase lifecycle for the LSP plugin.
 ///
 /// During `activate`, the LSP registry and manager are constructed and the
-/// manager is inserted into the `TypeMap` as `Arc<LspManager>`. LSP servers
+/// manager is inserted into the `TypeMap` as `Arc<Manager>`. LSP servers
 /// are eagerly spawned on a background thread so they are warm before the
 /// first workspace query arrives.
 ///

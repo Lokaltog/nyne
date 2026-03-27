@@ -16,7 +16,7 @@ struct AnalysisPlugin;
 ///
 /// During activation, reads `[plugin.analysis]` config, builds a filtered
 /// [`Engine`] respecting enabled/disabled rules, and inserts it into
-/// the `TypeMap` as `Arc<AnalysisEngine>`. The provider phase creates an
+/// the `TypeMap` as `Arc<Engine>`. The provider phase creates an
 /// [`AnalysisProvider`] that contributes `ANALYSIS.md` to symbol directories.
 impl Plugin for AnalysisPlugin {
     fn id(&self) -> &'static str { "analysis" }

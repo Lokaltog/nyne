@@ -33,7 +33,7 @@ impl SyntaxProvider {
             filename: filename.to_owned(),
         }));
 
-        // Imports file (if present). Byte range resolved lazily by SourceSlice.
+        // Imports file (if present). Byte range resolved lazily by Slice.
         if find_fragment_of_kind(&dctx.shared.decomposed, &FragmentKind::Imports).is_some() {
             let name = format!("{FILE_IMPORTS}.{}", dctx.ext);
             let node = VirtualNode::file(name, Slice {

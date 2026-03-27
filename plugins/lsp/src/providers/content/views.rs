@@ -21,7 +21,7 @@ use crate::session::path::PathResolver;
 use crate::session::uri::uri_to_file_path;
 
 /// Per-symbol LSP view — acquires a `FileQuery` at read time and
-/// delegates to `LspFeature::query()` + `LspQueryResult::render_view()`.
+/// delegates to `Feature::query()` + `QueryResult::render_view()`.
 ///
 /// Replaces the previous 5 separate `TemplateView` impls with one.
 pub(super) struct SymbolLspView {
@@ -188,7 +188,7 @@ pub(super) struct DiagnosticsView<'a> {
     pub items: &'a [DiagnosticRow],
 }
 
-/// Unified result from `LspFeature::query()`.
+/// Unified result from `Feature::query()`.
 ///
 /// Both markdown views (`render_view`) and symlink targets (`into_targets`)
 /// consume this, eliminating the previous duplication between view render

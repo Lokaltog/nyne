@@ -6,7 +6,7 @@
 //! TTL-based [`Cache`] to avoid redundant server round-trips.
 //!
 //! Servers are spawned lazily on first access for a file extension, but can
-//! also be warmed eagerly at activation via [`LspManager::spawn_all_applicable`].
+//! also be warmed eagerly at activation via [`Manager::spawn_all_applicable`].
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -41,7 +41,7 @@ struct OpenDocument {
 /// Version tracking and state for an LSP-opened document.
 impl OpenDocument {
     /// Initial version for a newly opened document. This is the single source
-    /// of truth — `LspClient::open_document` receives this value.
+    /// of truth — `Client::open_document` receives this value.
     const INITIAL_VERSION: i32 = 0;
 
     /// Create a new document tracker with initial version.

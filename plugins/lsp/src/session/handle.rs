@@ -113,8 +113,8 @@ impl Handle {
 
 /// Symbol-level LSP query context — an [`Handle`] bound to a specific position.
 ///
-/// Created by [`LspHandle::at`] with a byte offset that is converted to an
-/// LSP `Position`. Clone-friendly (`Arc<LspHandle>` inside) for embedding
+/// Created by [`Handle::at`] with a byte offset that is converted to an
+/// LSP `Position`. Clone-friendly (`Arc<Handle>` inside) for embedding
 /// in multiple `VirtualNode` readables (e.g., `REFERENCES.md` and `DOC.md`
 /// for the same symbol share a cloned `SymbolQuery`).
 #[derive(Clone)]

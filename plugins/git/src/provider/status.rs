@@ -8,7 +8,7 @@ use crate::status::StatusQueries as _;
 
 /// Git status view — renders working tree and index state.
 ///
-/// Backs the `@/git/STATUS.md` virtual file. Calls [`GitRepo::status()`]
+/// Backs the `@/git/STATUS.md` virtual file. Calls [`Repo::status()`]
 /// at read time to capture branch, tracking, staged/modified files, and
 /// recent commits, then renders the result via Jinja template.
 pub(super) struct StatusView {

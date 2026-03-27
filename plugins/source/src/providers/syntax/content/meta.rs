@@ -46,7 +46,7 @@ impl Deref for FragmentPath {
 /// Which byte range to address in a source file — resolved lazily from
 /// the current file state so byte offsets are never stale.
 ///
-/// Used by both read paths ([`super::SourceSlice`]) and write paths
+/// Used by both read paths ([`super::Slice`]) and write paths
 /// ([`MetaSplice`]). Read-only content types ([`SignatureContent`],
 /// [`DocstringContent`], [`DecoratorsContent`]) resolve their ranges
 /// from the same [`FragmentResolver`].

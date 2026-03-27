@@ -9,7 +9,7 @@
 //! [`FileQuery`] wraps an [`Client`] and a file path, providing
 //! cache-aware query methods for all file-level LSP operations.
 //! Each method constructs the appropriate [`CacheKey`] and delegates
-//! through [`LspManager::cached_query`], so callers never build keys
+//! through [`Manager::cached_query`], so callers never build keys
 //! or manage cache lifetimes manually.
 //!
 //! Positional queries (goto, hover, references) are generated via the
@@ -33,7 +33,7 @@ use super::manager::Manager;
 /// Scoped LSP query handle for a single file.
 ///
 /// Each method constructs the appropriate `CacheKey` and delegates through
-/// `LspManager::cached_query`, so callers never build keys manually.
+/// `Manager::cached_query`, so callers never build keys manually.
 pub struct FileQuery<'a> {
     manager: &'a Manager,
     client: Arc<Client>,
