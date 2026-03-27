@@ -25,11 +25,11 @@ const FILE_DIAGNOSTICS: &str = "DIAGNOSTICS.md";
 /// Subdirectory name for LSP code actions under a symbol's companion directory.
 const SUBDIR_ACTIONS: &str = "actions";
 
-use crate::lsp::handle::Handle;
-use crate::lsp::manager::Manager;
 use crate::providers::content::rename::{FileRenameDiff, RenameDiff};
 use crate::providers::content::{Feature, Handles, build_diagnostics_node, build_lsp_symbol_nodes};
 use crate::providers::lsp_links;
+use crate::session::handle::Handle;
+use crate::session::manager::Manager;
 
 /// LSP provider — contributes LSP-powered nodes to companion symbol directories.
 ///

@@ -17,8 +17,8 @@ use nyne_source::syntax::decomposed::DecomposedSource;
 use nyne_source::syntax::fragment::Fragment;
 use nyne_source::syntax::{find_fragment, find_fragment_at_line};
 
-use crate::lsp::handle::Handle;
 use crate::providers::content::{Target, actions, query_lsp_targets};
+use crate::session::handle::Handle;
 
 /// Resolved fragment context: shared decomposition, the fragment, and its LSP handle.
 type FragmentContext = (Arc<DecomposedSource>, Fragment, Arc<Handle>);

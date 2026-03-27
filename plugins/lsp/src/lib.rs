@@ -5,7 +5,7 @@
 //! actions, workspace symbols) as virtual files in the nyne VFS.
 
 pub mod config;
-pub mod lsp;
 pub mod providers;
+pub mod session;
 
 mod plugin;

@@ -15,8 +15,8 @@ use nyne::templates::{TemplateEngine, TemplateHandle};
 use strum::{EnumCount, IntoEnumIterator};
 
 use super::views::{QueryResult, hierarchy_item};
-use crate::lsp::query::FileQuery;
-use crate::lsp::uri::line_range_to_lsp_range;
+use crate::session::query::FileQuery;
+use crate::session::uri::line_range_to_lsp_range;
 
 /// Internal metadata for a single LSP feature variant.
 ///

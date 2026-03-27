@@ -36,7 +36,7 @@ use views::{DiagnosticsLspView, SymbolLspView};
 /// Error message when the LSP client has become unavailable since resolve time.
 pub const LSP_UNAVAILABLE: &str = "LSP server no longer available";
 
-use crate::lsp::handle::Handle;
+use crate::session::handle::Handle;
 
 /// Build LSP-backed virtual file nodes for a single symbol.
 ///

@@ -13,9 +13,9 @@ use nyne::text;
 use nyne_source::edit::diff_action::{DiffAction, DiffActionNode};
 use nyne_source::edit::plan::FileEditResult;
 
-use crate::lsp::edit::resolve_workspace_edit;
-use crate::lsp::handle::SymbolQuery;
-use crate::lsp::uri::line_range_to_lsp_range;
+use crate::session::edit::resolve_workspace_edit;
+use crate::session::handle::SymbolQuery;
+use crate::session::uri::line_range_to_lsp_range;
 
 /// Maximum length for the kebab-case slug derived from a code action title.
 const ACTION_SLUG_MAX_LEN: usize = 60;

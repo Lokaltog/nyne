@@ -10,8 +10,8 @@ use nyne::dispatch::routing::tree::RouteTree;
 use nyne::prelude::*;
 use nyne_source::providers::well_known::SUBDIR_AT_LINE;
 
-use crate::lsp::manager::Manager;
-use crate::lsp::uri::uri_to_file_path;
+use crate::session::manager::Manager;
+use crate::session::uri::uri_to_file_path;
 
 /// Workspace symbol search provider.
 ///

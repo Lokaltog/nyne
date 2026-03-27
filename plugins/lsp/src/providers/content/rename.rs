@@ -13,9 +13,9 @@ use nyne_source::edit::diff_action::DiffAction;
 use nyne_source::edit::plan::{FileEditResult, apply_file_edits};
 use nyne_source::syntax::fs_mapping::split_disambiguator;
 
-use crate::lsp::edit::resolve_workspace_edit;
-use crate::lsp::handle::{Handle, SymbolQuery};
-use crate::lsp::uri;
+use crate::session::edit::resolve_workspace_edit;
+use crate::session::handle::{Handle, SymbolQuery};
+use crate::session::uri;
 
 /// Shared rename computation — implements [`DiffAction`] for preview.
 ///

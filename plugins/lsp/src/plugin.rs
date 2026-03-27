@@ -15,13 +15,13 @@ use nyne_source::syntax::SyntaxRegistry;
 use tracing::info;
 
 use crate::config::Config;
-use crate::lsp::Registry;
-use crate::lsp::handle::Handle;
-use crate::lsp::manager::Manager;
-use crate::lsp::path::PathResolver;
 use crate::providers::content::rename::SymbolRename;
 use crate::providers::provider::LspProvider;
 use crate::providers::workspace_search::WorkspaceSearchProvider;
+use crate::session::Registry;
+use crate::session::handle::Handle;
+use crate::session::manager::Manager;
+use crate::session::path::PathResolver;
 
 /// Entry point for the LSP plugin, implementing the [`Plugin`] trait.
 ///

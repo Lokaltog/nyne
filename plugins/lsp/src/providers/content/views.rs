@@ -15,10 +15,10 @@ use serde::Serialize;
 
 use super::feature::{Feature, Target};
 use super::format::{extract_hover_content, extract_inlay_label};
-use crate::lsp::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
-use crate::lsp::handle::{Handle, SymbolQuery};
-use crate::lsp::path::PathResolver;
-use crate::lsp::uri::uri_to_file_path;
+use crate::session::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
+use crate::session::handle::{Handle, SymbolQuery};
+use crate::session::path::PathResolver;
+use crate::session::uri::uri_to_file_path;
 
 /// Per-symbol LSP view — acquires a `FileQuery` at read time and
 /// delegates to `LspFeature::query()` + `LspQueryResult::render_view()`.
