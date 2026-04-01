@@ -6,7 +6,7 @@
 //! far cheaper than shelling out to external commands.
 //!
 //! Each script has a fully-qualified dotted address (e.g.,
-//! `provider.coding.decompose`) built from namespace segments. Providers
+//! `provider.source.decompose`) built from namespace segments. Providers
 //! register scripts during activation; the [`ScriptRegistry`](super::script_registry::ScriptRegistry)
 //! indexes them for lookup by address.
 //!
@@ -17,6 +17,7 @@ use std::borrow::Borrow;
 use std::fmt;
 
 use crate::prelude::*;
+use crate::router::Chain;
 
 /// Namespace separator for script addresses (e.g., `provider.myplugin.my-script`).
 pub const SCRIPT_NS_SEPARATOR: char = '.';
@@ -80,21 +81,26 @@ pub fn provider_script_address(provider_id: &str, name: &str) -> ScriptAddress {
 
 /// Context available to scripts during execution.
 ///
-/// Provides access to the full [`ActivationContext`] so scripts can query
-/// project roots, configuration, and plugin-provided services (git, LSP, etc.)
-/// without needing to shell out or duplicate setup logic.
+/// Provides access to the full [`ActivationContext`] and the middleware
+/// [`Chain`](Chain) so scripts can query project state,
+/// plugin-provided services, and evaluate paths through the pipeline.
 pub struct ScriptContext<'a> {
     /// The shared activation context for this mount session.
     pub activation: &'a ActivationContext,
+    /// The middleware chain for path evaluation.
+    pub chain: &'a Chain,
 }
 
 /// Construction and accessors for the script execution context.
 impl<'a> ScriptContext<'a> {
     /// Create a new script context.
-    pub(crate) const fn new(activation: &'a ActivationContext) -> Self { Self { activation } }
+    pub(crate) const fn new(activation: &'a ActivationContext, chain: &'a Chain) -> Self { Self { activation, chain } }
 
     /// Access the activation context (git, syntax, LSP, roots, etc.).
     pub const fn activation(&self) -> &ActivationContext { self.activation }
+
+    /// Access the middleware chain for path evaluation.
+    pub const fn chain(&self) -> &Chain { self.chain }
 }
 
 /// A named script that accepts stdin and produces stdout.
@@ -109,7 +115,7 @@ pub trait Script: Send + Sync {
 
 /// A registered script entry: fully-qualified address + implementation.
 ///
-/// Returned by [`Provider::scripts`](crate::provider::Provider::scripts) during
+/// Returned by [`Plugin::scripts`](crate::plugin::Plugin::scripts) during
 /// activation. The address (first element) should be built via
 /// [`provider_script_address`] for consistency.
 pub type ScriptEntry = (ScriptAddress, Arc<dyn Script>);

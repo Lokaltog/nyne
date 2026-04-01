@@ -164,9 +164,9 @@ fn append_into_scope_with_children_still_works() {
     assert!(modified.contains("fn new_method()"), "new method appended");
 }
 
-/// Regression: check_conflicts must detect overlap when a zero-width insertion
-/// and a non-empty edit share the same byte_range.start. Sort instability
-/// could hide the conflict, letting apply() panic with begin > end.
+/// Regression: `check_conflicts` must detect overlap when a zero-width insertion
+/// and a non-empty edit share the same `byte_range.start`. Sort instability
+/// could hide the conflict, letting `apply()` panic with begin > end.
 #[test]
 fn check_conflicts_detects_zero_width_at_same_start_as_nonempty() {
     let source = "/// Doc A\nfn aaa() {}\n/// Doc B\nfn bbb() {}\n";
@@ -203,7 +203,7 @@ fn check_conflicts_detects_zero_width_at_same_start_as_nonempty() {
 }
 
 /// Regression: apply must not panic when edits at the same offset are
-/// processed in the wrong order due to unstable sort on byte_range.start.
+/// processed in the wrong order due to unstable sort on `byte_range.start`.
 #[test]
 fn apply_handles_zero_width_and_nonempty_at_same_offset() {
     let source = "aaabbbccc";

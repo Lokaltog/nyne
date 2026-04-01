@@ -13,8 +13,9 @@ name = "nyne"
 path = "src/lib.rs"
 
 [dependencies]
-nyne-macros.workspace = true
 clap = { workspace = true, features = ["env", "wrap_help"] }
+paste.workspace = true
+petgraph.workspace = true
 color-eyre.workspace = true
 tracing.workspace = true
 serde.workspace = true
@@ -43,6 +44,7 @@ toml.workspace = true
 console.workspace = true
 smallvec.workspace = true
 thiserror.workspace = true
+anymap2.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
@@ -56,10 +58,6 @@ predicates.workspace = true
 
 [features]
 default = []
-
-[[bench]]
-name = "routing"
-harness = false
 
 [lints]
 workspace = true

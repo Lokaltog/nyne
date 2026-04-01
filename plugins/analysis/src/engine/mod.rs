@@ -4,7 +4,7 @@
 //! for O(1) lookup. Rules produce [`Hint`]s that suggest code improvements.
 
 /// Analysis rules for detecting code smells and potential improvements.
-pub(crate) mod rules;
+pub mod rules;
 
 /// Tests for the analysis engine.
 #[cfg(test)]
@@ -15,7 +15,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use crate::TsNode;
-use crate::config::Config;
+use crate::plugin::config::Config;
 
 /// Rules disabled by default because they tend to be noisy on most codebases.
 ///
@@ -34,7 +34,7 @@ pub const DEFAULT_DISABLED_RULES: &[&str] = &[
     // Problem: flags format!("...: {}", foo.display()) as "use push_str" — but you can't use push_str with impl Display types. Tree-sitter can't do type
     // analysis, so this will always false-flag on non-&str format args. Add "string-format-push" to DEFAULT_DISABLED_RULES.
     // c. redundant-clone — Disable by default
-    // Problem: flags .clone() on references (e.g., |g| g.0.clone() where g is &T from TypeMap::get()). Without type information, the rule can't
+    // Problem: flags .clone() on references (e.g., |g| g.0.clone() where g is &T from AnyMap::get()). Without type information, the rule can't
     // distinguish "clone needed to convert &T → T" from "unnecessary clone of owned value." Add "redundant-clone" to DEFAULT_DISABLED_RULES.
     rules::type_in_variable_name::ID,
     rules::string_format_push::ID,

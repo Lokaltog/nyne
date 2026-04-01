@@ -3,8 +3,7 @@ use std::sync::Arc;
 use color_eyre::eyre::{Result, eyre};
 use serde::Serialize;
 
-use super::{TemplateContent, TemplateEngine, TemplateView, serialize_view};
-use crate::node::Readable;
+use super::{TemplateContent, TemplateEngine, TemplateGlobals, TemplateHandle, TemplateView, serialize_view};
 
 /// Load a fixture template file.
 fn load_fixture(name: &str) -> String { crate::test_support::load_fixture("templates", name) }
@@ -36,7 +35,7 @@ fn render_basic_template() {
     insta::assert_snapshot!(engine.render("test", &view));
 }
 
-/// Tests that trim_blocks and lstrip_blocks engine settings strip whitespace correctly.
+/// Tests that `trim_blocks` and `lstrip_blocks` engine settings strip whitespace correctly.
 #[test]
 fn trim_blocks_and_lstrip() {
     let engine = engine_with_fixture("trim_blocks.j2");
@@ -176,36 +175,97 @@ fn template_content_construction() {
     }
     let _content = TemplateContent::new(&engine, "test", ManualView);
 }
-
-use crate::test_support::{StubEvents, StubFs, StubResolver, stub_request_context};
-
-/// Exercise `TemplateContent` through `Readable::read` with a real `RequestContext`.
+/// `TemplateHandle::lazy_node` creates a closure-backed template node.
 #[test]
-fn template_content_readable_integration() {
+fn lazy_node_renders_via_closure() {
     let engine = Arc::new(engine_with_fixture("basic.j2"));
+    let handle = TemplateHandle::new(&engine, "test");
 
-    #[derive(Serialize)]
-    struct V {
-        name: String,
-        items: Vec<String>,
-    }
+    let node = handle.lazy_node("test.md", |engine: &TemplateEngine, tmpl: &str| {
+        let view = minijinja::context! { name => "lazy", items => vec!["one"] };
+        Ok(engine.render_bytes(tmpl, &view))
+    });
+    assert_eq!(node.name(), "test.md");
 
-    let content = TemplateContent::new(
-        &engine,
-        "test",
-        serialize_view(&V {
-            name: "readable".into(),
-            items: vec!["one".into(), "two".into()],
-        }),
+    let fs = crate::router::MemFs::new();
+    let ctx = crate::router::ReadContext {
+        path: std::path::Path::new("/test.md"),
+        fs: &fs,
+    };
+    let bytes = node.readable().unwrap().read(&ctx).unwrap();
+    let content = String::from_utf8(bytes).unwrap();
+    insta::assert_snapshot!("lazy_node", content);
+}
+
+/// `TemplateHandle::editable_lazy_node` creates a closure-backed readable+writable node.
+#[test]
+fn editable_lazy_node_renders_and_writes() {
+    let engine = Arc::new(engine_with_fixture("basic.j2"));
+    let handle = TemplateHandle::new(&engine, "test");
+
+    let written = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let w = Arc::clone(&written);
+
+    let node = handle.editable_lazy_node(
+        "test.md",
+        |engine: &TemplateEngine, tmpl: &str| {
+            let view = minijinja::context! { name => "editable", items => Vec::<String>::new() };
+            Ok(engine.render_bytes(tmpl, &view))
+        },
+        move |_ctx: &crate::router::WriteContext<'_>, data: &[u8]| {
+            *w.lock().unwrap() = data.to_vec();
+            Ok(vec![])
+        },
     );
 
-    let path = crate::types::vfs_path::VfsPath::root();
-    let real_fs = StubFs;
-    let events = StubEvents;
-    let resolver = StubResolver;
-    let file_generations = crate::dispatch::content_cache::FileGenerations::new();
-    let ctx = stub_request_context(&path, &real_fs, &events, &resolver, &file_generations);
+    let fs = crate::router::MemFs::new();
+    let read_ctx = crate::router::ReadContext {
+        path: std::path::Path::new("/test.md"),
+        fs: &fs,
+    };
+    let bytes = node.readable().unwrap().read(&read_ctx).unwrap();
+    assert!(String::from_utf8(bytes).unwrap().contains("editable"));
 
-    let output = content.read(&ctx).unwrap();
-    insta::assert_snapshot!(String::from_utf8(output).unwrap());
+    let write_ctx = crate::router::WriteContext {
+        path: std::path::Path::new("/test.md"),
+        fs: &fs,
+    };
+    node.writable().unwrap().write(&write_ctx, b"new content").unwrap();
+    assert_eq!(*written.lock().unwrap(), b"new content");
+}
+/// `TemplateGlobals` default impl walks nested fields and registers each
+/// string leaf as a template global using UPPER_SNAKE keys joined by `_`.
+#[test]
+fn template_globals_derives_nested_keys() {
+    #[derive(Serialize)]
+    struct Vfs {
+        dir: VfsDirs,
+        file: VfsFiles,
+        flat: String,
+    }
+    #[derive(Serialize)]
+    struct VfsDirs {
+        git: String,
+        by_kind: String,
+    }
+    #[derive(Serialize)]
+    struct VfsFiles {
+        head_diff: String,
+    }
+    impl TemplateGlobals for Vfs {}
+
+    let vfs = Vfs {
+        dir: VfsDirs {
+            git: "git".into(),
+            by_kind: "by-kind".into(),
+        },
+        file: VfsFiles {
+            head_diff: "HEAD.diff".into(),
+        },
+        flat: "flat.txt".into(),
+    };
+    let mut engine = TemplateEngine::new();
+    vfs.register_globals(&mut engine);
+    engine.add_template("t", "{{ DIR_GIT }}|{{ DIR_BY_KIND }}|{{ FILE_HEAD_DIFF }}|{{ FLAT }}");
+    assert_eq!(engine.render("t", &()), "git|by-kind|HEAD.diff|flat.txt");
 }

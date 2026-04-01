@@ -16,6 +16,7 @@ use garde::Validate;
 use rustix::mount::MountFlags;
 use serde::{Deserialize, Serialize};
 
+use crate::dispatch::activation::ActivationContext;
 use crate::plugin::Plugin;
 
 /// Top-level nyne configuration, deserialized from `~/.config/nyne/config.toml`.
@@ -50,29 +51,19 @@ pub struct NyneConfig {
     #[garde(dive)]
     pub agent_files: AgentFilesConfig,
 
-    /// Process names that see only the real filesystem (full passthrough).
+    /// Plugin configuration values, stored as opaque TOML values.
     ///
-    /// Matched against `/proc/{pid}/comm` (auto-truncated to 15 chars).
-    /// Defaults to `["git"]`. Plugins may contribute additional entries
-    /// at activation time (e.g., LSP servers via [`PassthroughProcesses`]).
-    #[garde(skip)]
-    #[serde(default = "default_passthrough_processes")]
-    pub passthrough_processes: Vec<String>,
-
-    /// Plugin configuration values. Stored as JSON despite TOML source — the
-    /// TOML→JSON conversion is intentional to support JSON-based merge with
-    /// CLI overrides.
-    ///
-    /// Each key is a plugin ID (e.g., `"coding"`, `"git"`). Values are
-    /// opaque JSON values -- plugins deserialize their own config.
+    /// Each key is a plugin ID (e.g., `"source"`, `"git"`). Values are
+    /// opaque TOML tables — plugins deserialize their own config via
+    /// [`PluginConfig::from_section`].
     ///
     /// ```toml
-    /// [plugin.coding]
-    /// lsp.enabled = true
+    /// [plugin.source]
+    /// enabled = true
     /// ```
     #[serde(default)]
     #[garde(skip)]
-    pub plugin: HashMap<String, serde_json::Value>,
+    pub plugin: HashMap<String, toml::Value>,
 }
 
 /// Default implementation for `NyneConfig`.
@@ -84,7 +75,6 @@ impl Default for NyneConfig {
             repository: RepositoryConfig::default(),
             sandbox: SandboxConfig::default(),
             agent_files: AgentFilesConfig::default(),
-            passthrough_processes: default_passthrough_processes(),
             plugin: HashMap::default(),
         }
     }
@@ -117,37 +107,56 @@ pub struct RepositoryConfig {
 /// directories (e.g., `~/.ssh`, `~/.config`) that the sandboxed process
 /// needs but wouldn't otherwise see.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct SandboxConfig {
     /// Hostname visible inside the sandbox (via UTS namespace).
     ///
     /// Appears in shell prompts as `user@<hostname>`. Set to distinguish
     /// sandboxed shells from regular ones at a glance.
-    #[serde(default = "default_sandbox_hostname")]
     pub hostname: String,
 
     /// Additional bind mounts to expose host directories inside the sandbox.
     ///
     /// Each entry creates a bind mount from a host path to a sandbox path
     /// with configurable mount flags (read-only, noexec, nosuid, nodev).
-    #[serde(default)]
     pub bind_mounts: Vec<BindMount>,
 
     /// Extra environment variables set in sandbox subprocesses (e.g., LSP
     /// servers). These are merged on top of the default propagated set --
     /// use this to inject variables the sandbox wouldn't otherwise see.
-    #[serde(default)]
     pub env: HashMap<String, String>,
+
+    /// Root directory for per-process sandbox state.
+    ///
+    /// Each running daemon and attach-command child creates a subdirectory
+    /// `<state_root>/proc/<pid>/fs/{root,merged,lower,upper,work}` containing
+    /// its overlay scaffolding. Removing `<state_root>/proc/<pid>/` reaps
+    /// all state for that process.
+    ///
+    /// Defaults to `/tmp/nyne` (see [`default_sandbox_state_root`]).
+    pub state_root: PathBuf,
+
+    /// Mount point for the nyne VFS inside the sandbox.
+    ///
+    /// This is the single path through which the project is accessible to
+    /// sandboxed processes. After `pivot_root`, the FUSE filesystem is
+    /// attached here and all project access goes through it.
+    ///
+    /// Defaults to `/code` (see [`default_sandbox_mount_root`]).
+    pub mount_root: PathBuf,
 }
 
 /// Default implementation for `SandboxConfig`.
 impl Default for SandboxConfig {
-    /// Return sandbox config with default hostname, no bind mounts, and no extra env vars.
+    /// Return sandbox config with default hostname, no bind mounts, no extra
+    /// env vars, state root `/tmp/nyne`, and mount root `/code`.
     fn default() -> Self {
         Self {
             hostname: default_sandbox_hostname(),
             bind_mounts: Vec::new(),
             env: HashMap::new(),
+            state_root: default_sandbox_state_root(),
+            mount_root: default_sandbox_mount_root(),
         }
     }
 }
@@ -158,6 +167,18 @@ impl Default for SandboxConfig {
 /// clearly identifiable in shell prompts so users can tell at a glance
 /// whether they're inside a sandbox.
 fn default_sandbox_hostname() -> String { "nyne-sandbox".to_owned() }
+/// Return the default sandbox state root (`/tmp/nyne`).
+///
+/// The directory `<state_root>/proc/<pid>/` holds all overlay scaffolding
+/// for one running daemon or attach-command child; removing it reaps every
+/// directory that process created.
+fn default_sandbox_state_root() -> PathBuf { PathBuf::from("/tmp/nyne") }
+
+/// Return the default sandbox mount root (`/code`).
+///
+/// The nyne VFS is attached at this path inside the sandbox after
+/// `pivot_root`. All project access goes through this single mount point.
+fn default_sandbox_mount_root() -> PathBuf { PathBuf::from("/code") }
 
 /// Mount flags for user-configured bind mounts.
 ///
@@ -243,7 +264,7 @@ impl BindMount {
 }
 
 /// Strategy for exposing the project to the FUSE daemon.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, strum::Display, strum::EnumString)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum StorageStrategy {
@@ -304,11 +325,10 @@ pub struct MountConfig {
 /// The default filenames (`CLAUDE.md`, `AGENTS.md`) are chosen for compatibility
 /// with popular AI coding agents.
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct AgentFilesConfig {
     /// Filenames to expose as virtual agent files in every directory.
     /// If a real file with the same name exists, its content is prepended.
-    #[serde(default = "default_agent_filenames")]
     #[garde(skip)]
     pub filenames: Vec<String>,
 }
@@ -319,18 +339,6 @@ pub struct AgentFilesConfig {
 /// `CLAUDE.md` for Anthropic's Claude Code and `AGENTS.md` as a generic
 /// convention. Users can override this list in their config file.
 pub(crate) fn default_agent_filenames() -> Vec<String> { vec!["CLAUDE.md".to_owned(), "AGENTS.md".to_owned()] }
-
-/// Return the default passthrough process list (`["git"]`).
-///
-/// Git must always see the real filesystem (not the FUSE overlay) because
-/// it directly accesses `.git/` internals via mmap and inotify. Adding it
-/// to passthrough avoids subtle corruption and performance issues.
-fn default_passthrough_processes() -> Vec<String> { vec!["git".to_owned()] }
-/// Serde default function returning `true`.
-///
-/// Use with `#[serde(default = "nyne::config::default_true")]` for boolean
-/// fields that should default to enabled.
-pub const fn default_true() -> bool { true }
 
 /// Default implementation for `AgentFilesConfig`.
 impl Default for AgentFilesConfig {
@@ -358,13 +366,13 @@ const PROJECT_CONFIG_FILENAMES: &[&str] = &[".nyne/config.toml", ".nyne.toml", "
 /// Searches for config files in priority order (first match wins).
 /// Returns `None` if no project config file exists.
 /// Returns an error if a file exists but cannot be read or parsed.
-fn load_project_config(project_root: &Path) -> Result<Option<serde_json::Value>> {
+fn load_project_config(project_root: &Path) -> Result<Option<toml::Value>> {
     for filename in PROJECT_CONFIG_FILENAMES {
         let path = project_root.join(filename);
         match fs::read_to_string(&path) {
             Ok(contents) => {
                 tracing::debug!(path = %path.display(), "loading project config");
-                let value: serde_json::Value =
+                let value: toml::Value =
                     toml::from_str(&contents).wrap_err_with(|| format!("parsing {}", path.display()))?;
                 return Ok(Some(value));
             }
@@ -379,7 +387,7 @@ fn load_project_config(project_root: &Path) -> Result<Option<serde_json::Value>>
 ///
 /// Returns `None` if no XDG directory exists or the config file is missing.
 /// Returns an error if the file exists but cannot be read or parsed.
-fn load_user_config() -> Result<Option<serde_json::Value>> {
+fn load_user_config() -> Result<Option<toml::Value>> {
     let Some(path) = config_path() else {
         tracing::debug!("no XDG config directory found, skipping user config");
         return Ok(None);
@@ -389,7 +397,7 @@ fn load_user_config() -> Result<Option<serde_json::Value>> {
 
     match fs::read_to_string(&path) {
         Ok(contents) => {
-            let value: serde_json::Value =
+            let value: toml::Value =
                 toml::from_str(&contents).wrap_err_with(|| format!("parsing {}", path.display()))?;
             Ok(Some(value))
         }
@@ -404,13 +412,13 @@ fn load_user_config() -> Result<Option<serde_json::Value>> {
 impl NyneConfig {
     /// Load configuration by merging layers in priority order.
     ///
-    /// The merge strategy uses [`deep_merge`](crate::json::deep_merge) so that
-    /// each successive layer only needs to specify overrides — unset keys
+    /// The merge strategy uses [`toml_merge::deep_merge`](crate::toml_merge::deep_merge)
+    /// so that each successive layer only needs to specify overrides — unset keys
     /// inherit from the layer below.
     ///
     /// ## Layer order (lowest → highest priority)
     ///
-    /// 1. **Core defaults** — `NyneConfig::default()` serialized to JSON.
+    /// 1. **Core defaults** — `NyneConfig::default()` serialized to TOML.
     /// 2. **Plugin defaults** — each plugin's `default_config()` merged into
     ///    `plugin.<id>`.
     /// 3. **User config** — XDG config file (`~/.config/nyne/config.toml`).
@@ -424,12 +432,10 @@ impl NyneConfig {
     /// Returns an error if any config file exists but cannot be read/parsed,
     /// if the merged result fails deserialization, or if validation fails.
     pub fn load(plugins: &[Box<dyn Plugin>], project_root: Option<&Path>) -> Result<Self> {
-        use serde_json::{Map, Value};
-
-        use crate::json::deep_merge;
+        use crate::toml_merge::deep_merge;
 
         // Layer 1: Core defaults.
-        let mut merged = serde_json::to_value(Self::default()).wrap_err("serializing default config")?;
+        let mut merged = toml::Value::try_from(Self::default()).wrap_err("serializing default config")?;
 
         // Layer 2: Plugin defaults.
         for plugin in plugins {
@@ -439,15 +445,14 @@ impl NyneConfig {
 
             let plugin_section = merged
                 .get_mut("plugin")
-                .and_then(Value::as_object_mut)
+                .and_then(toml::Value::as_table_mut)
                 .ok_or_else(|| color_eyre::eyre::eyre!("default config missing plugin table"))?;
 
-            let plugin_value = serde_json::to_value(defaults)
-                .wrap_err_with(|| format!("serializing defaults for plugin '{}'", plugin.id()))?;
+            let plugin_value = toml::Value::Table(defaults);
 
             let entry = plugin_section
                 .entry(plugin.id())
-                .or_insert(Value::Object(Map::default()));
+                .or_insert(toml::Value::Table(toml::Table::new()));
 
             deep_merge(entry, &plugin_value);
         }
@@ -465,20 +470,20 @@ impl NyneConfig {
         }
 
         // Deserialize merged result.
-        let config: Self = serde_json::from_value(merged).wrap_err("deserializing merged config")?;
+        let config: Self = merged.try_into().wrap_err("deserializing merged config")?;
         config.validate().wrap_err("config validation failed")?;
         Ok(config)
     }
 }
-/// Deserialize a plugin config from a JSON value, logging a warning and falling back to defaults on failure.
+/// Deserialize a plugin config from a TOML value, logging a warning and falling back to defaults on failure.
 ///
-/// Prefer this over manual `serde_json::from_value` — it borrows the value (no clone),
+/// Prefer this over manual `toml::Value::try_into` — it borrows the value (via clone),
 /// and surfaces deserialization errors via `tracing::warn` instead of silently discarding them.
-pub fn deserialize_plugin_config<T>(value: &serde_json::Value) -> T
+pub fn deserialize_plugin_config<T>(value: &toml::Value) -> T
 where
     T: for<'de> serde::Deserialize<'de> + Default,
 {
-    T::deserialize(value).unwrap_or_else(|err| {
+    value.clone().try_into().unwrap_or_else(|err| {
         tracing::warn!(
             ?err,
             std_type = any::type_name::<T>(),
@@ -486,6 +491,32 @@ where
         );
         T::default()
     })
+}
+/// Trait for plugin configuration structs.
+///
+/// Provides a standard deserialization path from the activation context's config.
+/// Implement this trait on your config struct (requires `Default + Serialize + Deserialize`),
+/// then call `Config::from_context(ctx, self.id())` in your plugin's `activate()`.
+///
+/// Use `nyne::plugin_config!(ConfigType)` inside your `Plugin` impl to wire
+/// `default_config()` and `resolved_config()` automatically.
+pub trait PluginConfig: Default + serde::Serialize + for<'de> serde::Deserialize<'de> + Sized {
+    /// Deserialize from an optional TOML section, falling back to defaults.
+    fn from_section(section: Option<&toml::Value>) -> Self {
+        let Some(value) = section else {
+            return Self::default();
+        };
+        deserialize_plugin_config(value)
+    }
+
+    /// Deserialize this config from the activation context using the given plugin id.
+    fn from_context(ctx: &ActivationContext, id: &str) -> Self { Self::from_section(ctx.config().plugin.get(id)) }
+
+    /// Serialize the default config as a TOML table for the merge chain.
+    fn default_table() -> Option<toml::Table> { toml::Table::try_from(Self::default()).ok() }
+
+    /// Serialize a resolved config instance as a TOML value for `nyne config` output.
+    fn to_value(&self) -> Option<toml::Value> { toml::Value::try_from(self).ok() }
 }
 
 /// Unit tests for configuration deserialization and validation.

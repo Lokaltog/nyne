@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use crate::config::ServerEntry;
+use crate::plugin::config::ServerEntry;
 
 /// Runtime definition of an LSP server.
 ///
@@ -28,11 +28,11 @@ pub struct ServerDef {
 
 /// Construction, accessors, and project-root applicability checks.
 impl ServerDef {
-    /// Build from a resolved server entry (all required fields must be present).
-    pub(crate) fn from_entry(entry: &ServerEntry) -> Self {
+    /// Build from a server name and its config entry.
+    pub(crate) fn from_entry(name: &str, entry: &ServerEntry) -> Self {
         Self {
-            command: entry.command.clone().unwrap_or_else(|| entry.name.clone()),
-            name: entry.name.clone(),
+            command: entry.command.clone().unwrap_or_else(|| name.to_owned()),
+            name: name.to_owned(),
             args: entry.args.clone().unwrap_or_default(),
             root_markers: entry.root_markers.clone().unwrap_or_default(),
         }

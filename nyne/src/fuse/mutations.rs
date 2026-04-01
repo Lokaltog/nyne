@@ -1,103 +1,185 @@
 //! FUSE mutation operations — create, mkdir, unlink, rmdir, and rename.
 //!
-//! These handlers delegate to `Router` mutation methods, which own event
-//! draining (see `doc/codebase.md` — "Event Draining"). The FUSE layer
-//! does **not** call `process_events()` after these operations — the
-//! router handles cache invalidation internally.
+//! All mutations dispatch through the middleware chain via
+//! [`crate::router::Filesystem`] methods on [`FuseFilesystem`].
 
 use std::ffi::OsStr;
+use std::sync::Arc;
 
 use fuser::{Errno, FileHandle, FopenFlags, INodeNo, ReplyCreate, ReplyEmpty, ReplyEntry, Request};
 use tracing::debug;
 
-use super::{GENERATION, NyneFs, extract_errno};
+use super::attrs::GENERATION;
+use super::{FuseFilesystem, ensure_dir_path, extract_errno, fuse_try};
+use crate::prelude::Op;
 
-/// FUSE mutation handlers for create, mkdir, remove, and rename.
-impl NyneFs {
-    /// Handles file creation in a parent directory.
+impl FuseFilesystem {
+    /// Handle file creation in a parent directory.
     ///
-    /// Asks the router to find a provider willing to claim the create. If
-    /// no provider accepts, replies `EACCES`. On success, immediately opens
-    /// the new file and returns a handle with `FOPEN_DIRECT_IO` so the
-    /// caller can write to it without a separate `open()`.
+    /// Dispatches `Op::Create` through the chain, then opens the new file
+    /// and returns a handle with `FOPEN_DIRECT_IO`.
     pub(super) fn do_create(&self, req: &Request, parent: INodeNo, name: &OsStr, flags: i32, reply: ReplyCreate) {
-        with_parent_ctx!(self, parent, name, reply, "create", |parent_ino, name_str, ctx| {
-            let result = fuse_try!(reply, self.router.create_node(&name_str, &ctx),
-                parent_ino, name = %name_str, "create failed");
-            let Some(inode) = result else {
-                debug!(target: "nyne::fuse", parent_ino, name = %name_str, "create: no provider claimed");
-                reply.error(Errno::EACCES);
-                return;
-            };
-            let content = fuse_try!(reply, self.load_content(inode), inode, "create: failed to load content");
-            let fh = self.handles.open(inode, content, flags);
-            if let Some((attr, ttl)) = self.build_attr(inode, req) {
+        let parent = u64::from(parent);
+        let dir_path = ensure_dir_path!(self, parent, reply);
+        let name = name.to_string_lossy();
+        debug!(target: "nyne::fuse", parent, name = %name, "create");
+
+        if !self.is_writable_dir(parent, req) {
+            reply.error(Errno::EACCES);
+            return;
+        }
+
+        let path = dir_path.join(name.as_ref());
+        fuse_try!(
+            reply,
+            self.dispatch_path_op(&path, |name| Op::Create { name }, Some(self.process_from(req))),
+            parent,
+            "create failed"
+        );
+
+        match self.resolve_inode(&dir_path, &name, parent, Some(self.process_from(req))) {
+            Ok(Some((ino, node))) => {
+                let fh = self.handles.open(ino, Arc::from([]), flags);
+                let (attr, ttl) = self.node_attr(ino, &node, req);
                 reply.created(&ttl, &attr, GENERATION, FileHandle(fh), FopenFlags::FOPEN_DIRECT_IO);
-            } else {
-                reply.error(Errno::EIO);
             }
-        });
+            Ok(None) | Err(_) => reply.error(Errno::EIO),
+        }
     }
 
-    /// Handles directory creation in a parent directory.
-    ///
-    /// Delegates to the router's `mkdir_node`, which finds a provider to
-    /// claim the directory. Replies `EACCES` if no provider accepts.
+    /// Handle directory creation in a parent directory.
     pub(super) fn do_mkdir(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
-        with_parent_ctx!(self, parent, name, reply, "mkdir", |parent_ino, name_str, ctx| {
-            let result = fuse_try!(reply, self.router.mkdir_node(&name_str, &ctx),
-                parent_ino, name = %name_str, "mkdir failed");
-            let Some(inode) = result else {
-                debug!(target: "nyne::fuse", parent_ino, name = %name_str, "mkdir: no provider claimed");
-                reply.error(Errno::EACCES);
+        let parent = u64::from(parent);
+        let dir_path = ensure_dir_path!(self, parent, reply);
+        let name = name.to_string_lossy();
+        debug!(target: "nyne::fuse", parent, name = %name, "mkdir");
+
+        if !self.is_writable_dir(parent, req) {
+            reply.error(Errno::EACCES);
+            return;
+        }
+
+        let path = dir_path.join(name.as_ref());
+        fuse_try!(
+            reply,
+            self.dispatch_path_op(&path, |name| Op::Mkdir { name }, Some(self.process_from(req))),
+            parent,
+            "mkdir failed"
+        );
+
+        match self.resolve_inode(&dir_path, &name, parent, Some(self.process_from(req))) {
+            Ok(Some((ino, node))) => {
+                let (attr, ttl) = self.node_attr(ino, &node, req);
+                reply.entry(&ttl, &attr, GENERATION);
+            }
+            Ok(None) => reply.error(Errno::ENOENT),
+            Err(e) => reply.error(extract_errno(&e)),
+        }
+    }
+
+    /// Handle file or directory removal (unlink or rmdir).
+    ///
+    /// Tries the node's [`Unlinkable`] capability first. Falls back to
+    /// chain dispatch so middleware providers (e.g. the diff plugin) can
+    /// handle remove operations for virtual nodes.
+    pub(super) fn do_remove(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
+        let parent = u64::from(parent);
+        let dir_path = ensure_dir_path!(self, parent, reply);
+        let name = name.to_string_lossy();
+        debug!(target: "nyne::fuse", parent, name = %name, "remove");
+
+        let path = dir_path.join(name.as_ref());
+
+        // Try node capability first (e.g. rmdir on a symbol directory).
+        match self.remove_node(&path) {
+            Ok(true) => {
+                reply.ok();
                 return;
-            };
-            self.reply_entry(inode, req, reply);
-        });
+            }
+            Err(e) => {
+                fuse_try!(reply, Err::<(), _>(e), parent, "remove failed");
+            }
+            Ok(false) => {}
+        }
+
+        // Fall back to chain dispatch — middleware providers handle virtual removes.
+        let process = Some(self.process_from(req));
+        fuse_try!(
+            reply,
+            self.dispatch_path_op(&path, |name| Op::Remove { name }, process),
+            parent,
+            "remove failed"
+        );
+        reply.ok();
     }
 
-    /// Handles file or directory removal (unlink or rmdir).
+    /// Handle rename/move of a file or directory.
     ///
-    /// Unified handler for both `unlink` and `rmdir` — the `is_dir` flag
-    /// tells the router which semantics to apply. The router decides whether
-    /// this is a real filesystem removal or a virtual node unlink based on
-    /// the node's [`Unlinkable`](crate::node::capabilities::Unlinkable) capability.
-    pub(super) fn do_remove(&self, parent: INodeNo, name: &OsStr, is_dir: bool, reply: ReplyEmpty) {
-        let label = if is_dir { "rmdir" } else { "unlink" };
-        with_parent_ctx!(self, parent, name, reply, "remove", |parent_ino, name_str, ctx| {
-            fuse_try!(reply, self.router.remove_node(&name_str, is_dir, &ctx),
-                parent_ino, name = %name_str, label, "remove failed");
-            reply.ok();
-        });
-    }
-
-    /// Handles rename/move of a file or directory.
-    ///
-    /// Resolves both the source and target parent directories independently
-    /// (they may differ for cross-directory moves). The router's
-    /// [`rename_node`](crate::dispatch::Router::rename_node) decides whether
-    /// the rename targets a real filesystem entry or a virtual node with
-    /// [`Renameable`](crate::node::capabilities::Renameable) capability.
+    /// Tries the node's [`Renameable`] capability first. Falls back to
+    /// `is_writable_dir` + chain dispatch for real filesystem paths.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn do_rename(
         &self,
+        req: &Request,
         parent: INodeNo,
         name: &OsStr,
         newparent: INodeNo,
         newname: &OsStr,
         reply: ReplyEmpty,
     ) {
-        let parent_ino = u64::from(parent);
+        let parent = u64::from(parent);
         let newparent_ino = u64::from(newparent);
-        let name_str = name.to_string_lossy();
-        let newname_str = newname.to_string_lossy();
-        debug!(target: "nyne::fuse", parent_ino, name = %name_str, newparent_ino, newname = %newname_str, "rename");
+        let name = name.to_string_lossy();
+        let newname = newname.to_string_lossy();
+        debug!(target: "nyne::fuse", parent, name = %name, newparent_ino, newname = %newname, "rename");
 
-        let src_dir = ensure_dir_path!(self, parent_ino, reply);
-        let target_dir = ensure_dir_path!(self, newparent_ino, reply);
+        let src_dir = ensure_dir_path!(self, parent, reply);
+        let dst_dir = ensure_dir_path!(self, newparent_ino, reply);
 
-        let src_ctx = self.router.make_request_context(&src_dir);
-        fuse_try!(reply, self.router.rename_node(&name_str, &src_ctx, &target_dir, &newname_str),
-            src = %name_str, dst = %newname_str, "rename failed");
+        // When `mv` (without `-T`) targets a directory, the kernel probes the
+        // destination name via lookup. If the VFS resolves it as a directory
+        // (companion `@` dirs always do), `mv` issues a nest-into rename:
+        //   rename(parent=symbols/, "Foo@", newparent=Bar@/, "Foo@")
+        // instead of the intended same-level rename. Detect this pattern —
+        // different parents, same entry name, target is a direct child of
+        // source's parent — and rewrite to the intended rename.
+        let dst = if parent != newparent_ino && name == newname && dst_dir.starts_with(&src_dir) {
+            src_dir.join(dst_dir.file_name().unwrap_or(newname.as_ref().as_ref()))
+        } else {
+            dst_dir.join(newname.as_ref())
+        };
+        let src = src_dir.join(name.as_ref());
+
+        // Try node capability first (e.g. LSP symbol rename).
+        match self.rename_node(&src, &dst) {
+            Ok(true) => {
+                if let Some(ino) = self.inodes.find_inode(&src_dir, &name) {
+                    self.inodes.update(ino, dst_dir, newname.into_owned(), newparent_ino);
+                }
+                reply.ok();
+                return;
+            }
+            Err(e) => {
+                fuse_try!(reply, Err::<(), _>(e), parent, "rename failed");
+            }
+            Ok(false) => {}
+        }
+
+        // Fall back to chain dispatch (real filesystem paths).
+        if !self.is_writable_dir(parent, req) {
+            reply.error(Errno::EACCES);
+            return;
+        }
+        fuse_try!(
+            reply,
+            self.dispatch_rename_op(&src, &dst, Some(self.process_from(req))),
+            parent,
+            "rename failed"
+        );
+
+        if let Some(ino) = self.inodes.find_inode(&src_dir, &name) {
+            self.inodes.update(ino, dst_dir, newname.into_owned(), newparent_ino);
+        }
         reply.ok();
     }
 }

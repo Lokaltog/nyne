@@ -1,3 +1,0 @@
-[[lsp.servers]]
-name = "rust-analyzer"
-args = ["--log-file", "/tmp/ra.log"]

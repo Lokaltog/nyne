@@ -7,29 +7,34 @@
 //!
 //! Wire format: newline-delimited JSON, one request → one response per connection.
 
-use std::collections::HashMap;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, IoSlice, IoSliceMut, Write};
+use std::mem::MaybeUninit;
 use std::net::Shutdown;
 use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
+use std::str::from_utf8;
 use std::time::SystemTime;
 use std::{fs, thread};
 
 use base64::prelude::{BASE64_STANDARD as BASE64, Engine};
-use color_eyre::eyre::{WrapErr, eyre};
+use color_eyre::eyre::{WrapErr, ensure, eyre};
 use parking_lot::Mutex;
 use rustix::event::{PollFd, PollFlags, poll};
+use rustix::net::{
+    RecvAncillaryBuffer, RecvAncillaryMessage, RecvFlags, SendAncillaryBuffer, SendAncillaryMessage, SendFlags,
+    recvmsg, sendmsg,
+};
 use rustix::pipe::{PipeFlags, pipe_with};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::dispatch::ScriptRegistry;
 use crate::dispatch::script::ScriptContext;
-use crate::fuse::VisibilityMap;
+use crate::dispatch::{ControlRegistry, ScriptRegistry};
+use crate::plugin::control::{AttachedProcess, ControlContext, ProcessTable};
 use crate::prelude::*;
+use crate::router::Chain;
 use crate::session::state;
-use crate::types::ProcessVisibility;
 
 /// Environment variable set inside the sandbox pointing to the control socket.
 ///
@@ -38,15 +43,20 @@ use crate::types::ProcessVisibility;
 /// for IPC without path discovery.
 pub const NYNE_CONTROL_SOCKET_ENV: &str = "NYNE_CONTROL_SOCKET";
 
-/// Inbound message types for the control socket.
+/// Environment variable set inside the sandbox pointing to the session
+/// directory where nested sessions live.
 ///
-/// This enum is the single source of truth for the control protocol.
-/// The `nyne ctl` CLI reads a JSON `Request` directly rather than
-/// maintaining a parallel type.
+/// Injected by `command_main` alongside [`NYNE_CONTROL_SOCKET_ENV`] so
+/// that `nyne mount`/`nyne list`/`nyne attach` invocations inside the
+/// sandbox share a consistent session directory scoped to the parent
+/// daemon, rather than each attach landing in its own namespace bucket.
+pub const NYNE_SESSION_DIR_ENV: &str = "NYNE_SESSION_DIR";
+
+/// Core control request types handled directly by the control server.
 ///
-/// Note: `deny_unknown_fields` cannot be used here because the
-/// `SetVisibility` variant uses `#[serde(flatten)]` for wire-format
-/// compatibility, which is incompatible with `deny_unknown_fields`.
+/// Plugin-provided commands are dispatched separately via the
+/// [`ControlRegistry`](crate::dispatch::ControlRegistry) — any request
+/// whose `type` field does not match a core variant is looked up there.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Request {
@@ -57,37 +67,26 @@ pub enum Request {
     Register { pid: i32, command: String },
     /// Remove an attached process from the process table.
     Unregister { pid: i32 },
-    /// Set or query visibility level for a PID or process name.
-    SetVisibility {
-        #[serde(flatten)]
-        target: VisibilityTarget,
-        visibility: ProcessVisibility,
-    },
     /// Query all attached processes (used by `nyne list`).
     ListProcesses,
-}
-
-/// Identifies the subject of a visibility change — either a specific PID or a
-/// process name pattern.
-///
-/// Wire format (untagged): `{"pid": 123}` or `{"name": "fish"}` or `{}` (query-only).
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum VisibilityTarget {
-    /// Target a specific attached process by PID.
-    Pid { pid: i32 },
-    /// Target processes matching a comm name.
-    Name { name: String },
-    /// No target — query current rules without changing anything.
-    Query {},
+    /// Request the daemon's user and mount namespace fds for attach.
+    ///
+    /// The response carries the two fds as `SCM_RIGHTS` ancillary data
+    /// (user first, mnt second) alongside a [`Response::NamespaceFds`]
+    /// tag. This replaces resolving the daemon's PID via `SO_PEERCRED`
+    /// and opening `/proc/<pid>/ns/*` — fd passing works cross-PID-ns,
+    /// PID translation does not (sibling PID namespaces can't see each
+    /// other).
+    GetNamespaceFds,
 }
 
 /// Outbound message types from the control socket.
 ///
-/// Each variant corresponds to a specific [`Request`] type, except
-/// [`Error`](Self::Error) which is a catch-all for protocol-level failures.
+/// Core variants correspond to specific [`Request`] types. Plugin-provided
+/// commands return [`Plugin`](Self::Plugin) with an opaque JSON payload.
+/// [`Error`](Self::Error) is a catch-all for protocol-level failures.
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", deny_unknown_fields)]
+#[serde(tag = "type")]
 pub enum Response {
     /// Successful script execution. `data` is base64-encoded stdout.
     ExecOk { data: String },
@@ -97,44 +96,65 @@ pub enum Response {
     Registered,
     /// Process successfully unregistered.
     Unregistered,
-    /// Current visibility rules snapshot (response to `SetVisibility`).
-    Visibility { rules: VisibilityRules },
     /// List of all attached processes (response to `ListProcesses`).
     Processes { list: Vec<AttachedProcess> },
+    /// Response to `GetNamespaceFds`. The actual fds travel as
+    /// `SCM_RIGHTS` ancillary data on the same `recvmsg` call; this
+    /// tag exists only for protocol sanity checking.
+    NamespaceFds,
+    /// Response from a plugin-provided control command.
+    Plugin {
+        #[serde(flatten)]
+        payload: serde_json::Value,
+    },
     /// Protocol-level error (malformed request, unknown type, etc.).
     Error { message: String },
 }
 
-/// A process currently attached to the sandbox via `nyne attach`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AttachedProcess {
-    pub pid: i32,
-    pub command: String,
-    pub start_time: SystemTime,
+/// File descriptors for the daemon's user and mount namespaces.
+///
+/// Opened from `/proc/self/ns/{user,mnt}` inside the daemon after
+/// `unshare_user_mount` has established them. These fds are sent to
+/// attach clients via `SCM_RIGHTS` on demand (see
+/// [`Request::GetNamespaceFds`]) so clients can `setns` directly
+/// without needing to resolve the daemon's PID — a resolution that
+/// breaks across sibling PID namespaces.
+pub struct NamespaceFds {
+    pub user: OwnedFd,
+    pub mnt: OwnedFd,
+}
+/// Shared state used by the control server and every request handler.
+///
+/// Groups the per-daemon registries, process table, middleware chain,
+/// and namespace fds so that the server loop and dispatch path don't
+/// thread a half-dozen `Arc`s through every function signature.
+pub struct Handlers {
+    pub registry: Arc<ScriptRegistry>,
+    pub activation: Arc<ActivationContext>,
+    pub processes: ProcessTable,
+    pub control_commands: Arc<ControlRegistry>,
+    pub chain: Arc<Chain>,
+    pub ns_fds: Arc<NamespaceFds>,
 }
 
-/// Current visibility rule state returned by `SetVisibility` responses.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VisibilityRules {
-    /// Per-PID explicit overrides (only registered processes).
-    pub pid_rules: Vec<PidVisibility>,
-    /// Dynamic name-based rules set at runtime.
-    pub name_rules: Vec<NameVisibility>,
-}
-
-/// Visibility override for a specific PID.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PidVisibility {
-    pub pid: i32,
-    pub command: String,
-    pub visibility: ProcessVisibility,
-}
-
-/// Visibility rule for a process comm name.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NameVisibility {
-    pub name: String,
-    pub visibility: ProcessVisibility,
+impl Handlers {
+    /// Build a fresh set of handlers with an empty process table.
+    pub fn new(
+        registry: Arc<ScriptRegistry>,
+        activation: Arc<ActivationContext>,
+        control_commands: Arc<ControlRegistry>,
+        chain: Arc<Chain>,
+        ns_fds: Arc<NamespaceFds>,
+    ) -> Self {
+        Self {
+            registry,
+            activation,
+            processes: Arc::new(Mutex::new(Vec::new())),
+            control_commands,
+            chain,
+            ns_fds,
+        }
+    }
 }
 
 /// Handle to a running control server. Joins the IPC thread and removes the socket on drop.
@@ -177,25 +197,13 @@ impl Drop for Server {
     }
 }
 
-/// Shared state for tracking attached processes.
-///
-/// A `Mutex<Vec<AttachedProcess>>` shared between the server loop thread
-/// and request handlers. Entries are added on `Register`, removed on
-/// `Unregister`, and pruned of dead PIDs on `ListProcesses`.
-type ProcessTable = Arc<Mutex<Vec<AttachedProcess>>>;
-
 /// Start the control server on the given socket path.
 ///
 /// Removes any stale socket file, binds a new `UnixListener`, and spawns
 /// the `control-ipc` thread running [`server_loop`]. Shutdown is coordinated
 /// via a pipe — dropping the returned [`Server`] closes the write end,
 /// which triggers `POLLHUP` in the server loop and causes it to exit.
-pub fn start_server(
-    socket_path: &Path,
-    registry: Arc<ScriptRegistry>,
-    ctx: Arc<ActivationContext>,
-    visibility: Arc<VisibilityMap>,
-) -> Result<Server> {
+pub fn start_server(socket_path: &Path, handlers: Handlers) -> Result<Server> {
     if socket_path.exists() {
         fs::remove_file(socket_path)
             .wrap_err_with(|| format!("removing stale control socket: {}", socket_path.display()))?;
@@ -208,21 +216,12 @@ pub fn start_server(
 
     let (shutdown_rd, shutdown_wr) = pipe_with(PipeFlags::CLOEXEC).wrap_err("creating control server shutdown pipe")?;
 
-    let processes: ProcessTable = Arc::new(Mutex::new(Vec::new()));
     let path_for_thread = socket_path.to_path_buf();
 
     let handle = thread::Builder::new()
         .name("control-ipc".into())
         .spawn(move || {
-            server_loop(
-                &path_for_thread,
-                &listener,
-                &shutdown_rd,
-                &registry,
-                &ctx,
-                &processes,
-                &visibility,
-            );
+            server_loop(&path_for_thread, &listener, &shutdown_rd, &handlers);
         })
         .wrap_err("spawning control IPC thread")?;
 
@@ -238,16 +237,7 @@ pub fn start_server(
 /// Blocks in `poll()` on both the listener and a shutdown pipe. When the
 /// write end of the pipe is dropped (by [`Server::drop`]), `POLLHUP` wakes
 /// the poll and the loop exits cleanly.
-#[allow(clippy::too_many_arguments)]
-fn server_loop(
-    path: &Path,
-    listener: &UnixListener,
-    shutdown: &OwnedFd,
-    registry: &ScriptRegistry,
-    activation: &ActivationContext,
-    processes: &ProcessTable,
-    visibility: &VisibilityMap,
-) {
+fn server_loop(path: &Path, listener: &UnixListener, shutdown: &OwnedFd, handlers: &Handlers) {
     let listener_fd = listener.as_fd();
     loop {
         let mut fds = [
@@ -274,7 +264,7 @@ fn server_loop(
         }
         match listener.accept() {
             Ok((stream, _addr)) =>
-                if let Err(e) = handle_connection(&stream, registry, activation, processes, visibility) {
+                if let Err(e) = handle_connection(&stream, handlers) {
                     warn!(error = format!("{e:#}"), "control request failed");
                 },
             Err(e) => {
@@ -294,52 +284,69 @@ fn write_response(stream: &UnixStream, response: &Response) -> Result<()> {
 }
 
 /// Read a single JSON request from a stream, dispatch it, and write the response.
-fn handle_connection(
-    stream: &UnixStream,
-    registry: &ScriptRegistry,
-    activation: &ActivationContext,
-    processes: &ProcessTable,
-    visibility: &VisibilityMap,
-) -> Result<()> {
+///
+/// Two-phase deserialization: first try core [`Request`] variants, then fall
+/// back to plugin commands via the [`ControlRegistry`].
+fn handle_connection(stream: &UnixStream, handlers: &Handlers) -> Result<()> {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     reader.read_line(&mut line).wrap_err("reading request")?;
 
-    let req = match serde_json::from_str::<Request>(&line) {
-        Ok(req) => req,
-        Err(e) => {
-            write_response(stream, &Response::Error {
-                message: format!("{e:#}"),
-            })
-            .wrap_err("writing error response")?;
-            return Err(e).wrap_err("parsing request");
+    // Phase 1: try core request variants.
+    let response = if let Ok(req) = serde_json::from_str::<Request>(&line) {
+        // `GetNamespaceFds` needs direct stream access to send fds via
+        // SCM_RIGHTS ancillary, so it bypasses the `Response` return path.
+        if matches!(req, Request::GetNamespaceFds) {
+            return send_namespace_fds(stream, &handlers.ns_fds);
+        }
+        dispatch(req, handlers)
+    } else {
+        // Phase 2: extract `type` field and dispatch to plugin handlers.
+        let raw: serde_json::Value = serde_json::from_str(&line).map_err(|e| eyre!("{e:#}"))?;
+        let Some(command_type) = raw.get("type").and_then(|t| t.as_str().map(str::to_owned)) else {
+            return write_response(stream, &Response::Error {
+                message: "missing \"type\" field".into(),
+            });
+        };
+        let ctrl_ctx = ControlContext {
+            activation: &handlers.activation,
+            processes: &handlers.processes,
+        };
+        match handlers.control_commands.dispatch(&command_type, raw, &ctrl_ctx) {
+            Some(payload) => Response::Plugin { payload },
+            None => Response::Error {
+                message: format!("unknown command: {command_type}"),
+            },
         }
     };
-    write_response(stream, &dispatch(req, registry, activation, processes, visibility))
+    write_response(stream, &response)
 }
 
-/// Route a control request to the appropriate handler.
-fn dispatch(
-    req: Request,
-    registry: &ScriptRegistry,
-    activation: &ActivationContext,
-    processes: &ProcessTable,
-    visibility: &VisibilityMap,
-) -> Response {
+/// Route a core control request to the appropriate handler.
+fn dispatch(req: Request, handlers: &Handlers) -> Response {
     match req {
-        Request::Exec { address, stdin } => handle_exec(&address, &stdin, registry, activation),
-        Request::Register { pid, command } => handle_register(pid, command, processes),
-        Request::Unregister { pid } => handle_unregister(pid, processes),
-        Request::SetVisibility {
-            target,
-            visibility: vis,
-        } => handle_set_visibility(target, vis, processes, visibility),
-        Request::ListProcesses => handle_list(processes),
+        Request::Exec { address, stdin } => handle_exec(
+            &address,
+            &stdin,
+            &handlers.registry,
+            &handlers.activation,
+            &handlers.chain,
+        ),
+        Request::Register { pid, command } => handle_register(pid, command, &handlers.processes),
+        Request::Unregister { pid } => handle_unregister(pid, &handlers.processes),
+        Request::ListProcesses => handle_list(&handlers.processes),
+        Request::GetNamespaceFds => unreachable!("GetNamespaceFds is intercepted in handle_connection"),
     }
 }
 
 /// Decode base64 stdin, execute the addressed script, and return the result.
-fn handle_exec(address: &str, stdin_b64: &str, registry: &ScriptRegistry, activation: &ActivationContext) -> Response {
+fn handle_exec(
+    address: &str,
+    stdin_b64: &str,
+    registry: &ScriptRegistry,
+    activation: &ActivationContext,
+    chain: &Chain,
+) -> Response {
     let stdin = match BASE64.decode(stdin_b64) {
         Ok(bytes) => bytes,
         Err(e) => {
@@ -352,7 +359,7 @@ fn handle_exec(address: &str, stdin_b64: &str, registry: &ScriptRegistry, activa
     let payload = String::from_utf8_lossy(&stdin);
     trace!(target: "wire", address, %payload, "exec request");
 
-    let ctx = ScriptContext::new(activation);
+    let ctx = ScriptContext::new(activation, chain);
     match registry.exec(address, &ctx, &stdin) {
         Ok(stdout) => {
             let response = String::from_utf8_lossy(&stdout);
@@ -390,79 +397,6 @@ fn handle_unregister(pid: i32, processes: &ProcessTable) -> Response {
     Response::Unregistered
 }
 
-/// Set or query visibility rules for a PID or process name.
-///
-/// Three target modes:
-/// - `Pid { pid }` — set visibility for a specific registered PID (errors if
-///   the PID is not in the process table)
-/// - `Name { name }` — set a name-based rule matching process comm names
-/// - `Query {}` — return current rules without modifying anything
-///
-/// Always returns the full visibility rules snapshot in the response.
-fn handle_set_visibility(
-    target: VisibilityTarget,
-    vis: ProcessVisibility,
-    processes: &ProcessTable,
-    map: &VisibilityMap,
-) -> Response {
-    match target {
-        VisibilityTarget::Pid { pid } => {
-            if !processes.lock().iter().any(|p| p.pid == pid) {
-                return Response::Error {
-                    message: format!(
-                        "PID {pid} is not a registered process (use ListProcesses to see registered PIDs)"
-                    ),
-                };
-            }
-            map.set_pid(pid.cast_unsigned(), vis);
-            debug!(pid, %vis, "process visibility set");
-        }
-        VisibilityTarget::Name { name } => {
-            debug!(name = %name, %vis, "name visibility rule set");
-            map.set_name_rule(&name, vis);
-        }
-        VisibilityTarget::Query {} => {
-            debug!("visibility rules queried");
-        }
-    }
-
-    Response::Visibility {
-        rules: build_visibility_rules(processes, map),
-    }
-}
-
-/// Snapshot all active visibility rules (per-PID and per-name) into a response struct.
-///
-/// Joins the process table with the visibility map's explicit PID entries
-/// to produce per-PID rules (only includes PIDs that have an explicit
-/// override). Name-based rules are collected separately from the map's
-/// dynamic name rules. The result is a complete snapshot suitable for
-/// the `Visibility` response variant.
-fn build_visibility_rules(processes: &ProcessTable, map: &VisibilityMap) -> VisibilityRules {
-    let table = processes.lock();
-    let pid_entries: HashMap<u32, _> = map.explicit_pid_entries().into_iter().collect();
-
-    let pid_rules = table
-        .iter()
-        .filter_map(|proc| {
-            let &vis = pid_entries.get(&proc.pid.cast_unsigned())?;
-            Some(PidVisibility {
-                pid: proc.pid,
-                command: proc.command.clone(),
-                visibility: vis,
-            })
-        })
-        .collect();
-
-    let name_rules = map
-        .dynamic_name_rules()
-        .into_iter()
-        .map(|(name, visibility)| NameVisibility { name, visibility })
-        .collect();
-
-    VisibilityRules { pid_rules, name_rules }
-}
-
 /// Return all attached processes, pruning dead PIDs in the process.
 ///
 /// Opportunistically removes entries for PIDs that no longer exist
@@ -474,6 +408,28 @@ fn handle_list(processes: &ProcessTable) -> Response {
     table.retain(|p| state::is_pid_alive(p.pid));
     Response::Processes { list: table.clone() }
 }
+/// Send the daemon's namespace fds over the control socket via `SCM_RIGHTS`.
+///
+/// Writes a `Response::NamespaceFds` JSON line as the normal payload,
+/// with the two fds (user first, mnt second) attached as ancillary
+/// data. The client receives both atomically via `recvmsg`.
+fn send_namespace_fds(stream: &UnixStream, ns_fds: &NamespaceFds) -> Result<()> {
+    let response = serde_json::to_string(&Response::NamespaceFds).wrap_err("serializing NamespaceFds response")?;
+    let mut payload = response.into_bytes();
+    payload.push(b'\n');
+
+    let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(2))];
+    let mut control = SendAncillaryBuffer::new(&mut space);
+    let fds = [ns_fds.user.as_fd(), ns_fds.mnt.as_fd()];
+    ensure!(
+        control.push(SendAncillaryMessage::ScmRights(&fds)),
+        "pushing ScmRights onto ancillary buffer"
+    );
+
+    let iov = [IoSlice::new(&payload)];
+    sendmsg(stream, &iov, &mut control, SendFlags::empty()).wrap_err("sendmsg for NamespaceFds")?;
+    Ok(())
+}
 
 /// Send a control request and receive the response.
 ///
@@ -481,7 +437,10 @@ fn handle_list(processes: &ProcessTable) -> Response {
 /// request as newline-delimited JSON, shuts down the write half (signaling
 /// end of request), and reads back a single JSON response line. Each
 /// request uses a fresh connection — no persistent state between calls.
-pub fn send_request(socket_path: &Path, req: &Request) -> Result<Response> {
+///
+/// Accepts any `Serialize` type — core [`Request`] variants and plugin
+/// command payloads both work.
+pub fn send_request(socket_path: &Path, req: &impl Serialize) -> Result<Response> {
     let mut stream = UnixStream::connect(socket_path)
         .wrap_err_with(|| format!("connecting to control socket: {}", socket_path.display()))?;
 
@@ -494,6 +453,53 @@ pub fn send_request(socket_path: &Path, req: &Request) -> Result<Response> {
     reader.read_line(&mut line).wrap_err("reading response")?;
 
     serde_json::from_str(&line).wrap_err("parsing response")
+}
+/// Request the daemon's namespace fds and receive them via `SCM_RIGHTS`.
+///
+/// The daemon opens `/proc/self/ns/{user,mnt}` at startup and holds
+/// the fds for the lifetime of the server. This function connects to
+/// the control socket, sends [`Request::GetNamespaceFds`], and pulls
+/// the two fds out of the ancillary buffer on the response.
+///
+/// The caller can `setns` directly from the returned [`NamespaceFds`]
+/// without needing to resolve the daemon's PID.
+pub fn recv_namespace_fds(socket_path: &Path) -> Result<NamespaceFds> {
+    let mut stream = UnixStream::connect(socket_path)
+        .wrap_err_with(|| format!("connecting to control socket: {}", socket_path.display()))?;
+
+    serde_json::to_writer(&mut stream, &Request::GetNamespaceFds).wrap_err("writing request")?;
+    stream.write_all(b"\n")?;
+    stream.shutdown(Shutdown::Write)?;
+
+    let mut iov_buf = [0u8; 256];
+    let mut iov = [IoSliceMut::new(&mut iov_buf)];
+    let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(2))];
+    let mut control = RecvAncillaryBuffer::new(&mut space);
+    let received = recvmsg(&stream, &mut iov, &mut control, RecvFlags::empty()).wrap_err("recvmsg for NamespaceFds")?;
+
+    let response_bytes = iov_buf.get(..received.bytes).ok_or_else(|| {
+        eyre!(
+            "recvmsg reported {} bytes, buffer only holds {}",
+            received.bytes,
+            iov_buf.len()
+        )
+    })?;
+    let response_text = from_utf8(response_bytes).wrap_err("response not UTF-8")?;
+    let response: Response = serde_json::from_str(response_text.trim_end()).wrap_err("parsing response")?;
+    ensure!(
+        matches!(response, Response::NamespaceFds),
+        "expected NamespaceFds response, got {response:?}"
+    );
+
+    let mut fds: Vec<OwnedFd> = Vec::with_capacity(2);
+    for msg in control.drain() {
+        if let RecvAncillaryMessage::ScmRights(iter) = msg {
+            fds.extend(iter);
+        }
+    }
+    let [user, mnt] =
+        <[OwnedFd; 2]>::try_from(fds).map_err(|fds| eyre!("expected 2 fds in ancillary, got {}", fds.len()))?;
+    Ok(NamespaceFds { user, mnt })
 }
 
 /// Execute a script via the control socket. Returns stdout bytes.

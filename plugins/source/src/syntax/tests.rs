@@ -1,22 +1,25 @@
+use std::path::PathBuf;
+
 use nyne::text::slugify_unbounded;
 use rstest::{fixture, rstest};
 
-use super::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, Fragment, FragmentKind, SymbolKind};
-use crate::test_support::{registry, vfs};
+use super::fragment::{DecomposedFile, Fragment, FragmentKind, SymbolKind};
+use super::fragment_vfs_name;
+use crate::test_support::registry;
 
 /// Decompose source into fragments.
 fn decompose(ext: &str, source: &str) -> DecomposedFile {
     let reg = registry();
     let d = reg.get(ext).unwrap();
-    let (result, _tree) = d.decompose(source, DEFAULT_MAX_DEPTH);
+    let (result, _tree) = d.decompose(source, 5);
     result
 }
 
-/// Decompose source and apply fs_name mapping.
+/// Decompose source and apply `fs_name` mapping.
 fn decompose_mapped(ext: &str, source: &str) -> Vec<Fragment> {
     let reg = registry();
     let d = reg.get(ext).unwrap();
-    let (mut result, _tree) = d.decompose(source, DEFAULT_MAX_DEPTH);
+    let (mut result, _tree) = d.decompose(source, 5);
     d.map_to_fs(&mut result);
     result
 }
@@ -170,7 +173,7 @@ fn markdown_fs_mapping_slugified() {
     insta::assert_debug_snapshot!(frags);
 }
 
-/// Verifies that a trait impl is named as TraitName_for_TypeName.
+/// Verifies that a trait impl is named as `TraitName_for_TypeName`.
 #[test]
 fn rust_trait_impl_naming() {
     let source =
@@ -191,9 +194,9 @@ fn rust_imports_extracted() {
 /// duplicate the next section's heading.
 ///
 /// The read path in `resolve_fragment_dir` uses `full_span.end` directly for
-/// `SpliceMode::Line` languages (including markdown). Previously it used
-/// `line_end_of(full_span.end)`, which extended past the section boundary
-/// into the next heading — causing duplicate headers on round-trip writes.
+/// `SpliceMode::Line` languages (including markdown). Using `line_end_of(full_span.end)`
+/// would extend past the section boundary into the next heading — causing
+/// duplicate headers on round-trip writes.
 #[test]
 fn markdown_section_body_roundtrip_does_not_duplicate_next_heading() {
     use crate::edit::splice::{line_start_of, splice_content};
@@ -279,15 +282,15 @@ fn markdown_fixture_all_sections_roundtrip_without_duplication() {
         let file_path = dir.path().join("test.md");
         std::fs::write(&file_path, fixture).unwrap();
 
-        let fs = nyne::types::OsFs::new(dir.path().to_path_buf());
-        let vfs_path = vfs("test.md");
+        let fs = nyne::router::fs::os::OsFilesystem::new(dir.path());
+        let vfs_path = PathBuf::from("test.md");
 
         let body_start = line_start_of(fixture, section.full_span().start);
         let body_end = section.full_span().end;
         let read_body = &fixture[body_start..body_end];
 
         splice_validate_write(&fs, &vfs_path, body_start..body_end, read_body, |spliced| {
-            let (re_decomposed, _tree) = decomposer.decompose(spliced, DEFAULT_MAX_DEPTH);
+            let (re_decomposed, _tree) = decomposer.decompose(spliced, 5);
             if re_decomposed.is_empty() && !result.is_empty() {
                 return Err("re-decomposition lost all fragments".into());
             }
@@ -367,7 +370,7 @@ fn rust_doc_comment_extracted() {
     assert_eq!(doc.as_deref(), Some("Does a thing."));
 }
 
-/// Verifies that a doc comment extends the full_span to include lines before the fn keyword.
+/// Verifies that a doc comment extends the `full_span` to include lines before the fn keyword.
 #[test]
 fn rust_doc_comment_range_extends_fragment() {
     let source = "/// Doc line.\npub fn documented() {}\n";
@@ -566,7 +569,7 @@ fn doc_and_decorator_ranges_are_disjoint(#[case] ext: &str, #[case] source: &str
 
 // Group 8: Line range symlink tests (byte_and_line_ranges_match)
 
-/// Verifies that line_range and byte_range produce consistent SymbolLineRange values.
+/// Verifies that `line_range` and `byte_range` produce consistent `SymbolLineRange` values.
 #[rstest]
 #[case::rust_top_level("rs", "fn foo() {}\n")]
 #[case::rust_doc_comment("rs", "/// Documented.\nfn foo() {}\n")]
@@ -577,7 +580,7 @@ fn doc_and_decorator_ranges_are_disjoint(#[case] ext: &str, #[case] source: &str
 #[case::python_docstring("py", "def greet():\n    \"\"\"Say hello.\"\"\"\n    pass\n")]
 #[case::typescript_jsdoc("ts", "/** Does a thing. */\nfunction doThing() {}\n")]
 fn byte_and_line_ranges_match(#[case] ext: &str, #[case] source: &str) {
-    use nyne::types::SymbolLineRange;
+    use nyne::SymbolLineRange;
 
     let result = decompose(ext, source);
 
@@ -606,7 +609,7 @@ fn byte_and_line_ranges_match(#[case] ext: &str, #[case] source: &str) {
 /// Verifies that a decorator byte range converts to the correct line range.
 #[test]
 fn decorator_byte_range_to_line_range() {
-    use nyne::types::SymbolLineRange;
+    use nyne::SymbolLineRange;
 
     let source = "/// Doc.\n#[derive(Debug)]\npub struct Foo;\n";
     let result = decompose("rs", source);
@@ -620,7 +623,7 @@ fn decorator_byte_range_to_line_range() {
 /// Verifies that an import span line range matches its byte range conversion.
 #[test]
 fn import_span_line_range_matches_byte_range() {
-    use nyne::types::SymbolLineRange;
+    use nyne::SymbolLineRange;
 
     let source = "use std::io;\nuse std::fmt;\n\nfn foo() {}\n";
     let result = decompose("rs", source);
@@ -634,28 +637,27 @@ fn import_span_line_range_matches_byte_range() {
     );
 }
 
-/// Verifies that SymbolLineRange Display round-trips through parse_slice_suffix.
+/// Verifies that `SymbolLineRange` Display round-trips through `parse_slice_suffix`.
 #[test]
 fn lines_suffix_roundtrips_through_parse() {
-    use nyne::types::SymbolLineRange;
-    use nyne::types::slice::parse_slice_suffix;
+    use nyne::{SymbolLineRange, parse_slice_suffix};
 
     let range = SymbolLineRange { start: 5, end: 10 };
     let suffix = range.to_string();
     let (base, spec) = parse_slice_suffix(&suffix).expect("should parse");
     assert_eq!(base, "lines");
-    assert_eq!(spec, nyne::types::slice::SliceSpec::Range(5, 10));
+    assert_eq!(spec, nyne::SliceSpec::Range(5, 10));
 
     let single = SymbolLineRange { start: 3, end: 3 };
     let suffix = single.to_string();
     let (base, spec) = parse_slice_suffix(&suffix).expect("should parse");
     assert_eq!(base, "lines");
-    assert_eq!(spec, nyne::types::slice::SliceSpec::Single(3));
+    assert_eq!(spec, nyne::SliceSpec::Single(3));
 }
 
 // full_span tests (unique assertions per test)
 
-/// Verifies that a bare symbol without doc or decorator has full_span equal to byte_range.
+/// Verifies that a bare symbol without doc or decorator has `full_span` equal to `byte_range`.
 #[test]
 fn full_span_bare_symbol_matches_byte_range() {
     let result = decompose("rs", "fn bare() {}\n");
@@ -667,7 +669,7 @@ fn full_span_bare_symbol_matches_byte_range() {
     );
 }
 
-/// Verifies that full_span includes a Rust attribute but byte_range starts after it.
+/// Verifies that `full_span` includes a Rust attribute but `byte_range` starts after it.
 #[test]
 fn full_span_rust_decorator_only() {
     let result = decompose("rs", "#[derive(Debug)]\npub struct Foo;\n");
@@ -677,7 +679,7 @@ fn full_span_rust_decorator_only() {
     assert_eq!(frag.full_span().end, frag.byte_range.end, "ends should match");
 }
 
-/// Verifies that full_span includes both doc comment and attribute for a Rust symbol.
+/// Verifies that `full_span` includes both doc comment and attribute for a Rust symbol.
 #[test]
 fn full_span_rust_decorator_and_doc_comment() {
     let result = decompose("rs", "/// Documented.\n#[derive(Debug)]\npub struct Foo;\n");
@@ -687,7 +689,7 @@ fn full_span_rust_decorator_and_doc_comment() {
     assert_eq!(frag.full_span().end, frag.byte_range.end);
 }
 
-/// Verifies that full_span includes the decorator for a Python class with a docstring.
+/// Verifies that `full_span` includes the decorator for a Python class with a docstring.
 #[test]
 fn full_span_python_decorated_class_with_docstring() {
     let result = decompose("py", "@dataclass\nclass Bar:\n    \"\"\"A bar.\"\"\"\n    x: int = 0\n");
@@ -697,7 +699,7 @@ fn full_span_python_decorated_class_with_docstring() {
     assert_eq!(frag.full_span().end, frag.byte_range.end);
 }
 
-/// Verifies that full_span includes a JSDoc comment for a TypeScript function.
+/// Verifies that `full_span` includes a `JSDoc` comment for a TypeScript function.
 #[test]
 fn full_span_typescript_jsdoc() {
     let result = decompose("ts", "/** Documented. */\nfunction greet() {}\n");
@@ -707,7 +709,7 @@ fn full_span_typescript_jsdoc() {
     assert_eq!(frag.full_span().end, frag.byte_range.end);
 }
 
-/// Verifies that full_span ranges of adjacent Python classes do not overlap.
+/// Verifies that `full_span` ranges of adjacent Python classes do not overlap.
 #[test]
 fn full_span_python_multi_symbol_delete_scenario() {
     let source = "\
@@ -744,54 +746,33 @@ class Second:
 
 // Strip / wrap doc comment tests
 
-/// Verifies that strip_doc_comment and wrap_doc_comment round-trip for Rust doc comments.
+#[rstest]
+#[case::rust("rs", "/// Hello\n/// World", "Hello\nWorld")]
+#[case::python("py", "\"\"\"Hello world.\"\"\"", "Hello world.")]
+#[case::typescript("ts", "/**\n * Hello\n * World\n */", "Hello\nWorld")]
+fn strip_doc_comment(#[case] ext: &str, #[case] input: &str, #[case] expected: &str) {
+    let stripped = registry().get(ext).unwrap().strip_doc_comment(input);
+    assert_eq!(stripped, expected);
+}
+
+/// Verifies that `wrap_doc_comment` round-trips with strip for Rust doc comments.
 #[test]
-fn rust_strip_and_wrap_doc_comment() {
+fn rust_wrap_doc_comment_roundtrip() {
     let reg = registry();
     let d = reg.get("rs").unwrap();
-    let stripped = d.strip_doc_comment("/// Hello\n/// World");
-    assert_eq!(stripped, "Hello\nWorld");
     let wrapped = d.wrap_doc_comment("Hello\nWorld", "    ");
     assert!(wrapped.starts_with("/// Hello"));
     assert!(wrapped.contains("    /// World"));
 }
 
-/// Verifies that strip_doc_comment removes triple-quote wrappers from Python docstrings.
-#[test]
-fn python_strip_doc_comment_triple_quotes() {
-    let stripped = registry()
-        .get("py")
-        .unwrap()
-        .strip_doc_comment("\"\"\"Hello world.\"\"\"");
-    assert_eq!(stripped, "Hello world.");
-}
-
-/// Verifies that strip_doc_comment removes JSDoc markers from TypeScript comments.
-#[test]
-fn typescript_strip_jsdoc() {
-    let stripped = registry()
-        .get("ts")
-        .unwrap()
-        .strip_doc_comment("/**\n * Hello\n * World\n */");
-    assert_eq!(stripped, "Hello\nWorld");
-}
-
 // Visibility
 
-/// Verifies that visibility is extracted from a Rust pub(crate) function.
-#[test]
-fn rust_visibility_extracted() {
-    let result = decompose("rs", "pub(crate) fn internal() {}\n");
-    let visibility = &result[0].visibility;
-    assert_eq!(visibility.as_deref(), Some("pub(crate)"));
-}
-
-/// Verifies that visibility is extracted as "export" for a TypeScript function.
-#[test]
-fn typescript_exported_visibility() {
-    let result = decompose("ts", "export function greet() {}\n");
-    let visibility = &result[0].visibility;
-    assert_eq!(visibility.as_deref(), Some("export"));
+#[rstest]
+#[case::rust_pub_crate("rs", "pub(crate) fn internal() {}\n", Some("pub(crate)"))]
+#[case::typescript_export("ts", "export function greet() {}\n", Some("export"))]
+fn visibility_extracted(#[case] ext: &str, #[case] source: &str, #[case] expected: Option<&str>) {
+    let result = decompose(ext, source);
+    assert_eq!(result[0].visibility.as_deref(), expected);
 }
 
 // Docstring splice round-trip
@@ -851,7 +832,7 @@ fn typescript_decorator_on_class() {
 
 // FS mapping / conflict resolution
 
-/// Verifies that fs_name mapping preserves function names as-is for Rust.
+/// Verifies that `fs_name` mapping preserves function names as-is for Rust.
 #[test]
 fn identity_fs_mapping() {
     let frags = decompose_mapped("rs", "fn alpha() {}\nfn beta() {}\n");
@@ -859,7 +840,7 @@ fn identity_fs_mapping() {
     assert_eq!(frags[1].fs_name.as_deref(), Some("beta"));
 }
 
-/// Verifies that structural fragments (imports, docstrings, decorators) have no fs_name.
+/// Verifies that structural fragments (imports, docstrings, decorators) have no `fs_name`.
 #[test]
 fn structural_fragments_have_no_fs_name() {
     let source = "//! Module doc.\nuse std::io;\n\n/// Documented.\n#[derive(Debug)]\npub struct Foo;\n";
@@ -961,51 +942,34 @@ fn slugify_basic() {
 
 // Validation
 
-/// Verifies that valid Rust source passes validation.
-#[test]
-fn validate_valid_source() {
-    assert!(registry().get("rs").unwrap().validate("fn foo() {}\n").is_ok());
+#[rstest]
+#[case::valid("fn foo() {}\n", true)]
+#[case::invalid("fn foo( {}\n", false)]
+fn validate_source(#[case] source: &str, #[case] should_pass: bool) {
+    assert_eq!(registry().get("rs").unwrap().validate(source).is_ok(), should_pass);
 }
 
-/// Verifies that invalid Rust source fails validation.
-#[test]
-fn validate_invalid_source() {
-    assert!(registry().get("rs").unwrap().validate("fn foo( {}\n").is_err());
+#[rstest]
+#[case::heading_with_newline("# Heading\n", true)]
+#[case::heading_without_newline("# Heading", false)]
+#[case::multi_section("# A\n\nText.\n\n## B\n\nMore.\n", true)]
+fn validate_markdown(#[case] source: &str, #[case] should_pass: bool) {
+    let reg = registry();
+    assert_eq!(reg.get("md").unwrap().validate(source).is_ok(), should_pass);
 }
 
 // extract_symbol
 
-/// Verifies that extract_symbol finds a top-level function by name.
-#[test]
-fn extract_symbol_top_level() {
+#[rstest]
+#[case::top_level("fn hello() {}\n\nfn world() { 42 }\n", "rs", &["world"], Some("fn world() { 42 }"))]
+#[case::nested("impl Foo {\n    fn bar() {}\n    fn baz() {}\n}\n", "rs", &["Foo", "baz"], Some("fn baz() {}"))]
+#[case::missing("fn hello() {}\n", "rs", &["nonexistent"], None)]
+#[case::unknown_ext("some content", "xyz", &["foo"], None)]
+fn extract_symbol(#[case] source: &str, #[case] ext: &str, #[case] path: &[&str], #[case] expected: Option<&str>) {
     let reg = registry();
-    let source = "fn hello() {}\n\nfn world() { 42 }\n";
-    let result = reg.extract_symbol(source, "rs", &["world".into()]);
-    assert_eq!(result.as_deref(), Some("fn world() { 42 }"));
-}
-
-/// Verifies that extract_symbol finds a nested method inside an impl block.
-#[test]
-fn extract_symbol_nested() {
-    let reg = registry();
-    let source = "impl Foo {\n    fn bar() {}\n    fn baz() {}\n}\n";
-    let body = reg.extract_symbol(source, "rs", &["Foo".into(), "baz".into()]).unwrap();
-    assert_eq!(body.trim(), "fn baz() {}");
-}
-
-/// Verifies that extract_symbol returns None for a missing symbol name.
-#[test]
-fn extract_symbol_missing_returns_none() {
-    let reg = registry();
-    let source = "fn hello() {}\n";
-    assert!(reg.extract_symbol(source, "rs", &["nonexistent".into()]).is_none());
-}
-
-/// Verifies that extract_symbol returns None for an unknown file extension.
-#[test]
-fn extract_symbol_unknown_ext_returns_none() {
-    let reg = registry();
-    assert!(reg.extract_symbol("some content", "xyz", &["foo".into()]).is_none());
+    let path: Vec<String> = path.iter().map(|s| (*s).into()).collect();
+    let result = reg.extract_symbol(source, ext, &path, 5);
+    assert_eq!(result.as_deref().map(str::trim), expected);
 }
 
 // Registry compound lookup
@@ -1019,18 +983,11 @@ fn registry_compound_lookup_returns_decomposer() {
     assert!(reg.get_compound("rs", "j2").is_some(), "missing compound rs+j2");
 }
 
-/// Verifies that compound lookup returns None for an unknown inner extension.
-#[test]
-fn registry_compound_unknown_inner_returns_none() {
-    let reg = registry();
-    assert!(reg.get_compound("xyz", "j2").is_none());
-}
-
-/// Verifies that compound lookup returns None for an unknown outer extension.
-#[test]
-fn registry_compound_unknown_outer_returns_none() {
-    let reg = registry();
-    assert!(reg.get_compound("rs", "gz").is_none());
+#[rstest]
+#[case::unknown_inner("xyz", "j2")]
+#[case::unknown_outer("rs", "gz")]
+fn registry_compound_unknown_returns_none(#[case] inner: &str, #[case] outer: &str) {
+    assert!(registry().get_compound(inner, outer).is_none());
 }
 
 /// Verifies that simple extension lookups still work when compound decomposers are registered.
@@ -1051,34 +1008,12 @@ fn registry_has_all_j2_compounds() {
     }
 }
 
-/// Verifies that decomposer_for finds a decomposer for a simple file extension.
-#[test]
-fn decomposer_for_simple_extension() {
-    let reg = registry();
-    let path = vfs("src/main.rs");
-    assert!(
-        reg.decomposer_for(&path).is_some(),
-        "decomposer_for should find simple .rs decomposer"
-    );
-}
-
-/// Verifies that decomposer_for finds a compound decomposer for a .j2 file.
-#[test]
-fn decomposer_for_compound_j2_extension() {
-    let reg = registry();
-    let path = vfs("templates/page.md.j2");
-    assert!(
-        reg.decomposer_for(&path).is_some(),
-        "decomposer_for should find compound .md.j2 decomposer"
-    );
-}
-
-/// Verifies that decomposer_for returns None for an unknown file extension.
-#[test]
-fn decomposer_for_unknown_extension_returns_none() {
-    let reg = registry();
-    let path = vfs("data/file.xyz");
-    assert!(reg.decomposer_for(&path).is_none());
+#[rstest]
+#[case::simple_extension("src/main.rs", true)]
+#[case::compound_j2("templates/page.md.j2", true)]
+#[case::unknown_extension("data/file.xyz", false)]
+fn decomposer_for_resolves(#[case] path: &str, #[case] expected: bool) {
+    assert_eq!(registry().decomposer_for(&PathBuf::from(path)).is_some(), expected);
 }
 
 /// Verifies that compound j2 decomposers produce fragments from Jinja2 content.
@@ -1088,11 +1023,11 @@ fn decomposer_for_unknown_extension_returns_none() {
 #[case::py_j2("scripts/build.py.j2")]
 fn decomposer_for_compound_decomposes_j2_content(#[case] path_str: &str) {
     let reg = registry();
-    let path = vfs(path_str);
+    let path = PathBuf::from(path_str);
     let decomposer = reg.decomposer_for(&path).expect("compound decomposer should exist");
 
     let source = "{% block content %}\nHello\n{% endblock %}";
-    let (result, _tree) = decomposer.decompose(source, DEFAULT_MAX_DEPTH);
+    let (result, _tree) = decomposer.decompose(source, 5);
     assert!(
         !result.is_empty(),
         "compound decomposer for {path_str} should produce fragments"
@@ -1111,7 +1046,7 @@ fn alpha_beta_fragments() -> (Vec<Fragment>, String) {
 
 /// Source: `struct Foo {} / impl Foo { fn bar() {} } / impl Foo { fn baz() {} }`
 ///
-/// Two inherent impl blocks trigger KindSuffix conflict: `Foo~Impl` appears
+/// Two inherent impl blocks trigger `KindSuffix` conflict: `Foo~Impl` appears
 /// twice → non-unique → conflict resolution hides both impls (`fs_name = None`).
 ///
 /// Lines (0-based): 0=struct, 2=impl#1, 3=bar, 6=impl#2, 7=baz
@@ -1128,7 +1063,7 @@ fn nameless_impl_fragments() -> (Vec<Fragment>, String) {
     (frags, src.to_owned())
 }
 
-/// Verifies that find_nearest_fragment_at_line returns the closest fragment for a given line.
+/// Verifies that `find_nearest_fragment_at_line` returns the closest fragment for a given line.
 #[rstest]
 #[case::exact_match(2, &["alpha"])]
 #[case::gap_before_first_symbol(0, &["alpha"])]
@@ -1144,13 +1079,13 @@ fn nearest_fragment_at_line(
     assert_eq!(path.as_deref(), Some(expected.as_slice()));
 }
 
-/// Verifies that find_nearest_fragment_at_line returns None for empty fragment lists.
+/// Verifies that `find_nearest_fragment_at_line` returns None for empty fragment lists.
 #[test]
 fn nearest_fragment_at_line_empty_fragments_returns_none() {
     assert_eq!(super::find_nearest_fragment_at_line(&[], 5, ""), None);
 }
 
-/// Verifies that find_fragment_at_line resolves a child inside a nameless impl parent.
+/// Verifies that `find_fragment_at_line` resolves a child inside a nameless impl parent.
 #[rstest]
 fn fragment_at_line_inside_nameless_parent(nameless_impl_fragments: (Vec<Fragment>, String)) {
     let (frags, source) = nameless_impl_fragments;
@@ -1159,7 +1094,7 @@ fn fragment_at_line_inside_nameless_parent(nameless_impl_fragments: (Vec<Fragmen
     assert_eq!(path.as_deref(), Some(&["bar".to_owned()][..]));
 }
 
-/// Verifies that find_nearest_fragment_at_line resolves children of nameless impl parents.
+/// Verifies that `find_nearest_fragment_at_line` resolves children of nameless impl parents.
 #[rstest]
 #[case::exact_child(3, &["bar"])]
 #[case::gap_in_nameless_parent(2, &["bar"])]
@@ -1178,7 +1113,7 @@ fn nearest_fragment_at_line_nameless_parent(
 
 /// Property-based tests verifying decomposition invariants across generated source code.
 mod proptest_invariants {
-    use nyne::types::SymbolLineRange;
+    use nyne::SymbolLineRange;
     use proptest::prelude::*;
 
     use super::*;
@@ -1348,5 +1283,13 @@ mod proptest_invariants {
         fn typescript_decomposition_invariants(source in typescript_functions_strategy()) {
             check_fragment_invariants(&source, &decompose("ts", &source));
         }
+    }
+    #[rstest]
+    #[case::single(&["Foo"], "Foo")]
+    #[case::nested(&["Foo", "bar"], "Foo@/bar")]
+    #[case::deep(&["Impl", "method", "inner"], "Impl@/method@/inner")]
+    fn fragment_vfs_name_joins_with_companion_separator(#[case] segments: &[&str], #[case] expected: &str) {
+        let companion = nyne_companion::Companion::new(None, "@".into());
+        assert_eq!(fragment_vfs_name(&companion, segments), expected);
     }
 }

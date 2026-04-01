@@ -12,8 +12,10 @@ name = "nyne_claude"
 [dependencies]
 nyne.workspace = true
 nyne-analysis = { workspace = true, optional = true }
+nyne-companion.workspace = true
 nyne-source.workspace = true
-nyne-lsp.workspace = true
+nyne-visibility.workspace = true
+nyne-lsp = { workspace = true, optional = true }
 nyne-git.workspace = true
 
 color-eyre.workspace = true
@@ -22,7 +24,6 @@ filetime.workspace = true
 jiff.workspace = true
 linkme.workspace = true
 minijinja.workspace = true
-nyne-macros.workspace = true
 owo-colors.workspace = true
 palette.workspace = true
 serde.workspace = true
@@ -37,8 +38,9 @@ insta.workspace = true
 rstest.workspace = true
 
 [features]
-default = ["analysis"]
+default = ["analysis", "lsp"]
 analysis = ["dep:nyne-analysis"]
+lsp = ["dep:nyne-lsp"]
 
 [lints]
 workspace = true

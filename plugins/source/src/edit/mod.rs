@@ -7,11 +7,11 @@
 //! preview them as unified diffs, and apply them atomically with tree-sitter
 //! validation.
 
-/// The [`DiffAction`] trait for nodes that preview as a diff and apply on delete.
-pub mod diff_action;
-
 /// Edit planning and resolution for multi-operation file edits.
 pub mod plan;
 
 /// Content splicing with validation.
 pub mod splice;
+
+/// Batch edit staging and application.
+pub mod staging;

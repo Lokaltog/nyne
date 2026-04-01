@@ -1,0 +1,11 @@
+# {{ dirname }}/
+{% if files %}
+
+| File | Language | Lines | Description |
+|-|-|-|-|
+{% for f in files %}| {{ f.name }} | {{ f.language }} | {{ f.lines }} | {{ f.description }} |
+{% endfor %}
+{% else %}
+
+_No parseable source files._
+{% endif %}

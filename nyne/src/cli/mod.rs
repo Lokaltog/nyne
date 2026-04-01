@@ -82,6 +82,35 @@ pub enum Command {
     /// Show the effective configuration with all defaults resolved.
     Config(ConfigArgs),
 }
+/// Result of running a CLI subcommand.
+///
+/// Most commands complete with `Ok` (success). Interactive commands like
+/// `Attach` and `Exec` produce an exit code that the binary propagates
+/// via [`std::process::exit`].
+pub enum ExitAction {
+    /// The command completed successfully.
+    Ok,
+    /// The command completed with an explicit exit code.
+    Exit(i32),
+}
+
+impl Command {
+    /// Dispatch to the appropriate subcommand handler.
+    ///
+    /// Replaces the manual match in `main()` so that adding a new command
+    /// only requires a variant here and a match arm in this method — the
+    /// binary entry point never changes.
+    pub fn run(&self) -> Result<ExitAction> {
+        match self {
+            Self::Mount(args) => mount::run(args).map(|()| ExitAction::Ok),
+            Self::Attach(args) => attach::run(args).map(ExitAction::Exit),
+            Self::List(args) => list::run(args).map(|()| ExitAction::Ok),
+            Self::Exec(args) => exec::run(args).map(ExitAction::Exit),
+            Self::Ctl(args) => ctl::run(args).map(|()| ExitAction::Ok),
+            Self::Config(args) => config::run(args).map(|()| ExitAction::Ok),
+        }
+    }
+}
 
 /// Common arguments for commands that target a running session.
 ///

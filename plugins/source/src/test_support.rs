@@ -1,4 +1,4 @@
-//! Test helpers for nyne-coding.
+//! Test helpers for nyne-source.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,15 +11,7 @@ use crate::syntax::SyntaxRegistry;
 /// the registry type directly.
 pub fn registry() -> SyntaxRegistry { SyntaxRegistry::build() }
 
-/// Build a [`VfsPath`] from a string, panicking on invalid paths.
-///
-/// Convenience wrapper that avoids `unwrap()` noise in test assertions
-/// while still failing loudly on bad input.
-pub fn vfs(path: &str) -> nyne::types::vfs_path::VfsPath {
-    nyne::types::vfs_path::VfsPath::new(path).expect("invalid test path")
-}
-
-/// Load a test fixture file relative to `nyne-coding/src/`.
+/// Load a test fixture file relative to `nyne-source/src/`.
 ///
 /// Resolves `src/{module}/fixtures/{name}` using `CARGO_MANIFEST_DIR` so
 /// fixtures work regardless of the working directory. Panics with a
@@ -33,32 +25,32 @@ pub fn load_fixture(module: &str, name: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to load fixture {}: {e}", path.display()))
 }
 
-/// Create a stub `ActivationContext` for testing.
+/// Create a source-plugin-flavored stub `ActivationContext` for testing.
 ///
-/// Inserts a [`Services`] bundle with default config and a real syntax
-/// registry. This mirrors production activation so tests exercise the same
-/// code paths.
-pub fn stub_activation_context() -> Arc<nyne::dispatch::activation::ActivationContext> {
-    use nyne::dispatch::activation::ActivationContext;
+/// Unlike [`nyne::test_support::stub_activation_context`] (minimal, uses `StubFs`),
+/// this version uses `OsFilesystem` and inserts `Arc<SyntaxRegistry>` and
+/// `DecompositionCache`, mirroring production activation so tests exercise the
+/// same code paths.
+pub fn stub_activation_context() -> Arc<nyne::ActivationContext> {
+    use nyne::ActivationContext;
     use nyne::process::Spawner;
-    use nyne::types::OsFs;
 
-    use crate::config::Config;
-    use crate::plugin::Services;
     use crate::syntax::decomposed::DecompositionCache;
 
     let tmp = std::env::temp_dir().join("nyne-source-test");
     let config = Arc::new(nyne::config::NyneConfig::default());
-    let real_fs: Arc<dyn nyne::types::RealFs> = Arc::new(OsFs::new(tmp.clone()));
-    let spawner = Arc::new(Spawner::new());
-    let mut ctx = ActivationContext::new(tmp.clone(), tmp.clone(), tmp.clone(), real_fs.clone(), config, spawner);
+    let fs: Arc<dyn nyne::router::Filesystem> = Arc::new(nyne::router::fs::os::OsFilesystem::new(&tmp));
+    let mut ctx = ActivationContext::new(
+        tmp.clone(),
+        tmp.clone(),
+        tmp,
+        Arc::clone(&fs),
+        config,
+        Arc::new(Spawner::new()),
+    );
 
-    let source_config = Config::default();
     let syntax = Arc::new(registry());
-    ctx.insert(Services {
-        decomposition: DecompositionCache::new(real_fs, Arc::clone(&syntax)),
-        syntax,
-        config: source_config,
-    });
+    ctx.insert(DecompositionCache::new(Arc::clone(&fs), Arc::clone(&syntax), 5));
+    ctx.insert(syntax);
     Arc::new(ctx)
 }

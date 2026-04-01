@@ -1,0 +1,31 @@
+[package]
+name = "nyne-plugin-cache"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "nyne_cache"
+
+[dependencies]
+nyne.workspace = true
+nyne-companion.workspace = true
+
+color-eyre.workspace = true
+linkme.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+color-eyre.workspace = true
+nyne-companion.workspace = true
+nyne-fs.workspace = true
+nyne-slice.workspace = true
+nyne-visibility.workspace = true
+rstest.workspace = true
+similar-asserts.workspace = true
+
+[lints]
+workspace = true

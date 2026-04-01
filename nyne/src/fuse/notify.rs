@@ -14,13 +14,14 @@
 //! stale cache entries expire via TTL and get re-resolved on next access.
 
 use std::ffi::OsStr;
+use std::path::Path;
 use std::sync::mpsc;
 use std::thread::Builder;
 
 use fuser::{INodeNo, Notifier};
 use tracing::{trace, warn};
 
-use crate::dispatch::invalidation::KernelNotifier;
+use crate::fuse::inode_map::InodeMap;
 
 /// [`KernelNotifier`] backed by a `fuser::Notifier`.
 ///
@@ -125,5 +126,41 @@ impl KernelNotifier for AsyncNotifier {
         }) {
             trace!(target: "nyne::fuse", parent_inode, name, "notification queue full, dropping inval_entry");
         }
+    }
+}
+
+/// Notifies the kernel to invalidate its page/dentry caches.
+///
+/// This trait abstracts `fuser::Notifier` so the dispatch layer remains
+/// independent of the FUSE crate. The FUSE layer implements it with a
+/// real `Notifier`; tests can use a no-op or recording implementation.
+///
+/// All methods are best-effort — errors are logged but never propagated.
+pub trait KernelNotifier: Send + Sync {
+    /// Invalidate the kernel's cached attributes and data for an inode.
+    fn inval_inode(&self, inode: u64);
+
+    /// Invalidate a directory entry (name) within a parent inode.
+    fn inval_entry(&self, parent_inode: u64, name: &str);
+}
+
+/// Invalidate the kernel page/dentry cache for a file by path.
+///
+/// Looks up the inode for the given path and invalidates both the inode's
+/// cached page data and its parent directory entry. Best-effort — silently
+/// skips paths that have no allocated inode.
+pub fn invalidate_inode_at(path: &Path, notifier: &dyn KernelNotifier, inodes: &InodeMap) {
+    let dir = path.parent().unwrap_or_else(|| Path::new(""));
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return;
+    };
+    if let Some(ino) = inodes.find_inode(dir, name) {
+        notifier.inval_inode(ino);
+    }
+    if let Some(parent_ino) = inodes.find_inode(
+        dir.parent().unwrap_or_else(|| Path::new("")),
+        &dir.file_name().map(|n| n.to_string_lossy()).unwrap_or_default(),
+    ) {
+        notifier.inval_entry(parent_ino, name);
     }
 }

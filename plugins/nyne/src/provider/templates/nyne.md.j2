@@ -1,0 +1,17 @@
+# nyne
+
+| Property | Value |
+|-|-|
+| **Source (host)** | `{{ host_root }}` |
+| **Source (mount)** | `{{ source_dir }}` |
+| **State** | mounted |
+| **Languages** | {{ languages }} |
+| **Uptime** | {{ uptime }} |
+
+## Middleware Chain (dispatch order)
+
+| # | Provider | Plugin |
+|-|-|-|
+{% for row in chain %}
+| {{ row.position }} | {{ row.provider }} | {{ row.plugin }} |
+{% endfor %}

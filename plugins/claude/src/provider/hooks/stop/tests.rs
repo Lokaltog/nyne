@@ -22,7 +22,7 @@ fn is_ignored_extension_cases(#[case] path: &str, #[case] expected: bool) {
     assert_eq!(is_ignored_extension(path, &ignore_list()), expected);
 }
 
-/// Build a minimal transcript line containing an assistant Edit/Write tool_use.
+/// Build a minimal transcript line containing an assistant Edit/Write `tool_use`.
 fn tool_use_line(tool: &str, file_path: &str) -> String {
     serde_json::json!({
         "type": "assistant",

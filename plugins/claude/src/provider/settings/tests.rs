@@ -41,7 +41,7 @@ fn preserves_existing_keys() {
     assert!(result.get("hooks").is_some());
 }
 
-/// Tests that injected hooks append to existing SessionStart entries.
+/// Tests that injected hooks append to existing `SessionStart` entries.
 #[test]
 fn appends_to_existing_session_start_hooks() {
     let base = json!({
@@ -138,7 +138,7 @@ fn hook_command_uses_jq_envelope() {
     assert!(cmd.contains("additionalContext"), "command includes additionalContext");
 }
 
-/// Tests that PostToolUse injection does not interfere with SessionStart hooks.
+/// Tests that `PostToolUse` injection does not interfere with `SessionStart` hooks.
 #[test]
 fn post_tool_use_does_not_interfere_with_session_start() {
     let base = json!({

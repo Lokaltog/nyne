@@ -50,7 +50,7 @@ Code analysis hints:
 {% endfor %}
 {% endif %}
 {% endfor %}
-Address all hints unless fixing them is non-trivial (e.g. requires a larger refactor). Briefly note what you fixed.
+Address all hints. If a fix requires a larger refactor, flag it to the user instead of silently skipping it.
 {% endif %}
 {% if diagnostics %}
 LSP diagnostics ({{ diagnostics|length }}):

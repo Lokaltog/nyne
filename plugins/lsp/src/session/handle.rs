@@ -1,5 +1,4 @@
-// Provider-facing LSP handle — bridges ActivationContext into cached LSP queries.
-//
+// Provider-facing LSP handle — bridges LSP manager into cached LSP queries.
 // Two levels:
 //   `Handle`    — file-level: manager + real path + ext (shared across symbols)
 //   `SymbolQuery`  — symbol-level: handle + pre-computed LSP position (per fragment)
@@ -14,15 +13,14 @@
 //! single symbol position, enabling position-sensitive LSP features (hover,
 //! references, rename, etc.).
 //!
-//! These handles are lightweight and clone-friendly -- multiple `VirtualNode`
+//! These handles are lightweight and clone-friendly -- multiple node
 //! readables for the same symbol share cloned `SymbolQuery` instances.
-
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crop::Rope;
 use lsp_types::Position;
-use nyne::prelude::*;
 
 use super::client::Client;
 use super::manager::Manager;
@@ -59,14 +57,14 @@ impl Handle {
     /// document is opened in the LSP server (`textDocument/didOpen`) —
     /// accessing a companion directory is the semantic equivalent of
     /// "opening" the file in an editor.
-    pub(crate) fn for_file(ctx: &ActivationContext, source_file: &VfsPath) -> Option<Arc<Self>> {
-        let ext = source_file.extension()?;
-        let lsp = Arc::clone(ctx.get::<Arc<Manager>>()?);
+    pub(crate) fn for_file(lsp: &Arc<Manager>, source_file: &Path) -> Option<Arc<Self>> {
+        let ext = source_file.extension().and_then(|e| e.to_str())?;
+        let lsp = Arc::clone(lsp);
 
         let client = lsp.client_for_ext(ext)?;
-        // Use overlay_root — LSP servers run as daemon children and see
-        // the overlay merged path, not the FUSE mount.
-        let lsp_file = ctx.overlay_root().join(source_file.as_str());
+        // LSP servers run as daemon children and see the backing
+        // filesystem path, not the FUSE mount.
+        let lsp_file = lsp.path_resolver().source_root().join(source_file);
 
         // Ensure the document is opened in the LSP server. This is
         // idempotent — only the first call per file sends the notification.
@@ -101,13 +99,13 @@ impl Handle {
     /// Returns `None` if the server has become unavailable since resolve time.
     pub(crate) fn file_query(&self) -> Option<FileQuery<'_>> { self.manager.file_query(&self.lsp_file, &self.ext) }
 
-    /// The overlay-rooted file path used for LSP requests.
+    /// The source-rooted file path used for LSP requests.
     pub(crate) fn lsp_file(&self) -> &Path { &self.lsp_file }
 
     /// The LSP client for this file's language server.
     pub(crate) fn client(&self) -> &Client { &self.client }
 
-    /// Path resolver for rewriting LSP URIs from FUSE paths to overlay paths.
+    /// Path resolver for rewriting LSP URIs from FUSE paths to source paths.
     pub(crate) fn path_resolver(&self) -> &super::path::PathResolver { self.manager.path_resolver() }
 }
 
@@ -115,7 +113,7 @@ impl Handle {
 ///
 /// Created by [`Handle::at`] with a byte offset that is converted to an
 /// LSP `Position`. Clone-friendly (`Arc<Handle>` inside) for embedding
-/// in multiple `VirtualNode` readables (e.g., `REFERENCES.md` and `DOC.md`
+/// in multiple node readables (e.g., `REFERENCES.md` and `DOC.md`
 /// for the same symbol share a cloned `SymbolQuery`).
 #[derive(Clone)]
 pub struct SymbolQuery {

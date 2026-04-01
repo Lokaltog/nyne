@@ -9,7 +9,8 @@ mod render;
 mod tests;
 
 use color_eyre::eyre::Result;
-use nyne::dispatch::script::{Script, ScriptContext};
+use nyne::{Script, ScriptContext};
+use nyne_git::GitContextExt as _;
 
 /// Statusline script implementation.
 ///
@@ -24,9 +25,11 @@ impl Script for Statusline {
     /// Parse the statusline JSON payload and render ANSI output.
     fn exec(&self, ctx: &ScriptContext<'_>, stdin: &[u8]) -> Result<Vec<u8>> {
         let payload: payload::StatuslinePayload = serde_json::from_slice(stdin)?;
+        let activation = ctx.activation();
         let render_ctx = render::Context {
             payload: &payload,
-            activation: ctx.activation(),
+            root: activation.root(),
+            repo: activation.git_repo(),
         };
         Ok(render::render(&render_ctx).into_bytes())
     }

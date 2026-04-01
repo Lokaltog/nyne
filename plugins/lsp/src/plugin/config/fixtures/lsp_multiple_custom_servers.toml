@@ -1,0 +1,9 @@
+[lsp.servers.ruff]
+command = "ruff"
+args = ["server"]
+extensions = ["py"]
+
+[lsp.servers.deno]
+command = "deno"
+args = ["lsp"]
+extensions = ["ts", "tsx"]

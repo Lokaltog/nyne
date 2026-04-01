@@ -1,18 +1,10 @@
-## Discipline: Four Mandatory Behaviors
-
-### Token-Budget Awareness
-
-Never read raw source files. Always start with `OVERVIEW.md` to see symbol names and token estimates, then read only what you need.
-
-- Read the symbol body.{{ ext }} directly
-- **Multiple symbols:** use Bash brace expansion: `cat file.{{ ext }}@/symbols/{A,B,C}@/body.{{ ext }}`
-- **Imports only:** `Read file.{{ ext }}@/symbols/imports.{{ ext }}` (~95% savings vs full file)
+## Discipline: Mandatory Behaviors
 
 ### Blast-Radius Discipline
 
 **Before modifying any symbol**, read its impact files:
 
-```sh
+```bash
 cat file.{{ ext }}@/symbols/Foo@/CALLERS.md      # who calls this — will they break?
 cat file.{{ ext }}@/symbols/Foo@/REFERENCES.md   # all usage sites
 cat file.{{ ext }}@/symbols/Foo@/DEPS.md         # what does this call?
@@ -20,38 +12,17 @@ cat file.{{ ext }}@/symbols/Foo@/DEPS.md         # what does this call?
 
 Never modify a function signature, rename a symbol, or delete code without first understanding who depends on it. One read each — they include inline code context.
 
----
-
-## Advanced Reading
-
-**Default to the Read tool** for all single-path `@/` reads. Use Bash `cat` only for batch reads (brace expansion) and shell pipelines.
-
 ### Filter by Kind
 
-```sh
+```bash
 ls file.{{ ext }}@/symbols/by-kind/fn/       # all functions
 ls file.{{ ext }}@/symbols/by-kind/struct/   # all structs
 ls file.{{ ext }}@/symbols/by-kind/impl/     # all impl blocks
 ```
 
-### Batch Reads
+## Code Relationships
 
-```sh
-cat file.{{ ext }}@/symbols/{Foo,Bar,Baz}@/body.{{ ext }}    # multiple symbols at once
-```
-
-### Hover Documentation and Hints
-
-```sh
-cat file.{{ ext }}@/symbols/Foo@/DOC.md      # hover docs and type info
-cat file.{{ ext }}@/symbols/Foo@/HINTS.md    # inlay hints (inferred types)
-```
-
----
-
-## Code Relationships (LSP-Powered)
-
-**Use these instead of Grep for relationship queries.**
+**Read these sources instead of Grep for relationship queries.**
 
 | What | Path | Use case |
 |-|-|-|
@@ -62,94 +33,23 @@ cat file.{{ ext }}@/symbols/Foo@/HINTS.md    # inlay hints (inferred types)
 | Declaration | `Foo@/DECLARATION.md` | Where a symbol is declared |
 | Implementations | `Foo@/IMPLEMENTATION.md` | All concrete impls of a trait |
 
-### Symlink Traversal
+## Efficient Editing
 
-Each relationship has a symlink directory (`callers/`, `deps/`, `references/`).
-Follow symlinks to traverse the codebase without resolving file paths:
+```bash
+echo 'use std::collections::HashMap;' >>file.{{ ext }}@/symbols/imports.{{ ext }} # add an import
 
-```sh
-# Read a caller's body — no need to know which file it lives in
-cat file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}
-
-# Edit a caller directly through the symlink
-Edit file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}
-
-# Check actions available on a caller
-ls file.{{ ext }}@/symbols/process@/callers/init/actions/
-
-# Chain traversal: Foo → callers → bar → deps
-cat file.{{ ext }}@/symbols/Foo@/callers/bar/deps/baz.{{ ext }}
-```
-
----
-
-## Advanced Editing
-
-### Imports, Signatures, Decorators
-
-```sh
-echo 'use std::collections::HashMap;' >>file.{{ ext }}@/symbols/imports.{{ ext }}
 echo 'fn process(input: &str, opts: Options) -> Result<()>' \
-    >file.{{ ext }}@/symbols/process@/signature.{{ ext }}
-echo '#[instrument]' >>file.{{ ext }}@/symbols/process@/decorators.{{ ext }}
+    >file.{{ ext }}@/symbols/process@/signature.{{ ext }} # change signature
+echo '#[instrument]' >>file.{{ ext }}@/symbols/process@/decorators.{{ ext }} # add a decorator/attribute
+
+rmdir file.{{ ext }}@/symbols/old_helper@/ # splices entire symbol out from source
 ```
 
-### Delete a Symbol or Line Range
-
-```sh
-rmdir file.{{ ext }}@/symbols/old_helper@/    # splices out from source
-rm file.{{ ext }}@/symbols/old_helper.{{ ext }}  # shorthand — same effect
-rm file.{{ ext }}@/lines:10-20                # delete a line range
-```
-
----
-
-## Advanced Batch Editing
-
-### Append as Last Child (impl blocks, modules)
-
-```sh
-echo 'fn method() { ... }' >file.{{ ext }}@/symbols/MyImpl@/edit/append
-```
-
-### Review Before Applying
-
-```sh
-ls file.{{ ext }}@/symbols/Foo@/edit/staged/               # list staged actions
-cat file.{{ ext }}@/symbols/Foo@/edit/staged/10-replace.diff  # preview one
-rm file.{{ ext }}@/symbols/Foo@/edit/staged/10-replace.diff   # remove one without applying
-cat @/edit/staged.diff                                       # global preview (all files)
-```
-
-Cross-file batch edits: stage in multiple files, apply with `rm @/edit/staged.diff`.
-
----
-
-## Advanced Refactoring
-
-### Interface Change Workflow
-
-When changing a function signature (highest-value workflow):
-
-1. **Read callers** (mandatory): `Read file.{{ ext }}@/symbols/process@/CALLERS.md`
-2. **Read the function**: `Read file.{{ ext }}@/symbols/process.{{ ext }}`
-3. **Write new signature**: `echo '...' > file.{{ ext }}@/symbols/process@/signature.{{ ext }}`
-4. **Check for auto-fixes**: `ls file.{{ ext }}@/symbols/process@/actions/`
-5. **Apply fixes**: `cat file.{{ ext }}@/symbols/process@/actions/*.diff | patch -p1`
-6. **Fix remaining callers** via symlinks: `Edit file.{{ ext }}@/symbols/process@/callers/init.{{ ext }}`
-
-**~6 tool calls vs ~24 without nyne. ~1000 tokens vs ~34,000.**
-
-### Extract a Function
-
-1. Read source: `Read file.{{ ext }}@/symbols/process.{{ ext }}`
-2. Stage new function: `echo 'fn extracted() { ... }' >file.{{ ext }}@/symbols/process@/edit/insert-after`
-3. Stage call replacement: `echo 'fn process() { extracted() }' >file.{{ ext }}@/symbols/process@/edit/replace`
-4. Preview and apply: `cat @/edit/staged.diff` then `rm @/edit/staged.diff`
+## Refactoring
 
 ### Code Actions
 
-```sh
+```bash
 ls file.{{ ext }}@/symbols/Foo@/actions/                    # list available fixes
 cat file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff        # preview
 patch -p1 < file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff   # apply
@@ -157,60 +57,6 @@ patch -p1 < file.{{ ext }}@/symbols/Foo@/actions/10-fix.diff   # apply
 # Apply all actions for a symbol
 cat file.{{ ext }}@/symbols/Foo@/actions/*.diff | patch -p1
 ```
-
----
-
-## Git Integration
-
-### File-Level
-
-```sh
-cat file.{{ ext }}@/git/LOG.md              # commit log
-cat file.{{ ext }}@/git/LOG.md:-10          # last 10 commits
-cat file.{{ ext }}@/git/BLAME.md            # per-line authorship
-cat file.{{ ext }}@/git/BLAME.md:42-55      # blame for line range
-cat file.{{ ext }}@/git/CONTRIBUTORS.md     # contributors ranked
-cat file.{{ ext }}@/diff/HEAD.diff          # uncommitted changes
-cat file.{{ ext }}@/diff/main.diff          # diff against any branch
-```
-
-### Symbol-Level (Scoped to Symbol's Line Range)
-
-```sh
-cat file.{{ ext }}@/symbols/Foo@/git/LOG.md     # commits touching this symbol only
-cat file.{{ ext }}@/symbols/Foo@/git/BLAME.md   # blame within the symbol
-```
-
-### Repository-Level
-
-```sh
-cat @/git/STATUS.md              # working tree status
-ls @/git/branches/               # branch listing
-mv @/git/branches/old @/git/branches/new   # rename a branch
-```
-
-### Cross-Branch Comparison
-
-```sh
-diff <(cat @/git/branches/main/src/lib.{{ ext }}@/symbols/process@/body.{{ ext }}) \
-     <(cat @/git/branches/feature/src/lib.{{ ext }}@/symbols/process@/body.{{ ext }})
-```
-
----
-
-## Markdown Documents
-
-Markdown files decompose at headers into navigable sections:
-
-```sh
-cat doc.md@/symbols/OVERVIEW.md                    # section listing
-cat doc.md@/symbols/20-getting-started.md          # read one section
-cat doc.md@/symbols/20-getting-started/code/10.{{ ext }}   # extracted code block
-```
-
-Code blocks are extracted as editable files with extensions from the fence language tag.
-
----
 
 ## Anti-Patterns
 
@@ -228,15 +74,3 @@ Code blocks are extracted as editable files with extensions from the fence langu
 | `Bash(cat file@/OVERVIEW.md)` for single reads | Use the **Read tool** — it's the default for all single-path `@/` reads |
 | Guessing path variations on `ENOENT` | `ls symbols/` or `OVERVIEW.md` to find the current name |
 | Sequential direct writes to 2+ symbols | Batch edit staging — atomic, validated |
-
----
-
-## Error Codes
-
-| Error | Meaning | Action |
-|-|-|-|
-| `EINVAL` | Invalid input | Fix content: bad syntax, invalid UTF-8, stale target |
-| `ENOTSUP` | Not supported | No decomposer for this language — edit source directly |
-| `EIO` | System failure | Retry once; if persistent, report |
-| `EACCES` | Permission denied | File is read-only |
-| `ENOENT` | Not found | Re-read `OVERVIEW.md` or `ls symbols/` — the name may have changed after a write |

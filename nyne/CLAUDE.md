@@ -6,23 +6,16 @@ Core library — all plugin crates depend on this. Module structure is discovera
 
 Modules may only import from their own tier or lower.
 
-- **Tier 0 — Foundation** (no crate imports): `types/`, `text/`, `config/`, `session/`, `process/`
-- **Tier 1 — Domain Knowledge** (imports Tier 0 + dispatch interface types†): `node/`, `edit/`
-- **Tier 2 — Contracts & Infrastructure** (imports Tiers 0-1): `provider/`, `templates/`
-- **Tier 3 — Orchestration** (imports any lower tier): `dispatch/`, `fuse/`, `watcher/`, `sandbox/`, `providers/`, `cli/`
+- **Tier 0 — Foundation**: `types/`, `text/`, `config/`, `session/`, `process/`, `procfs/`, `json/`, `path_utils`, `toml_merge/`
+- **Tier 1 — Infrastructure**: `router/`
+- **Tier 2 — Domain**: `err/`
+- **Tier 3 — Contracts** (imports lower tiers): `plugin/`, `prelude/`, `templates/`
+- **Tier 4 — Orchestration** (imports any lower tier): `dispatch/`, `fuse/`, `watcher/`, `sandbox/`, `cli/`
 
-† `ActivationContext` and `RequestContext` are interface types used in trait signatures across all tiers.
+Within-tier imports are allowed and encouraged when they enable code sharing — the constraint is strictly on tier ordering, not isolation.
 
-## dispatch/ — Interface vs Implementation
+## Core ↛ Plugin Invariant
 
-**Interface submodules** (imported freely): `activation`, `context`, `invalidation`, `resolver`, `script`, `write_mode`, `routing/`
+nyne core must have ZERO knowledge of plugin concepts. No plugin-specific types, imports, or logic in `nyne/src/`. The request state map is for plugins to talk to each other.
 
-**Implementation submodules** (dispatch-internal only): `router/`, `cache/`, `content_cache`, `pipeline`, `mutation`, `resolve`, `inode`, `events`, `path_filter`, `registry`, `script_registry`
-
-## Submodule Access
-
-Prefer re-exports from `mod.rs`. Reaching into implementation submodules of another module is a layering violation.
-
-## CLI Output
-
-All CLI terminal output goes through `cli::output` — the SSOT for terminal access. Import `Term`, `style`, and `term()` from `super::output`, never use `println!` or import `console::` directly in CLI modules.
+All state types must impl `Clone + Send + Sync` (required for cache state snapshotting).

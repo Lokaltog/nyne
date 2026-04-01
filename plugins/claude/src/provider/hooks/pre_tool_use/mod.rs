@@ -4,20 +4,20 @@
 //! which dispatches to per-mode partials in `templates/pre-tool-use/`.
 //! This module computes derived fields and picks the mode.
 
-use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
 
-use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::prelude::*;
+use nyne::router::Filesystem;
 use nyne::templates::TemplateEngine;
-use nyne_source::Services;
-use nyne_source::syntax::find_fragment_at_line;
-use nyne_source::syntax::fragment::Fragment;
-use nyne_source::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, fragment_list};
+use nyne::{ActivationContext, Script, ScriptContext};
+use nyne_source::{
+    Fragment, SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC, SourceContextExt as _, find_fragment_at_line,
+    fragment_list,
+};
 use serde::Serialize;
 
-use crate::config::PreToolHookConfig;
+use crate::plugin::config::PreToolHookConfig;
 use crate::provider::hook_schema::{
     EditToolInput, GrepToolInput, HookInput, HookOutput, ReadToolInput, WriteToolInput,
 };
@@ -54,27 +54,19 @@ enum PreToolMode {
 /// raw access. For Grep, detects symbol-search patterns and suggests LSP
 /// alternatives like `CALLERS.md` or `REFERENCES.md`.
 pub(in crate::provider) struct PreToolUse {
-    engine: Arc<TemplateEngine>,
-    config: PreToolHookConfig,
+    pub(in crate::provider) engine: Arc<TemplateEngine>,
+    pub(in crate::provider) config: PreToolHookConfig,
 }
 
-/// Constructor for [`PreToolUse`].
-impl PreToolUse {
-    /// Create a new pre-tool-use hook with registered templates.
-    pub fn new(config: &PreToolHookConfig) -> Self {
-        let mut b = super::hook_builder();
-        b.register_partial(SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC);
-        b.register_partial(PARTIAL_DENY, include_str!("../templates/pre-tool-use/deny.md.j2"));
-        b.register_partial(PARTIAL_HINT, include_str!("../templates/pre-tool-use/hint.md.j2"));
-        b.register_partial(PARTIAL_GREP, include_str!("../templates/pre-tool-use/grep.md.j2"));
-        b.register(TMPL_PRE, include_str!("../templates/pre-tool-use.md.j2"));
-        Self {
-            engine: b.finish(),
-            config: config.clone(),
-        }
-    }
+pub(in crate::provider) fn build_engine() -> Arc<TemplateEngine> {
+    let mut b = super::hook_builder();
+    b.register_partial(SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC);
+    b.register_partial(PARTIAL_DENY, include_str!("../templates/pre-tool-use/deny.md.j2"));
+    b.register_partial(PARTIAL_HINT, include_str!("../templates/pre-tool-use/hint.md.j2"));
+    b.register_partial(PARTIAL_GREP, include_str!("../templates/pre-tool-use/grep.md.j2"));
+    b.register(TMPL_PRE, include_str!("../templates/pre-tool-use.md.j2"));
+    b.finish()
 }
-
 /// [`Script`] implementation for [`PreToolUse`].
 impl Script for PreToolUse {
     /// Parse hook input and dispatch to the appropriate handler.
@@ -134,21 +126,21 @@ impl PreToolUse {
             return HookOutput::empty();
         };
 
-        // Only intercept paths under the mount root, skip @/ virtual paths.
+        // Only intercept paths under the mount root, skip VFS companion paths.
         let activation = ctx.activation();
         let root_prefix = activation.root_prefix();
         let Some(rel) = file_path.strip_prefix(root_prefix) else {
             return HookOutput::empty();
         };
-        if super::is_vfs_path(&file_path) {
+        if super::resolve_companion(ctx.chain(), root_prefix, &file_path).is_some() {
             return HookOutput::empty();
         }
 
         // Only intercept files that have symbol decomposition.
-        let Ok(vfs_path) = VfsPath::new(rel) else {
+        let Some(cache) = activation.decomposition_cache() else {
             return HookOutput::empty();
         };
-        let Ok(decomposed) = Services::get(activation).decomposition.get(&vfs_path) else {
+        let Ok(decomposed) = cache.get(Path::new(rel)) else {
             return HookOutput::empty();
         };
         if decomposed.decomposed.is_empty() {
@@ -156,11 +148,11 @@ impl PreToolUse {
         }
 
         // Within grace period → pass through silently.
-        let overlay = activation.overlay_root();
-        if is_within_grace(overlay, rel) {
+        let fs = activation.fs();
+        if is_within_grace(fs.as_ref(), rel) {
             return HookOutput::empty();
         }
-        stamp_atime(overlay, rel);
+        stamp_atime(activation, rel);
 
         // Resolve per-filetype policy.
         let policy = self.config.resolve(decomposed.decomposer.language_name());
@@ -177,7 +169,7 @@ impl PreToolUse {
             }
             "Edit" => edit_input
                 .and_then(|e| e.old_string)
-                .and_then(|old| find_line_of_string(overlay, rel, &old))
+                .and_then(|old| find_line_of_string(fs.as_ref(), rel, &old))
                 .and_then(|line| {
                     let line = usize::try_from(line).unwrap_or(usize::MAX);
                     resolve_symbol_at_line(&decomposed.decomposed, line.saturating_sub(1), &decomposed.source)
@@ -285,28 +277,24 @@ fn extract_first_identifier(pattern: &str) -> Option<String> {
 /// [`stamp_atime`]. Subsequent accesses within [`RAW_FILE_GRACE_SECS`]
 /// are allowed through without a hint/deny, preventing an annoying
 /// loop when the agent retries immediately after being redirected.
-fn is_within_grace(overlay_root: &Path, rel: &str) -> bool {
-    let real_path = overlay_root.join(rel);
-    let Ok(meta) = fs::metadata(&real_path) else {
+fn is_within_grace(fs: &dyn Filesystem, rel: &str) -> bool {
+    let Ok(meta) = fs.metadata(Path::new(rel)) else {
         return false;
     };
-    let Ok(atime) = meta.accessed() else {
-        return false;
-    };
-    let Ok(elapsed) = SystemTime::now().duration_since(atime) else {
+    let Ok(elapsed) = SystemTime::now().duration_since(meta.timestamps.atime) else {
         return false;
     };
     elapsed.as_secs() < RAW_FILE_GRACE_SECS
 }
 
 /// Stamp atime to suppress re-triggering within the grace period.
-fn stamp_atime(overlay_root: &Path, rel: &str) {
-    let _ = filetime::set_file_atime(overlay_root.join(rel), filetime::FileTime::now());
+fn stamp_atime(activation: &ActivationContext, rel: &str) {
+    let _ = filetime::set_file_atime(activation.source_path(rel), filetime::FileTime::now());
 }
 
 /// Find the 1-based line number of the first occurrence of `needle` in a file.
-fn find_line_of_string(overlay_root: &Path, rel: &str, needle: &str) -> Option<u64> {
-    let content = fs::read_to_string(overlay_root.join(rel)).ok()?;
+fn find_line_of_string(fs: &dyn Filesystem, rel: &str, needle: &str) -> Option<u64> {
+    let content = String::from_utf8(fs.read_file(Path::new(rel)).ok()?).ok()?;
     let first_line = needle.lines().next()?;
     content
         .lines()
@@ -314,9 +302,14 @@ fn find_line_of_string(overlay_root: &Path, rel: &str, needle: &str) -> Option<u
         .and_then(|i| u64::try_from(i + 1).ok())
 }
 
-/// Resolve a 0-based line number to a VFS symbol `fs_name` path.
+/// Resolve a 0-based line number to a symbol name path.
+///
+/// Returns fragment path segments joined with `/` (e.g., `Foo/bar`).
+/// TODO: use `SourceContext` from pipeline state once available to build
+/// companion-suffixed VFS display paths.
 fn resolve_symbol_at_line(fragments: &[Fragment], line: usize, source: &str) -> Option<String> {
-    Some(find_fragment_at_line(fragments, line, source)?.join(nyne::VFS_SEPARATOR))
+    Some(find_fragment_at_line(fragments, line, source)?.join("/"))
 }
+
 #[cfg(test)]
 mod tests;

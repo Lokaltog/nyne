@@ -11,8 +11,10 @@ name = "nyne_lsp"
 
 [dependencies]
 nyne.workspace = true
-nyne-macros.workspace = true
+nyne-companion.workspace = true
+nyne-diff.workspace = true
 nyne-source.workspace = true
+nyne-visibility.workspace = true
 
 # Core
 color-eyre.workspace = true

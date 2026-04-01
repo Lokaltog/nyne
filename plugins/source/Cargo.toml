@@ -11,8 +11,9 @@ name = "nyne_source"
 
 [dependencies]
 nyne.workspace = true
-nyne-macros.workspace = true
-nyne-git = { workspace = true, optional = true }
+nyne-companion.workspace = true
+nyne-diff.workspace = true
+
 
 # Core
 color-eyre.workspace = true
@@ -21,12 +22,11 @@ linkme.workspace = true
 minijinja.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 strum.workspace = true
 jiff.workspace = true
 tracing.workspace = true
 rustix = { workspace = true, features = ["fs"] }
-git2 = { workspace = true, optional = true }
+
 
 # Parsing & analysis
 aho-corasick.workspace = true
@@ -59,9 +59,9 @@ rstest.workspace = true
 proptest.workspace = true
 
 [features]
-default = ["git-symbols", "lang-rust", "lang-python", "lang-typescript", "lang-markdown", "lang-toml", "lang-nix", "lang-fennel", "lang-jinja2"]
+default = ["lang-rust", "lang-python", "lang-typescript", "lang-markdown", "lang-toml", "lang-nix", "lang-fennel", "lang-jinja2"]
 test-support = []
-git-symbols = ["dep:nyne-git", "dep:git2"]
+
 lang-rust = ["dep:tree-sitter-rust"]
 lang-python = ["dep:tree-sitter-python"]
 lang-typescript = ["dep:tree-sitter-typescript"]

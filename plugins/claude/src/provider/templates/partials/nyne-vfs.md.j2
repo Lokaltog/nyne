@@ -137,6 +137,36 @@ cat file.{{ ext }}@/symbols/process@/actions/01-fix.diff
 rm file.{{ ext }}@/symbols/process@/actions/01-fix.diff
 ```
 
+## Extracting Symbols (Move to New File)
+
+To move symbols from one file to another (e.g., extracting helpers into a new module), use `cat` + `rmdir` — this preserves exact content (docstrings, attributes, etc.) and avoids reconstructing file contents manually.
+
+This workflow is significantly more token-efficient than reading full files and rewriting them with `Write` or `Edit` — symbol bodies are small, targeted slices, and `rmdir` + `echo >>` replace what would otherwise require reading and echoing back entire files.
+
+```bash
+# 1. Extract: cat symbol bodies into the new file
+cat source.{{ ext }}@/symbols/Foo@/body.{{ ext }} > new_module.{{ ext }}
+cat source.{{ ext }}@/symbols/Bar@/body.{{ ext }} >> new_module.{{ ext }}
+cat source.{{ ext }}@/symbols/Baz@/body.{{ ext }} >> new_module.{{ ext }}
+
+# 2. Remove originals from the source file
+rmdir source.{{ ext }}@/symbols/Foo@/
+rmdir source.{{ ext }}@/symbols/Bar@/
+rmdir source.{{ ext }}@/symbols/Baz@/
+
+# 3. Add imports to the new file
+echo 'use std::sync::Arc;' >> new_module.{{ ext }}@/symbols/imports.{{ ext }}
+
+# 4. Add module declaration to the source file's imports
+echo 'mod new_module;' >> source.{{ ext }}@/symbols/imports.{{ ext }}
+```
+
+**Tips:**
+
+- Prefer `cat >> file` from VFS bodies over `Write` with manually composed content — it's cheaper and less error-prone.
+- **Symbol names change after removals.** After removing `Foo~Struct@/`, the disambiguator on `Foo~Impl@/` may drop — it becomes `Foo@/`. Re-run `ls symbols/` before removing further symbols if names were disambiguated.
+- Use `echo >> imports.{{ ext }}` to add imports rather than reading the whole file just to Edit the import block.
+
 ## Analysis
 
 | What | When to use | Path |

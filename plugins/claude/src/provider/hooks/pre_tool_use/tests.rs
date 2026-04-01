@@ -33,7 +33,7 @@ fn extract_symbol_function_call(#[case] pattern: &str, #[case] expected_sym: &st
     assert_eq!(sym, expected_sym);
 }
 
-/// PascalCase identifiers return references.
+/// `PascalCase` identifiers return references.
 #[rstest]
 #[case::simple_type("HashMap", "HashMap")]
 #[case::with_underscore("My_Type", "My_Type")]

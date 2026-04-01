@@ -12,12 +12,12 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
+use std::path::{Path, PathBuf};
 use std::str::from_utf8;
 use std::sync::Arc;
 
 use aho_corasick::AhoCorasick;
-use nyne::types::real_fs::RealFs;
-use nyne::types::vfs_path::VfsPath;
+use nyne::router::Filesystem;
 use nyne_source::{Decomposer, SyntaxRegistry};
 
 use super::entry::Entry;
@@ -26,7 +26,7 @@ use super::entry::Entry;
 ///
 /// The automaton is built once from the configured tags and reused for all
 /// file scans. Tag order in the config determines priority (index 0 = highest).
-pub(super) struct Scanner {
+pub struct Scanner {
     automaton: AhoCorasick,
     /// Canonical tag strings, indexed to match automaton pattern IDs.
     tags: Vec<Arc<str>>,
@@ -57,13 +57,13 @@ impl Scanner {
     /// Scan a single file for TODO entries.
     ///
     /// Flow:
-    /// 1. Read file content via `real_fs`
+    /// 1. Read file content via the filesystem
     /// 2. Fast aho-corasick pre-filter — skip files with no tag matches
     /// 3. Find all tag match positions and their line numbers
     /// 4. For each match, extract the comment block from the source text
     /// 5. Strip comment prefixes using the decomposer
-    pub fn scan_file(&self, source_file: &VfsPath, real_fs: &dyn RealFs, decomposer: &dyn Decomposer) -> Vec<Entry> {
-        let Ok(bytes) = real_fs.read(source_file) else {
+    pub fn scan_file(&self, source_file: &Path, fs: &dyn Filesystem, decomposer: &dyn Decomposer) -> Vec<Entry> {
+        let Ok(bytes) = fs.read_file(source_file) else {
             return Vec::new();
         };
         let Ok(source) = from_utf8(&bytes) else {
@@ -102,7 +102,7 @@ impl Scanner {
                 let stripped = strip_tag_prefix(raw_comment, tag)?;
                 let text = decomposer.strip_doc_comment(&stripped).trim().to_owned();
                 (!text.is_empty()).then(|| Entry {
-                    source_file: source_file.clone(),
+                    source_file: source_file.to_path_buf(),
                     line: byte_to_line(&line_starts, m.byte_offset) + 1,
                     tag: Arc::clone(tag),
                     text,
@@ -114,8 +114,8 @@ impl Scanner {
     /// Scan all files, returning entries grouped by tag (preserving tag priority order).
     pub fn scan_all(
         &self,
-        files: &[VfsPath],
-        real_fs: &dyn RealFs,
+        files: &[PathBuf],
+        fs: &dyn Filesystem,
         syntax: &SyntaxRegistry,
     ) -> BTreeMap<String, Vec<Entry>> {
         let mut by_tag: BTreeMap<String, Vec<Entry>> = BTreeMap::new();
@@ -126,9 +126,9 @@ impl Scanner {
         }
 
         let entries = files.iter().filter_map(|file| {
-            let ext = file.extension()?;
+            let ext = file.extension()?.to_str()?;
             let decomposer = syntax.get(ext)?;
-            Some(self.scan_file(file, real_fs, decomposer.as_ref()))
+            Some(self.scan_file(file, fs, decomposer.as_ref()))
         });
         for entry in entries.flatten() {
             let Some(bucket) = by_tag.get_mut(&*entry.tag) else {

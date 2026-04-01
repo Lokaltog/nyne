@@ -237,28 +237,27 @@ fn rope_out_of_range_returns_error() {
     assert!(apply_edits_to_rope(content, &mut edits).is_err());
 }
 
-/// Tests that a single-file edit produces a valid unified diff.
+/// Tests that a single-file edit resolves to the correct modified content.
 #[test]
-fn diff_single_file_single_edit() {
+fn resolve_single_file_single_edit() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "hello world\n").unwrap();
+    writeln!(tmp, "hello world").unwrap();
     tmp.flush().unwrap();
     let path = tmp.path().to_str().unwrap();
 
     let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(0, 0, 0, 5, "goodbye")])]);
-    let diff = workspace_edit_to_diff(&edit, &passthrough_resolver()).unwrap();
+    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
-    assert!(diff.contains("--- a/"));
-    assert!(diff.contains("+++ b/"));
-    assert!(diff.contains("-hello world"));
-    assert!(diff.contains("+goodbye world"));
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].original, "hello world\n");
+    assert_eq!(results[0].modified, "goodbye world\n");
 }
 
-/// Tests that multiple edits in one file produce a combined diff.
+/// Tests that multiple edits in one file resolve to combined modified content.
 #[test]
-fn diff_multi_edit_single_file() {
+fn resolve_multi_edit_single_file() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "aaa bbb ccc\n").unwrap();
+    writeln!(tmp, "aaa bbb ccc").unwrap();
     tmp.flush().unwrap();
     let path = tmp.path().to_str().unwrap();
 
@@ -266,22 +265,23 @@ fn diff_multi_edit_single_file() {
         text_edit(0, 0, 0, 3, "xxx"),
         text_edit(0, 8, 0, 11, "zzz"),
     ])]);
-    let diff = workspace_edit_to_diff(&edit, &passthrough_resolver()).unwrap();
+    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
-    assert!(diff.contains("-aaa bbb ccc"));
-    assert!(diff.contains("+xxx bbb zzz"));
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].original, "aaa bbb ccc\n");
+    assert_eq!(results[0].modified, "xxx bbb zzz\n");
 }
 
-/// Tests that edits across multiple files produce per-file diff sections.
+/// Tests that edits across multiple files resolve to per-file results.
 #[test]
-fn diff_multiple_files() {
+fn resolve_multiple_files() {
     let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp1, "file one\n").unwrap();
+    writeln!(tmp1, "file one").unwrap();
     tmp1.flush().unwrap();
     let path1 = tmp1.path().to_str().unwrap().to_owned();
 
     let mut tmp2 = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp2, "file two\n").unwrap();
+    writeln!(tmp2, "file two").unwrap();
     tmp2.flush().unwrap();
     let path2 = tmp2.path().to_str().unwrap().to_owned();
 
@@ -289,18 +289,17 @@ fn diff_multiple_files() {
         (uri_from_path(&path1), vec![text_edit(0, 5, 0, 8, "ONE")]),
         (uri_from_path(&path2), vec![text_edit(0, 5, 0, 8, "TWO")]),
     ]);
-    let diff = workspace_edit_to_diff(&edit, &passthrough_resolver()).unwrap();
+    let mut results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
+    results.sort_by(|a, b| a.modified.cmp(&b.modified));
 
-    // Both files should appear in the diff.
-    assert!(diff.contains("-file one"));
-    assert!(diff.contains("+file ONE"));
-    assert!(diff.contains("-file two"));
-    assert!(diff.contains("+file TWO"));
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].modified, "file ONE\n");
+    assert_eq!(results[1].modified, "file TWO\n");
 }
 
-/// Tests that a pure insertion produces a diff with added lines.
+/// Tests that a pure insertion resolves to modified content with the new line.
 #[test]
-fn diff_insertion_only() {
+fn resolve_insertion_only() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     write!(tmp, "line one\nline two\n").unwrap();
     tmp.flush().unwrap();
@@ -308,14 +307,15 @@ fn diff_insertion_only() {
 
     // Insert a new line between line one and line two.
     let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(1, 0, 1, 0, "inserted\n")])]);
-    let diff = workspace_edit_to_diff(&edit, &passthrough_resolver()).unwrap();
+    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
-    assert!(diff.contains("+inserted"));
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].modified, "line one\ninserted\nline two\n");
 }
 
-/// Tests that a pure deletion produces a diff with removed lines.
+/// Tests that a pure deletion resolves to modified content without the removed line.
 #[test]
-fn diff_deletion_only() {
+fn resolve_deletion_only() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     write!(tmp, "keep\nremove\ntrailing\n").unwrap();
     tmp.flush().unwrap();
@@ -323,36 +323,37 @@ fn diff_deletion_only() {
 
     // Delete the second line entirely (line 1 through start of line 2).
     let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(1, 0, 2, 0, "")])]);
-    let diff = workspace_edit_to_diff(&edit, &passthrough_resolver()).unwrap();
+    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
-    assert!(diff.contains("-remove"));
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].modified, "keep\ntrailing\n");
 }
 
-/// Tests that an empty workspace edit produces an empty diff string.
+/// Tests that an empty workspace edit resolves to no results.
 #[test]
-fn diff_empty_edit_returns_empty_string() {
+fn resolve_empty_edit_returns_empty() {
     let edit = WorkspaceEdit {
         changes: Some(HashMap::new()),
         document_changes: None,
         change_annotations: None,
     };
 
-    let diff = workspace_edit_to_diff(&edit, &passthrough_resolver()).unwrap();
-    assert!(diff.is_empty());
+    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
+    assert!(results.is_empty());
 }
 
-/// Tests that replacing text with identical content produces an empty diff.
+/// Tests that replacing text with identical content produces no effective change.
 #[test]
-fn diff_no_change_returns_empty_diff() {
+fn resolve_no_change_returns_identical_content() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "unchanged\n").unwrap();
+    writeln!(tmp, "unchanged").unwrap();
     tmp.flush().unwrap();
     let path = tmp.path().to_str().unwrap();
 
     // Replace "unchanged" with "unchanged" — no actual change.
     let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(0, 0, 0, 9, "unchanged")])]);
-    let diff = workspace_edit_to_diff(&edit, &passthrough_resolver()).unwrap();
+    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
-    // similar produces empty output when old == new.
-    assert!(diff.is_empty());
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].original, results[0].modified);
 }

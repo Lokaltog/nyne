@@ -49,9 +49,12 @@ fn truncate_at_boundary(s: &str, max_len: usize) -> String {
 
 /// Compute a unified diff between two strings using `similar`.
 ///
-/// Produces standard `a/`/`b/`-prefixed headers. Returns an empty string
-/// when `old` and `new` are identical. Leading `/` is stripped from `path`
-/// so that absolute paths produce valid `patch -p1` headers.
+/// Produces standard `a/`/`b/`-prefixed headers compatible with `patch -p1`.
+/// Returns an empty string when `old` and `new` are identical.
+///
+/// `path` should be project-relative (e.g. `src/lib.rs`). The diff rendering
+/// pipeline normalizes absolute paths via `strip_root_prefix` before calling
+/// this function. A leading `/` is stripped defensively as a fallback.
 pub fn unified_diff(old: &str, new: &str, path: &str) -> String {
     let path = path.strip_prefix('/').unwrap_or(path);
     similar::TextDiff::from_lines(old, new)

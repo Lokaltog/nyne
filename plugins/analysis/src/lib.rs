@@ -3,11 +3,12 @@
 //! This crate provides the analysis engine, rule trait, and built-in rules.
 //! It is an optional dependency of the source and claude plugins.
 
-pub mod config;
-pub mod engine;
+pub(crate) mod context;
+pub(crate) mod engine;
 
 mod plugin;
-mod providers;
+mod provider;
 
+pub use context::AnalysisContextExt;
 pub use engine::{Engine, Hint, HintView};
-pub use nyne_source::TsNode;
+pub(crate) use nyne_source::TsNode;

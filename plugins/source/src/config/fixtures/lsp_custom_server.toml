@@ -1,5 +1,0 @@
-[[lsp.servers]]
-name = "ruff"
-command = "ruff"
-args = ["server"]
-extensions = ["py"]

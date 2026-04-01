@@ -25,7 +25,9 @@ const SECS_PER_DAY: f64 = 24.0 * 3600.0;
 const NOW_EPOCH: f64 = 1_000_000.0;
 
 /// Compute `resets_at` given how many days have elapsed in the 7-day window.
-fn resets_at_after(days_elapsed: f64) -> u64 { (NOW_EPOCH + (7.0 * SECS_PER_DAY - days_elapsed * SECS_PER_DAY)) as u64 }
+fn resets_at_after(days_elapsed: f64) -> u64 {
+    (NOW_EPOCH + 7.0f64.mul_add(SECS_PER_DAY, -(days_elapsed * SECS_PER_DAY))) as u64
+}
 
 /// Verifies pacing delta computation for various usage and elapsed-day scenarios.
 #[rstest]
@@ -78,13 +80,13 @@ fn returns_none_when_seven_day_absent() {
     assert!(compute_pacing(&RateLimits { seven_day: None }, SystemTime::now()).is_none());
 }
 
-/// Tests that pacing returns None when used_percentage is absent.
+/// Tests that pacing returns None when `used_percentage` is absent.
 #[test]
 fn returns_none_when_used_percentage_absent() {
     assert!(compute_pacing(&limits(None, Some(1_700_000_000)), epoch(1_699_000_000)).is_none());
 }
 
-/// Tests that pacing returns None when resets_at is absent.
+/// Tests that pacing returns None when `resets_at` is absent.
 #[test]
 fn returns_none_when_resets_at_absent() {
     assert!(compute_pacing(&limits(Some(50.0), None), epoch(1_699_000_000)).is_none());

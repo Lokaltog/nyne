@@ -12,12 +12,19 @@ path = "src/main.rs"
 
 [dependencies]
 nyne.workspace = true
-nyne-analysis.workspace = true
+nyne-cache.workspace = true
 nyne-claude.workspace = true
+nyne-diff.workspace = true
+nyne-companion.workspace = true
+nyne-fs.workspace = true
 nyne-git.workspace = true
 nyne-source.workspace = true
+nyne-analysis.workspace = true
 nyne-lsp.workspace = true
+nyne-nyne.workspace = true
+nyne-slice.workspace = true
 nyne-todo.workspace = true
+nyne-visibility.workspace = true
 clap.workspace = true
 color-eyre.workspace = true
 tracing-subscriber.workspace = true
@@ -27,8 +34,8 @@ workspace = true
 
 [workspace]
 resolver = "3"
-members = ["nyne", "nyne-macros", "plugins/*"]
-default-members = [".", "nyne", "nyne-macros", "plugins/*"]
+members = ["nyne", "plugins/*", "tests/integration"]
+default-members = [".", "nyne", "plugins/*"]
 
 [workspace.package]
 edition = "2024"
@@ -39,15 +46,22 @@ publish = false
 [workspace.dependencies]
 # Internal crates
 nyne = { path = "nyne" }
-nyne-macros = { path = "nyne-macros" }
 nyne-git = { package = "nyne-plugin-git", path = "plugins/git" }
 nyne-claude = { package = "nyne-plugin-claude", path = "plugins/claude" }
 nyne-source = { package = "nyne-plugin-source", path = "plugins/source" }
 nyne-lsp = { package = "nyne-plugin-lsp", path = "plugins/lsp" }
 nyne-analysis = { package = "nyne-plugin-analysis", path = "plugins/analysis" }
 nyne-todo = { package = "nyne-plugin-todo", path = "plugins/todo" }
+nyne-cache = { package = "nyne-plugin-cache", path = "plugins/cache" }
+nyne-companion = { package = "nyne-plugin-companion", path = "plugins/companion" }
+nyne-diff = { package = "nyne-plugin-diff", path = "plugins/diff" }
+nyne-fs = { package = "nyne-plugin-fs", path = "plugins/fs" }
+nyne-slice = { package = "nyne-plugin-slice", path = "plugins/slice" }
+nyne-nyne = { package = "nyne-plugin-nyne", path = "plugins/nyne" }
+nyne-visibility = { package = "nyne-plugin-visibility", path = "plugins/visibility" }
 
 # Core
+anymap2 = "0.13.0"
 aho-corasick = { version = "1.1.4", features = ["logging"] }
 base64 = "0.22.1"
 clap = { version = "4", features = ["derive"] }
@@ -68,29 +82,31 @@ jiff = { version = "0.2", features = ["serde"] }
 libc = "0.2"
 linkme = "0.3.35"
 lsp-types = "0.97.0"
-minijinja = { version = "2.18.0", features = ["builtins"] }
+minijinja = { version = "2.19.0", features = ["builtins"] }
 notify = "8.2.0"
 owo-colors = "4.3.0"
 palette = { version = "0.7.6", features = ["std"] }
 parking_lot = "0.12.5"
+paste = "1"
+petgraph = "0.8.3"
 proc-macro2 = "1"
 quote = "1"
-rustix = "1.1.4"
+rustix = { version = "1.1.4", features = ["net"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-signal-hook = "0.4.3"
-similar = "2.7.0"
+signal-hook = "0.4.4"
+similar = "3.0.0"
 smallvec = "1.15.1"
 slab = "0.4.12"
 strum = { version = "0.28", features = ["derive"] }
 syn = { version = "2", features = ["full", "extra-traits"] }
 thiserror = "2.0.18"
-toml = "1.0"
+toml = "1.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.26"
 tree-sitter-fennel = { path = "plugins/source/vendor/tree-sitter-fennel" }
-tree-sitter-jinja = "0.11.1"
+tree-sitter-jinja = "0.12.0"
 tree-sitter-md = "0.5.3"
 tree-sitter-nix = "0.3.0"
 tree-sitter-python = "0.25.0"
@@ -105,9 +121,10 @@ assert_fs = "1"
 criterion = { version = "0.8.2", features = ["html_reports"] }
 insta = { version = "1", features = ["json", "filters"] }
 predicates = "3"
-proptest = "1.10.0"
+proptest = "1.11.0"
 rstest = "0.26.1"
-similar-asserts = "1"
+serial_test = "3"
+similar-asserts = "2"
 tempfile = "3"
 
 [profile.release]

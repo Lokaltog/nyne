@@ -34,10 +34,10 @@ pub mod uri;
 
 use std::collections::{HashMap, HashSet};
 
-use nyne_source::syntax::SyntaxRegistry;
+use nyne_source::SyntaxRegistry;
 use spec::ServerDef;
 
-use crate::config::{Config, ServerEntry};
+use crate::plugin::config::Config;
 
 /// Extension-indexed registry of LSP server definitions.
 ///
@@ -52,31 +52,29 @@ pub struct Registry {
 
 /// Construction, lookup, and introspection for the extension-indexed server registry.
 impl Registry {
-    /// Build the registry from the merged config server list.
+    /// Build the registry from the merged config server map.
     ///
-    /// Server entries may contain duplicates from different config layers
-    /// (defaults, user, project) because `deep_merge` concatenates arrays.
-    /// Later entries override earlier ones (per field), and disabled
-    /// entries are filtered out.
+    /// Servers are keyed by name in config. The TOML deep merge handles
+    /// per-key deduplication across config layers — no manual resolution needed.
+    /// Disabled entries are filtered out.
     #[expect(clippy::excessive_nesting, reason = "entry > extensions > ext is inherent")]
     pub(crate) fn build_with_config(config: &Config) -> Self {
         let syntax = SyntaxRegistry::global();
-        let resolved = Self::resolve_servers(&config.servers);
 
         let mut servers: HashMap<String, Vec<ServerDef>> = HashMap::new();
         let mut language_ids: HashMap<String, String> = HashMap::new();
 
-        for entry in &resolved {
+        for (name, entry) in &config.servers {
             if !entry.enabled {
                 continue;
             }
 
             let Some(extensions) = &entry.extensions else {
-                tracing::warn!(server = %entry.name, "server has no extensions — skipping");
+                tracing::warn!(server = %name, "server has no extensions — skipping");
                 continue;
             };
 
-            let def = ServerDef::from_entry(entry);
+            let def = ServerDef::from_entry(name, entry);
 
             for ext in extensions.iter().filter(|e| syntax.get(e.as_str()).is_some()) {
                 servers.entry(ext.clone()).or_default().push(def.clone());
@@ -87,20 +85,6 @@ impl Registry {
         }
 
         Self { servers, language_ids }
-    }
-
-    /// Deduplicate server entries by name. Later entries override earlier ones
-    /// per-field (Option fields: last `Some` wins; `enabled`: last value wins).
-    fn resolve_servers(entries: &[ServerEntry]) -> Vec<ServerEntry> {
-        let mut resolved: Vec<ServerEntry> = Vec::new();
-        for entry in entries {
-            if let Some(existing) = resolved.iter_mut().find(|e| e.name == entry.name) {
-                existing.overlay(entry);
-            } else {
-                resolved.push(entry.clone());
-            }
-        }
-        resolved
     }
 
     /// Get server definitions for a file extension.

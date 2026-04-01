@@ -66,7 +66,7 @@ cat file.rs@/symbols/process@/DOC.md
 # Find a symbol by name across the entire project
 ls @/search/symbols/EditOutcome
 # → edit.rs::EditOutcome -> ../../../../nyne/src/edit.rs@/symbols/at-line/14
-# → mod.rs::EditOutcome  -> ../../../../plugins/coding/src/edit/plan/mod.rs@/symbols/at-line/261
+# → mod.rs::EditOutcome  -> ../../../../plugins/source/src/edit/plan/mod.rs@/symbols/at-line/261
 
 # Results are symlinks — follow them to read, edit, or inspect
 cat @/search/symbols/EditOutcome/edit.rs::EditOutcome

@@ -8,14 +8,15 @@
 use std::ops::Range;
 use std::path::Path;
 
-use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::prelude::*;
+use nyne::router::Chain;
 use nyne::templates::TemplateEngine;
-use nyne_lsp::session::diagnostic_view::{DiagnosticRow, diagnostics_to_rows};
-use nyne_lsp::session::manager::Manager;
-use nyne_source::Services;
-use nyne_source::providers::well_known::FILE_OVERVIEW;
-use nyne_source::syntax::decomposed::DecomposedSource;
+use nyne::{Script, ScriptContext};
+#[cfg(feature = "lsp")]
+use nyne_lsp::LspContextExt as _;
+#[cfg(feature = "lsp")]
+use nyne_lsp::{DiagnosticRow, diagnostics_to_rows};
+use nyne_source::DecomposedSource;
 
 use crate::provider::hook_schema::{
     BashToolInput, EditToolInput, HookInput, HookOutput, ReadToolInput, WriteToolInput,
@@ -39,19 +40,14 @@ const TMPL_POST: &str = "claude/post-tool-use";
 /// to provide VFS navigation hints. All derived data is passed to a
 /// Jinja template that decides what context to surface.
 pub(in crate::provider) struct PostToolUse {
-    engine: Arc<TemplateEngine>,
+    pub(in crate::provider) engine: Arc<TemplateEngine>,
 }
 
-/// Methods for [`PostToolUse`].
-impl PostToolUse {
-    /// Create a new post-tool-use hook with registered templates.
-    pub fn new() -> Self {
-        let mut b = super::hook_builder();
-        b.register(TMPL_POST, include_str!("../templates/post-tool-use.md.j2"));
-        Self { engine: b.finish() }
-    }
+pub(in crate::provider) fn build_engine() -> Arc<TemplateEngine> {
+    let mut b = super::hook_builder();
+    b.register(TMPL_POST, include_str!("../templates/post-tool-use.md.j2"));
+    b.finish()
 }
-
 /// [`Script`] implementation for [`PostToolUse`].
 impl Script for PostToolUse {
     /// Process post-tool-use hook input and render analysis context.
@@ -61,6 +57,7 @@ impl Script for PostToolUse {
         };
         let tool_name = input.tool_name.clone().unwrap_or_default();
         let root = ctx.activation().root_prefix();
+        let chain = ctx.chain();
 
         // Deserialize EditToolInput once — reused by analysis, diagnostics, and view.
         let edit_input = (tool_name == "Edit")
@@ -69,14 +66,26 @@ impl Script for PostToolUse {
 
         let (analysis, changed) = run_analysis(ctx, edit_input.as_ref(), &input, &tool_name, root);
 
+        #[cfg(feature = "lsp")]
         let diagnostics = filter_diagnostics(
             fetch_diagnostics_for_tool(ctx, edit_input.as_ref(), &input, &tool_name, root),
             changed.as_ref(),
         );
+        #[cfg(not(feature = "lsp"))]
+        let diagnostics: Vec<minijinja::Value> = Vec::new();
 
-        let view = build_view(input, edit_input.as_ref(), &tool_name, root, &analysis, &diagnostics);
+        let _ = &changed; // suppress unused warning when lsp is disabled
+
+        let results = ToolResults { analysis, diagnostics };
+        let view = build_view(input, edit_input.as_ref(), &tool_name, root, chain, &results);
         Ok(super::render_context(&self.engine, TMPL_POST, &view, "PostToolUse"))
     }
+}
+
+/// Bundled analysis + diagnostics results for template rendering.
+struct ToolResults<A, D> {
+    analysis: A,
+    diagnostics: D,
 }
 
 /// Build the template view from raw hook input + derived fields.
@@ -85,8 +94,8 @@ fn build_view(
     edit_input: Option<&EditToolInput>,
     tool_name: &str,
     root: &str,
-    analysis: &[impl serde::Serialize],
-    diagnostics: &[DiagnosticRow],
+    chain: &Chain,
+    results: &ToolResults<impl serde::Serialize, impl serde::Serialize>,
 ) -> minijinja::Value {
     // Deserialize typed inputs before consuming `input.tool_input`.
     let bash_cmd = (tool_name == "Bash")
@@ -100,34 +109,38 @@ fn build_view(
             .tool_input_as::<ReadToolInput>()
             .and_then(|r| r.file_path)
             .filter(|fp| super::is_symbols_overview(fp))
-            .map(|fp| strip_to_rel(&fp, root)),
+            .map(|fp| strip_to_rel(&fp, root, chain)),
         "Bash" => bash_cmd
             .as_deref()
             .and_then(extract_cat_overview_path)
             .filter(|fp| super::is_symbols_overview(fp))
-            .map(|fp| strip_to_rel(&fp, root)),
+            .map(|fp| strip_to_rel(&fp, root, chain)),
         _ => None,
     };
 
     // Edit/Write: file path, relative path, symbol, VFS status.
     let file_path = tool_file_path(edit_input, &input, tool_name);
-    let is_vfs = file_path.as_deref().is_some_and(super::is_vfs_path);
-    let rel = file_path
+    let companion = file_path
         .as_deref()
-        .map(|fp| if is_vfs { super::source_file_of(fp) } else { fp })
-        .and_then(|src| src.strip_prefix(root))
-        .map(str::to_owned);
-    let sym = file_path
-        .as_deref()
-        .and_then(super::symbol_from_vfs_path)
-        .map(str::to_owned);
+        .and_then(|fp| super::resolve_companion(chain, root, fp));
+    let is_vfs = companion.is_some();
+    let rel = match &companion {
+        Some(c) => c.source_file.as_ref().and_then(|sf| sf.to_str()).map(str::to_owned),
+        None => file_path
+            .as_deref()
+            .and_then(|fp| fp.strip_prefix(root))
+            .map(str::to_owned),
+    };
+    // TODO: derive sym from pipeline state once the source plugin sets
+    // a ResolvedFragment (or similar) on the request during dispatch.
+    let sym: Option<String> = None;
 
     // Consume tool_input — all typed deserialization is done above.
     let tool_input = input.tool_input.unwrap_or(serde_json::Value::Null);
 
     // Bash: extract command name and relative file paths.
     let (bin, rel_paths) = bash_cmd.as_deref().map_or((None, Vec::new()), |cmd| {
-        (Some(extract_command_name(cmd)), extract_rel_paths(cmd, root))
+        (Some(extract_command_name(cmd)), extract_rel_paths(cmd, root, chain))
     });
 
     // SSOT: only on significant edits or any write.
@@ -151,15 +164,19 @@ fn build_view(
         is_vfs,
         ssot,
         overview_rel,
-        analysis,
-        diagnostics,
+        analysis => results.analysis,
+        diagnostics => results.diagnostics,
     }
 }
 
-/// Strip a VFS path to its relative source file form.
-fn strip_to_rel(fp: &str, root: &str) -> String {
-    let src = super::source_file_of(fp);
-    src.strip_prefix(root).unwrap_or(src).to_owned()
+/// Strip a path to its relative source file form.
+///
+/// VFS paths are resolved to their underlying source file via pipeline evaluation.
+fn strip_to_rel(fp: &str, root: &str, chain: &Chain) -> String {
+    super::resolve_companion(chain, root, fp)
+        .and_then(|c| c.source_file)
+        .and_then(|sf| sf.to_str().map(str::to_owned))
+        .unwrap_or_else(|| fp.strip_prefix(root).unwrap_or(fp).to_owned())
 }
 
 /// Extract the base command name from a shell command string, skipping env
@@ -194,9 +211,9 @@ fn extract_command_name(cmd: &str) -> String {
 
 /// Extract relative paths from a command string — tokens under root that
 /// aren't VFS virtual paths.
-fn extract_rel_paths(cmd: &str, root_str: &str) -> Vec<String> {
+fn extract_rel_paths(cmd: &str, root_str: &str, chain: &Chain) -> Vec<String> {
     cmd.split_whitespace()
-        .filter(|tok| tok.starts_with(root_str) && !super::is_vfs_path(tok))
+        .filter(|tok| tok.starts_with(root_str) && super::resolve_companion(chain, root_str, tok).is_none())
         .filter_map(|tok| {
             let cleaned = tok.trim_end_matches([',', ':', ';']);
             cleaned.strip_prefix(root_str).map(str::to_owned)
@@ -206,10 +223,8 @@ fn extract_rel_paths(cmd: &str, root_str: &str) -> Vec<String> {
 
 /// Extract an OVERVIEW.md path from a `cat <path>` command.
 fn extract_cat_overview_path(cmd: &str) -> Option<String> {
-    let cat_pos = cmd.find("cat ")?;
-    let after_cat = cmd[cat_pos + 4..].trim_start();
-    let path = after_cat.split_whitespace().next()?;
-    path.ends_with(FILE_OVERVIEW).then(|| path.to_owned())
+    let path = cmd[cmd.find("cat ")? + 4..].split_whitespace().next()?;
+    path.ends_with("OVERVIEW.md").then(|| path.to_owned())
 }
 
 /// Extract the file path from an Edit or Write tool call.
@@ -224,22 +239,20 @@ fn tool_file_path(edit_input: Option<&EditToolInput>, input: &HookInput, tool_na
 /// Extract the source file's relative path from an Edit/Write tool call.
 ///
 /// Returns `None` for non-file tools or paths outside root.
-/// VFS paths are resolved to their underlying source file.
+/// VFS paths are resolved to their underlying source file via pipeline evaluation.
 fn source_rel_path(
     edit_input: Option<&EditToolInput>,
     input: &HookInput,
     tool_name: &str,
     root: &str,
+    chain: &Chain,
 ) -> Option<String> {
     let file_path = tool_file_path(edit_input, input, tool_name)?;
 
-    let src = if super::is_vfs_path(&file_path) {
-        super::source_file_of(&file_path)
-    } else {
-        &file_path
-    };
-
-    src.strip_prefix(root).map(str::to_owned)
+    match super::resolve_companion(chain, root, &file_path) {
+        Some(c) => c.source_file.and_then(|sf| sf.to_str().map(str::to_owned)),
+        None => file_path.strip_prefix(root).map(str::to_owned),
+    }
 }
 
 /// Unit tests.
@@ -252,6 +265,7 @@ mod tests;
 /// VFS paths are resolved to their underlying source file. Blocks up to
 /// `diagnostics_timeout` if the file was recently changed (waiting for the
 /// server to push fresh diagnostics).
+#[cfg(feature = "lsp")]
 fn fetch_diagnostics_for_tool(
     ctx: &ScriptContext<'_>,
     edit_input: Option<&EditToolInput>,
@@ -259,7 +273,7 @@ fn fetch_diagnostics_for_tool(
     tool_name: &str,
     root: &str,
 ) -> Vec<DiagnosticRow> {
-    let Some(rel) = source_rel_path(edit_input, input, tool_name, root) else {
+    let Some(rel) = source_rel_path(edit_input, input, tool_name, root, ctx.chain()) else {
         return Vec::new();
     };
 
@@ -268,15 +282,15 @@ fn fetch_diagnostics_for_tool(
         return Vec::new();
     };
 
-    let Some(lsp) = ctx.activation().get::<Arc<Manager>>() else {
+    let Some(lsp) = ctx.activation().lsp_manager() else {
         return Vec::new();
     };
 
-    let lsp_file = ctx.activation().overlay_root().join(&rel);
+    let lsp_file = ctx.activation().source_path(&rel);
     lsp.ensure_document_open(&lsp_file, ext);
 
-    // The FUSE write handler writes through to the overlay, but LSP
-    // invalidation is triggered by the inotify watcher on the overlay —
+    // The FUSE write handler writes through to the source root, but LSP
+    // invalidation is triggered by the inotify watcher on the source root —
     // which is async. By the time this hook runs, the watcher may not
     // have fired yet, so the LSP server still has stale content and the
     // DiagnosticStore isn't marked dirty. Explicitly invalidate to send
@@ -366,6 +380,7 @@ fn enclosing_scope_lines(tree: &tree_sitter::Tree, byte_start: usize, byte_end: 
 }
 
 /// Filter diagnostics to those within the changed line range.
+#[cfg(feature = "lsp")]
 fn filter_diagnostics(diagnostics: Vec<DiagnosticRow>, changed: Option<&Range<usize>>) -> Vec<DiagnosticRow> {
     let Some(range) = changed else {
         return diagnostics;

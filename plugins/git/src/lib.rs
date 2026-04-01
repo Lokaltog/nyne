@@ -1,29 +1,27 @@
 //! Git repository integration for nyne.
 //!
 //! Provides [`Repo`] for git operations and `GitPlugin`
-//! which inserts the repo into the activation context's `TypeMap`.
+//! which inserts the repo into the activation context's `AnyMap`.
 
 /// Git-backed project cloning for overlay lowerdirs.
 mod clone;
 /// Commit metadata types.
 mod commit;
-/// Git-aware companion provider.
-mod companion;
-/// Route and template name constants.
-pub mod names;
+/// Extension trait for accessing git services from `ActivationContext`.
+pub(crate) mod context;
+/// Git history queries (blame, file history, contributors, notes).
+mod history;
 /// Plugin registration entry point.
 mod plugin;
 /// Git VFS provider implementation.
-pub mod provider;
+pub(crate) mod provider;
 /// Git repository wrapper.
-pub mod repo;
+pub(crate) mod repo;
 /// Working tree status types.
 mod status;
 
 pub use commit::CommitInfo;
-pub use provider::history::HistoryQueries;
-pub use provider::repo::FileViewCtx;
-pub use provider::views::{BLAME_TEMPLATE, HISTORY_LIMIT, LOG_TEMPLATE, history_filename, hunk_overlaps_range};
-pub use provider::{CommitMtime, CommitMtimeExt};
+pub use context::GitContextExt;
+pub use provider::GitProvider;
 pub use repo::Repo;
 pub use status::RepoStatus;

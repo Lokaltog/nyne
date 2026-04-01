@@ -4,8 +4,9 @@ use std::env;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
+use nyne::{Script, ScriptContext};
+use nyne_git::GitContextExt as _;
 
 use crate::provider::hook_schema::HookOutput;
 
@@ -19,26 +20,21 @@ const TMPL_SESSION_START: &str = "claude/session-start";
 /// CLAUDE.md instructions) so the agent starts with awareness of the
 /// nyne virtual filesystem.
 pub(in crate::provider) struct SessionStart {
-    engine: Arc<TemplateEngine>,
+    pub(in crate::provider) engine: Arc<TemplateEngine>,
 }
 
-/// Methods for [`SessionStart`].
-impl SessionStart {
-    /// Create a new session start hook with registered templates.
-    pub fn new() -> Self {
-        let mut b = super::hook_builder();
-        b.register(TMPL_SESSION_START, include_str!("templates/session-start.md.j2"));
-        Self { engine: b.finish() }
-    }
+pub(in crate::provider) fn build_engine() -> Arc<TemplateEngine> {
+    let mut b = super::hook_builder();
+    b.register(TMPL_SESSION_START, include_str!("templates/session-start.md.j2"));
+    b.finish()
 }
-
 /// [`Script`] implementation for [`SessionStart`].
 impl Script for SessionStart {
     /// Render session start context with mount status and project instructions.
     fn exec(&self, ctx: &ScriptContext<'_>, _stdin: &[u8]) -> Result<Vec<u8>> {
         let activation = ctx.activation();
         let branch = activation
-            .get::<Arc<nyne_git::Repo>>()
+            .git_repo()
             .map_or_else(|| "(no repo)".to_owned(), |r| r.head_branch());
 
         let view = minijinja::context! {

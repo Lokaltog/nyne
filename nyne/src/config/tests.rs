@@ -8,7 +8,7 @@ fn load_fixture(name: &str) -> NyneConfig {
     toml::from_str(&content).unwrap_or_else(|e| panic!("failed to parse fixture {name}: {e}"))
 }
 
-/// Verifies that the default NyneConfig passes validation.
+/// Verifies that the default `NyneConfig` passes validation.
 #[test]
 fn default_config_is_valid() {
     let config = NyneConfig::default();
@@ -52,18 +52,18 @@ fn reject_invalid_config(#[case] toml_input: &str) {
     assert!(result.is_err(), "invalid config should be rejected: {toml_input}");
 }
 
-/// Tests that agent_files defaults to CLAUDE.md and AGENTS.md when the section is omitted.
+/// Tests that `agent_files` defaults to CLAUDE.md and AGENTS.md when the section is omitted.
 #[test]
 fn agent_files_defaults_when_omitted() {
     let config = load_fixture("minimal.toml");
-    assert_eq!(config.agent_files.filenames, vec!["CLAUDE.md", "AGENTS.md"]);
+    assert_eq!(config.agent_files.filenames, default_agent_filenames());
 }
 
-/// Verifies that the AgentFilesConfig default has the expected filenames.
+/// Verifies that the `AgentFilesConfig` default has the expected filenames.
 #[test]
 fn agent_files_default_is_valid() {
     let config = AgentFilesConfig::default();
-    assert_eq!(config.filenames, vec!["CLAUDE.md", "AGENTS.md"]);
+    assert_eq!(config.filenames, default_agent_filenames());
 }
 
 /// Tests that custom agent filenames are deserialized from TOML.
@@ -80,11 +80,11 @@ fn deserialize_agent_files_empty_filenames() {
     assert!(config.agent_files.filenames.is_empty());
 }
 
-/// Tests that an agent_files section without a filenames key uses defaults.
+/// Tests that an `agent_files` section without a filenames key uses defaults.
 #[test]
 fn deserialize_agent_files_section_without_filenames() {
     let config = load_fixture("agent_files_section_only.toml");
-    assert_eq!(config.agent_files.filenames, vec!["CLAUDE.md", "AGENTS.md"]);
+    assert_eq!(config.agent_files.filenames, default_agent_filenames());
 }
 
 /// Tests that repository defaults to passthrough strategy when the section is omitted.
@@ -162,7 +162,7 @@ fn sandbox_bind_mounts_all_flags() {
     ]);
 }
 
-/// Verifies that bind mount flags convert to the correct kernel MountFlags bitset.
+/// Verifies that bind mount flags convert to the correct kernel `MountFlags` bitset.
 #[test]
 fn sandbox_bind_mounts_mount_flags() {
     use rustix::mount::MountFlags;
@@ -192,7 +192,7 @@ fn sandbox_env_defaults_empty() {
     assert!(config.sandbox.env.is_empty());
 }
 
-/// Verifies that a NyneConfig with custom agent filenames passes validation.
+/// Verifies that a `NyneConfig` with custom agent filenames passes validation.
 #[test]
 fn agent_files_config_validates() {
     let config = NyneConfig {
@@ -208,8 +208,8 @@ fn default_matches_empty_toml_deserialization() {
     let from_toml: NyneConfig = toml::from_str("").expect("empty TOML should deserialize");
     let from_default = NyneConfig::default();
 
-    let toml_value = serde_json::to_value(&from_toml).expect("serialization of deserialized config");
-    let default_value = serde_json::to_value(&from_default).expect("serialization of default config");
+    let toml_value = toml::Value::try_from(&from_toml).expect("serialization of deserialized config");
+    let default_value = toml::Value::try_from(&from_default).expect("serialization of default config");
 
     assert_eq!(
         toml_value, default_value,
@@ -218,16 +218,18 @@ fn default_matches_empty_toml_deserialization() {
     );
 }
 
-#[derive(Debug, Default, PartialEq, serde::Deserialize)]
+#[derive(Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Dummy {
     #[serde(default)]
     name: String,
 }
 
+impl PluginConfig for Dummy {}
+
 #[test]
 fn deserialize_plugin_config_valid() {
-    let value = serde_json::json!({"name": "test"});
+    let value: toml::Value = toml::toml! { name = "test" }.into();
     let result: Dummy = deserialize_plugin_config(&value);
     assert_eq!(result.name, "test");
 }
@@ -235,15 +237,30 @@ fn deserialize_plugin_config_valid() {
 #[test]
 fn deserialize_plugin_config_falls_back_on_error() {
     // deny_unknown_fields should reject "bogus", but the helper falls back to Default.
-    let value = serde_json::json!({"bogus": true});
+    let value: toml::Value = toml::toml! { bogus = true }.into();
     let result: Dummy = deserialize_plugin_config(&value);
     assert_eq!(result, Dummy::default());
 }
 
 #[test]
-fn deserialize_plugin_config_borrows_value() {
-    // Null → falls back to Default (empty string), proving it borrows without clone.
-    let value = serde_json::Value::Null;
+fn deserialize_plugin_config_falls_back_on_non_table() {
+    // A non-table value can't deserialize into a struct — falls back to Default.
+    let value = toml::Value::Boolean(false);
     let result: Dummy = deserialize_plugin_config(&value);
     assert_eq!(result, Dummy::default());
+}
+
+#[rstest]
+#[case::none_returns_default(None, Dummy::default())]
+#[case::valid_section(
+    Some(toml::toml! { name = "hello" }.into()),
+    Dummy { name: "hello".into() },
+)]
+#[case::invalid_section_falls_back(
+    Some(toml::toml! { bogus = true }.into()),
+    Dummy::default(),
+)]
+fn plugin_config_from_section(#[case] section: Option<toml::Value>, #[case] expected: Dummy) {
+    let result = Dummy::from_section(section.as_ref());
+    assert_eq!(result, expected);
 }

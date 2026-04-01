@@ -16,7 +16,7 @@ use crate::syntax::decomposed::DecomposedSource;
 pub const SYMBOL_TABLE_PARTIAL_KEY: &str = "syntax/symbol_table";
 
 /// Template source for the shared symbol table partial.
-pub const SYMBOL_TABLE_PARTIAL_SRC: &str = include_str!("../../providers/syntax/templates/symbol_table.md.j2");
+pub const SYMBOL_TABLE_PARTIAL_SRC: &str = include_str!("../../provider/syntax/templates/symbol_table.md.j2");
 use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata};
 
 /// Template-accessible wrapper around a [`Fragment`].

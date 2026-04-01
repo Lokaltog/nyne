@@ -4,18 +4,18 @@ use rstest::rstest;
 
 use super::*;
 use crate::syntax::decomposed::DecomposedSource;
-use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, FragmentKind, SymbolKind};
+use crate::syntax::fragment::{FragmentKind, SymbolKind};
 use crate::syntax::{SyntaxRegistry, resolve_conflicts};
 use crate::test_support::registry;
 
 /// Load a fixture file by language extension and name.
 fn load_fixture(name: &str) -> String { crate::test_support::load_fixture("syntax/view", name) }
 
-/// Decompose a fixture file into a shared DecomposedSource for testing views.
+/// Decompose a fixture file into a shared `DecomposedSource` for testing views.
 fn decompose_fixture(reg: &SyntaxRegistry, ext: &str, name: &str) -> Arc<DecomposedSource> {
     let source = load_fixture(name);
     let decomposer = reg.get(ext).expect("no decomposer for extension");
-    let (mut file, _tree) = decomposer.decompose(&source, DEFAULT_MAX_DEPTH);
+    let (mut file, _tree) = decomposer.decompose(&source, 5);
     decomposer.map_to_fs(&mut file);
     resolve_conflicts(&mut file, decomposer);
     Arc::new(DecomposedSource {
@@ -39,7 +39,7 @@ fn find_view(shared: &Arc<DecomposedSource>, name: &str) -> FragmentView {
     }
 }
 
-/// Verifies that short_display renders fragment kinds to expected display strings.
+/// Verifies that `short_display` renders fragment kinds to expected display strings.
 #[rstest]
 #[case(FragmentKind::Symbol(SymbolKind::Function), "Function")]
 #[case(FragmentKind::Symbol(SymbolKind::Struct), "Struct")]
@@ -52,7 +52,7 @@ fn short_display_renders(#[case] kind: FragmentKind, #[case] expected: &str) {
     assert_eq!(kind.short_display(), expected);
 }
 
-/// Verifies that compact_visibility shortens Rust visibility modifiers.
+/// Verifies that `compact_visibility` shortens Rust visibility modifiers.
 #[rstest]
 #[case("pub", "pub")]
 #[case("pub(crate)", "crate")]
@@ -64,7 +64,7 @@ fn compact_visibility_shortens(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(compact_visibility(input), expected);
 }
 
-/// Verifies that code_block_summary produces a summary from fixture code blocks.
+/// Verifies that `code_block_summary` produces a summary from fixture code blocks.
 #[test]
 fn code_block_summary_from_fixture() {
     let reg = registry();
@@ -74,13 +74,13 @@ fn code_block_summary_from_fixture() {
     assert_eq!(code_block_summary(&view.fragment.children), "2 blocks (rust, sh)");
 }
 
-/// Verifies that code_block_summary returns empty string for no children.
+/// Verifies that `code_block_summary` returns empty string for no children.
 #[test]
 fn code_block_summary_empty_children() {
     assert_eq!(code_block_summary(&[]), "");
 }
 
-/// Verifies that code_block_summary deduplicates non-adjacent language tags.
+/// Verifies that `code_block_summary` deduplicates non-adjacent language tags.
 #[test]
 fn code_block_summary_deduplicates_non_adjacent_langs() {
     let reg = registry();
@@ -98,7 +98,7 @@ fn code_block_summary_deduplicates_non_adjacent_langs() {
     assert_eq!(summary, "3 blocks (rust, sh)");
 }
 
-/// Verifies that section_first_line extracts the first non-heading content line.
+/// Verifies that `section_first_line` extracts the first non-heading content line.
 #[rstest]
 #[case("hello\nworld", Some("hello"))]
 #[case("# Heading\nContent here", Some("Content here"))]
@@ -163,7 +163,7 @@ fn visibility_empty_for_sections() {
     assert_eq!(view.visibility(), "");
 }
 
-/// Verifies that fragment_list filters out code block fragments.
+/// Verifies that `fragment_list` filters out code block fragments.
 #[test]
 fn fragment_list_filters_code_blocks() {
     let reg = registry();

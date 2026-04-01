@@ -12,7 +12,7 @@ fn bogus_pid_is_not_alive() {
     assert!(!state::is_pid_alive(i32::MAX));
 }
 
-/// Verifies that SessionInfo survives JSON serialization and deserialization.
+/// Verifies that `SessionInfo` survives JSON serialization and deserialization.
 #[test]
 fn session_info_roundtrip() {
     let info = SessionInfo {
@@ -78,7 +78,7 @@ fn registry_resolve_multiple_sessions_requires_id() {
     assert_eq!(registry.resolve(Some("b")).unwrap().id.as_str(), "b");
 }
 
-/// Verifies that is_active returns true for known sessions and false for unknown ones.
+/// Verifies that `is_active` returns true for known sessions and false for unknown ones.
 #[test]
 fn registry_is_active() {
     let registry = SessionRegistry {

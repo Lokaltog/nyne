@@ -1,0 +1,4 @@
+[lsp.servers.ruff]
+command = "ruff"
+args = ["server"]
+extensions = ["py"]

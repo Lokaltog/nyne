@@ -11,15 +11,16 @@
 //!
 //! - **Foundation** (`types`, `text`, `config`, `session`, `process`) — no crate-internal
 //!   imports, pure domain types and utilities.
+//! - **Infrastructure** (`router`) — middleware pipeline: chain, provider trait, node
+//!   capabilities, route tree, filesystem abstraction. No crate-internal imports.
 //! - **Domain** (`node`, `err`) — virtual node types and error handling.
 //! - **Contracts** (`provider`, `templates`) — the [`Provider`] trait and template rendering
 //!   that plugin crates implement.
 //! - **Orchestration** (`dispatch`, `fuse`, `watcher`, `sandbox`, `cli`) — ties everything
 //!   together into a running FUSE daemon.
-//!
-//! The `extern crate self as nyne` alias allows proc macros (like [`nyne_macros::routes!`])
-//! to generate `::nyne::...` paths that resolve correctly within this crate's own code.
-extern crate self as nyne;
+
+/// Middleware pipeline for FUSE operation dispatch.
+pub mod router;
 
 /// Error utilities for FUSE errno handling and eyre integration.
 pub mod err;
@@ -30,32 +31,25 @@ pub mod cli;
 pub mod config;
 /// Request dispatch: routing, caching, and content pipeline.
 pub mod dispatch;
-/// Shared text utilities: slugification, date formatting, diffs.
-pub mod text;
-// Re-export provider helpers for plugin crates.
-pub use config::default_true;
-pub use providers::names::{FILE_OVERVIEW, SUBDIR_SYMBOLS, handle_builder, register_template_globals};
-pub use providers::{
-    companion_children, companion_dir, companion_lookup, companion_symbol_path, dispatch_children, dispatch_lookup,
-    source_file,
-};
 /// Shared JSON utilities: deep merge and streaming.
 pub mod json;
+/// Shared text utilities: slugification, date formatting, diffs.
+pub mod text;
+/// TOML deep merge for layered configuration.
+pub mod toml_merge;
 
 /// FUSE filesystem implementation bridging kernel requests to the dispatch layer.
 pub(crate) mod fuse;
-/// Virtual node types representing files and directories in the VFS.
-pub mod node;
+/// Path utilities for virtual filesystem operations.
+pub mod path_utils;
 /// Plugin registration and lifecycle management.
 pub mod plugin;
 /// Common re-exports for convenient use across the crate.
 pub mod prelude;
 /// Process spawning utilities for subprocess lifecycle management.
 pub mod process;
-/// Provider trait and types for contributing virtual filesystem content.
-pub mod provider;
-/// Built-in provider implementations (companion, agent files).
-pub(crate) mod providers;
+/// Per-process metadata helpers over procfs (`/proc/{pid}/…`, `/proc/self/…`).
+pub mod procfs;
 /// Linux namespace sandbox for isolating daemon subprocesses.
 pub(crate) mod sandbox;
 /// Session management: mount lifecycle and control socket handling.
@@ -67,29 +61,20 @@ pub mod types;
 /// Filesystem watcher for real-FS change detection and cache invalidation.
 pub(crate) mod watcher;
 
-/// Shared test fixtures, stubs, and helpers for unit tests.
-#[cfg(test)]
-pub(crate) mod test_support;
+/// Shared test fixtures, stubs, and helpers.
+///
+/// Not `#[cfg(test)]` — plugin crates depend on these utilities for their
+/// own test code and `#[cfg(test)]` items in a library are invisible to
+/// downstream crates even during `cargo test`.
+pub mod test_support;
 
 // Public API: only what external consumers (CLI, provider authors) need.
+pub use dispatch::ScriptRegistry;
 pub use dispatch::activation::ActivationContext;
-pub use dispatch::context::{PipelineContext, RenameContext, RequestContext};
-pub use dispatch::invalidation::{EventSink, InvalidationEvent, KernelNotifier};
-pub use dispatch::resolver::Resolver;
-pub use dispatch::{BufferedEventSink, LoggingEventSink, ProviderRegistry, Router, WriteMode};
-pub use fuse::{AsyncNotifier, FuseNotifier, NyneFs};
-pub use node::builtins::{PassthroughContent, StaticContent};
-pub use node::capabilities::{Lifecycle, Readable, Renameable, Unlinkable, Writable, Xattrable};
-pub use node::kind::{NodeAttr, NodeKind, WriteOutcome};
-pub use node::middleware::{PostWriteHook, ReadMiddleware, WriteMiddleware};
-pub use node::{CachePolicy, VirtualNode};
+pub use dispatch::script::{Script, ScriptContext, ScriptEntry, provider_script_address};
+pub use fuse::notify::{AsyncNotifier, FuseNotifier, KernelNotifier};
+pub use plugin::control::{ControlCommand, ControlContext};
 pub use plugin::{PLUGINS, Plugin};
-pub use provider::{ConflictInfo, ConflictParty, ConflictResolution, Node, Nodes, Provider, ProviderId};
 pub use sandbox::{ClonerFactory, PROJECT_CLONERS, ProjectCloner};
-pub use types::path_conventions::{
-    COMPANION_SUFFIX, VFS_SEPARATOR, companion_name, is_vfs_path, source_file_of, split_companion_path,
-    strip_companion_suffix,
-};
-pub use types::{
-    ExtensionCounts, FileKind, GitDirName, OsFs, PassthroughProcesses, ProcessVisibility, RealFs, TypeMap, VfsPath,
-};
+pub use types::slice::{SliceSpec, parse_slice_suffix, parse_spec};
+pub use types::{ExtensionCounts, FileKind, SymbolLineRange};

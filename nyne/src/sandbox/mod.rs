@@ -21,6 +21,8 @@ macro_rules! syscall_try {
     };
 }
 
+/// Reap overlay/pivot scaffolding dirs left behind by terminated processes.
+mod cleanup;
 /// Control socket IPC between daemon and CLI commands.
 pub mod control;
 /// Mount syscall primitives for sandbox construction.
@@ -38,9 +40,9 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use color_eyre::eyre::{Result, WrapErr, ensure, eyre};
+use color_eyre::eyre::{Result, WrapErr, ensure};
 use linkme::distributed_slice;
-use rustix::process::{Pid, getgid, getpid, getuid};
+use rustix::process::{getgid, getuid};
 use signal_hook::consts::{SIGINT, SIGTERM};
 use signal_hook::iterator::Signals;
 use tracing::{debug, info};
@@ -107,12 +109,16 @@ impl DaemonConfig {
 /// (hostname, bind mounts, env vars) is carried here so the command child
 /// has everything it needs without additional IPC.
 pub struct AttachConfig {
-    /// Daemon PID to attach to.
-    pub daemon_pid: i32,
     /// Mount path the daemon serves.
     pub mount_path: PathBuf,
-    /// Control socket path (for injecting `NYNE_CONTROL_SOCKET` env var).
-    pub control_socket: Option<PathBuf>,
+    /// Control socket path. The daemon's user + mount namespace fds are
+    /// fetched from this socket via `SCM_RIGHTS` (see
+    /// [`control::recv_namespace_fds`]), and the path is injected as
+    /// `NYNE_CONTROL_SOCKET`.
+    pub control_socket: PathBuf,
+    /// Nested session directory for inside-sandbox `nyne` invocations
+    /// (for injecting `NYNE_SESSION_DIR` env var).
+    pub session_dir: PathBuf,
     /// Command to execute inside the namespace.
     pub command: Vec<OsString>,
     /// Sandbox configuration (hostname, bind mounts, etc.).
@@ -151,12 +157,7 @@ use std::path::Path;
 use std::process::exit;
 use std::sync::atomic::AtomicBool;
 
-pub use overlay::{prepare_project_storage, resolve_persist_root};
-/// The fixed mount point for the FUSE filesystem inside the sandbox.
-///
-/// All project access goes through this path. Used by `cli/mount.rs` to
-/// set the display root for provider templates and LSP path rewriting.
-pub use paths::SANDBOX_CODE;
+pub use overlay::prepare_project_storage;
 use signal_hook::flag::register_conditional_default;
 
 use crate::config::SandboxConfig;
@@ -210,7 +211,7 @@ fn start_one(config: DaemonConfig, session_id: &session::SessionId, mount_fn: Mo
 }
 
 /// Block until SIGINT/SIGTERM, then tear down all sessions.
-fn wait_and_shutdown(sessions: Vec<MountSession>) -> Result<()> {
+fn wait_and_shutdown(sessions: Vec<MountSession>, state_root: &Path) -> Result<()> {
     for s in &sessions {
         info!(
             "daemon running — use `nyne attach {} -- <command>` to enter",
@@ -223,16 +224,25 @@ fn wait_and_shutdown(sessions: Vec<MountSession>) -> Result<()> {
         info!(signal = sig, "received shutdown signal");
     }
 
-    teardown(sessions);
+    teardown(sessions, state_root);
     Ok(())
 }
 
-/// Remove session files and terminate daemons.
-fn teardown(sessions: Vec<MountSession>) {
+/// Remove session files, terminate daemons, and reap their state trees.
+///
+/// After each daemon is killed and reaped, its mount namespace is gone
+/// and the per-PID state tree `<state_root>/proc/<pid>` on the host is
+/// no longer a mount hierarchy — `ProcState::reap` removes it safely.
+fn teardown(sessions: Vec<MountSession>, state_root: &Path) {
     for s in sessions {
         session::remove(&s.session_path);
+        let daemon_pid = s.daemon.pid();
+        let session_id = s.session_id.clone();
         s.daemon.terminate();
-        info!(id = %s.session_id, "daemon terminated");
+        if let Some(pid) = daemon_pid {
+            paths::ProcState::new(state_root, pid).reap();
+        }
+        info!(id = %session_id, "daemon terminated");
     }
 }
 
@@ -242,20 +252,24 @@ fn teardown(sessions: Vec<MountSession>) {
 /// ready, the supervisor blocks until SIGINT/SIGTERM, then tears down all
 /// sessions. If any mount fails to start, already-running daemons are
 /// cleaned up before the error is propagated.
-pub fn run_mounts(mounts: Vec<(DaemonConfig, session::SessionId, MountFn)>) -> Result<()> {
+pub fn run_mounts(mounts: Vec<(DaemonConfig, session::SessionId, MountFn)>, state_root: &Path) -> Result<()> {
+    // Clean up any per-process state trees left behind by crashed
+    // predecessors before spawning our own daemons.
+    cleanup::reap_stale(state_root);
+
     let mut sessions = Vec::with_capacity(mounts.len());
 
     for (config, id, mount_fn) in mounts {
         match start_one(config, &id, mount_fn) {
             Ok(session) => sessions.push(session),
             Err(e) => {
-                teardown(sessions);
+                teardown(sessions, state_root);
                 return Err(e);
             }
         }
     }
 
-    wait_and_shutdown(sessions)
+    wait_and_shutdown(sessions, state_root)
 }
 
 /// Attach to a running daemon and execute a command inside its namespace.
@@ -268,17 +282,22 @@ pub fn run_mounts(mounts: Vec<(DaemonConfig, session::SessionId, MountFn)>) -> R
 ///
 /// Returns the command's exit code (0-255), or 128+signal if killed.
 pub fn run_attach(config: AttachConfig) -> Result<i32> {
-    let daemon_pid =
-        Pid::from_raw(config.daemon_pid).ok_or_else(|| eyre!("invalid daemon PID: {}", config.daemon_pid))?;
+    // Fetch the daemon's user + mount namespace fds directly via
+    // SCM_RIGHTS on the control socket. This bypasses PID resolution
+    // entirely: fd passing works across unrelated PID namespaces
+    // (e.g. two parallel `nyne attach` shells running sibling init
+    // PID namespaces), whereas SO_PEERCRED and `/proc/<pid>/ns/*`
+    // lookups do not.
+    let control::NamespaceFds { user, mnt } =
+        control::recv_namespace_fds(&config.control_socket).wrap_err("requesting daemon namespace fds")?;
 
     info!(
-        daemon_pid = config.daemon_pid,
         path = %config.mount_path.display(),
         command = ?config.command,
         "attaching to daemon"
     );
 
-    let ns = Namespace::open_from_pid(daemon_pid).wrap_err("opening daemon namespace fds")?;
+    let ns = Namespace::from_fds(user, mnt);
 
     // Capture real identity before namespace entry.
     let identity = HostIdentity {
@@ -290,13 +309,16 @@ pub fn run_attach(config: AttachConfig) -> Result<i32> {
 
     let fuse_path = config.mount_path.clone();
     let control_socket = config.control_socket;
+    let session_dir = config.session_dir;
     let command = config.command;
     let sandbox = config.sandbox;
+    let state_root = sandbox.state_root.clone();
     let command_pid = fork_or_die(|| {
         let paths = CommandPaths {
             cwd: &cwd,
             fuse_path: &fuse_path,
-            control_socket: control_socket.as_deref(),
+            control_socket: &control_socket,
+            session_dir: &session_dir,
         };
         command_main(ns, &paths, &command, &sandbox, identity);
     })
@@ -314,6 +336,9 @@ pub fn run_attach(config: AttachConfig) -> Result<i32> {
 
     let exit_code = wait_for_exit(command_pid).wrap_err("waiting for command process")?;
     guard.defuse();
+    // The command child's mount namespace is gone now; its per-PID state
+    // tree `<state_root>/proc/<pid>` is just empty dirs on the host.
+    paths::ProcState::new(&state_root, command_pid).reap();
     info!(exit_code, "command exited");
 
     Ok(exit_code)
@@ -364,21 +389,11 @@ fn daemon_main(mounts: &[MountEntry], pipe: ReadyPipe, mut mount_fn: MountFn) {
         }
 
         // Sessions dropped here — triggers BackgroundSession::drop
-        // which calls umount_and_join on each FUSE mount.
+        // which calls umount_and_join on each FUSE mount. Per-PID
+        // scaffolding directories are reaped by the supervisor in
+        // `teardown` once this process is waitpid-reaped.
         drop(sessions);
         debug!("FUSE sessions unmounted, daemon exiting");
-
-        // Notify user about cached clone data that can be cleaned up.
-        if let Some(base_dirs) = directories::BaseDirs::new() {
-            let pid = getpid();
-            let lower = paths::lower_base(base_dirs.cache_dir(), pid);
-            let merged = paths::merged_base(pid);
-            info!(
-                "session ended — cached data can be removed with:\n  rm -rf {} {}",
-                lower.display(),
-                merged.display(),
-            );
-        }
 
         Ok(())
     });
@@ -386,11 +401,11 @@ fn daemon_main(mounts: &[MountEntry], pipe: ReadyPipe, mut mount_fn: MountFn) {
 
 /// Remap host CWD to sandbox path.
 ///
-/// If the CWD is inside the FUSE-mounted project, remap to `/code/...`.
+/// If the CWD is inside the FUSE-mounted project, remap to `mount_root/...`.
 /// Otherwise return the original CWD (it may exist via RO bind mounts).
-fn sandbox_cwd(cwd: &Path, fuse_path: &Path) -> PathBuf {
+fn sandbox_cwd(cwd: &Path, fuse_path: &Path, mount_root: &Path) -> PathBuf {
     if let Ok(relative) = cwd.strip_prefix(fuse_path) {
-        PathBuf::from(paths::SANDBOX_CODE).join(relative)
+        mount_root.join(relative)
     } else {
         cwd.to_path_buf()
     }
@@ -400,12 +415,25 @@ fn sandbox_cwd(cwd: &Path, fuse_path: &Path) -> PathBuf {
 ///
 /// Groups the host-side paths needed by [`command_main`] to set up the
 /// sandbox: the original working directory (for CWD remapping), the FUSE
-/// mount path (for overlay setup and `pivot_root`), and the optional
-/// control socket path (injected as an env var for `nyne exec`).
+/// mount path (for overlay setup and `pivot_root`), the control socket
+/// path (injected as `NYNE_CONTROL_SOCKET`), and the nested session dir
+/// (injected as `NYNE_SESSION_DIR`).
 struct CommandPaths<'a> {
     cwd: &'a Path,
     fuse_path: &'a Path,
-    control_socket: Option<&'a Path>,
+    control_socket: &'a Path,
+    session_dir: &'a Path,
+}
+
+/// Insert a path as an env var entry, UTF-8 path permitting.
+///
+/// Only inserts if the key is not already set (so explicit user config
+/// wins). Silently skips when the path is not UTF-8 — env values must
+/// be strings.
+fn inject_path_env(env: &mut HashMap<String, String>, key: &str, path: &Path) {
+    if let Some(s) = path.to_str() {
+        env.entry(key.to_owned()).or_insert_with(|| s.to_owned());
+    }
 }
 
 /// Command child entry point: enter the daemon namespace, set up the sandbox, and fork init.
@@ -431,7 +459,12 @@ fn command_main(
         ns.enter()?;
         debug!("entered daemon namespace");
 
-        overlay::setup(paths.fuse_path, &sandbox.bind_mounts)?;
+        overlay::setup(
+            paths.fuse_path,
+            &sandbox.bind_mounts,
+            &sandbox.state_root,
+            &sandbox.mount_root,
+        )?;
 
         // Set hostname before dropping root — NEWUTS requires CAP_SYS_ADMIN.
         namespace::unshare_uts(&sandbox.hostname)?;
@@ -442,18 +475,16 @@ fn command_main(
         let command = command.to_vec();
         let cwd = paths.cwd.to_path_buf();
         let fuse_path = paths.fuse_path.to_path_buf();
+        let mount_root = sandbox.mount_root.clone();
         let mut sandbox_env = sandbox.env.clone();
 
-        // Inject control socket path so `nyne exec` works inside the sandbox.
-        if let Some(socket_path) = paths.control_socket
-            && let Some(s) = socket_path.to_str()
-        {
-            sandbox_env
-                .entry(control::NYNE_CONTROL_SOCKET_ENV.to_owned())
-                .or_insert_with(|| s.to_owned());
-        }
+        // Inject env vars for nested nyne invocations: the control
+        // socket (for `nyne exec`) and the session dir (for nested
+        // `nyne mount`/`nyne list` to find each other's sessions).
+        inject_path_env(&mut sandbox_env, control::NYNE_CONTROL_SOCKET_ENV, paths.control_socket);
+        inject_path_env(&mut sandbox_env, control::NYNE_SESSION_DIR_ENV, paths.session_dir);
         let init_pid = fork_or_die(|| {
-            init_main(&command, identity, &cwd, &fuse_path, &sandbox_env);
+            init_main(&command, identity, &cwd, &fuse_path, &mount_root, &sandbox_env);
         })
         .wrap_err("forking init (PID 1)")?;
 
@@ -473,6 +504,7 @@ fn init_main(
     identity: HostIdentity,
     cwd: &Path,
     fuse_path: &Path,
+    mount_root: &Path,
     extra_env: &HashMap<String, String>,
 ) {
     run_or_exit("init", || {
@@ -485,11 +517,10 @@ fn init_main(
         // Drop root identity.
         namespace::unshare_user_remap(identity.uid, identity.gid)?;
 
-        // Set CWD: remap to /code if inside the FUSE-mounted project,
-        // fall back to /code if the target doesn't exist in the sandbox.
-        let target_cwd = sandbox_cwd(cwd, fuse_path);
-        if env::set_current_dir(&target_cwd).is_err() {
-            env::set_current_dir(paths::SANDBOX_CODE).wrap_err("setting working directory to /code fallback")?;
+        // Set CWD: remap to mount_root if inside the FUSE-mounted project,
+        // fall back to mount_root if the target doesn't exist in the sandbox.
+        if env::set_current_dir(sandbox_cwd(cwd, fuse_path, mount_root)).is_err() {
+            env::set_current_dir(mount_root).wrap_err("setting working directory to mount root fallback")?;
         }
         debug!(cwd = %env::current_dir().unwrap_or_default().display(), "working directory set");
 
@@ -497,15 +528,6 @@ fn init_main(
             process::set_env(key, value);
         }
 
-        // Prepend the nyne bin directory so the sandbox resolves the same
-        // binary that was invoked, regardless of what's installed on PATH.
-        let nyne_path = match env::var("PATH") {
-            Ok(existing) => format!("{}:{existing}", paths::NYNE_BIN_DIR),
-            Err(_) => paths::NYNE_BIN_DIR.to_owned(),
-        };
-        process::set_env("PATH", &nyne_path);
-
-        let exit_code = process::run_init(command)?;
-        exit(exit_code);
+        exit(process::run_init(command)?);
     });
 }

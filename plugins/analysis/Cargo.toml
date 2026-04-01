@@ -11,16 +11,16 @@ name = "nyne_analysis"
 
 [dependencies]
 nyne.workspace = true
+nyne-companion.workspace = true
 nyne-source.workspace = true
 
 color-eyre.workspace = true
 linkme.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+toml.workspace = true
 strum.workspace = true
 tracing.workspace = true
 tree-sitter.workspace = true
-nyne-macros.workspace = true
 minijinja.workspace = true
 
 [dev-dependencies]

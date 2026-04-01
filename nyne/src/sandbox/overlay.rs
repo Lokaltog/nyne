@@ -29,10 +29,9 @@
 //!                                real fs (via clone lowerdir)
 //! ```
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
-use std::{env, fs};
 
 use color_eyre::eyre::{ContextCompat, Result, WrapErr};
 use directories::BaseDirs;
@@ -42,6 +41,7 @@ use tracing::{debug, info};
 
 use super::{PROJECT_CLONERS, mnt, namespace, paths};
 use crate::config::{BindMount, StorageStrategy};
+use crate::path_utils::PathExt;
 
 /// Size limit for structural tmpfs mounts (newroot, /tmp).
 ///
@@ -50,7 +50,7 @@ use crate::config::{BindMount, StorageStrategy};
 /// data lives on the FUSE mount or overlay, not on these tmpfs instances.
 const TMPFS_SIZE: &str = "2G";
 
-/// Build the isolated sandbox root filesystem and mount FUSE at `/code`.
+/// Build the isolated sandbox root filesystem and mount FUSE at `mount_root`.
 ///
 /// Called by the command child after entering the daemon's namespace. The
 /// sequence is order-sensitive:
@@ -59,12 +59,11 @@ const TMPFS_SIZE: &str = "2G";
 /// 2. Create a private mount namespace (no nested user ns, avoids mount locking)
 /// 3. Detach FUSE from the project dir so bind mounts copy host fs, not FUSE
 /// 4. Build newroot (tmpfs scaffold, host bind mounts, XDG dirs)
-/// 5. Bind-mount the nyne binary for PATH resolution inside the sandbox
-/// 6. Apply user-configured bind mounts (while host paths are still visible)
-/// 7. `pivot_root` into newroot
-/// 8. Attach the FUSE clone at `/code`
-/// 9. Remount root tmpfs read-only (layered mounts keep their own flags)
-pub(super) fn setup(fuse_path: &Path, bind_mounts: &[BindMount]) -> Result<()> {
+/// 5. Apply user-configured bind mounts (while host paths are still visible)
+/// 6. `pivot_root` into newroot
+/// 7. Attach the FUSE clone at `mount_root`
+/// 8. Remount root tmpfs read-only (layered mounts keep their own flags)
+pub(super) fn setup(fuse_path: &Path, bind_mounts: &[BindMount], state_root: &Path, mount_root: &Path) -> Result<()> {
     let base_dirs = BaseDirs::new();
 
     // Clone the FUSE mount into a detached mount tree while still in the
@@ -85,13 +84,9 @@ pub(super) fn setup(fuse_path: &Path, bind_mounts: &[BindMount]) -> Result<()> {
     mnt::detach(fuse_path)?;
     debug!(path = %fuse_path.display(), "FUSE detached");
 
-    let newroot = paths::newroot(process::getpid());
+    let newroot = paths::ProcState::new(state_root, process::getpid()).newroot();
 
-    build_newroot(&newroot, base_dirs.as_ref())?;
-
-    // Bind-mount the current nyne binary so the sandbox uses the same
-    // version that was invoked, not whatever is installed on the host.
-    bind_self_exe(&newroot)?;
+    build_newroot(&newroot, base_dirs.as_ref(), mount_root)?;
 
     // Apply user-configured bind mounts before pivot — sources are
     // still visible on the host filesystem at this point.
@@ -99,12 +94,11 @@ pub(super) fn setup(fuse_path: &Path, bind_mounts: &[BindMount]) -> Result<()> {
 
     mnt::pivot(&newroot)?;
 
-    // Attach the FUSE clone at /code — the single entry point for
+    // Attach the FUSE clone at mount_root — the single entry point for
     // all project access inside the sandbox.
-    let code = Path::new(paths::SANDBOX_CODE);
-    dirs(&[code])?;
-    mnt::attach(&fuse_fd, code)?;
-    info!(path = %code.display(), "FUSE mounted at sandbox code path");
+    dirs(&[mount_root])?;
+    mnt::attach(&fuse_fd, mount_root)?;
+    info!(path = %mount_root.display(), "FUSE mounted at sandbox mount root");
 
     // Lock down the root tmpfs. Mounts layered on top (FUSE, XDG
     // bind mounts, /dev, /run, /proc, /tmp) retain their own flags.
@@ -117,18 +111,20 @@ pub(super) fn setup(fuse_path: &Path, bind_mounts: &[BindMount]) -> Result<()> {
 }
 /// Prepare the project backing path for the FUSE daemon.
 ///
-/// The returned path is what the daemon uses for all filesystem I/O.
+/// The returned path is what the daemon uses for all filesystem I/O. All
+/// per-process scaffolding lives under
+/// `<state_root>/proc/<pid>/fs/{merged,lower,upper}`.
 ///
-/// - **Passthrough**: bind-mounts the project directory RW at a stable
-///   merged path. No clone, no overlayfs — writes hit the real filesystem.
-/// - **Snapshot / Hardlink**: clones the project as an immutable lowerdir,
-///   then mounts overlayfs at a separate merged path with a persistent
-///   upperdir for write capture.
-pub fn prepare_project_storage(path: &Path, persist_root: Option<&Path>, strategy: StorageStrategy) -> Result<PathBuf> {
-    let pid = process::getpid();
+/// - **Passthrough**: bind-mounts the project directory RW at the merged
+///   path. No clone, no overlayfs — writes hit the real filesystem.
+/// - **Snapshot / Hardlink**: clones the project into the `lower/` layer,
+///   then mounts overlayfs at `merged/` with `upper/` as the write sink.
+pub fn prepare_project_storage(path: &Path, state_root: &Path, strategy: StorageStrategy) -> Result<PathBuf> {
+    let proc = paths::ProcState::new(state_root, process::getpid());
+    let rel = path.relative_to(Path::new("/"));
 
     // Both strategies use the same merged path as the daemon's working directory.
-    let merged = paths::merged_base(pid).join(paths::relative_to_root(path));
+    let merged = proc.merged().join(&rel);
     fs::create_dir_all(&merged).wrap_err_with(|| format!("creating merged dir {}", merged.display()))?;
 
     match strategy {
@@ -141,15 +137,8 @@ pub fn prepare_project_storage(path: &Path, persist_root: Option<&Path>, strateg
             );
         }
         strategy @ (StorageStrategy::Snapshot | StorageStrategy::Hardlink) => {
-            let persist_root =
-                persist_root.wrap_err("overlay strategies require a persist root for upperdir storage")?;
-            let cache_dir = BaseDirs::new()
-                .wrap_err("cannot determine XDG directories")?
-                .cache_dir()
-                .to_path_buf();
-
             // Clone project into a stable lower dir for use as overlayfs lowerdir.
-            let lower = paths::lower_base(&cache_dir, pid).join(paths::relative_to_root(path));
+            let lower = proc.lower().join(&rel);
             PROJECT_CLONERS
                 .first()
                 .map(|f| f())
@@ -163,13 +152,13 @@ pub fn prepare_project_storage(path: &Path, persist_root: Option<&Path>, strateg
             mnt::remount(&lower, MountFlags::RDONLY)?;
             debug!(lower = %lower.display(), "clone lowerdir remounted read-only");
 
-            let slot = paths::persist_slot(persist_root, pid).join(paths::relative_to_root(path));
-            mount_overlay_slot(&merged, &lower, &slot)?;
+            let upper = proc.upper().join(&rel);
+            mount_overlay_layers(&merged, &lower, &upper, &proc.work().join(&rel))?;
             info!(
                 path = %path.display(),
                 lower = %lower.display(),
                 merged = %merged.display(),
-                slot = %slot.display(),
+                upper = %upper.display(),
                 "project overlay mounted (clone-backed)"
             );
         }
@@ -186,17 +175,16 @@ pub fn prepare_project_storage(path: &Path, persist_root: Option<&Path>, strateg
 ///
 /// If `base_dirs` is `None` (XDG dirs unavailable), the home directory
 /// step is skipped entirely — no home is visible inside the sandbox.
-fn build_newroot(newroot: &Path, base_dirs: Option<&BaseDirs>) -> Result<()> {
+fn build_newroot(newroot: &Path, base_dirs: Option<&BaseDirs>, mount_root: &Path) -> Result<()> {
     dirs(&[newroot])?;
     mnt::tmpfs(newroot, TMPFS_SIZE)?;
 
-    // Enumerate host root entries and selectively bind-mount them.
-    // This replaces the previous rbind-all-then-override approach,
+    // Enumerate host root entries and selectively bind-mount them,
     // giving precise control over what's visible in the sandbox.
     // /proc is included — needed for /proc/self/uid_map writes during
     // user remap. The PID namespace init process remounts /proc after
     // fork to scope it to the sandbox's PID namespace.
-    bind_host_root_entries(newroot)?;
+    bind_host_root_entries(newroot, mount_root)?;
 
     // Fresh isolated /tmp — prevents temp file leakage to/from host.
     let tmp_path = newroot.join("tmp");
@@ -213,30 +201,22 @@ fn build_newroot(newroot: &Path, base_dirs: Option<&BaseDirs>) -> Result<()> {
     Ok(())
 }
 
-/// Bind-mount the running nyne binary into the sandbox.
-///
-/// Resolves `/proc/self/exe` to find the invoking binary and mounts it
-/// at `<newroot>/nyne/bin/nyne`. The corresponding `PATH` prepend happens
-/// in [`super::init_main`] after user env vars are applied.
-fn bind_self_exe(newroot: &Path) -> Result<()> {
-    let exe = env::current_exe().wrap_err("resolving current executable")?;
-    let bin_dir = newroot.join(paths::relative_to_root(Path::new(paths::NYNE_BIN_DIR)));
-    let target = bin_dir.join("nyne");
-    dirs(&[&bin_dir])?;
-    File::create(&target).wrap_err_with(|| format!("creating mount point at {}", target.display()))?;
-    mnt::bind(&exe, &target)?;
-    debug!(exe = %exe.display(), "self binary bind-mounted");
-    Ok(())
-}
-
-/// Top-level root entries that are handled separately and must not be
+/// Host root paths that are handled separately and must not be
 /// bind-mounted from the host during enumeration.
 ///
-/// **`proc` is intentionally NOT skipped** — the host `/proc` bind mount
+/// - `/tmp`, `/home` — replaced by the sandbox tmpfs and per-user XDG
+///   bind mounts respectively.
+///
+/// The configured `mount_root` (default `/code`) is also skipped at runtime
+/// — see [`bind_host_root_entries`]. Bind-mounting the host path would pull
+/// in whatever occupies it (e.g., an outer nyne FUSE mount in nested
+/// scenarios), shadowing or conflicting with the inner mount.
+///
+/// **`/proc` is intentionally NOT skipped** — the host `/proc` bind mount
 /// is required for `/proc/self/uid_map` writes during `unshare_user_remap`.
 /// The PID namespace init process (`init_main`) remounts `/proc` afterwards
 /// to scope it to the sandbox's PID namespace.
-const SKIP_ROOT_ENTRIES: &[&str] = &["tmp", "home"];
+const SKIP_ROOT_PATHS: &[&str] = &["/tmp", "/home"];
 
 /// Enumerate host `/` and selectively bind-mount entries into `newroot`.
 ///
@@ -245,7 +225,7 @@ const SKIP_ROOT_ENTRIES: &[&str] = &["tmp", "home"];
 /// permissions (sysfs, procfs attributes, filesystem ACLs), and the
 /// sandbox user has the same uid/gid as the host user after remap.
 ///
-/// - Directories in [`SKIP_ROOT_ENTRIES`] are skipped (handled elsewhere).
+/// - Paths in [`SKIP_ROOT_PATHS`] and `mount_root` are skipped (handled elsewhere).
 /// - Symlinks are recreated (preserves indirection, e.g., `/bin → /usr/bin`
 ///   on systems like NixOS where root-level symlinks are common).
 /// - Regular files at `/` are skipped (unusual; no known use case).
@@ -254,19 +234,19 @@ const SKIP_ROOT_ENTRIES: &[&str] = &["tmp", "home"];
 /// `/run` exposes host runtime state (D-Bus socket, systemd sockets).
 /// A more restrictive approach (e.g., only binding `/run/user/<uid>`)
 /// is on the roadmap.
-fn bind_host_root_entries(newroot: &Path) -> Result<()> {
+fn bind_host_root_entries(newroot: &Path, mount_root: &Path) -> Result<()> {
     let entries = fs::read_dir("/").wrap_err("enumerating host root")?;
 
     for entry in entries {
         let entry = entry.wrap_err("reading host root entry")?;
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
+        let source = entry.path();
 
-        if SKIP_ROOT_ENTRIES.contains(&name_str.as_ref()) {
+        if SKIP_ROOT_PATHS.iter().any(|p| Path::new(p) == source) || source == mount_root {
             continue;
         }
 
-        let source = entry.path();
         let target = newroot.join(&name);
         // Does NOT follow symlinks — returns the entry's own type.
         let file_type = entry
@@ -302,11 +282,11 @@ fn bind_xdg_dirs(newroot: &Path, base_dirs: &BaseDirs) -> Result<()> {
 
     // Create the home directory structure on the tmpfs.
     let home = base_dirs.home_dir();
-    let home_in_newroot = newroot.join(paths::relative_to_root(home));
+    let home_in_newroot = newroot.join(home.relative_to(Path::new("/")));
     dirs(&[&home_in_newroot])?;
 
     for xdg_dir in &xdg_dirs {
-        let rel = paths::relative_to_root(xdg_dir);
+        let rel = xdg_dir.relative_to(Path::new("/"));
         let dst = newroot.join(rel);
         dirs(&[&dst])?;
         mnt::bind(xdg_dir, &dst)?;
@@ -325,7 +305,7 @@ fn bind_xdg_dirs(newroot: &Path, base_dirs: &BaseDirs) -> Result<()> {
 /// remounts with user-specified flags (e.g., read-only).
 fn apply_bind_mounts(newroot: &Path, bind_mounts: &[BindMount]) -> Result<()> {
     for bm in bind_mounts {
-        let dst = newroot.join(paths::relative_to_root(&bm.target));
+        let dst = newroot.join(bm.target.relative_to(Path::new("/")));
 
         // Create the mount point: directory for directory sources,
         // empty file for file sources. Bind mounts require the target
@@ -355,17 +335,14 @@ fn apply_bind_mounts(newroot: &Path, bind_mounts: &[BindMount]) -> Result<()> {
     Ok(())
 }
 
-/// Create upper/work dirs in `slot` and mount overlayfs at `target`.
+/// Create the upper/work dirs and mount overlayfs at `target`.
 ///
-/// The `slot` directory provides persistent storage for the overlay's
-/// `upper` (captured writes) and `work` (kernel scratch space) dirs.
-/// Both are created with `create_dir_all` so the slot can be a fresh
-/// path on first use.
-fn mount_overlay_slot(target: &Path, lower: &Path, slot: &Path) -> Result<()> {
-    let upper = slot.join("upper");
-    let work = slot.join("work");
-    dirs(&[&upper, &work])?;
-    mnt::overlay(target, lower, &upper, &work)
+/// `upper` holds captured writes, `work` is kernel scratch space — both
+/// must live on the same filesystem and both are created with
+/// `create_dir_all` so callers can pass fresh paths.
+fn mount_overlay_layers(target: &Path, lower: &Path, upper: &Path, work: &Path) -> Result<()> {
+    dirs(&[upper, work])?;
+    mnt::overlay(target, lower, upper, work)
 }
 
 /// Create multiple directories (with intermediate parents).
@@ -401,19 +378,4 @@ fn collect_xdg_dirs(base_dirs: &BaseDirs) -> Vec<PathBuf> {
     }
 
     dirs
-}
-
-/// Resolve the persist root for overlay upperdirs.
-///
-/// Uses the given path or falls back to `$XDG_CACHE_HOME/nyne/overlay/`.
-pub fn resolve_persist_root(explicit: Option<&Path>) -> Result<PathBuf> {
-    let root = if let Some(p) = explicit {
-        p.to_path_buf()
-    } else {
-        let base = BaseDirs::new().wrap_err("cannot determine XDG directories")?;
-        paths::default_persist_root(base.cache_dir())
-    };
-    fs::create_dir_all(&root).wrap_err_with(|| format!("creating persist root at {}", root.display()))?;
-    debug!(path = %root.display(), "overlay persist root resolved");
-    Ok(root)
 }

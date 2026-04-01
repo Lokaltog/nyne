@@ -8,7 +8,7 @@ use super::*;
 #[case::rust("rs", "rust")]
 #[case::python("py", "python")]
 fn language_id_for_extension(#[case] ext: &str, #[case] expected: &str) {
-    let registry = Registry::build_with_config(&crate::config::Config::default());
+    let registry = Registry::build_with_config(&crate::plugin::config::Config::default());
     assert_eq!(
         registry.language_id_for(ext),
         Some(expected),

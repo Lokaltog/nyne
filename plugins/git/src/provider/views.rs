@@ -1,51 +1,8 @@
-//! Template view structs for git file-level content.
-//!
-//! These handle sliced blame/log and per-file companion directory children.
-//! Symbol-scoped views (`SymbolBlameView`, `SymbolLogView`) live in nyne-coding.
+//! Shared constants and helpers for git template views.
 
-use nyne::prelude::*;
-use nyne::templates::TemplateEngine;
 use nyne::text;
-use nyne::types::SymbolLineRange;
-use nyne::types::slice::SliceSpec;
 
-use super::blame::BlameView;
-use super::contributors::ContributorsView;
-use super::history::{HistoryEntry, HistoryQueries as _};
-use super::log::LogView;
-use super::notes::NotesView;
-use super::repo::FileViewCtx;
-use super::{CommitMtimeExt as _, GitProvider};
-use crate::names;
-use crate::repo::Repo;
-
-/// Default cap on history entries listed in readdir.
-pub const HISTORY_LIMIT: usize = 50;
-
-/// View-related methods on [`GitProvider`].
-impl GitProvider {
-    /// Resolve the `file.rs@/git/` companion directory — blame, log, contributors, notes.
-    pub(super) fn resolve_companion_git(&self, repo: &Arc<Repo>, rel: String) -> Vec<VirtualNode> {
-        let secs = repo.file_epoch_secs(&rel);
-        let h = &self.handles;
-        let fctx = FileViewCtx::new(repo, rel);
-        let blame = BlameView(fctx.clone());
-        let log = LogView(fctx.clone());
-        let notes = NotesView(fctx.clone());
-        let contributors = ContributorsView(fctx);
-        vec![
-            h.blame.node(names::FILE_BLAME, blame).with_mtime(secs),
-            h.log.node(names::FILE_LOG, log).with_mtime(secs),
-            h.contributors
-                .node(names::FILE_CONTRIBUTORS, contributors)
-                .with_mtime(secs),
-            h.notes
-                .node(names::FILE_NOTES, notes.clone())
-                .with_writable(notes)
-                .with_mtime(secs),
-        ]
-    }
-}
+use crate::history::HistoryEntry;
 
 /// Format a history entry filename: `001_2024-01-15_abc1234_commit-message.rs`.
 ///
@@ -61,45 +18,8 @@ pub fn history_filename(index: usize, entry: &HistoryEntry, ext: &str) -> String
     }
 }
 
-/// Check whether a blame hunk overlaps a 1-based inclusive line range.
-pub const fn hunk_overlaps_range(hunk: &super::history::BlameHunk, range: &SymbolLineRange) -> bool {
-    hunk.start_line <= range.end && hunk.end_line >= range.start
-}
-
-/// Blame content sliced by a spec (e.g., `BLAME.md:5-20` → entries 5-20).
-pub(super) struct SlicedBlameView {
-    pub ctx: FileViewCtx,
-    pub spec: SliceSpec,
-}
-
-/// [`TemplateView`] implementation for [`SlicedBlameView`].
-impl TemplateView for SlicedBlameView {
-    /// Renders a line-range-sliced blame view using a template.
-    fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
-        let hunks = self.ctx.repo.blame(&self.ctx.rel_path)?;
-        let sliced = self.spec.apply(&hunks);
-        Ok(engine.render_bytes(template, &minijinja::context!(data => sliced)))
-    }
-}
-
-/// Log content sliced by a spec (e.g., `LOG.md:-10` → last 10 entries).
-pub(super) struct SlicedLogView {
-    pub ctx: FileViewCtx,
-    pub spec: SliceSpec,
-}
-
-/// [`TemplateView`] implementation for [`SlicedLogView`].
-impl TemplateView for SlicedLogView {
-    /// Renders a line-range-sliced log view using a template.
-    fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
-        let entries = self.ctx.repo.file_history(&self.ctx.rel_path, super::log::LOG_LIMIT)?;
-        let sliced = self.spec.apply(&entries);
-        Ok(engine.render_bytes(template, &minijinja::context!(data => sliced)))
-    }
-}
-
-/// Blame template content (shared with nyne-coding for symbol-scoped views).
+/// Blame template content.
 pub const BLAME_TEMPLATE: &str = include_str!("templates/blame.md.j2");
 
-/// Log template content (shared with nyne-coding for symbol-scoped views).
+/// Log template content.
 pub const LOG_TEMPLATE: &str = include_str!("templates/log.md.j2");

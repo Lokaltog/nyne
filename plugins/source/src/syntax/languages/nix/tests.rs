@@ -1,6 +1,6 @@
 use rstest::{fixture, rstest};
 
-use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, FragmentKind, SymbolKind};
+use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
 use crate::test_support::{load_fixture, registry};
 
 /// Fixture: decompose the basic.nix test file into fragments.
@@ -9,7 +9,7 @@ fn basic() -> DecomposedFile {
     let source = load_fixture("syntax/languages/nix", "basic.nix");
     let reg = registry();
     let d = reg.get("nix").unwrap();
-    let (result, _tree) = d.decompose(&source, DEFAULT_MAX_DEPTH);
+    let (result, _tree) = d.decompose(&source, 5);
     result
 }
 

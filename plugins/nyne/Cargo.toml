@@ -1,0 +1,25 @@
+[package]
+name = "nyne-plugin-nyne"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "nyne_nyne"
+
+[dependencies]
+nyne.workspace = true
+
+humantime.workspace = true
+linkme.workspace = true
+minijinja.workspace = true
+serde.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+
+[lints]
+workspace = true

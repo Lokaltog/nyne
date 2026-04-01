@@ -11,7 +11,7 @@ use std::ops::Range;
 /// Line range metadata attached to symbol directory nodes.
 ///
 /// Providers that create symbol decompositions attach this to fragment
-/// directory `VirtualNode`s via [`VirtualNode::prop`](crate::node::VirtualNode::prop). Other providers
+/// directory nodes. Other providers
 /// (e.g., git) read it via the resolver to scope operations to a
 /// symbol's line range.
 ///

@@ -31,8 +31,10 @@ pub mod view;
 pub mod languages;
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use color_eyre::eyre::eyre;
+use nyne::path_utils::PathExt;
 use nyne::prelude::*;
 use spec::Decomposer;
 
@@ -182,13 +184,13 @@ impl SyntaxRegistry {
     /// of truth** for "given a path, which decomposer handles it?" — all call
     /// sites must use this rather than calling `get`/`get_compound` directly.
     #[must_use]
-    pub fn decomposer_for(&self, path: &VfsPath) -> Option<&Arc<dyn Decomposer>> {
+    pub fn decomposer_for(&self, path: &Path) -> Option<&Arc<dyn Decomposer>> {
         if let Some((inner, outer)) = path.compound_extension()
             && let Some(d) = self.get_compound(inner, outer)
         {
             return Some(d);
         }
-        let ext = path.extension()?;
+        let ext = path.extension()?.to_str()?;
         self.get(ext)
     }
 
@@ -206,9 +208,15 @@ impl SyntaxRegistry {
     /// Returns `None` if no decomposer exists for the extension, the source is
     /// not valid UTF-8, or the fragment path doesn't match any symbol.
     #[must_use]
-    pub fn extract_symbol(&self, source: &str, ext: &str, fragment_path: &[String]) -> Option<String> {
+    pub fn extract_symbol(
+        &self,
+        source: &str,
+        ext: &str,
+        fragment_path: &[String],
+        max_depth: usize,
+    ) -> Option<String> {
         let decomposer = self.get(ext)?;
-        let (mut fragments, _tree) = decomposer.decompose(source, fragment::DEFAULT_MAX_DEPTH);
+        let (mut fragments, _tree) = decomposer.decompose(source, max_depth);
         decomposer.map_to_fs(&mut fragments);
         resolve_conflicts(&mut fragments, decomposer);
         let frag = find_fragment(&fragments, fragment_path)?;
@@ -276,6 +284,16 @@ pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<
 pub fn find_fragment_at_line(fragments: &[fragment::Fragment], line: usize, source: &str) -> Option<Vec<String>> {
     let rope = crop::Rope::from(source);
     find_fragment_at_line_rope(fragments, line, &rope)
+}
+
+/// Join fragment path segments into a VFS display path.
+///
+/// E.g., `&["Foo", "bar"]` → `"Foo@/bar"`. Uses the companion's runtime
+/// suffix to build the path separator.
+#[cfg(test)]
+pub fn fragment_vfs_name(companion: &nyne_companion::Companion, segments: &[impl AsRef<str>]) -> String {
+    let sep = format!("{}/", companion.companion_name(""));
+    segments.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(&sep)
 }
 
 /// Inner implementation that accepts a pre-built rope to avoid repeated construction.

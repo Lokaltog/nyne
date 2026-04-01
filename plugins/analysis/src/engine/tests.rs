@@ -1,12 +1,11 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use nyne_source::syntax::fragment::DEFAULT_MAX_DEPTH;
 use nyne_source::test_support::registry;
 use rstest::rstest;
 
 use super::{DEFAULT_DISABLED_RULES, Engine, Hint};
-use crate::config::Config;
+use crate::plugin::config::Config;
 
 /// Load a test fixture file relative to this crate's `src/engine/fixtures/`.
 fn load_fixture(name: &str) -> String {
@@ -26,7 +25,7 @@ fn analyze_fixture(ext: &str, name: &str) -> Vec<Hint> {
 fn analyze_source(ext: &str, source: &str) -> Vec<Hint> {
     let reg = registry();
     let decomposer = reg.get(ext).expect("no decomposer for extension");
-    let (_file, tree) = decomposer.decompose(source, DEFAULT_MAX_DEPTH);
+    let (_file, tree) = decomposer.decompose(source, 5);
     let tree = tree.expect("parse should succeed");
 
     let engine = Engine::build();
@@ -206,7 +205,7 @@ fn separator_not_triggered(#[case] ext: &str, #[case] fixture: &str) {
 
 /// Recursively collect all tree-sitter node kinds from a syntax tree.
 fn collect_kinds(node: tree_sitter::Node<'_>, kinds: &mut std::collections::BTreeSet<String>) {
-    kinds.insert(node.kind().to_string());
+    kinds.insert(node.kind().to_owned());
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         collect_kinds(child, kinds);
@@ -229,7 +228,7 @@ fn debug_dump_tree_kinds() {
         let source = load_fixture(name);
         let reg = registry();
         let decomposer = reg.get(ext).expect("no decomposer");
-        let (_file, tree) = decomposer.decompose(&source, DEFAULT_MAX_DEPTH);
+        let (_file, tree) = decomposer.decompose(&source, 5);
         let tree = tree.expect("parse should succeed");
 
         let mut kinds = std::collections::BTreeSet::new();
@@ -241,11 +240,11 @@ fn debug_dump_tree_kinds() {
     }
 }
 
-/// Analyze inline source with a filtered AnalysisConfig and return all hints.
+/// Analyze inline source with a filtered `AnalysisConfig` and return all hints.
 fn analyze_source_filtered(ext: &str, source: &str, config: &Config) -> Vec<Hint> {
     let reg = registry();
     let decomposer = reg.get(ext).expect("no decomposer for extension");
-    let (_file, tree) = decomposer.decompose(source, DEFAULT_MAX_DEPTH);
+    let (_file, tree) = decomposer.decompose(source, 5);
     let tree = tree.expect("parse should succeed");
 
     let engine = Engine::build_filtered(config);
@@ -253,7 +252,7 @@ fn analyze_source_filtered(ext: &str, source: &str, config: &Config) -> Vec<Hint
     engine.analyze(&tree, source)
 }
 
-/// Verifies that default config excludes rules listed in DEFAULT_DISABLED_RULES.
+/// Verifies that default config excludes rules listed in `DEFAULT_DISABLED_RULES`.
 #[test]
 fn default_config_excludes_noisy_rules() {
     let config = Config::default();
@@ -278,6 +277,7 @@ fn explicit_empty_rules_runs_all() {
     let config = Config {
         enabled: true,
         rules: Some(HashSet::new()),
+        ..Default::default()
     };
     let all = Engine::build();
     let filtered = Engine::build_filtered(&config);
@@ -292,6 +292,7 @@ fn filtered_keeps_only_named_rules() {
     let config = Config {
         enabled: true,
         rules: Some(HashSet::from(["deep-nesting".into()])),
+        ..Default::default()
     };
     let source = load_fixture("deep-nesting.rs");
     let hints = analyze_source_filtered("rs", &source, &config);
@@ -309,6 +310,7 @@ fn filtered_excludes_unselected_rules() {
     let config = Config {
         enabled: true,
         rules: Some(HashSet::from(["deep-nesting".into()])),
+        ..Default::default()
     };
     let source = load_fixture("magic-number.rs");
     let hints = analyze_source_filtered("rs", &source, &config);
@@ -325,6 +327,7 @@ fn disabled_produces_no_hints() {
     let config = Config {
         enabled: false,
         rules: None,
+        ..Default::default()
     };
     let source = load_fixture("deep-nesting.rs");
     let hints = analyze_source_filtered("rs", &source, &config);

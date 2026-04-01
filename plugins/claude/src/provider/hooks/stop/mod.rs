@@ -10,10 +10,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::dispatch::script::{Script, ScriptContext};
 use nyne::templates::TemplateEngine;
+use nyne::{Script, ScriptContext};
 
-use crate::config::StopHookConfig;
+use crate::plugin::config::StopHookConfig;
 use crate::provider::hook_schema::{HookInput, HookOutput};
 
 /// Template key for the stop hook.
@@ -26,23 +26,15 @@ const TMPL_STOP: &str = "claude/stop";
 /// emits a review prompt listing modified files, reminding the agent
 /// to verify SSOT/DRY compliance before concluding.
 pub(in crate::provider) struct Stop {
-    engine: Arc<TemplateEngine>,
-    config: StopHookConfig,
+    pub(in crate::provider) engine: Arc<TemplateEngine>,
+    pub(in crate::provider) config: StopHookConfig,
 }
 
-/// Methods for [`Stop`].
-impl Stop {
-    /// Create a new stop hook with registered templates.
-    pub fn new(config: &StopHookConfig) -> Self {
-        let mut b = super::hook_builder();
-        b.register(TMPL_STOP, include_str!("../templates/stop.md.j2"));
-        Self {
-            engine: b.finish(),
-            config: config.clone(),
-        }
-    }
+pub(in crate::provider) fn build_engine() -> Arc<TemplateEngine> {
+    let mut b = super::hook_builder();
+    b.register(TMPL_STOP, include_str!("../templates/stop.md.j2"));
+    b.finish()
 }
-
 /// [`Script`] implementation for [`Stop`].
 impl Script for Stop {
     /// Scan transcript for changes and render a review prompt if needed.

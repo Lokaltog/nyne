@@ -1,9 +1,11 @@
 //! Diff view — unified diff between versions.
 
+use std::path::PathBuf;
 use std::str::from_utf8;
+use std::sync::Arc;
 
-use nyne::node::Readable;
-use nyne::prelude::*;
+use color_eyre::eyre::Result;
+use nyne::router::{ReadContext, Readable};
 use nyne::text::unified_diff;
 
 use crate::repo::Repo;
@@ -15,7 +17,7 @@ use crate::repo::Repo;
 /// branch, tag, or commit SHA.
 pub(super) enum DiffTarget {
     /// Working tree vs HEAD — computed without git2 touching the filesystem.
-    Workdir { source_file: VfsPath },
+    Workdir { source_file: PathBuf },
     /// HEAD vs an arbitrary ref (branch, tag, sha).
     Ref(String),
 }
@@ -30,12 +32,12 @@ pub(super) struct DiffContent {
 /// [`Readable`] implementation for [`DiffContent`].
 impl Readable for DiffContent {
     /// Reads a unified diff against HEAD or a named ref.
-    fn read(&self, ctx: &RequestContext<'_>) -> Result<Vec<u8>> {
+    fn read(&self, ctx: &ReadContext<'_>) -> Result<Vec<u8>> {
         Ok(match &self.target {
             DiffTarget::Workdir { source_file: real_file } => {
                 // Read HEAD version from git object store (no filesystem access).
                 let old = self.repo.head_blob(&self.rel_path)?;
-                let new = ctx.real_fs.read(real_file)?;
+                let new = ctx.fs.read_file(real_file)?;
                 match (from_utf8(&old), from_utf8(&new)) {
                     (Ok(old_str), Ok(new_str)) => unified_diff(old_str, new_str, &self.rel_path).into_bytes(),
                     _ => "Binary file differs\n".into(),

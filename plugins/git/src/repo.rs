@@ -8,6 +8,7 @@
 //! **Threading:** All methods acquire the mutex internally via [`lock()`],
 //! so callers can use `&self` without external synchronization.
 
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -23,12 +24,14 @@ use crate::commit::diff_opts;
 /// Shared git repository handle.
 ///
 /// Wraps `git2::Repository` in a `Mutex` (`Repository` is `Send` but not `Sync`).
-/// Computes and caches the path prefix to convert `VfsPath` → git-relative path.
+/// Computes and caches the path prefix to convert absolute paths → git-relative paths.
 pub struct Repo {
-    repo: Mutex<git2::Repository>,
-    /// Prefix to prepend to `VfsPath` for git-relative paths.
+    inner: Mutex<git2::Repository>,
+    /// Prefix to prepend for git-relative paths.
     /// Empty when source dir == workdir.
     prefix: String,
+    /// Project root directory — used to convert absolute paths to repo-relative.
+    root: PathBuf,
 }
 
 /// Core git operations — open, blob retrieval, diff, index, branches, and tags.
@@ -55,30 +58,26 @@ impl Repo {
         );
 
         Ok(Self {
-            repo: Mutex::new(repo),
+            inner: Mutex::new(repo),
             prefix,
+            root: source_dir.to_owned(),
         })
     }
 
-    /// Convert a `VfsPath` to a git-relative path.
-    pub fn rel_path(&self, path: &VfsPath) -> String {
+    /// Convert an absolute source path to a git-relative path.
+    pub fn rel_path(&self, path: &Path) -> String {
+        let relative = path.strip_prefix(&self.root).unwrap_or(path).to_string_lossy();
         if self.prefix.is_empty() {
-            path.as_str().to_owned()
-        } else if path.is_root() {
+            relative.into_owned()
+        } else if relative.is_empty() {
             self.prefix.clone()
         } else {
-            format!("{}/{}", self.prefix, path.as_str())
+            format!("{}/{relative}", self.prefix)
         }
     }
 
-    /// The path to the `.git` directory (or equivalent for worktrees).
-    ///
-    /// Returns the value of `git2::Repository::path()`, which is the
-    /// absolute path to the git directory (e.g., `/project/.git/`).
-    pub(crate) fn git_dir_path(&self) -> PathBuf { self.lock().path().to_owned() }
-
     /// Acquires a lock on the underlying git2 repository.
-    pub(crate) fn lock(&self) -> parking_lot::MutexGuard<'_, git2::Repository> { self.repo.lock() }
+    pub(crate) fn lock(&self) -> parking_lot::MutexGuard<'_, git2::Repository> { self.inner.lock() }
 
     /// Retrieve file content at HEAD from the object store.
     ///
@@ -165,9 +164,7 @@ impl Repo {
     ///
     /// Mirrors porcelain `git mv` (which is just `mv` + `git rm` + `git add`).
     /// Uses `add_path` which re-stats the file at the new path to record
-    /// the correct blob OID, mtime, and size. Safe during FUSE callbacks
-    /// because the repo's stored workdir points to the overlay merged path,
-    /// so all stats resolve against the overlay filesystem.
+    /// the correct blob OID, mtime, and size.
     pub(crate) fn index_rename_with_stat(&self, old_rel: &str, new_rel: &str) -> Result<()> {
         let repo = self.lock();
         let mut index = repo.index().wrap_err("failed to open git index")?;
@@ -270,22 +267,6 @@ impl Repo {
         }
     }
 
-    /// HEAD commit timestamp as seconds since epoch, or 0 for unborn branches.
-    pub(crate) fn head_epoch_secs(&self) -> i64 {
-        let repo = self.lock();
-        let Ok(Some(head)) = resolve_head(&repo).inspect_err(|e| {
-            warn!(error = %e, "failed to read HEAD");
-        }) else {
-            return 0;
-        };
-        let Ok(commit) = head.peel_to_commit().inspect_err(|e| {
-            warn!(error = %e, "failed to peel HEAD to commit");
-        }) else {
-            return 0;
-        };
-        commit.time().seconds()
-    }
-
     /// All file paths in the git index.
     ///
     /// Returns paths relative to the repository workdir. Useful for
@@ -315,7 +296,7 @@ impl Repo {
             }
         }
         let mut sorted: Vec<_> = counts.into_iter().collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.sort_by_key(|x| Reverse(x.1));
         Ok(sorted)
     }
 }

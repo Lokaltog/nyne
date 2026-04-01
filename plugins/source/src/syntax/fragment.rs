@@ -283,13 +283,6 @@ pub fn find_fragment_of_kind<'a>(fragments: &'a [Fragment], kind: &FragmentKind)
     fragments.iter().find(|f| f.kind == *kind)
 }
 
-/// Default maximum nesting depth for recursive fragment extraction.
-///
-/// Set to 5 to handle common nesting patterns (module > impl > fn > closure)
-/// without exploding on pathological inputs. Deeper nesting is flattened
-/// into the parent fragment's body.
-pub const DEFAULT_MAX_DEPTH: usize = 5;
-
 /// A syntax error detected by tree-sitter in the parse tree.
 ///
 /// Collected from ERROR and MISSING nodes after parsing. Used by the

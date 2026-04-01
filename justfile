@@ -13,6 +13,11 @@ check: lint
 test *ARGS:
     cargo nextest run {{ARGS}}
 
+# Run E2E integration tests (requires FUSE + user namespaces)
+integration *ARGS:
+    cargo build --bin nyne
+    cargo nextest run -p nyne-integration-tests {{ARGS}}
+
 # Supply chain audit (licenses, advisories, bans)
 deny:
     cargo deny check
@@ -36,6 +41,10 @@ watch:
 # Find unused dependencies
 machete:
     cargo machete --with-metadata
+
+# Install the binary
+install:
+    cargo install --path .
 
 # Clean build artifacts
 clean:

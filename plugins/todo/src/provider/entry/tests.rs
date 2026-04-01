@@ -34,7 +34,7 @@ fn slugify_empty() {
 #[test]
 fn fs_name_format() {
     let entry = Entry {
-        source_file: VfsPath::new("src/main.rs").unwrap(),
+        source_file: PathBuf::from("src/main.rs"),
         line: 42,
         tag: Arc::from("TODO"),
         text: "fix frobnicator".to_owned(),
@@ -47,14 +47,16 @@ fn fs_name_format() {
 #[test]
 fn symlink_target_nested_source_file() {
     let entry = Entry {
-        source_file: VfsPath::new("src/dispatch/router.rs").unwrap(),
+        source_file: PathBuf::from("src/dispatch/router.rs"),
         line: 10,
         tag: Arc::from("FIXME"),
         text: "null check".to_owned(),
     };
+    let companion = nyne_companion::Companion::new(None, "@".into());
+    let source_paths = SourcePaths::default();
     // From @/todo/FIXME/ (3 levels) up to mount root, then to target companion.
     assert_eq!(
-        entry.symlink_target(),
+        entry.symlink_target(&companion, "todo", &source_paths),
         PathBuf::from("../../../src/dispatch/router.rs@/symbols/at-line/10")
     );
 }
@@ -63,13 +65,15 @@ fn symlink_target_nested_source_file() {
 #[test]
 fn symlink_target_root_source_file() {
     let entry = Entry {
-        source_file: VfsPath::new("ROADMAP.md").unwrap(),
+        source_file: PathBuf::from("ROADMAP.md"),
         line: 788,
         tag: Arc::from("TODO"),
         text: "hack".to_owned(),
     };
+    let companion = nyne_companion::Companion::new(None, "@".into());
+    let source_paths = SourcePaths::default();
     assert_eq!(
-        entry.symlink_target(),
+        entry.symlink_target(&companion, "todo", &source_paths),
         PathBuf::from("../../../ROADMAP.md@/symbols/at-line/788")
     );
 }

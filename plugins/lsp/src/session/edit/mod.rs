@@ -12,14 +12,12 @@
 //! [`PathResolver`]: super::path::PathResolver
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::{Result, bail};
 use crop::Rope;
 use lsp_types::{DocumentChanges, OneOf, TextEdit, WorkspaceEdit};
-use nyne::text;
-use nyne::types::vfs_path::VfsPath;
-use nyne_source::edit::plan::FileEditResult;
+use nyne_diff::FileEditResult;
 use tracing::{debug, warn};
 
 use super::uri::position_to_byte_offset;
@@ -55,30 +53,6 @@ pub fn apply_workspace_edit(edit: &WorkspaceEdit, resolver: &super::path::PathRe
     }
 
     Ok(())
-}
-
-/// Convert a `WorkspaceEdit` to a unified diff string without modifying any files.
-pub fn workspace_edit_to_diff(edit: &WorkspaceEdit, resolver: &super::path::PathResolver) -> Result<String> {
-    let mut results = resolve_edits(edit, resolver)?;
-
-    if results.is_empty() {
-        return Ok(String::new());
-    }
-
-    // Sort by path for deterministic output.
-    results.sort_by(|a, b| a.path.cmp(&b.path));
-
-    let mut diff = String::new();
-    for result in &results {
-        let display_path = resolver.rewrite_to_fuse(Path::new(&result.path));
-        diff.push_str(&text::unified_diff(
-            &result.original,
-            &result.modified,
-            &display_path.to_string_lossy(),
-        ));
-    }
-
-    Ok(diff)
 }
 
 /// Collect all text edits from a `WorkspaceEdit`, grouped by file path.
@@ -174,9 +148,9 @@ fn apply_edits_to_rope(content: &str, edits: &mut [&TextEdit]) -> Result<String>
 
 /// A file's original and modified content after applying text edits.
 ///
-/// Intermediate result from [`resolve_edits`], consumed by both
+/// Intermediate result from [`resolve_edits`], consumed by
 /// [`apply_workspace_edit`] (writes `modified` to disk) and
-/// [`workspace_edit_to_diff`] (diffs `original` vs `modified`).
+/// [`resolve_workspace_edit`] (builds [`FileEditResult`]s for diff preview).
 struct ResolvedFileEdit {
     path: String,
     original: String,
@@ -208,28 +182,28 @@ fn resolve_edits(edit: &WorkspaceEdit, resolver: &super::path::PathResolver) -> 
         .collect()
 }
 
-/// Resolve a `WorkspaceEdit` into [`FileEditResult`]s for use with [`DiffAction`].
+/// Resolve a `WorkspaceEdit` into [`FileEditResult`]s for use with [`DiffSource`].
 ///
 /// Handles both text edits (via [`resolve_edits`]) and file-level operations
 /// (`CreateFile`, `RenameFile`, `DeleteFile`) from `DocumentChanges::Operations`.
 ///
-/// Path translation is encapsulated: absolute overlay paths from LSP are
-/// converted to relative `VfsPath`s, and display paths use the FUSE root.
+/// Path translation is encapsulated: absolute source paths from LSP are
+/// converted to relative paths, and display paths use the FUSE root.
 ///
-/// [`DiffAction`]: crate::edit::diff_action::DiffAction
+/// [`DiffSource`]: nyne_diff::DiffSource
 pub fn resolve_workspace_edit(
     edit: &WorkspaceEdit,
     resolver: &super::path::PathResolver,
 ) -> Result<Vec<FileEditResult>> {
-    use nyne_source::edit::plan::EditOutcome;
+    use nyne_diff::EditOutcome;
 
-    // Convert an absolute path to a (VfsPath, display_path) pair.
-    let to_paths = |abs: &str| -> Result<(VfsPath, String)> {
+    // Convert an absolute path to a (PathBuf, display_path) pair.
+    let to_paths = |abs: &str| -> Result<(PathBuf, String)> {
         let rel = Path::new(abs)
-            .strip_prefix(resolver.overlay_root())
-            .map_or_else(|_| abs.to_owned(), |p| p.to_string_lossy().into_owned());
+            .strip_prefix(resolver.source_root())
+            .map_or_else(|_| PathBuf::from(abs), ToOwned::to_owned);
         let display = resolver.rewrite_to_fuse(Path::new(abs)).to_string_lossy().into_owned();
-        Ok((VfsPath::new(&rel)?, display))
+        Ok((rel, display))
     };
 
     let mut results: Vec<FileEditResult> = Vec::new();
@@ -271,10 +245,10 @@ pub fn resolve_workspace_edit(
 fn collect_resource_op(
     op: &lsp_types::ResourceOp,
     resolver: &super::path::PathResolver,
-    to_paths: &impl Fn(&str) -> Result<(VfsPath, String)>,
+    to_paths: &impl Fn(&str) -> Result<(PathBuf, String)>,
     results: &mut Vec<FileEditResult>,
 ) -> Result<()> {
-    use nyne_source::edit::plan::EditOutcome;
+    use nyne_diff::EditOutcome;
 
     match op {
         lsp_types::ResourceOp::Create(create) => {

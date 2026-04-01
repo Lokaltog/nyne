@@ -1,6 +1,6 @@
 # nyne
 
-**Plan 9 insisted that everything should be a file.** The idea influenced decades of systems design, but never became the default. LLMs change the equation: forty years of `cat`, `grep`, and `sed` on unchanged interfaces across the internet means file operations are baked in. Your custom 500-token `get_file_symbols` schema can't be piped, grepped or composed, and has to be learned from scratch every single session.
+**Plan 9 insisted that everything should be a file.** It mostly didn't catch on, but LLMs make it worth revisiting: forty years of `cat`, `grep`, and `sed` on unchanged interfaces across the internet means file operations are baked in. Your custom 500-token `get_file_symbols` schema can't be piped, grepped or composed, and has to be learned from scratch every single session.
 
 Irrelevant context is the biggest bottleneck in agent-driven development. An agent reads a whole file to find one function, and everything else enters the context window. nyne exposes your codebase as decomposed, scoped files agents already know how to use, through a FUSE overlay over your project.
 
@@ -100,11 +100,11 @@ See **[Usage](USAGE.md)** for the full command reference and examples.
 
 ## Why
 
-If you've ever watched an agent refactor, you're familiar with the joy of watching context rot in real-time. 50K tokens in, re-reading files from three steps ago. Five files into a call graph, useful context is buried under thousands of irrelevant lines. nyne solves this at the filesystem level. When an agent asks for a function body, that's what it gets. Callers, diagnostics, git history are separate, scoped reads.
+If you've ever watched an agent refactor, you're familiar with the joy of watching context rot in real-time. 50K tokens in, re-reading files from three steps ago. Five files into a call graph, useful context is buried under thousands of irrelevant lines. nyne handles this at the filesystem level. When an agent asks for a function body, that's what it gets. Callers, diagnostics, git history are separate, scoped reads.
 
-Raw shell access lets agents pipe, grep, and compose, but also hands them unrestricted access to `.env` and `~/diary`. nyne sits in between. Mutations land in an overlay, not on your source tree. The [Sandbox](#sandbox) section covers the full isolation model.
+Raw shell access lets agents use standard Unix tools, but also hands them unrestricted access to `.env` and `~/diary`. nyne sits in between. Mutations land in an overlay, not on your source tree. The [Sandbox](#sandbox) section covers the full isolation model.
 
-Tree-sitter validates every write before it touches disk. Syntax error? `EINVAL`, not a wasted build cycle three tool calls later. Writes are blocking: LSP diagnostics come back before the write returns.
+Every write is tree-sitter validated. Syntax error? `EINVAL`, not a wasted build cycle three tool calls later. Writes are blocking: LSP diagnostics come back before the write returns.
 
 ## How it works
 
@@ -144,9 +144,7 @@ project/
       edit/                             # batch edit staging area
 ```
 
-File extensions match the source language (`.py` for Python, `.ts` for TypeScript) so syntax highlighting works out of the box.
-
-Symlinks connect the call graph: follow a caller into its `@/` namespace, check its diagnostics, follow _its_ callers. No file paths to resolve, you just keep reading. Mutations produce diffs you can inspect before applying. `mv` triggers LSP rename, code actions appear as `.diff` files, and tree-sitter validates every write before it touches disk.
+Symlinks connect the call graph: follow a caller into its `@/` namespace, check its diagnostics, follow _its_ callers. No file paths to resolve, you just keep reading. Mutations produce diffs you can inspect before applying. `mv` triggers LSP rename, code actions appear as `.diff` files, and writes are tree-sitter validated.
 
 ## Sandbox
 
@@ -172,21 +170,7 @@ ls ~/
 
 You'll see a tmpfs root with selective bind mounts, FUSE at `/code`, and a PID namespace showing only sandbox processes. Anything you can (and can't) do in there applies to agents as well.
 
-<details>
-<summary>What's actually isolated</summary>
-
-The **daemon** (`nyne mount`) creates a user+mount namespace to serve FUSE. It retains mount capabilities for the overlay and nothing else.
-
-**Attached processes** (`nyne attach`) get further isolation:
-
-- **Mount namespace.** pivot_root into a tmpfs. Host `/` entries are selectively bind-mounted read-only. `/home` and `/tmp` excluded entirely.
-- **PID namespace.** Only sandbox processes visible.
-- **User remap.** Root in the mount namespace is dropped back to the real uid/gid before any user code runs.
-- **Filesystem.** Root tmpfs is read-only after setup. Writable surfaces: `/code` (FUSE), XDG dirs (`~/.config`, `~/.cache`, `~/.local/share`, `~/.local/state`), `/tmp` (isolated tmpfs), `/dev`, `/run`.
-
-Project files at `/code` go through FUSE. Writes land in an overlayfs upperdir, not on your source tree. Your real files stay untouched until you explicitly commit the overlay.
-
-</details>
+The daemon (`nyne mount`) creates a user+mount namespace to serve FUSE and retains only mount capabilities. Attached processes (`nyne attach`) get a pivot_root into a tmpfs with host `/` entries bind-mounted read-only, `/home` and `/tmp` excluded entirely, a separate PID namespace, and uid/gid dropped back from the mount namespace root. The writable surfaces are `/code` (FUSE), XDG dirs, an isolated `/tmp`, `/dev`, and `/run`. Project writes go to your source tree by default (git makes recovery trivial), or optionally to an overlayfs upperdir if you want an extra safety net. Mount paths, excluded directories, and writable surfaces are all configurable.
 
 **This applies to every tool in this space, not just nyne.** Any project that gives an LLM shell access deserves five minutes of poking. That's all it takes to know whether your `/home` is actually walled off or just claimed to be.
 

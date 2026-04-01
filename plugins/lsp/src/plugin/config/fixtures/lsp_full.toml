@@ -1,0 +1,15 @@
+[lsp]
+enabled = true
+cache_ttl = "10m"
+diagnostics_timeout = "3s"
+
+[lsp.servers.rust-analyzer]
+args = ["--log-file", "/tmp/ra.log"]
+
+[lsp.servers.basedpyright]
+enabled = false
+
+[lsp.servers.ruff]
+command = "ruff"
+args = ["server"]
+extensions = ["py"]

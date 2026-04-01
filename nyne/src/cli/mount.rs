@@ -15,18 +15,20 @@ use std::sync::Arc;
 
 use clap::Args;
 use color_eyre::eyre::{Result, WrapErr, ensure, eyre};
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use super::output::{self, style};
 use crate::config::{NyneConfig, StorageStrategy};
-use crate::dispatch::ScriptRegistry;
-use crate::dispatch::path_filter::PathFilter;
-use crate::fuse::VisibilityMap;
+use crate::dispatch::activation::ActivationContext;
+use crate::dispatch::{ControlRegistry, ScriptRegistry};
+use crate::fuse::FuseFilesystem;
+use crate::fuse::notify::{AsyncNotifier, FuseNotifier};
 use crate::process::Spawner;
+use crate::router::fs::os::OsFilesystem;
+use crate::router::{Chain, Filesystem};
 use crate::session::{self, SessionId, SessionRegistry};
-use crate::types::{GitDirName, PassthroughProcesses, ProcessVisibility};
-use crate::watcher::FsWatcher;
-use crate::{AsyncNotifier, BufferedEventSink, FuseNotifier, NyneFs, OsFs, ProviderRegistry, Router, plugin, sandbox};
+use crate::watcher::{FsWatcher, WatcherBackend};
+use crate::{plugin, procfs, sandbox};
 
 /// Number of FUSE handler threads per mount.
 ///
@@ -56,6 +58,13 @@ pub struct MountArgs {
     ///   nyne mount <myid:/path/to/project>
     ///   nyne mount /path/a /path/b
     pub paths: Vec<MountSpec>,
+
+    /// Override the repository storage strategy from the config file.
+    ///
+    /// Accepts `passthrough`, `snapshot`, or `hardlink`. See [`StorageStrategy`]
+    /// for variant descriptions.
+    #[arg(long)]
+    pub storage_strategy: Option<StorageStrategy>,
 }
 
 /// A parsed mount specification: optional explicit session ID + directory path.
@@ -119,18 +128,15 @@ impl FromStr for MountSpec {
     }
 }
 
-/// Owns the FUSE session, filesystem watcher, and control IPC server.
+/// Owns the FUSE session and supporting infrastructure.
 ///
-/// All three resources are kept alive for the lifetime of the mount. When
-/// this guard is dropped (on `SIGINT`, `SIGTERM`, or normal exit), the FUSE
-/// session unmounts the overlay, the watcher stops monitoring for changes,
-/// and the control socket is cleaned up. The `#[allow(dead_code)]` is
-/// intentional -- the fields are never read, only held for their drop side
-/// effects.
+/// All resources are kept alive for the lifetime of the mount. When
+/// this guard is dropped, the FUSE session unmounts the overlay and
+/// supporting services are cleaned up.
 #[allow(dead_code)]
 struct SessionGuard {
     _session: fuser::BackgroundSession,
-    _watcher: FsWatcher,
+    watcher: FsWatcher,
     _control_server: Option<sandbox::control::Server>,
 }
 
@@ -163,8 +169,12 @@ pub fn run(args: &MountArgs) -> Result<()> {
         .map(|p| p.canonicalize().unwrap_or(p))
         .or_else(|| env::current_dir().ok());
 
-    let nyne_config = Arc::new(NyneConfig::load(&plugins, project_root.as_deref())?);
+    let mut nyne_config = NyneConfig::load(&plugins, project_root.as_deref())?;
+    if let Some(strategy) = args.storage_strategy {
+        nyne_config.repository.storage_strategy = strategy;
+    }
     let storage_strategy = nyne_config.repository.storage_strategy;
+    let nyne_config = Arc::new(nyne_config);
 
     // Ensure session directory exists before scanning.
     session::ensure_session_dir()?;
@@ -211,25 +221,27 @@ pub fn run(args: &MountArgs) -> Result<()> {
 
     print_mount_plan(&mounts)?;
 
+    let state_root = nyne_config.sandbox.state_root.clone();
+
     // Build mount entries and launch all daemons.
     let entries: Vec<_> = mounts
         .into_iter()
         .map(|(id, path)| {
-            let persist_root = match storage_strategy {
-                StorageStrategy::Passthrough => None,
-                _ => Some(sandbox::resolve_persist_root(None)?),
-            };
-
             let config = sandbox::DaemonConfig::new(sandbox::MountEntry { path })?;
 
-            let session_id = id.clone();
+            // Resolve the control socket path in the supervisor's user
+            // namespace so that the daemon (in its own fresh user ns)
+            // binds at the same location clients look up.
+            session::ensure_session_dir()?;
+            let control_socket_path = session::control_socket(id.as_str())?;
             let nyne_config = Arc::clone(&nyne_config);
+            let state_root = state_root.clone();
             let mount_fn: sandbox::MountFn = Box::new(move |mount_path| {
                 build_fuse_session(
                     mount_path,
-                    &session_id,
-                    Arc::clone(&nyne_config),
-                    persist_root.as_deref(),
+                    &control_socket_path,
+                    &nyne_config,
+                    &state_root,
                     storage_strategy,
                 )
             });
@@ -238,7 +250,7 @@ pub fn run(args: &MountArgs) -> Result<()> {
         })
         .collect::<Result<_>>()?;
 
-    sandbox::run_mounts(entries)
+    sandbox::run_mounts(entries, &state_root)
 }
 
 /// Print the mount plan to the terminal before launching daemons.
@@ -270,135 +282,113 @@ fn print_mount_plan(mounts: &[(SessionId, PathBuf)]) -> Result<()> {
 
 /// Build and start a FUSE session with all supporting infrastructure.
 ///
-/// Called from inside the sandbox namespace after fork -- `mount_path` is the
-/// bind-mounted project directory visible to the daemon. This function is the
-/// heart of the mount lifecycle:
+/// 1. Prepare project storage (passthrough bind or clone overlay).
+/// 2. Activate plugins, collect router providers.
+/// 3. Build the middleware chain.
+/// 4. Construct `FuseFilesystem` and mount FUSE.
+/// 5. Set kernel notifier, start filesystem watcher.
 ///
-/// 1. **Storage**: prepare the backing store (passthrough bind or clone overlay)
-///    per the configured [`StorageStrategy`].
-/// 2. **Providers**: activate all linked plugins via [`ProviderRegistry`], which
-///    populates the `TypeMap` with shared services.
-/// 3. **Scripts**: build the script registry from provider-contributed scripts.
-/// 4. **Router**: assemble the dispatch router that maps FUSE paths to provider
-///    content, including path filters for `.git/` exclusion.
-/// 5. **Visibility**: build the per-process visibility map from config defaults
-///    and plugin contributions (e.g., LSP servers needing passthrough).
-/// 6. **Control server**: start the Unix socket IPC server for `nyne ctl`/`exec`.
-/// 7. **FUSE mount**: spawn the `fuser` background session with [`FUSE_THREADS`]
-///    handler threads.
-/// 8. **Watcher**: start the filesystem watcher for change-driven invalidation.
-///
-/// Returns a boxed [`SessionGuard`] that keeps everything alive until dropped.
-///
-/// # Errors
-///
-/// Returns an error if any step fails (storage prep, FUSE mount, etc.).
-/// Control server failures are non-fatal -- logged as warnings.
+/// Returns a [`SessionGuard`] that keeps everything alive until dropped.
 fn build_fuse_session(
     mount_path: &Path,
-    session_id: &SessionId,
-    nyne_config: Arc<NyneConfig>,
-    persist_root: Option<&Path>,
+    control_socket_path: &Path,
+    nyne_config: &Arc<NyneConfig>,
+    state_root: &Path,
     storage_strategy: StorageStrategy,
 ) -> Result<Box<dyn Send>> {
     let mount_path = mount_path.to_path_buf();
 
-    // Prepare the project backing path (passthrough bind-mount or
-    // clone-backed overlay, depending on strategy).
-    let storage_root = sandbox::prepare_project_storage(&mount_path, persist_root, storage_strategy)?;
-    debug!(
-        mount = %mount_path.display(),
-        storage = %storage_root.display(),
-        strategy = %storage_strategy,
-        "project storage prepared"
-    );
+    // Prepare the project backing path.
+    let storage_root = sandbox::prepare_project_storage(&mount_path, state_root, storage_strategy)?;
 
-    // Build real filesystem and provider registry.
-    let real_fs: Arc<dyn crate::RealFs> = Arc::new(OsFs::new(storage_root.clone()));
-    let display_root = Path::new(sandbox::SANDBOX_CODE);
+    // Build filesystem and activation context.
+    let fs_backend: Arc<dyn Filesystem> = Arc::new(OsFilesystem::new(&storage_root));
+    let display_root = nyne_config.sandbox.mount_root.as_path();
     let spawner = Arc::new(Spawner::new());
-    let (provider_registry, activation_ctx) = ProviderRegistry::default_for(
-        &mount_path,
-        display_root,
-        &storage_root,
-        Arc::clone(&real_fs),
-        nyne_config,
+    let mut activation_ctx = ActivationContext::new(
+        mount_path.clone(),
+        display_root.to_path_buf(),
+        storage_root.clone(),
+        Arc::clone(&fs_backend),
+        Arc::clone(nyne_config),
         spawner,
     );
-    let registry = Arc::new(provider_registry);
-    info!(
-        path = %mount_path.display(),
-        active_count = registry.active_providers().len(),
-        "providers activated"
+
+    // Activate plugins in dependency order.
+    let plugins = plugin::instantiate();
+    let plugins = plugin::sort_by_deps(plugins)?;
+    for p in &plugins {
+        p.activate(&mut activation_ctx)?;
+    }
+
+    let activation_ctx = Arc::new(activation_ctx);
+
+    // Collect all plugin contributions in a single pass.
+    let mut all_providers = Vec::new();
+    let mut all_scripts = Vec::new();
+    let mut all_commands = Vec::new();
+    for p in &plugins {
+        let c = p.contributions(&activation_ctx)?;
+        all_providers.extend(c.providers);
+        all_scripts.extend(c.scripts);
+        all_commands.extend(c.control_commands);
+    }
+
+    let chain = Arc::new(Chain::build(all_providers).wrap_err("chain build failed")?);
+    let script_registry = Arc::new(ScriptRegistry::from_entries(all_scripts));
+    let control_registry = Arc::new(ControlRegistry::from_commands(all_commands));
+
+    // Open the daemon's own user + mount namespace fds. Sent to attach
+    // clients via SCM_RIGHTS so they can `setns` without resolving the
+    // daemon's PID (which breaks across sibling PID namespaces).
+    // `daemon_main` has already called `unshare_user_mount`, so
+    // `/proc/self/ns/{user,mnt}` point at the daemon's namespaces.
+    let ns_fds = Arc::new(sandbox::control::NamespaceFds {
+        user: procfs::self_ns_fd("user")?,
+        mnt: procfs::self_ns_fd("mnt")?,
+    });
+
+    // Control server. The socket path was resolved by the supervisor
+    // before forking, so it reflects the supervisor's namespace view —
+    // matching the session file location and what clients will look up.
+    let handlers = sandbox::control::Handlers::new(
+        Arc::clone(&script_registry),
+        Arc::clone(&activation_ctx),
+        control_registry,
+        Arc::clone(&chain),
+        ns_fds,
     );
+    let control_server = Some(sandbox::control::start_server(control_socket_path, handlers)?);
 
-    // Build script registry.
-    let script_registry = Arc::new(ScriptRegistry::new(&activation_ctx));
+    // Build FuseFilesystem and mount.
+    let fs = FuseFilesystem::new(Arc::clone(&chain), fs_backend);
+    let notifier_slot = Arc::clone(fs.notifier());
+    let inodes = Arc::clone(fs.inodes());
 
-    // Git directory name comes from the git plugin via TypeMap.
-    // If no git plugin is active, falls back to None (no git dir filtering).
-    let git_dir_component = activation_ctx.get::<GitDirName>().map(|g| g.0.clone());
-    let path_filter = PathFilter::build(&storage_root, git_dir_component.clone());
-
-    // Build router and FUSE handler.
-    let events: Arc<BufferedEventSink> = Arc::new(BufferedEventSink::new());
-    let router = Arc::new(Router::new(registry, real_fs, events, path_filter));
-
-    // Build visibility map: config defaults + plugin contributions → name-based
-    // rules (all mapped to `None` / passthrough). Shared with the control server
-    // so `SetVisibility` requests from `nyne attach` take effect immediately.
-    let plugin_processes = activation_ctx
-        .get::<PassthroughProcesses>()
-        .map_or_else(Vec::new, |p| p.as_slice().to_vec());
-    let name_rules = activation_ctx
-        .config()
-        .passthrough_processes
-        .iter()
-        .cloned()
-        .chain(plugin_processes)
-        .map(|name| (name, ProcessVisibility::None));
-    let visibility = Arc::new(VisibilityMap::new(name_rules).with_cgroup_tracking());
-
-    // Ensure session dir exists inside the daemon's mount namespace.
-    // This is intentionally separate from the `ensure_session_dir()` call
-    // in `run()` — the daemon runs in a new mount namespace after fork,
-    // so the parent's session dir may not be visible here.
-    session::ensure_session_dir()?;
-    let control_server = match session::control_socket(session_id.as_str()) {
-        Ok(socket_path) => {
-            let server = sandbox::control::start_server(
-                &socket_path,
-                Arc::clone(&script_registry),
-                Arc::clone(&activation_ctx),
-                Arc::clone(&visibility),
-            )?;
-            Some(server)
-        }
-        Err(e) => {
-            warn!(error = %e, "could not determine control socket path — nyne exec will not be available");
-            None
-        }
-    };
-
-    let fs = NyneFs::new(Arc::clone(&router), visibility);
-
-    // Mount FUSE.
     let mut fuse_config = fuser::Config::default();
     fuse_config.n_threads = Some(FUSE_THREADS);
     fuse_config.clone_fd = true;
-    let session = fuser::spawn_mount2(fs, &mount_path, &fuse_config)
+    let fuse_session = fuser::spawn_mount2(fs, &mount_path, &fuse_config)
         .wrap_err_with(|| format!("mounting FUSE at {}", mount_path.display()))?;
 
-    router.set_kernel_notifier(Box::new(AsyncNotifier::new(FuseNotifier::new(session.notifier()))));
+    // Set the kernel notifier now that the FUSE session is running.
+    notifier_slot
+        .set(Box::new(AsyncNotifier::new(FuseNotifier::new(fuse_session.notifier()))))
+        .ok();
 
-    let watcher = FsWatcher::new(&storage_root, Arc::clone(&router), git_dir_component.as_deref())?;
+    // Start filesystem watcher.
+    let watcher_backend = WatcherBackend {
+        chain,
+        inodes,
+        notifier: notifier_slot,
+    };
+    let watcher = FsWatcher::new(&storage_root, watcher_backend)?;
 
     info!(path = %mount_path.display(), "FUSE session spawned");
 
-    let guard = SessionGuard {
-        _session: session,
-        _watcher: watcher,
+    Ok(Box::new(SessionGuard {
+        _session: fuse_session,
+        watcher,
         _control_server: control_server,
-    };
-    Ok(Box::new(guard) as Box<dyn Send>)
+    }))
 }

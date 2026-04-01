@@ -10,13 +10,13 @@
 
 use std::io::ErrorKind;
 use std::ops::Range;
+use std::path::Path;
 use std::str::from_utf8;
 
 use color_eyre::eyre::Result;
 use crop::Rope;
 use nyne::err::io_err;
-use nyne::types::real_fs::RealFs;
-use nyne::types::vfs_path::VfsPath;
+use nyne::router::Filesystem;
 
 /// Read a source file, splice new content at a byte range, validate, and write back.
 ///
@@ -25,16 +25,15 @@ use nyne::types::vfs_path::VfsPath;
 ///
 /// Returns the number of bytes in `new_content` on success.
 pub fn splice_validate_write(
-    real_fs: &dyn RealFs,
-    source_file: &VfsPath,
+    fs: &dyn Filesystem,
+    source_file: &Path,
     byte_range: Range<usize>,
     new_content: &str,
     validate: impl Fn(&str) -> Result<(), String>,
 ) -> Result<usize> {
-    let current = real_fs.read(source_file)?;
-    let current_str = from_utf8(&current)?;
-    let mut rope = Rope::from(current_str);
-    splice_rope_validate_write(real_fs, source_file, &mut rope, byte_range, new_content, validate)
+    let content = fs.read_file(source_file)?;
+    let mut rope = Rope::from(from_utf8(&content)?);
+    splice_rope_validate_write(fs, source_file, &mut rope, byte_range, new_content, validate)
 }
 
 /// Splice new content into source text at a byte range, returning the result.
@@ -61,8 +60,8 @@ pub fn splice_content(source: &str, byte_range: Range<usize>, new_content: &str)
 ///
 /// Returns the number of bytes in `new_content` on success.
 pub fn splice_rope_validate_write(
-    real_fs: &dyn RealFs,
-    source_file: &VfsPath,
+    fs: &dyn Filesystem,
+    source_file: &Path,
     rope: &mut Rope,
     byte_range: Range<usize>,
     new_content: &str,
@@ -74,12 +73,20 @@ pub fn splice_rope_validate_write(
             ErrorKind::InvalidInput,
             format!(
                 "byte range {}..{} out of bounds for source of length {source_len} \
-                 (source={source_file})",
-                byte_range.start, byte_range.end,
+                 (source={})",
+                byte_range.start,
+                byte_range.end,
+                source_file.display(),
             ),
         ));
     }
     rope.replace(byte_range.clone(), new_content);
+    // Ensure the result ends with a newline. POSIX text file convention,
+    // and tree-sitter grammars (notably markdown) treat a missing final
+    // newline as a parse error.
+    if rope.byte_len() > 0 && rope.byte(rope.byte_len() - 1) != b'\n' {
+        rope.insert(rope.byte_len(), "\n");
+    }
     let spliced = rope.to_string();
 
     // Validate the result. On failure, check whether the source was already
@@ -90,12 +97,13 @@ pub fn splice_rope_validate_write(
         // Re-read the original file (not yet overwritten) to check whether
         // it was already invalid before the splice. Only pay this cost on
         // the error path — the common (success) path does zero extra work.
-        if validate(from_utf8(&real_fs.read(source_file)?).unwrap_or("")).is_ok() {
+        if validate(from_utf8(&fs.read_file(source_file)?).unwrap_or("")).is_ok() {
             return Err(io_err(
                 ErrorKind::InvalidInput,
                 format!(
-                    "{e} (source={source_file}, splice_range={}..{}, new_content_len={}, \
+                    "{e} (source={}, splice_range={}..{}, new_content_len={}, \
                      source_len={source_len}, result_len={})",
+                    source_file.display(),
                     byte_range.start,
                     byte_range.end,
                     new_content.len(),
@@ -104,7 +112,7 @@ pub fn splice_rope_validate_write(
             ));
         }
     }
-    real_fs.write(source_file, spliced.as_bytes())?;
+    fs.write_file(source_file, spliced.as_bytes())?;
     Ok(new_content.len())
 }
 
@@ -115,11 +123,8 @@ pub fn splice_rope_validate_write(
 #[must_use]
 pub fn line_start_of_rope(rope: &Rope, offset: usize) -> usize { rope.byte_of_line(rope.line_of_byte(offset)) }
 
-/// Byte offset of the start of the line containing `offset`.
-///
-/// Convenience wrapper that builds a [`crop::Rope`] internally. When calling
-/// multiple line-offset functions on the same source, prefer
-/// [`line_start_of_rope`] with a shared rope.
+/// Convenience wrapper that builds a [`crop::Rope`] internally.
+#[cfg(test)]
 #[must_use]
 pub fn line_start_of(source: &str, offset: usize) -> usize { line_start_of_rope(&Rope::from(source), offset) }
 
@@ -138,14 +143,6 @@ pub fn line_end_of_rope(rope: &Rope, offset: usize) -> usize {
     }
 }
 
-/// Byte offset of the end of the line containing `offset`.
-///
-/// Convenience wrapper that builds a [`crop::Rope`] internally. When calling
-/// multiple line-offset functions on the same source, prefer
-/// [`line_end_of_rope`] with a shared rope.
-#[must_use]
-pub fn line_end_of(source: &str, offset: usize) -> usize { line_end_of_rope(&Rope::from(source), offset) }
-
 /// Determine the indentation prefix at a given byte offset, using a pre-built rope.
 ///
 /// Finds the line start via the rope, then extracts leading whitespace from
@@ -155,14 +152,6 @@ pub fn indent_at_rope<'a>(source: &'a str, rope: &Rope, offset: usize) -> &'a st
     let line = &source[line_start_of_rope(rope, offset)..offset];
     &line[..line.find(|c: char| !c.is_whitespace()).unwrap_or(line.len())]
 }
-
-/// Determine the indentation prefix at a given byte offset in source text.
-///
-/// Convenience wrapper that builds a [`crop::Rope`] internally. When calling
-/// multiple line-offset functions on the same source, prefer
-/// [`indent_at_rope`] with a shared rope.
-#[must_use]
-pub fn indent_at(source: &str, offset: usize) -> &str { indent_at_rope(source, &Rope::from(source), offset) }
 
 /// Extend a byte range to consume trailing blank-line separators.
 ///

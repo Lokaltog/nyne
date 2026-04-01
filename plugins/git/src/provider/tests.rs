@@ -1,8 +1,9 @@
 use super::*;
+use crate::history;
 
 /// Tests that `hunk_overlaps_range` correctly detects overlap between blame hunks and line ranges.
 mod hunk_overlap_tests {
-    use nyne::types::SymbolLineRange;
+    use nyne::SymbolLineRange;
     use rstest::rstest;
 
     use super::*;
@@ -28,6 +29,10 @@ mod hunk_overlap_tests {
         }
     }
 
+    /// Check whether a blame hunk overlaps a 1-based inclusive line range.
+    const fn hunk_overlaps_range(hunk: &history::BlameHunk, range: &SymbolLineRange) -> bool {
+        hunk.start_line <= range.end && hunk.end_line >= range.start
+    }
     /// Verifies hunk overlap detection against a fixed 10-20 range with various hunk positions.
     #[rstest]
     #[case::single_line_inside("15", true)]
@@ -44,7 +49,7 @@ mod hunk_overlap_tests {
     fn hunk_overlap(#[case] lines: &str, #[case] expected: bool) {
         let range = SymbolLineRange { start: 10, end: 20 };
         assert_eq!(
-            views::hunk_overlaps_range(&hunk(lines), &range),
+            hunk_overlaps_range(&hunk(lines), &range),
             expected,
             "hunk {lines} vs range 10-20"
         );
@@ -53,7 +58,7 @@ mod hunk_overlap_tests {
 
 /// Tests for `SymbolLineRange` construction and formatting.
 mod symbol_line_range_tests {
-    use nyne::types::SymbolLineRange;
+    use nyne::SymbolLineRange;
 
     /// Tests that `from_zero_based` converts a 0-based range to 1-based inclusive.
     #[test]
@@ -135,7 +140,6 @@ mod history_filename_tests {
             author: "dev".into(),
             date: "2024-01-15".into(),
             message: message.into(),
-            epoch_secs: 1_705_276_800,
         }
     }
 
@@ -199,10 +203,10 @@ mod history_filename_tests {
 mod sliced_content_tests {
     use std::sync::Arc;
 
-    use nyne::templates::{HandleBuilder, TemplateHandle};
-    use nyne::types::slice::SliceSpec;
+    use nyne::SliceSpec;
+    use nyne::templates::{HandleBuilder, LazyView, TemplateHandle};
 
-    use super::*;
+    use crate::history::HistoryQueries as _;
 
     /// Template handles for blame and log used in sliced content tests.
     struct TestHandles {
@@ -216,11 +220,9 @@ mod sliced_content_tests {
         let dir = tempfile::tempdir().expect("create temp dir");
         let git_repo = git2::Repository::init(dir.path()).expect("git init");
 
-        // Write the file.
         let file_path = dir.path().join(filename);
         std::fs::write(&file_path, content).expect("write file");
 
-        // Stage and commit.
         let mut index = git_repo.index().expect("get index");
         index.add_path(std::path::Path::new(filename)).expect("add path");
         index.write().expect("write index");
@@ -235,7 +237,6 @@ mod sliced_content_tests {
         (Arc::new(repo), dir)
     }
 
-    /// Build blame and log template handles for testing.
     fn git_handles() -> TestHandles {
         let mut b = HandleBuilder::new();
         let blame_key = b.register("git/blame", include_str!("templates/blame.md.j2"));
@@ -247,120 +248,96 @@ mod sliced_content_tests {
         }
     }
 
-    /// Verifies that a range slice selects only the matching blame rows.
+    fn sliced_blame_view(
+        repo: Arc<crate::repo::Repo>,
+        rel: &str,
+        spec: SliceSpec,
+    ) -> LazyView<impl Fn(&nyne::templates::TemplateEngine, &str) -> color_eyre::eyre::Result<Vec<u8>> + Send + Sync>
+    {
+        let rel = rel.to_owned();
+        LazyView::new(move |engine: &nyne::templates::TemplateEngine, tmpl: &str| {
+            let hunks = repo.blame(&rel)?;
+            Ok(engine.render_bytes(
+                tmpl,
+                &minijinja::context!(data => crate::history::slice_blame_hunks(hunks, &spec)),
+            ))
+        })
+    }
+
+    fn sliced_log_view(
+        repo: Arc<crate::repo::Repo>,
+        rel: &str,
+        spec: SliceSpec,
+    ) -> LazyView<impl Fn(&nyne::templates::TemplateEngine, &str) -> color_eyre::eyre::Result<Vec<u8>> + Send + Sync>
+    {
+        let rel = rel.to_owned();
+        LazyView::new(move |engine: &nyne::templates::TemplateEngine, tmpl: &str| {
+            let entries = repo.file_history(&rel, super::LOG_LIMIT)?;
+            let sliced = spec.apply(&entries);
+            Ok(engine.render_bytes(tmpl, &minijinja::context!(data => sliced)))
+        })
+    }
+
     #[test]
     fn sliced_blame_range_selects_subset() {
         let (repo, _dir) = test_repo_with_file("hello.txt", "line1\nline2\nline3\nline4\n");
-        let ctx = repo::FileViewCtx {
-            repo,
-            rel_path: "hello.txt".into(),
-        };
         let h = git_handles();
-        let view = views::SlicedBlameView {
-            ctx,
-            spec: SliceSpec::Range(1, 2),
-        };
+        let view = sliced_blame_view(repo, "hello.txt", SliceSpec::Range(1, 2));
         let output = String::from_utf8(h.blame.render_view(&view).expect("render")).expect("utf8");
-        // Should contain blame table rows — at least the header and some data.
         assert!(output.contains("# Blame"), "expected blame header");
-        // The full blame has 4 hunks (one per line or merged); slicing to 1-2
-        // should produce fewer rows than the full file.
         let row_count = output.lines().filter(|l| l.starts_with('|') && l.contains('`')).count();
         assert!(row_count > 0, "expected at least one blame row");
         assert!(row_count <= 2, "expected at most 2 blame rows, got {row_count}");
     }
 
-    /// Verifies that an out-of-range slice produces the empty-blame fallback.
     #[test]
     fn sliced_blame_empty_on_range_beyond_data() {
         let (repo, _dir) = test_repo_with_file("tiny.txt", "only line\n");
-        let ctx = repo::FileViewCtx {
-            repo,
-            rel_path: "tiny.txt".into(),
-        };
         let h = git_handles();
-        let view = views::SlicedBlameView {
-            ctx,
-            spec: SliceSpec::Range(100, 200),
-        };
+        let view = sliced_blame_view(repo, "tiny.txt", SliceSpec::Range(100, 200));
         let output = String::from_utf8(h.blame.render_view(&view).expect("render")).expect("utf8");
-        // Out-of-range slice produces the "no data" fallback.
         assert!(
             output.contains("No blame data available"),
             "expected empty-blame fallback, got: {output}"
         );
     }
 
-    /// Verifies that a tail(1) slice yields exactly one blame row.
     #[test]
     fn sliced_blame_tail() {
         let (repo, _dir) = test_repo_with_file("four.txt", "a\nb\nc\nd\n");
-        let ctx = repo::FileViewCtx {
-            repo,
-            rel_path: "four.txt".into(),
-        };
         let h = git_handles();
-        let view = views::SlicedBlameView {
-            ctx,
-            spec: SliceSpec::Tail(1),
-        };
+        let view = sliced_blame_view(repo, "four.txt", SliceSpec::Tail(1));
         let output = String::from_utf8(h.blame.render_view(&view).expect("render")).expect("utf8");
         let row_count = output.lines().filter(|l| l.starts_with('|') && l.contains('`')).count();
         assert_eq!(row_count, 1, "tail(1) should yield exactly 1 blame row");
     }
 
-    /// Verifies that `Single(1)` returns exactly one log row.
     #[test]
     fn sliced_log_single_entry() {
         let (repo, _dir) = test_repo_with_file("hello.txt", "content\n");
-        let ctx = repo::FileViewCtx {
-            repo,
-            rel_path: "hello.txt".into(),
-        };
         let h = git_handles();
-        // Repo has exactly 1 commit — Single(1) should return it.
-        let view = views::SlicedLogView {
-            ctx,
-            spec: SliceSpec::Single(1),
-        };
+        let view = sliced_log_view(repo, "hello.txt", SliceSpec::Single(1));
         let output = String::from_utf8(h.log.render_view(&view).expect("render")).expect("utf8");
         assert!(output.contains("# Log"), "expected log header");
         let row_count = output.lines().filter(|l| l.starts_with('|') && l.contains('`')).count();
         assert_eq!(row_count, 1, "expected exactly 1 log row");
     }
 
-    /// Verifies that tail(N) returns all entries when fewer than N exist.
     #[test]
     fn sliced_log_tail_with_fewer_entries() {
         let (repo, _dir) = test_repo_with_file("hello.txt", "content\n");
-        let ctx = repo::FileViewCtx {
-            repo,
-            rel_path: "hello.txt".into(),
-        };
         let h = git_handles();
-        // Ask for the last 100 entries but only 1 exists — should return that 1.
-        let view = views::SlicedLogView {
-            ctx,
-            spec: SliceSpec::Tail(100),
-        };
+        let view = sliced_log_view(repo, "hello.txt", SliceSpec::Tail(100));
         let output = String::from_utf8(h.log.render_view(&view).expect("render")).expect("utf8");
         let row_count = output.lines().filter(|l| l.starts_with('|') && l.contains('`')).count();
         assert_eq!(row_count, 1, "tail(100) with 1 commit should yield 1 row");
     }
 
-    /// Verifies that an out-of-range log slice produces the empty-log fallback.
     #[test]
     fn sliced_log_range_beyond_data() {
         let (repo, _dir) = test_repo_with_file("hello.txt", "content\n");
-        let ctx = repo::FileViewCtx {
-            repo,
-            rel_path: "hello.txt".into(),
-        };
         let h = git_handles();
-        let view = views::SlicedLogView {
-            ctx,
-            spec: SliceSpec::Range(50, 100),
-        };
+        let view = sliced_log_view(repo, "hello.txt", SliceSpec::Range(50, 100));
         let output = String::from_utf8(h.log.render_view(&view).expect("render")).expect("utf8");
         assert!(
             output.contains("No history available"),
@@ -398,7 +375,7 @@ mod branch_segment_tests {
         (Arc::new(repo), dir)
     }
 
-    /// Collect sorted (name, has_rename, has_unlink) tuples from `branch_segments_at_prefix`.
+    /// Collect sorted (name, `has_rename`, `has_unlink`) tuples from `branch_segments_at_prefix`.
     fn segments(repo: &Arc<Repo>, prefix: &str) -> Vec<(String, bool, bool)> {
         let Some(nodes) = super::branches::branch_segments_at_prefix(repo, prefix).expect("should not error") else {
             return Vec::new();
@@ -441,7 +418,7 @@ mod delete_branch_tests {
     use crate::repo::Repo;
 
     /// Create a temp repo with an initial commit on the default branch,
-    /// plus additional branches. Returns (repo, tempdir, initial_commit_oid).
+    /// plus additional branches. Returns (repo, tempdir, `initial_commit_oid`).
     fn repo_with_branches(branch_names: &[&str]) -> (Arc<Repo>, tempfile::TempDir, git2::Oid) {
         let dir = tempfile::tempdir().expect("create temp dir");
         let git_repo = git2::Repository::init(dir.path()).expect("git init");
@@ -546,7 +523,7 @@ mod branch_tree_tests {
         (Arc::new(repo), dir)
     }
 
-    /// Collect sorted (name, is_file) pairs from `branch_tree_nodes`.
+    /// Collect sorted (name, `is_file`) pairs from `branch_tree_nodes`.
     fn tree_entries(repo: &Arc<Repo>, branch: &str, path: &str) -> Vec<(String, bool)> {
         let Some(nodes) = super::branches::branch_tree_nodes(repo, branch, path).expect("should not error") else {
             return Vec::new();
@@ -580,5 +557,54 @@ mod branch_tree_tests {
         let (repo, _dir) = repo_with_files(&["dev"], &[("hello.txt", "world")]);
         let content = repo.blob_at_ref("dev", "hello.txt").expect("read blob");
         assert_eq!(content, b"world");
+    }
+
+    mod slice_blame_hunks_tests {
+        use nyne::SliceSpec;
+        use rstest::rstest;
+
+        use crate::commit::CommitInfo;
+        use crate::history::{BlameHunk, slice_blame_hunks};
+
+        fn hunk(start: usize, end: usize) -> BlameHunk {
+            BlameHunk {
+                start_line: start,
+                end_line: end,
+                commit: CommitInfo {
+                    hash: format!("h{start}"),
+                    author: "dev".into(),
+                    date: "2024-01-15".into(),
+                    message: "test".into(),
+                    epoch_secs: 0,
+                },
+            }
+        }
+
+        fn lines(hunks: &[BlameHunk]) -> Vec<(usize, usize)> {
+            hunks.iter().map(|h| (h.start_line, h.end_line)).collect()
+        }
+
+        /// Four hunks: 1-3, 4-6, 7-9, 10-12
+        fn sample_hunks() -> Vec<BlameHunk> { vec![hunk(1, 3), hunk(4, 6), hunk(7, 9), hunk(10, 12)] }
+
+        #[rstest]
+        #[case::exact_hunk(SliceSpec::Range(4, 6), &[(4, 6)])]
+        #[case::clips_start(SliceSpec::Range(2, 4), &[(2, 3), (4, 4)])]
+        #[case::clips_end(SliceSpec::Range(5, 8), &[(5, 6), (7, 8)])]
+        #[case::clips_both(SliceSpec::Range(2, 11), &[(2, 3), (4, 6), (7, 9), (10, 11)])]
+        #[case::single_line(SliceSpec::Single(5), &[(5, 5)])]
+        #[case::beyond_end(SliceSpec::Range(13, 20), &[])]
+        #[case::full_range(SliceSpec::Range(1, 12), &[(1, 3), (4, 6), (7, 9), (10, 12)])]
+        #[case::tail_one(SliceSpec::Tail(1), &[(12, 12)])]
+        #[case::tail_all(SliceSpec::Tail(100), &[(1, 3), (4, 6), (7, 9), (10, 12)])]
+        fn slice_by_line_range(#[case] spec: SliceSpec, #[case] expected: &[(usize, usize)]) {
+            let result = slice_blame_hunks(sample_hunks(), &spec);
+            assert_eq!(lines(&result), expected);
+        }
+
+        #[test]
+        fn empty_input() {
+            assert!(slice_blame_hunks(vec![], &SliceSpec::Range(1, 10)).is_empty());
+        }
     }
 }

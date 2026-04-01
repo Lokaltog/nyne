@@ -5,7 +5,7 @@ use std::sync::Arc;
 use nyne::process::Spawner;
 use nyne_source::SyntaxRegistry;
 
-use crate::config::Config;
+use crate::plugin::config::Config;
 use crate::session::Registry;
 use crate::session::manager::Manager;
 

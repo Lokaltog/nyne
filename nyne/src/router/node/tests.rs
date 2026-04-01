@@ -1,0 +1,214 @@
+use rstest::rstest;
+
+use super::*;
+use crate::router::test_support::{StubReadable, StubWritable};
+
+#[test]
+fn bitor_combines_flags() {
+    let perms = Permissions::READ | Permissions::WRITE;
+    assert!(perms.contains(Permissions::READ));
+    assert!(perms.contains(Permissions::WRITE));
+    assert!(!perms.contains(Permissions::EXECUTE));
+}
+
+#[test]
+fn bitand_intersects_flags() {
+    let rw = Permissions::READ | Permissions::WRITE;
+    let rx = Permissions::READ | Permissions::EXECUTE;
+    assert!((rw & rx).contains(Permissions::READ));
+    assert!(!(rw & rx).contains(Permissions::WRITE));
+    assert!(!(rw & rx).contains(Permissions::EXECUTE));
+}
+
+#[test]
+fn not_inverts_within_3_bits() {
+    let inverted = !Permissions::READ;
+    assert!(!inverted.contains(Permissions::READ));
+    assert!(inverted.contains(Permissions::WRITE));
+    assert!(inverted.contains(Permissions::EXECUTE));
+}
+
+#[test]
+fn none_is_empty() {
+    assert!(Permissions::NONE.is_empty());
+    assert!(!Permissions::READ.is_empty());
+}
+
+#[test]
+fn all_contains_every_flag() {
+    assert!(Permissions::ALL.contains(Permissions::READ));
+    assert!(Permissions::ALL.contains(Permissions::WRITE));
+    assert!(Permissions::ALL.contains(Permissions::EXECUTE));
+}
+
+#[test]
+fn from_bits_round_trips() {
+    let perms = Permissions::READ | Permissions::EXECUTE;
+    assert_eq!(Permissions::from_bits(perms.bits()), perms);
+}
+
+#[test]
+#[should_panic(expected = "out-of-range")]
+fn from_bits_rejects_out_of_range() { let _ = Permissions::from_bits(0xFF); }
+
+#[rstest]
+#[case::all("rwx", Permissions::ALL)]
+#[case::none("---", Permissions::NONE)]
+#[case::read_execute("r-x", Permissions::READ | Permissions::EXECUTE)]
+#[case::write_only("-w-", Permissions::WRITE)]
+fn display_formats_rwx(#[case] expected: &str, #[case] perms: Permissions) {
+    assert_eq!(perms.to_string(), expected);
+}
+
+#[test]
+fn bitor_assign_accumulates() {
+    let mut perms = Permissions::READ;
+    perms |= Permissions::WRITE;
+    assert!(perms.contains(Permissions::READ));
+    assert!(perms.contains(Permissions::WRITE));
+}
+
+/// Auto-derived permissions from node kind and capabilities.
+#[rstest]
+#[case::file_no_caps(Node::file(), Permissions::NONE)]
+#[case::file_readable(Node::file().with_readable(StubReadable::new("")), Permissions::READ)]
+#[case::file_writable(Node::file().with_writable(StubWritable), Permissions::WRITE)]
+#[case::file_read_write(
+    Node::file().with_readable(StubReadable::new("")).with_writable(StubWritable),
+    Permissions::READ | Permissions::WRITE,
+)]
+#[case::dir_default(Node::dir(), Permissions::READ | Permissions::EXECUTE)]
+#[case::dir_writable(Node::dir().with_writable(StubWritable), Permissions::ALL)]
+#[case::symlink(Node::symlink("/target"), Permissions::ALL)]
+#[case::explicit_override(
+    Node::file().with_readable(StubReadable::new("")).with_permissions(Permissions::ALL),
+    Permissions::ALL,
+)]
+fn auto_derived_permissions(#[case] node: Node, #[case] expected: Permissions) {
+    assert_eq!(node.permissions(), expected);
+}
+
+/// Merge: first-writer-wins for explicit permissions.
+#[rstest]
+#[case::first_wins(
+    Node::file().with_permissions(Permissions::READ),
+    Node::file().with_permissions(Permissions::WRITE),
+    Permissions::READ,
+)]
+#[case::takes_other_when_self_has_none(
+    Node::file(),
+    Node::file().with_permissions(Permissions::WRITE),
+    Permissions::WRITE,
+)]
+fn merge_permissions(#[case] mut target: Node, #[case] source: Node, #[case] expected: Permissions) {
+    target.merge_capabilities_from(source);
+    assert_eq!(target.permissions(), expected);
+}
+
+#[rstest]
+#[case::persistent_no_ttl(CachePolicy::persistent(), None)]
+#[case::with_ttl(CachePolicy::with_ttl(Duration::from_secs(60)), Some(Duration::from_secs(60)))]
+fn cache_policy_constructors(#[case] policy: CachePolicy, #[case] expected_ttl: Option<Duration>) {
+    assert_eq!(policy.ttl, expected_ttl);
+}
+
+#[test]
+fn node_cache_policy_default_is_none() {
+    assert!(Node::file().cache_policy().is_none());
+}
+
+#[test]
+fn node_with_cache_policy_round_trips() {
+    assert!(
+        Node::file()
+            .with_cache_policy(CachePolicy::persistent())
+            .cache_policy()
+            .unwrap()
+            .ttl
+            .is_none()
+    );
+}
+
+#[rstest]
+#[case::first_writer_wins(
+    Node::file().with_cache_policy(CachePolicy::persistent()),
+    Node::file().with_cache_policy(CachePolicy::with_ttl(Duration::from_secs(30))),
+    None,
+)]
+#[case::takes_other_when_self_has_none(
+    Node::file(),
+    Node::file().with_cache_policy(CachePolicy::with_ttl(Duration::from_secs(30))),
+    Some(Duration::from_secs(30)),
+)]
+fn merge_cache_policy(#[case] mut target: Node, #[case] source: Node, #[case] expected: Option<Duration>) {
+    target.merge_capabilities_from(source);
+    assert_eq!(target.cache_policy().and_then(|p| p.ttl), expected);
+}
+
+#[test]
+fn readable_size_defaults_to_none() {
+    assert!(StubReadable::new("hello").size().is_none());
+}
+
+struct StubLifecycle;
+impl Lifecycle for StubLifecycle {}
+
+struct StubAttributable;
+impl Attributable for StubAttributable {
+    fn get(&self, _key: &str) -> Option<Vec<u8>> { None }
+
+    fn set(&self, _key: &str, _value: &[u8]) -> Result<()> { Ok(()) }
+
+    fn list(&self) -> Vec<String> { Vec::new() }
+}
+
+#[rstest]
+#[case::lifecycle(Node::file().with_lifecycle(StubLifecycle))]
+#[case::attributable(Node::file().with_attributable(StubAttributable))]
+#[case::readable(Node::file().with_readable(StubReadable::new("")))]
+#[case::writable(Node::file().with_writable(StubWritable))]
+fn capability_slot_attach(#[case] node: Node) {
+    assert!(
+        node.readable().is_some()
+            || node.writable().is_some()
+            || node.lifecycle().is_some()
+            || node.attributable().is_some()
+    );
+}
+
+#[rstest]
+#[case::lifecycle(Node::file(), Node::file().with_lifecycle(StubLifecycle))]
+#[case::attributable(Node::file(), Node::file().with_attributable(StubAttributable))]
+fn capability_slot_merges_when_empty(#[case] mut target: Node, #[case] source: Node) {
+    target.merge_capabilities_from(source);
+    assert!(target.lifecycle().is_some() || target.attributable().is_some());
+}
+#[rstest]
+#[case::static_closure(
+    Box::new(LazyReadable::new(|_ctx: &ReadContext<'_>| Ok(b"hello from closure".to_vec()))) as Box<dyn Readable>,
+    b"hello from closure".as_slice(),
+)]
+#[case::captured_state({
+    let prefix = String::from("captured");
+    Box::new(LazyReadable::new(move |_ctx: &ReadContext<'_>| Ok(format!("{prefix}-value").into_bytes()))) as Box<dyn Readable>
+}, b"captured-value".as_slice())]
+fn lazy_readable_returns_expected(#[case] readable: Box<dyn Readable>, #[case] expected: &[u8]) {
+    let fs = crate::router::fs::mem::MemFs::new();
+    let ctx = ReadContext {
+        path: Path::new("/test"),
+        fs: &fs,
+    };
+    assert_eq!(readable.read(&ctx).unwrap(), expected);
+}
+
+#[test]
+fn lazy_readable_propagates_errors() {
+    let fs = crate::router::fs::mem::MemFs::new();
+    let ctx = ReadContext {
+        path: Path::new("/test"),
+        fs: &fs,
+    };
+    let readable = LazyReadable::new(|_ctx| color_eyre::eyre::bail!("intentional failure"));
+    let err = readable.read(&ctx).unwrap_err();
+    assert!(err.to_string().contains("intentional failure"));
+}

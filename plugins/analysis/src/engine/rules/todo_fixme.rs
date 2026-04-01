@@ -74,7 +74,7 @@ fn parse_tag_suffix(after_tag: &str) -> Option<&str> {
 /// Find a marker keyword followed by a colon and extract the trailing text.
 ///
 /// Returns `None` if the marker is absent or not followed by a colon.
-/// Delegates to [`crate::providers::todo::parse_tag_suffix`] for the
+/// Delegates to [`crate::provider::todo::parse_tag_suffix`] for the
 /// colon requirement (SSOT).
 fn extract_marker_text(comment: &str, marker: &str) -> Option<String> {
     let upper = comment.to_uppercase();

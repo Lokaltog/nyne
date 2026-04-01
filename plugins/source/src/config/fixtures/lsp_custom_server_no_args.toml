@@ -1,4 +1,0 @@
-[[lsp.servers]]
-name = "gopls"
-command = "gopls"
-extensions = ["go"]

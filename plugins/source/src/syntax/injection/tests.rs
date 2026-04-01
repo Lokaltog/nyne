@@ -1,6 +1,6 @@
 use rstest::rstest;
 
-use crate::syntax::fragment::{DEFAULT_MAX_DEPTH, DecomposedFile, FragmentKind, SymbolKind};
+use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
 use crate::test_support::registry;
 
 /// Load a fixture file from the syntax/injection test data directory.
@@ -12,7 +12,7 @@ fn decompose_j2(inner_ext: &str, source: &str) -> DecomposedFile {
     let decomposer = reg
         .get_compound(inner_ext, "j2")
         .unwrap_or_else(|| panic!("no compound decomposer for ({inner_ext}, j2)"));
-    let (file, _tree) = decomposer.decompose(source, DEFAULT_MAX_DEPTH);
+    let (file, _tree) = decomposer.decompose(source, 5);
     file
 }
 
@@ -119,7 +119,7 @@ fn preserves_inner_children() {
     insta::assert_debug_snapshot!(file);
 }
 
-/// Verifies that compound decomposition passes through inner fields like imports and file_doc.
+/// Verifies that compound decomposition passes through inner fields like imports and `file_doc`.
 #[test]
 fn inner_decomposition_fields_pass_through() {
     use crate::syntax::languages::jinja2::extract_template;
@@ -135,8 +135,8 @@ fn inner_decomposition_fields_pass_through() {
     let extraction = extract_template(&source);
     let (_map, inner_content) = SpanMap::build(&source, &extraction.regions);
 
-    let (direct, _tree) = inner.decompose(&inner_content, DEFAULT_MAX_DEPTH);
-    let (compound, _tree) = injection.decompose(&source, DEFAULT_MAX_DEPTH);
+    let (direct, _tree) = inner.decompose(&inner_content, 5);
+    let (compound, _tree) = injection.decompose(&source, 5);
 
     use crate::syntax::fragment::find_fragment_of_kind;
 
@@ -204,7 +204,7 @@ fn empty_content_only_jinja2_directives() {
 fn no_jinja2_directives_degenerates_to_inner_only() {
     let source = load_fixture("plain-content.md");
     let file = decompose_j2("md", &source);
-    let (direct, _tree) = registry().get("md").unwrap().decompose(&source, DEFAULT_MAX_DEPTH);
+    let (direct, _tree) = registry().get("md").unwrap().decompose(&source, 5);
     assert_eq!(
         file.len(),
         direct.len(),
@@ -274,7 +274,7 @@ fn validate_accepts(#[case] fixture: &str) {
     assert!(decomposer.validate(&source).is_ok());
 }
 
-/// Verifies that inner fragment full_span does not bleed into Jinja2 directives.
+/// Verifies that inner fragment `full_span` does not bleed into Jinja2 directives.
 #[test]
 fn inner_full_span_does_not_extend_into_jinja2_directives() {
     let source = load_fixture("toml-block.toml.j2");
@@ -299,7 +299,7 @@ fn inner_full_span_does_not_extend_into_jinja2_directives() {
     );
 }
 
-/// Verifies that inner fragment full_span does not bleed into render expressions.
+/// Verifies that inner fragment `full_span` does not bleed into render expressions.
 #[test]
 fn inner_full_span_does_not_extend_into_render_expressions() {
     // Render expressions ({{ var }}) create gaps in content regions just

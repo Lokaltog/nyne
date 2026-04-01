@@ -17,14 +17,14 @@ use std::time::Duration;
 use color_eyre::eyre::Result;
 use lsp_types::SymbolInformation;
 use nyne::process::Spawner;
-use nyne_source::syntax::SyntaxRegistry;
+use nyne_source::SyntaxRegistry;
 use parking_lot::{Mutex, RwLock};
 use tracing::{debug, warn};
 
 use super::Registry;
 use super::cache::Cache;
 use super::client::Client;
-use crate::config::Config;
+use crate::plugin::config::Config;
 
 /// Tracked state for a document opened via `textDocument/didOpen`.
 struct OpenDocument {
@@ -77,7 +77,7 @@ pub struct Manager {
     /// Active clients, keyed by server name.
     clients: RwLock<HashMap<String, Arc<Client>>>,
     /// Documents opened via `textDocument/didOpen`, tracked for lifecycle
-    /// management. Maps overlay path → `(extension, version)`.
+    /// management. Maps source path → `(extension, version)`.
     ///
     /// The extension is stored so the client can be looked up for
     /// `didChange`/`didClose` without re-deriving from the path.
@@ -86,8 +86,18 @@ pub struct Manager {
     open_documents: Mutex<HashMap<PathBuf, OpenDocument>>,
     /// TTL-based result cache.
     cache: Cache,
-    /// Path resolver for LSP URIs (`fuse_root` → `overlay_root` rewriting).
+    /// Path resolver for LSP URIs (`fuse_root` → `source_root` rewriting).
     path_resolver: super::path::PathResolver,
+}
+
+/// Resolved LSP client and file URIs for a rename operation.
+struct ResolvedRename {
+    /// The LSP client handling this file type.
+    client: Arc<Client>,
+    /// File URI of the original path.
+    old_uri: String,
+    /// File URI of the new path.
+    new_uri: String,
 }
 
 /// Manages LSP client lifecycle, document tracking, and query routing.
@@ -146,7 +156,7 @@ impl Manager {
         }
         // Return the first server that is applicable and spawnable.
         for server_def in self.registry.servers_for(ext) {
-            if !server_def.is_applicable(self.path_resolver.overlay_root()) {
+            if !server_def.is_applicable(self.path_resolver.source_root()) {
                 continue;
             }
             if let Some(client) = self.get_or_spawn(server_def) {
@@ -168,7 +178,7 @@ impl Manager {
         self.registry
             .servers_for(ext)
             .iter()
-            .filter(|def| def.is_applicable(self.path_resolver.overlay_root()))
+            .filter(|def| def.is_applicable(self.path_resolver.source_root()))
             .filter_map(|def| self.get_or_spawn(def))
             .collect()
     }
@@ -194,7 +204,7 @@ impl Manager {
     /// Get the diagnostics timeout from config.
     pub(crate) const fn diagnostics_timeout(&self) -> Duration { self.config.diagnostics_timeout }
 
-    /// Path resolver for rewriting LSP URIs from FUSE paths to overlay paths.
+    /// Path resolver for rewriting LSP URIs from FUSE paths to source paths.
     pub(crate) const fn path_resolver(&self) -> &super::path::PathResolver { &self.path_resolver }
 
     /// Ensure a document is opened in the LSP server via `textDocument/didOpen`.
@@ -338,11 +348,11 @@ impl Manager {
     /// file type. LSP errors are logged but do not propagate — the caller
     /// is responsible for performing the actual file rename regardless.
     pub(crate) fn will_rename_file(&self, old_path: &Path, new_path: &Path) {
-        let Some((client, old_uri, new_uri)) = self.resolve_rename_uris(old_path, new_path) else {
+        let Some(rename) = self.resolve_rename_uris(old_path, new_path) else {
             return;
         };
 
-        match client.will_rename_files(&old_uri, &new_uri) {
+        match rename.client.will_rename_files(&rename.old_uri, &rename.new_uri) {
             Ok(Some(edit)) =>
                 if let Err(e) = super::edit::apply_workspace_edit(&edit, &self.path_resolver) {
                     warn!(
@@ -371,11 +381,11 @@ impl Manager {
     /// Sends `workspace/didRenameFiles` and invalidates cached LSP
     /// results. Must be called **after** the actual file rename.
     pub(crate) fn did_rename_file(&self, old_path: &Path, new_path: &Path) {
-        let Some((client, old_uri, new_uri)) = self.resolve_rename_uris(old_path, new_path) else {
+        let Some(rename) = self.resolve_rename_uris(old_path, new_path) else {
             return;
         };
 
-        if let Err(e) = client.did_rename_files(&old_uri, &new_uri) {
+        if let Err(e) = rename.client.did_rename_files(&rename.old_uri, &rename.new_uri) {
             warn!(
                 target: "nyne::lsp",
                 old = %old_path.display(),
@@ -393,7 +403,7 @@ impl Manager {
     ///
     /// Returns `None` if no LSP client is available for the file's
     /// extension or if the paths cannot be converted to file URIs.
-    fn resolve_rename_uris(&self, old_path: &Path, new_path: &Path) -> Option<(Arc<Client>, String, String)> {
+    fn resolve_rename_uris(&self, old_path: &Path, new_path: &Path) -> Option<ResolvedRename> {
         let ext = old_path.extension().and_then(|e| e.to_str()).unwrap_or_default();
         let client = self.client_for_ext(ext)?;
 
@@ -409,15 +419,19 @@ impl Manager {
             return None;
         }
 
-        Some((client, old_uri, new_uri))
+        Some(ResolvedRename {
+            client,
+            old_uri,
+            new_uri,
+        })
     }
 
-    /// Read updated content from overlay and send `textDocument/didChange`.
+    /// Read updated content from source root and send `textDocument/didChange`.
     ///
     /// Returns `true` if the notification was sent successfully, `false` if
     /// the file could not be read (e.g., deleted) or the notification failed.
     fn send_did_change(client: &Client, path: &Path, version: i32) -> bool {
-        // Read from overlay (not FUSE — avoids re-entrancy).
+        // Read from source root (not FUSE — avoids re-entrancy).
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
@@ -504,10 +518,10 @@ impl Manager {
         }
 
         // Slow path: spawn as a direct daemon child. LSP servers use
-        // the overlay path (not FUSE) to avoid re-entrancy deadlocks.
+        // the source root (not FUSE) to avoid re-entrancy deadlocks.
         match Client::spawn(
             def,
-            self.path_resolver.overlay_root(),
+            self.path_resolver.source_root(),
             &self.spawner,
             self.config.response_timeout,
             &self.sandbox_env,

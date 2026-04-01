@@ -2,13 +2,8 @@
 //!
 //! A plugin bundles related VFS providers and their supporting services.
 //! Plugins are discovered at link time via the [`PLUGINS`] distributed slice
-//! and activated in two phases during mount:
-//!
-//! 1. **[`activate`](Plugin::activate)** — each plugin inserts shared services
-//!    into the [`ActivationContext`] `TypeMap`. All activations complete before
-//!    any providers are created.
-//! 2. **[`providers`](Plugin::providers)** — each plugin creates its provider
-//!    instances, reading services from the now-frozen context.
+//! and activated during mount via [`Plugin::activate`], which inserts shared
+//! services and router providers into the [`ActivationContext`] `AnyMap`.
 //!
 //! # Registration
 //!
@@ -19,11 +14,8 @@
 //!
 //! impl Plugin for MyPlugin {
 //!     fn id(&self) -> &str { "my-plugin" }
-//!     fn providers(
-//!         &self,
-//!         ctx: &Arc<ActivationContext>,
-//!     ) -> Result<Vec<Arc<dyn Provider>>> {
-//!         Ok(vec![])
+//!     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
+//!         Ok(())
 //!     }
 //! }
 //!
@@ -38,26 +30,56 @@ use linkme::distributed_slice;
 use crate::config::NyneConfig;
 use crate::dispatch::script::ScriptEntry;
 use crate::prelude::*;
+use crate::router::Provider;
+
+/// Everything a plugin contributes after activation.
+///
+/// Returned by [`Plugin::contributions`] to collect providers, scripts, and
+/// control commands in a single pass. Built from the individual trait methods
+/// by default — plugins rarely need to override `contributions()` directly.
+pub struct PluginContributions {
+    /// Providers for the middleware chain.
+    pub providers: Vec<Arc<dyn Provider>>,
+    /// Named scripts addressable via `nyne exec`.
+    pub scripts: Vec<ScriptEntry>,
+    /// Control commands handled via the IPC control socket.
+    pub control_commands: Vec<ControlCommand>,
+}
+
+pub mod control;
+pub use control::{AttachedProcess, ControlCommand, ControlContext, ProcessTable};
 
 /// A plugin bundles related VFS providers and their supporting services.
 ///
 /// Plugins insert shared services into [`ActivationContext`] during
-/// [`activate`](Plugin::activate), then create providers in
-/// [`providers`](Plugin::providers) after all plugins have activated.
+/// [`activate`](Plugin::activate). Providers are deposited into the
+/// activation context's `AnyMap` during activation.
 ///
-/// There are no ordering guarantees between plugin activations — providers
-/// must handle missing services gracefully (capability degradation).
+/// Plugins are activated in dependency order — [`provider_graph`](Plugin::provider_graph)
+/// declares which providers this plugin owns and their dependencies. The
+/// activation loop topologically sorts plugins before calling
+/// [`activate`](Plugin::activate).
 pub trait Plugin: Send + Sync {
     /// Unique identifier for this plugin.
     ///
-    /// Used for config lookup (`[plugin.<id>]`) and diagnostics.
+    /// Used for config lookup (`[plugin.<id>]`) and diagnostics. This is
+    /// intentionally separate from [`ProviderId`] — a plugin ID names the
+    /// *plugin* (one per crate), while provider IDs name the *middleware
+    /// providers* the plugin contributes (one or more per plugin).
     fn id(&self) -> &str;
 
-    /// Phase 1: Insert services into the context's `TypeMap`.
+    /// Provider ownership and dependency graph for activation ordering.
     ///
-    /// Called once per mount, before any providers are created. The context
-    /// is mutable — insert shared services here via
-    /// [`ActivationContext::insert`].
+    /// Each entry is `(provider_id, dependencies)` — the provider IDs this
+    /// plugin owns paired with their compile-time dependency lists. The
+    /// activation loop builds a plugin dependency graph from this and
+    /// topologically sorts before calling [`activate`](Plugin::activate).
+    fn provider_graph(&self) -> &[(ProviderId, &[ProviderId])] { &[] }
+
+    /// Insert services and providers into the context's `AnyMap`.
+    ///
+    /// Called once per mount. The context is mutable — insert shared
+    /// services and router providers here via [`ActivationContext::insert`].
     ///
     /// Returning an error aborts the mount.
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
@@ -65,20 +87,44 @@ pub trait Plugin: Send + Sync {
         Ok(())
     }
 
-    /// Phase 2: Create provider instances.
+    /// Providers this plugin contributes to the middleware chain.
     ///
-    /// Called after ALL plugins have run [`activate`](Plugin::activate), so
-    /// all `TypeMap` services are available. The context is now wrapped in
-    /// `Arc` — clone it into providers that need shared ownership.
-    fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>>;
+    /// Called after [`activate`](Self::activate). Providers are ordered by the
+    /// chain's dependency-graph sort — see [`crate::router::Chain::build`].
+    fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
+        let _ = ctx;
+        Ok(vec![])
+    }
 
     /// Named scripts this plugin provides.
     ///
-    /// Called after [`providers`](Plugin::providers). Scripts are addressable
-    /// as `provider.<plugin-id>.<name>`.
+    /// Scripts are addressable as `provider.<plugin-id>.<name>`.
     fn scripts(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<ScriptEntry>> {
         let _ = ctx;
         Ok(vec![])
+    }
+
+    /// Control commands this plugin handles via the IPC control socket.
+    ///
+    /// Called after [`activate`](Self::activate). Each command is registered
+    /// by name — the control server dispatches incoming requests whose `type`
+    /// field matches a registered command name to the plugin's handler.
+    fn control_commands(&self, ctx: &Arc<ActivationContext>) -> Vec<ControlCommand> {
+        let _ = ctx;
+        vec![]
+    }
+
+    /// Collect all contributions (providers, scripts, control commands) in one call.
+    ///
+    /// The default implementation delegates to [`providers`](Self::providers),
+    /// [`scripts`](Self::scripts), and [`control_commands`](Self::control_commands).
+    /// Plugins should not need to override this.
+    fn contributions(&self, ctx: &Arc<ActivationContext>) -> Result<PluginContributions> {
+        Ok(PluginContributions {
+            providers: self.providers(ctx)?,
+            scripts: self.scripts(ctx)?,
+            control_commands: self.control_commands(ctx),
+        })
     }
 
     /// Default plugin configuration as a TOML table.
@@ -90,14 +136,14 @@ pub trait Plugin: Send + Sync {
     /// Returns `None` (default) if the plugin has no configuration.
     fn default_config(&self) -> Option<toml::Table> { None }
 
-    /// Return the fully-resolved plugin configuration as a JSON value.
+    /// Return the fully-resolved plugin configuration as a TOML value.
     ///
     /// Plugins that deserialize a config struct from `[plugin.<id>]` should
     /// serialize it back here with all defaults filled in, so `nyne config`
     /// can show the effective configuration.
     ///
     /// Returns `None` (default) if the plugin has no configuration.
-    fn resolved_config(&self, config: &NyneConfig) -> Option<serde_json::Value> {
+    fn resolved_config(&self, config: &NyneConfig) -> Option<toml::Value> {
         let _ = config;
         None
     }
@@ -123,3 +169,93 @@ pub static PLUGINS: [PluginFactory];
 /// This is the standard entry point for obtaining plugin instances from the
 /// [`PLUGINS`] distributed slice. Each factory is called exactly once.
 pub fn instantiate() -> Vec<Box<dyn Plugin>> { PLUGINS.iter().map(|f| f()).collect() }
+
+/// Implement [`Plugin::provider_graph`] by extracting constants from provider types.
+///
+/// Each provider type must define `PROVIDER_ID: ProviderId` and
+/// `DEPENDENCIES: &[ProviderId]` as associated constants.
+///
+/// ```ignore
+/// impl Plugin for MyPlugin {
+///     provider_graph!(MyProvider, OtherProvider);
+/// }
+/// ```
+#[macro_export]
+macro_rules! provider_graph {
+    ($($provider:ty),+ $(,)?) => {
+        fn provider_graph(&self) -> &[($crate::router::ProviderId, &[$crate::router::ProviderId])] {
+            const { &[$((<$provider>::PROVIDER_ID, <$provider>::DEPENDENCIES)),+] }
+        }
+    };
+}
+
+/// Implement [`Plugin::default_config`] and [`Plugin::resolved_config`] from a
+/// [`PluginConfig`](crate::config::PluginConfig) type.
+///
+/// Place alongside [`provider_graph!`] at the top of a `Plugin` impl block.
+///
+/// ```ignore
+/// impl Plugin for MyPlugin {
+///     nyne::provider_graph!(MyProvider);
+///     nyne::plugin_config!(Config);
+///     fn id(&self) -> &str { "my-plugin" }
+/// }
+/// ```
+#[macro_export]
+macro_rules! plugin_config {
+    ($config_ty:ty) => {
+        fn default_config(&self) -> Option<toml::Table> {
+            <$config_ty as $crate::config::PluginConfig>::default_table()
+        }
+
+        fn resolved_config(&self, config: &$crate::config::NyneConfig) -> Option<toml::Value> {
+            <$config_ty as $crate::config::PluginConfig>::from_section(config.plugin.get(self.id())).to_value()
+        }
+    };
+}
+
+/// Sort plugins by dependency order using [`Plugin::provider_graph`].
+///
+/// Builds a provider-ID → plugin-index mapping from [`Plugin::provider_graph`],
+/// then topologically sorts plugins so dependencies activate first.
+#[allow(clippy::indexing_slicing)] // graph node weights are always valid plugin indices
+pub fn sort_by_deps(plugins: Vec<Box<dyn Plugin>>) -> Result<Vec<Box<dyn Plugin>>> {
+    use std::collections::HashMap;
+
+    use petgraph::algo::toposort;
+    use petgraph::graph::DiGraph;
+
+    let mut graph = DiGraph::<usize, ()>::new();
+    let nodes: Vec<_> = (0..plugins.len()).map(|i| graph.add_node(i)).collect();
+
+    // Map provider IDs → owning plugin graph node.
+    let provider_to_node: HashMap<_, _> = plugins
+        .iter()
+        .zip(&nodes)
+        .flat_map(|(p, &node)| p.provider_graph().iter().map(move |&(id, _)| (id, node)))
+        .collect();
+
+    // Add edges: dependency plugin → dependent plugin.
+    for (p, &self_node) in plugins.iter().zip(&nodes) {
+        for dep_node in p
+            .provider_graph()
+            .iter()
+            .flat_map(|(_, deps)| deps.iter())
+            .filter_map(|d| provider_to_node.get(d))
+        {
+            if *dep_node != self_node {
+                graph.add_edge(*dep_node, self_node, ());
+            }
+        }
+    }
+
+    let sorted = toposort(&graph, None).map_err(|cycle| {
+        color_eyre::eyre::eyre!(
+            "plugin dependency cycle involving {:?}",
+            plugins[graph[cycle.node_id()]].id()
+        )
+    })?;
+
+    let mut slots: Vec<_> = plugins.into_iter().map(Some).collect();
+    Ok(sorted.iter().filter_map(|&node| slots[graph[node]].take()).collect())
+}

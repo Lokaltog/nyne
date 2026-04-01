@@ -175,6 +175,9 @@ impl ChildGuard {
     /// Use after the child has already been reaped (e.g., via `wait_for_exit`).
     pub(super) const fn defuse(&mut self) { self.0.take(); }
 
+    /// Get the child's PID, if the guard is still armed.
+    pub(super) const fn pid(&self) -> Option<Pid> { self.0 }
+
     /// Explicitly terminate the child and disarm the guard.
     pub(super) fn terminate(mut self) {
         if let Some(pid) = self.0.take() {

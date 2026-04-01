@@ -18,8 +18,7 @@ use std::fs as stdfs;
 use std::os::fd::{AsFd, OwnedFd};
 
 use color_eyre::eyre::{Result, WrapErr};
-use rustix::fs::{self, Mode, OFlags};
-use rustix::process::{Pid, getgid, getuid};
+use rustix::process::{getgid, getuid};
 use rustix::thread::{LinkNameSpaceType, UnshareFlags};
 use rustix::{system, thread};
 use tracing::{debug, trace};
@@ -53,32 +52,14 @@ pub(super) struct Namespace {
 }
 
 impl Namespace {
-    /// Open namespace file descriptors for the given pid.
+    /// Construct a `Namespace` directly from pre-opened namespace fds.
     ///
-    /// Opens `/proc/<pid>/ns/user` and `/proc/<pid>/ns/mnt` as read-only fds.
-    /// These fds are passed to [`enter`](Self::enter) to join the target
-    /// process's user and mount namespaces via `setns(2)`.
-    pub(super) fn open_from_pid(pid: Pid) -> Result<Self> {
-        debug!(pid = pid.as_raw_pid(), "opening namespace fds");
-
-        let user_path = paths::ns_user(pid);
-        let user_ns = syscall_try!(
-            fs::open(&user_path, OFlags::RDONLY, Mode::empty()),
-            "opening {}",
-            user_path.display()
-        );
-
-        let mnt_path = paths::ns_mnt(pid);
-        let mnt_ns = syscall_try!(
-            fs::open(&mnt_path, OFlags::RDONLY, Mode::empty()),
-            "opening {}",
-            mnt_path.display()
-        );
-
-        trace!("namespace fds acquired");
-
-        Ok(Self { user_ns, mnt_ns })
-    }
+    /// The attach client receives the daemon's `user` and `mnt` namespace
+    /// fds from the daemon over the control socket via `SCM_RIGHTS` (see
+    /// [`control::recv_namespace_fds`](super::control::recv_namespace_fds)).
+    /// No PID resolution is involved, so this works across unrelated PID
+    /// namespaces (e.g. siblings under the host).
+    pub(super) const fn from_fds(user_ns: OwnedFd, mnt_ns: OwnedFd) -> Self { Self { user_ns, mnt_ns } }
 
     /// Enter this namespace (user first, then mount).
     ///

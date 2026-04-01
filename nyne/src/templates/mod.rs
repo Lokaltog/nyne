@@ -7,17 +7,20 @@
 //! **Provider workflow:**
 //! 1. Create [`TemplateHandle`]s via [`HandleBuilder`] — each handle binds a
 //!    template key to a shared engine.
-//! 2. Call [`TemplateHandle::node`] at resolve time to produce `VirtualNode`s.
+//! 2. Call [`TemplateHandle::router_node`] at resolve time to produce `NamedNode`s.
 
 /// Pre-bound template handles for producing virtual file nodes.
 mod handle;
 
 use std::borrow::Cow;
 
+use color_eyre::eyre;
+use convert_case::{Case, Casing};
 use minijinja::Environment;
 use serde::Serialize;
 
 use crate::prelude::*;
+use crate::router::{ReadContext, Readable, Writable, WriteContext};
 
 /// Template engine wrapping a `minijinja::Environment`.
 ///
@@ -82,13 +85,42 @@ impl TemplateEngine {
             .expect("template render failed — view contract mismatch")
     }
 
-    /// Add a global variable available to all templates.
+    /// Add a single global variable available to all templates.
     ///
-    /// Used by `register_template_globals` to
-    /// inject VFS name constants so templates can reference them as
-    /// `{{ FILE_OVERVIEW }}`, `{{ FILE_CALLERS }}`, etc.
+    /// For bulk registration from a config struct, prefer
+    /// [`add_globals_from`](Self::add_globals_from) or the
+    /// [`TemplateGlobals`] trait.
     pub fn add_global(&mut self, name: impl Into<Cow<'static, str>>, value: impl Into<String>) {
         self.env.add_global(name, minijinja::Value::from(value.into()));
+    }
+
+    /// Register every string field of a [`Serialize`] value as a template
+    /// global, with keys derived from the nesting path.
+    ///
+    /// Each string leaf produces a global whose name is the path segments
+    /// joined with `_` and converted to `UPPER_SNAKE_CASE`. The root
+    /// value's own name is not included.
+    ///
+    /// ```ignore
+    /// struct Vfs { dir: VfsDirs, file: VfsFiles }
+    /// struct VfsDirs { git: String }          // → DIR_GIT
+    /// struct VfsFiles { head_diff: String }   // → FILE_HEAD_DIFF
+    /// ```
+    ///
+    /// Types that want to customize naming should implement
+    /// [`TemplateGlobals`] manually instead of relying on the default impl.
+    ///
+    /// # Panics
+    ///
+    /// Panics if serialization fails. Call sites pass plain config structs,
+    /// so this is a programming error, not a runtime condition.
+    #[allow(clippy::expect_used)]
+    pub fn add_globals_from<T: Serialize + ?Sized>(&mut self, value: &T) {
+        walk_globals(
+            &serde_json::to_value(value).expect("serialize to json value for template globals"),
+            &mut Vec::new(),
+            self,
+        );
     }
 
     /// Render a named template to bytes.
@@ -96,6 +128,44 @@ impl TemplateEngine {
     /// Convenience wrapper around [`Self::render`] for the common case where
     /// callers need `Vec<u8>` (i.e., every [`TemplateView`] impl).
     pub fn render_bytes(&self, name: &str, view: &impl Serialize) -> Vec<u8> { self.render(name, view).into_bytes() }
+}
+
+/// Walk a JSON value and register every string leaf as a template global.
+///
+/// Keys are built from `path` joined with `_`, each segment converted to
+/// `UPPER_SNAKE_CASE`. Non-string, non-object leaves are ignored.
+fn walk_globals<'a>(v: &'a serde_json::Value, path: &mut Vec<&'a str>, engine: &mut TemplateEngine) {
+    match v {
+        serde_json::Value::String(s) => {
+            engine.add_global(
+                path.iter()
+                    .map(|p| p.to_case(Case::UpperSnake))
+                    .collect::<Vec<_>>()
+                    .join("_"),
+                s.clone(),
+            );
+        }
+        serde_json::Value::Object(map) =>
+            for (k, child) in map {
+                path.push(k);
+                walk_globals(child, path, engine);
+                path.pop();
+            },
+        _ => {}
+    }
+}
+
+/// Register a type's fields as template globals.
+///
+/// The default implementation walks the serialized form via
+/// [`TemplateEngine::add_globals_from`], producing one global per string
+/// leaf with a key derived from the nesting path (`UPPER_SNAKE_CASE`, joined
+/// by `_`, root struct name dropped).
+///
+/// Override this method to customize naming or skip fields.
+pub trait TemplateGlobals: Serialize {
+    /// Register this value's string fields as template globals.
+    fn register_globals(&self, engine: &mut TemplateEngine) { engine.add_globals_from(self); }
 }
 
 /// Produce rendered bytes at read time.
@@ -138,6 +208,56 @@ pub fn serialize_view<T: Serialize>(val: &T) -> impl TemplateView + use<T> {
     SerializeView(minijinja::Value::from_serialize(val))
 }
 
+/// Closure-backed [`TemplateView`] — captures state at dispatch time,
+/// renders lazily at read time.
+pub struct LazyView<R> {
+    read_fn: R,
+}
+
+impl<R> LazyView<R> {
+    /// Create a read-only lazy view.
+    pub const fn new(read_fn: R) -> Self { Self { read_fn } }
+
+    /// Attach a write callback, returning an [`EditableLazyView`].
+    pub fn writable<W>(self, write_fn: W) -> EditableLazyView<R, W> {
+        EditableLazyView {
+            read_fn: self.read_fn,
+            write_fn,
+        }
+    }
+}
+
+impl<R> TemplateView for LazyView<R>
+where
+    R: Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync,
+{
+    fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> { (self.read_fn)(engine, template) }
+}
+
+/// Closure-backed [`TemplateView`] + [`Writable`](crate::router::Writable).
+///
+/// Created via [`LazyView::writable`].
+pub struct EditableLazyView<R, W> {
+    read_fn: R,
+    write_fn: W,
+}
+
+impl<R, W> TemplateView for EditableLazyView<R, W>
+where
+    R: Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync,
+    W: Send + Sync,
+{
+    fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> { (self.read_fn)(engine, template) }
+}
+
+impl<R, W> Writable for EditableLazyView<R, W>
+where
+    R: Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync,
+    W: Fn(&WriteContext<'_>, &[u8]) -> Result<AffectedFiles> + Send + Sync,
+{
+    fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> { (self.write_fn)(ctx, data) }
+}
+
 /// Single [`Readable`](crate::node::Readable) for all template-backed
 /// virtual files.
 ///
@@ -163,11 +283,8 @@ impl TemplateContent {
         }
     }
 }
-
-/// Delegates reads to the inner [`TemplateView`] for on-demand rendering.
 impl Readable for TemplateContent {
-    /// Renders the template with the stored view and returns the result as bytes.
-    fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.view.render(&self.engine, self.template) }
+    fn read(&self, _ctx: &ReadContext<'_>) -> eyre::Result<Vec<u8>> { self.view.render(&self.engine, self.template) }
 }
 
 /// Estimate tokens from a byte count and format in compact form.
@@ -211,20 +328,7 @@ fn strip_prefix(mut v: String, prefix: &str) -> String {
     v
 }
 
-/// Register constants as template globals, using the constant's identifier
-/// as the template variable name.
-///
-/// Eliminates the manual `engine.add_global("NAME", NAME)` duplication —
-/// the string key is derived via `stringify!`.
-#[macro_export]
-macro_rules! register_globals {
-    ($engine:expr, $($name:ident),+ $(,)?) => {
-        $($engine.add_global(stringify!($name), $name);)+
-    };
-}
-
 pub use self::handle::{HandleBuilder, TemplateHandle};
-use crate::node::Readable;
 
 /// Unit tests.
 #[cfg(test)]

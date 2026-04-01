@@ -4,11 +4,12 @@
 //! `Engine`, etc.) and only exist when the `analysis` feature is enabled.
 //! The public entry point is [`run_analysis`], re-exported into the parent module.
 
-use nyne_analysis::{Engine, HintView};
+use std::path::Path;
 
-use super::{
-    Arc, DecomposedSource, HookInput, Range, ScriptContext, Services, VfsPath, changed_line_range, source_rel_path,
-};
+use nyne_analysis::{AnalysisContextExt as _, HintView};
+use nyne_source::SourceContextExt as _;
+
+use super::{Arc, DecomposedSource, HookInput, Range, ScriptContext, changed_line_range, source_rel_path};
 use crate::provider::hook_schema::EditToolInput;
 
 /// Per-file analysis output: hints plus the decomposed source for change-range filtering.
@@ -34,23 +35,22 @@ fn run_analysis_for_tool(
         decomposed: None,
     };
 
-    let Some(rel) = source_rel_path(edit_input, input, tool_name, root) else {
+    let Some(rel) = source_rel_path(edit_input, input, tool_name, root, ctx.chain()) else {
         return empty;
     };
 
-    let Ok(vfs_path) = VfsPath::new(&rel) else {
+    let rel_path = Path::new(&rel);
+    let Some(cache) = ctx.activation().decomposition_cache() else {
         return empty;
     };
-
-    let services = Services::get(ctx.activation());
 
     // The Edit/Write tool writes directly to the real filesystem, bypassing
     // the FUSE mount. The inotify watcher will eventually invalidate, but
     // it's async — by the time this hook runs the cache still holds the
     // pre-edit parse tree. Invalidate explicitly so we analyze fresh content.
-    services.decomposition.invalidate(&vfs_path);
+    cache.invalidate(rel_path);
 
-    let Ok(decomposed) = services.decomposition.get(&vfs_path) else {
+    let Ok(decomposed) = cache.get(rel_path) else {
         return empty;
     };
 
@@ -61,7 +61,7 @@ fn run_analysis_for_tool(
         };
     };
 
-    let Some(engine) = ctx.activation().get::<Arc<Engine>>() else {
+    let Some(engine) = ctx.activation().analysis_engine() else {
         return FileAnalysis {
             decomposed: Some(decomposed),
             ..empty

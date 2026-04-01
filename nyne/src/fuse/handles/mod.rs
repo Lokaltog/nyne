@@ -15,8 +15,8 @@
 //!   files that benefit from kernel page cache avoidance.
 //!
 //! Both paths converge on flush: dirty buffers are flushed through the
-//! router's write pipeline with a [`WriteMode`] derived from truncation
-//! history (see [`HandleEntry::write_mode`]).
+//! write pipeline. Dirty buffers are flushed through
+//! [`FuseFilesystem::flush_content`](super::FuseFilesystem::flush_content).
 
 use std::fs::File;
 use std::os::unix::fs::FileExt;
@@ -26,8 +26,6 @@ use std::{io, mem};
 use parking_lot::RwLock;
 use slab::Slab;
 use tracing::warn;
-
-use crate::dispatch::WriteMode;
 
 /// Unit tests.
 #[cfg(test)]
@@ -60,10 +58,8 @@ impl OpenMode {
 
 /// Source of truth for reads on a file handle.
 ///
-/// Encodes the state machine that was previously implicit in the
-/// combination of `direct_fd: Option<File>`, `truncated: bool`, and
-/// `buffer.is_empty()`. Each variant makes the valid operations and
-/// transitions explicit — invalid states are unrepresentable.
+/// Each variant makes the valid operations and transitions explicit —
+/// invalid states are unrepresentable.
 ///
 /// ```text
 ///   ┌────────────┐  write()   ┌──────────────┐
@@ -100,21 +96,11 @@ enum BufferSource {
     /// Transitioned from `DirectFd` or `Truncated` after the first
     /// write populated (or skipped populating) the buffer. The fd is
     /// kept alive for the handle's lifetime but no longer used for reads.
-    ///
-    /// `truncated` preserves whether the handle went through `Truncated`
-    /// at any point — needed by [`WriteMode`] to choose between
-    /// full-replacement and normal write semantics.
-    Materialized { _fd: File, truncated: bool },
+    Materialized { _fd: File },
 }
 
 /// Methods for querying buffer source state.
-impl BufferSource {
-    /// Whether this source was truncated at some point in its lifecycle.
-    /// Used to derive [`WriteMode`] for the flush pipeline.
-    const fn was_truncated(&self) -> bool {
-        matches!(self, Self::Truncated(_) | Self::Materialized { truncated: true, .. })
-    }
-}
+impl BufferSource {}
 /// Copy-on-write content buffer for file handles.
 ///
 /// `Shared` holds an `Arc<[u8]>` from the content cache — reads
@@ -181,33 +167,60 @@ pub(super) struct HandleEntry {
     /// creates a null-byte gap. When this flag is set, `write()` clamps the
     /// offset to `buffer.len()` to guarantee appends land at the true EOF.
     append: bool,
-    /// Whether this Preloaded handle discarded content at open time via
-    /// `O_TRUNC`. Direct handles track truncation in [`BufferSource`]
-    /// instead. Used by [`write_mode`](Self::write_mode) to select
-    /// `WriteMode::Truncate` and by [`is_dirty`](Self::is_dirty) to
-    /// ensure standalone truncation (`: > file`) triggers a flush.
-    truncated_on_open: bool,
+    /// Truncation lifecycle — tracks `O_TRUNC` / `setattr(size=0)` and
+    /// whether eager validation has been consumed.
+    truncation: TruncationState,
 }
 
 /// Methods for querying handle entry state.
 impl HandleEntry {
     /// Returns whether the handle has uncommitted writes.
+    #[cfg(test)]
     pub const fn is_dirty(&self) -> bool { self.dirty_gen > 0 }
+}
 
-    /// Returns the write mode based on truncation history.
-    pub const fn write_mode(&self) -> WriteMode {
-        if self.truncated_on_open || self.source.was_truncated() {
-            WriteMode::Truncate
-        } else {
-            // O_APPEND is handled at the buffer level: `write()` clamps
-            // the offset to `buffer.len()`, so by flush time the buffer
-            // already contains the final state. Passing Append to the
-            // Writable would re-read the original content and append the
-            // *entire* buffer (including the original content loaded on
-            // open), doubling everything.
-            WriteMode::Normal
-        }
-    }
+/// Snapshot of a dirty handle's buffer, taken atomically for flush.
+pub(super) struct DirtySnapshot {
+    /// The buffer contents at snapshot time.
+    pub data: Vec<u8>,
+    /// Generation counter — pass to [`HandleTable::clear_dirty`] after
+    /// a successful flush to avoid clearing a concurrent write.
+    pub generation: u64,
+    /// Whether this handle was opened with `O_TRUNC` (or truncated via
+    /// `setattr`). When `data` is empty and this is `true`, the flush
+    /// should be deferred to `release` — the kernel sends
+    /// `setattr(size=0)` + `flush` before write data arrives.
+    pub truncated: bool,
+}
+/// Outcome of a [`HandleTable::write`] call.
+///
+/// Distinguishes normal buffered writes from first-write-after-truncation,
+/// enabling the FUSE `write` handler to flush eagerly and surface validation
+/// errors on the `write()` syscall rather than deferring to `close()`.
+#[derive(Debug)]
+pub(super) enum WriteOutcome {
+    /// Data buffered normally. Deferred to flush for validation and commit.
+    Buffered(u32),
+    /// First write after `O_TRUNC` — buffer contains the full replacement
+    /// content. The caller should flush eagerly to validate immediately.
+    Replacement(u32),
+}
+/// Tracks whether a handle's content was replaced via `O_TRUNC` or
+/// `setattr(size=0)`, and whether eager validation is still pending.
+///
+/// Replaces the previous `truncated_on_open` + `eager_flush` bool pair,
+/// making invalid states unrepresentable (cannot have eager flush
+/// pending without being truncated).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum TruncationState {
+    /// Content was not truncated.
+    #[default]
+    None,
+    /// Content was truncated; next write triggers eager flush to surface
+    /// validation errors on the `write()` syscall.
+    Pending,
+    /// Content was truncated; eager flush consumed on first write.
+    Done,
 }
 
 /// File handle table using a slab for O(1) allocation and lookup.
@@ -247,7 +260,11 @@ impl HandleTable {
             source: BufferSource::Preloaded,
             dirty_gen: u64::from(mode.truncate && content_was_nonempty),
             append: mode.append,
-            truncated_on_open: mode.truncate,
+            truncation: match (mode.truncate, content_was_nonempty) {
+                (true, true) => TruncationState::Pending,
+                (true, false) => TruncationState::Done,
+                _ => TruncationState::None,
+            },
         });
         idx as u64
     }
@@ -271,7 +288,11 @@ impl HandleTable {
             source,
             dirty_gen: 0,
             append: mode.append,
-            truncated_on_open: false,
+            truncation: if mode.truncate {
+                TruncationState::Pending
+            } else {
+                TruncationState::None
+            },
         });
         idx as u64
     }
@@ -321,28 +342,31 @@ impl HandleTable {
     /// to `Materialized` and all subsequent reads use the buffer.
     ///
     /// Extends the buffer if the write goes past the end. Returns bytes written.
-    pub fn write(&self, fh: u64, offset: u64, data: &[u8]) -> Option<u32> {
+    pub fn write(&self, fh: u64, offset: u64, data: &[u8]) -> Option<WriteOutcome> {
         let mut slab = self.inner.write();
         let entry = Self::get_entry_mut(&mut slab, fh)?;
+
+        // Transition Pending → Done: consume the eager flush signal.
+        let eager = matches!(entry.truncation, TruncationState::Pending);
+        if eager {
+            entry.truncation = TruncationState::Done;
+        }
 
         // On first write to a direct handle, transition to Materialized.
         // For DirectFd: populate buffer from fd first (preserve surrounding content).
         // For Truncated: skip population (old content is logically gone).
-        let needs_populate = matches!(entry.source, BufferSource::DirectFd(_));
-        let was_truncated = entry.source.was_truncated();
         if matches!(entry.source, BufferSource::DirectFd(_) | BufferSource::Truncated(_)) {
-            let old = mem::replace(&mut entry.source, BufferSource::Preloaded);
-            let (BufferSource::DirectFd(fd) | BufferSource::Truncated(fd)) = old else {
+            let populate = matches!(entry.source, BufferSource::DirectFd(_));
+            let (BufferSource::DirectFd(fd) | BufferSource::Truncated(fd)) =
+                mem::replace(&mut entry.source, BufferSource::Preloaded)
+            else {
                 unreachable!()
             };
-            if needs_populate && let Err(e) = Self::populate_from_fd(&fd, entry.buffer.make_mut()) {
+            if populate && let Err(e) = Self::populate_from_fd(&fd, entry.buffer.make_mut()) {
                 warn!(target: "nyne::fuse", error = %e, "failed to populate buffer from direct fd");
                 return None;
             }
-            entry.source = BufferSource::Materialized {
-                _fd: fd,
-                truncated: was_truncated,
-            };
+            entry.source = BufferSource::Materialized { _fd: fd };
         }
 
         // For O_APPEND handles, the kernel positions the write at
@@ -367,7 +391,12 @@ impl HandleTable {
         if !data.is_empty() {
             entry.dirty_gen += 1;
         }
-        u32::try_from(data.len()).ok()
+        let n = u32::try_from(data.len()).ok()?;
+        Some(if eager {
+            WriteOutcome::Replacement(n)
+        } else {
+            WriteOutcome::Buffered(n)
+        })
     }
 
     /// Truncate a file handle's buffer to the given size.
@@ -380,7 +409,7 @@ impl HandleTable {
     /// For `Preloaded` handles that already have content in the buffer,
     /// marks the entry dirty so standalone truncation (`: > file`) is
     /// flushed on release. `DirectFd` handles don't need this — the
-    /// `Truncated` source state already selects `WriteMode::Truncate`.
+    /// `Truncated` source state already handles truncation semantics.
     pub fn truncate(&self, fh: u64, size: u64) {
         let mut slab = self.inner.write();
         if let Some(entry) = Self::get_entry_mut(&mut slab, fh) {
@@ -406,8 +435,7 @@ impl HandleTable {
 
         // DirectFd → Truncated: take the fd, optionally populate first.
         if matches!(entry.source, BufferSource::DirectFd(_)) {
-            let old = mem::replace(&mut entry.source, BufferSource::Preloaded);
-            let BufferSource::DirectFd(fd) = old else {
+            let BufferSource::DirectFd(fd) = mem::replace(&mut entry.source, BufferSource::Preloaded) else {
                 unreachable!()
             };
             if size > 0
@@ -416,11 +444,12 @@ impl HandleTable {
                 warn!(target: "nyne::fuse", error = %e, "failed to populate buffer during truncate");
             }
             entry.source = BufferSource::Truncated(fd);
+            entry.truncation = TruncationState::Pending;
         } else if matches!(entry.source, BufferSource::Preloaded) && size < entry.buffer.len() {
             // Preloaded handle losing content — mark dirty so the
             // truncation is flushed even without a subsequent write.
             entry.dirty_gen += 1;
-            entry.truncated_on_open = true;
+            entry.truncation = TruncationState::Pending;
         }
 
         entry.buffer.make_mut().truncate(size);
@@ -438,13 +467,17 @@ impl HandleTable {
 
     /// Get a snapshot of dirty buffer contents (for `flush` without releasing the handle).
     ///
-    /// Returns `(buffer, write_mode, generation)` — the generation must be
-    /// passed back to [`clear_dirty`](Self::clear_dirty) to prevent racing
-    /// with concurrent writes.
-    pub fn dirty_snapshot(&self, fh: u64) -> Option<(Vec<u8>, WriteMode, u64)> {
+    /// Returns `(buffer, generation)` — the generation must be passed back
+    /// to [`clear_dirty`](Self::clear_dirty) to prevent racing with
+    /// concurrent writes.
+    pub fn dirty_snapshot(&self, fh: u64) -> Option<DirtySnapshot> {
         let slab = self.inner.read();
         let entry = Self::get_entry(&slab, fh)?;
-        (entry.dirty_gen > 0).then(|| (entry.buffer.to_vec(), entry.write_mode(), entry.dirty_gen))
+        (entry.dirty_gen > 0).then(|| DirtySnapshot {
+            data: entry.buffer.to_vec(),
+            generation: entry.dirty_gen,
+            truncated: !matches!(entry.truncation, TruncationState::None),
+        })
     }
 
     /// Clear the dirty flag on a handle after a successful flush.

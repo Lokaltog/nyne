@@ -11,13 +11,15 @@ name = "nyne_git"
 
 [dependencies]
 nyne.workspace = true
-nyne-macros.workspace = true
+nyne-companion.workspace = true
+nyne-source.workspace = true
 color-eyre.workspace = true
 git2.workspace = true
 linkme.workspace = true
 minijinja.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
+toml.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

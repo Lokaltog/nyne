@@ -1,3 +1,0 @@
-[[lsp.servers]]
-name = "pyright"
-command = "basedpyright-langserver"

@@ -6,34 +6,25 @@
 
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::{env, process};
+use std::{env, fs, process};
 
 use clap::Args;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{Result, WrapErr};
 use tracing::{info, warn};
 
 use crate::config::NyneConfig;
-use crate::types::ProcessVisibility;
 use crate::{plugin, sandbox, session};
 
 /// Arguments for the `attach` subcommand.
 ///
 /// Attaching enters the mount namespace of a running nyne daemon and executes
 /// a command (defaulting to `$SHELL`) so the user gets an interactive session
-/// where the FUSE overlay is visible. The spawned process is registered with
+/// where the FUSE mount is visible. The spawned process is registered with
 /// the daemon for tracking in `nyne list` and unregistered on exit.
 #[derive(Debug, Args)]
 pub struct AttachArgs {
     #[command(flatten)]
     pub(crate) session: super::SessionArgs,
-
-    /// Virtual filesystem visibility for the spawned process and its children.
-    ///
-    /// - `all`: force all nyne nodes (including companion dirs) into directory listings.
-    /// - `default`: normal nyne behavior -- companion dirs hidden from listings.
-    /// - `none`: full passthrough -- process sees only the real filesystem.
-    #[arg(long, default_value = "default")]
-    pub visibility: ProcessVisibility,
 
     /// Command to execute inside the namespace. Defaults to $SHELL.
     #[arg(last = true)]
@@ -66,22 +57,6 @@ impl RegistrationGuard {
         }
         Some(Self { socket, pid })
     }
-
-    /// Set visibility override for this process.
-    ///
-    /// Tells the daemon how to present virtual filesystem entries to this
-    /// PID and its children. Failures are logged as warnings rather than
-    /// propagated, because a visibility failure should not prevent the
-    /// attach session from working.
-    fn set_visibility(&self, visibility: ProcessVisibility) {
-        let req = sandbox::control::Request::SetVisibility {
-            target: sandbox::control::VisibilityTarget::Pid { pid: self.pid },
-            visibility,
-        };
-        if let Err(e) = sandbox::control::send_request(&self.socket, &req) {
-            warn!(error = %e, "failed to set visibility — using default");
-        }
-    }
 }
 
 impl Drop for RegistrationGuard {
@@ -100,23 +75,21 @@ impl Drop for RegistrationGuard {
 /// Run the attach subcommand: enter a running mount's namespace and execute a command.
 ///
 /// Resolves the target session, registers the process with the daemon for
-/// `nyne list` tracking, optionally overrides visibility, then delegates to
-/// [`sandbox::run_attach`] which performs the actual namespace entry (joining
-/// the daemon's mount/PID/UTS namespaces).
+/// `nyne list` tracking, then delegates to [`sandbox::run_attach`] which
+/// performs the actual namespace entry (joining the daemon's mount/PID/UTS
+/// namespaces).
 ///
 /// The spawned command defaults to `$SHELL` when no explicit command is given,
-/// providing an interactive shell session inside the FUSE overlay.
+/// providing an interactive shell session inside the FUSE mount.
 ///
 /// # Errors
 ///
 /// Returns an error if session resolution fails or if sandbox entry fails.
-/// Registration and visibility failures are non-fatal (logged as warnings).
+/// Registration failures are non-fatal (logged as warnings).
 pub fn run(args: &AttachArgs) -> Result<i32> {
     let config = NyneConfig::load(&plugin::instantiate(), None)?;
     let session_info = args.session.resolve()?;
-    let control_socket = session::control_socket(session_info.id.as_str())
-        .inspect_err(|e| warn!(error = %e, "control socket unavailable — process registration disabled"))
-        .ok();
+    let control_socket = session::control_socket(session_info.id.as_str())?;
 
     let command = if args.command.is_empty() {
         vec![env::var_os("SHELL").unwrap_or_else(|| OsString::from("/bin/sh"))]
@@ -133,28 +106,26 @@ pub fn run(args: &AttachArgs) -> Result<i32> {
 
     // Register this process with the daemon so `nyne list` can show it.
     // The guard unregisters automatically on drop (panic, early return, or normal exit).
-    let guard = control_socket.as_ref().and_then(|socket| {
-        RegistrationGuard::register(
-            socket.clone(),
-            process::id().cast_signed(),
-            command
-                .first()
-                .map(|c| c.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-        )
-    });
+    let _guard = RegistrationGuard::register(
+        control_socket.clone(),
+        process::id().cast_signed(),
+        command
+            .first()
+            .map(|c| c.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+    );
 
-    // Set visibility if non-default — applies to this PID and its children.
-    if args.visibility != ProcessVisibility::Default
-        && let Some(g) = &guard
-    {
-        g.set_visibility(args.visibility);
-    }
+    // Create & pass the nested session dir so in-sandbox `nyne mount` /
+    // `nyne list` invocations share a per-daemon scope (independent of
+    // each attach's fresh user/mount/PID namespaces).
+    let nested_dir = session::nested_dir(session_info.id.as_str())?;
+    fs::create_dir_all(&nested_dir)
+        .wrap_err_with(|| format!("creating nested session dir {}", nested_dir.display()))?;
 
     sandbox::run_attach(sandbox::AttachConfig {
-        daemon_pid: session_info.pid,
         mount_path: session_info.mount_path,
         control_socket,
+        session_dir: nested_dir,
         command,
         sandbox: config.sandbox,
     })

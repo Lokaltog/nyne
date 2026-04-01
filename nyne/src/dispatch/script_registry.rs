@@ -1,12 +1,12 @@
 //! Registry of named scripts indexed by dotted address.
 //!
-//! Built once at mount time alongside the [`ProviderRegistry`](super::registry::ProviderRegistry).
+//! Built once at mount time during the plugin activation phase.
 //! Each plugin contributes scripts via [`Plugin::scripts`](crate::plugin::Plugin::scripts);
-//! they are indexed by their fully-qualified address (e.g., `provider.coding.decompose`)
+//! they are indexed by their fully-qualified address (e.g., `provider.source.decompose`)
 //! for O(1) lookup when `nyne exec` is invoked.
 //!
 //! Duplicate addresses are detected at registration time and logged as warnings --
-//! the last registration wins, matching HashMap insert semantics.
+//! the last registration wins, matching `HashMap` insert semantics.
 
 use std::collections::HashMap;
 
@@ -18,9 +18,9 @@ use crate::prelude::*;
 
 /// Registry of named scripts, indexed by fully-qualified dotted address.
 ///
-/// Built once at mount time by iterating [`PLUGINS`] and calling each plugin's
-/// [`scripts`](crate::plugin::Plugin::scripts) method. The registry is immutable
-/// after construction -- scripts cannot be added or removed at runtime.
+/// Built once at mount time from pre-collected [`ScriptEntry`] values.
+/// The registry is immutable after construction — scripts cannot be added
+/// or removed at runtime.
 ///
 /// Lookup is O(1) via `HashMap`. The `nyne exec` CLI command resolves an address
 /// through this registry, then calls [`Script::exec`] with binary stdin/stdout.
@@ -28,32 +28,17 @@ pub struct ScriptRegistry {
     scripts: HashMap<ScriptAddress, Arc<dyn Script>>,
 }
 
-/// Script discovery, registration, and execution.
+/// Script registration and execution.
 impl ScriptRegistry {
-    /// Build the registry from all plugin-provided scripts.
-    #[allow(clippy::excessive_nesting)] // warn! macro expansion inside for+match
-    /// Build the registry from all plugin-provided scripts.
+    /// Build the registry from pre-collected script entries.
     ///
-    /// Iterates the [`PLUGINS`](crate::plugin::PLUGINS) distributed slice, calling
-    /// each plugin's [`scripts`](crate::plugin::Plugin::scripts) method. Duplicate
-    /// addresses are logged as warnings; the last registration wins (`HashMap`
-    /// insert semantics).
-    pub(crate) fn new(ctx: &Arc<ActivationContext>) -> Self {
+    /// Duplicate addresses are logged as warnings; the last registration wins
+    /// (`HashMap` insert semantics).
+    pub(crate) fn from_entries(entries: Vec<(ScriptAddress, Arc<dyn Script>)>) -> Self {
         let mut scripts = HashMap::new();
-        for factory in PLUGINS {
-            let plugin = factory();
-            let entries = match plugin.scripts(ctx) {
-                Ok(entries) => entries,
-                Err(e) => {
-                    warn!(plugin = plugin.id(), error = %e, "plugin script creation failed");
-                    continue;
-                }
-            };
-            for (address, script) in entries {
-                if scripts.insert(address.clone(), script).is_none() {
-                    continue;
-                }
-                warn!(plugin = plugin.id(), address = %address, "duplicate script address");
+        for (address, script) in entries {
+            if scripts.insert(address.clone(), script).is_some() {
+                warn!(address = %address, "duplicate script address");
             }
         }
         Self { scripts }
@@ -61,10 +46,9 @@ impl ScriptRegistry {
 
     /// Execute a script by its fully-qualified address.
     pub(crate) fn exec(&self, address: &str, ctx: &ScriptContext<'_>, stdin: &[u8]) -> Result<Vec<u8>> {
-        let script = self
-            .scripts
+        self.scripts
             .get(address)
-            .ok_or_else(|| eyre!("unknown script: {address}"))?;
-        script.exec(ctx, stdin)
+            .ok_or_else(|| eyre!("unknown script: {address}"))?
+            .exec(ctx, stdin)
     }
 }

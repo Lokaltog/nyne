@@ -1,51 +1,257 @@
 //! `fuser::Filesystem` trait implementation — all FUSE protocol callbacks.
 //!
-//! This is the entry point for every kernel FUSE request. Each method follows
-//! the same pattern: convert fuser types to internal types, resolve the inode
-//! via [`NyneFs::resolve_for_request`] (which applies per-process visibility),
-//! delegate to the router or handle table, and reply.
+//! Each method dispatches through the middleware chain via [`FuseFilesystem`]
+//! and replies with the appropriate FUSE response.
 //!
 //! Mutation callbacks (`create`, `mkdir`, `unlink`, `rmdir`, `rename`) delegate
 //! to `mutations.rs`. Extended attribute callbacks delegate to `xattr.rs`.
-//! This file contains read-path operations and the I/O pipeline (open, read,
-//! write, flush, release).
-//!
-//! Event draining ownership: the FUSE layer drains after I/O and xattr ops
-//! (`flush`, `release`, `setxattr`). Mutation handlers drain internally via
-//! the router (see `doc/codebase.md`).
 
 use std::ffi::OsStr;
+use std::fs::File;
 use std::io;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::SystemTime;
+use std::sync::{Arc, PoisonError};
+use std::time::{Duration, SystemTime};
 
+use color_eyre::eyre;
 use fuser::{
-    AccessFlags, BsdFileFlags, CopyFileRangeFlags, Errno, FileHandle, Filesystem, FopenFlags, INodeNo, InitFlags,
-    IoctlFlags, LockOwner, OpenFlags, RenameFlags, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
-    ReplyDirectoryPlus, ReplyEmpty, ReplyEntry, ReplyIoctl, ReplyLseek, ReplyOpen, ReplyStatfs, ReplyWrite, ReplyXattr,
-    Request, WriteFlags,
+    AccessFlags, BsdFileFlags, Errno, FileHandle, Filesystem, FopenFlags, INodeNo, InitFlags, LockOwner, OpenFlags,
+    RenameFlags, ReplyAttr, ReplyCreate, ReplyData, ReplyEmpty, ReplyEntry, ReplyOpen, ReplyStatfs, ReplyWrite,
+    ReplyXattr, Request, TimeOrNow, WriteFlags,
 };
 use rustix::fs::statvfs;
 use tracing::{debug, info, trace, warn};
 
-use super::{NyneFs, extract_errno, file_kind_to_fuse};
-use crate::dispatch::{ResolvedInode, WriteMode};
-use crate::node::NodeKind;
-use crate::types::ProcessVisibility;
+use super::attrs::{BLKSIZE, GENERATION, TTL, file_kind_to_fuse, make_attr};
+use super::handles::{OpenMode, WriteOutcome};
+use super::inode_map::{InodeEntry, ROOT_INODE};
+use super::{FuseFilesystem, ensure_dir_path, extract_errno, fuse_try};
+use crate::router::{NamedNode, Permissions, Process, Readable};
+use crate::types::Timestamps;
 use crate::types::file_kind::FileKind;
+/// Outcome of a flush attempt via [`FuseFilesystem::do_flush`].
+enum FlushOutcome {
+    /// Handle was not dirty, or dirty data was deferred (`O_TRUNC` guard).
+    Clean,
+    /// Flushed successfully.
+    Flushed,
+    /// Flush failed — contains the error for errno mapping.
+    Failed(eyre::Error),
+}
 
-/// `Filesystem` implementation for [`NyneFs`], dispatching FUSE protocol callbacks.
-impl Filesystem for NyneFs {
-    /// Initializes the FUSE filesystem, negotiating kernel capabilities.
+/// Controls whether [`FuseFilesystem::do_flush`] defers empty truncations.
+#[derive(Debug, Clone, Copy)]
+enum FlushMode {
+    /// Mid-life flush (from `flush` callback): defer empty `O_TRUNC` buffers
+    /// so write data can arrive before the content is spliced.
+    Eager,
+    /// Final flush (from `release` callback): always flush, even if the
+    /// buffer is empty from truncation.
+    Final,
+}
+
+impl FuseFilesystem {
+    /// Resolve attributes for an inode via chain dispatch.
     ///
-    /// Negotiates two optional capabilities:
-    /// - **`FUSE_PASSTHROUGH`** — zero-copy I/O for real files by forwarding
-    ///   reads/writes directly to the backing fd. Requires `CAP_SYS_ADMIN`.
-    ///   Falls back gracefully if the kernel rejects `max_stack_depth=1`.
-    /// - **`FUSE_READDIRPLUS`** — combined readdir+getattr in a single call,
-    ///   reducing round-trips for directory listings.
+    /// Dispatches a lookup to resolve the node, then delegates to
+    /// [`node_attr`] for attr construction. Content is never read here —
+    /// size becomes accurate only after a FUSE `read` populates the
+    /// [`CachedReadable`](nyne_cache) cache, at which point
+    /// [`Readable::size`] returns the real length.
+    pub(super) fn resolve_attr(&self, ino: u64, req: &Request) -> Option<(fuser::FileAttr, Duration)> {
+        if ino == ROOT_INODE {
+            return Some((self.root_attr(req), TTL));
+        }
+        let entry = self.inodes.get(ino)?;
+        let node = self
+            .lookup_node(&entry.dir_path, &entry.name, Some(self.process_from(req)))
+            .ok()??;
+        Some(self.node_attr(ino, &node, req))
+    }
+
+    /// Build attrs from a pre-resolved `NamedNode` (no chain dispatch).
+    ///
+    /// Cheap path: uses [`Readable::size`] if cached, falls back to
+    /// [`BLKSIZE`] for virtual files with unknown size. Used by
+    /// `readdirplus` where reading content for every entry is too expensive.
+    pub(super) fn node_attr(&self, ino: u64, node: &NamedNode, req: &Request) -> (fuser::FileAttr, Duration) {
+        // Real files: use backing filesystem metadata for accurate size/mtime.
+        if let Some(backing) = node.readable().and_then(|r| r.backing_path())
+            && let Ok(meta) = self.backing_fs.metadata(backing)
+        {
+            let kind = FileKind::from(node.kind());
+            let perm = u16::try_from(meta.permissions & 0o7777).unwrap_or(0o644);
+            let mut ts = meta.timestamps;
+            if let Some(override_atime) = self.atime_overrides.read().ok().and_then(|m| m.get(&ino).copied()) {
+                ts.atime = override_atime;
+            }
+            return (make_attr(ino, meta.size, file_kind_to_fuse(kind), perm, ts, req), TTL);
+        }
+
+        // Virtual files: use cached size if available, BLKSIZE fallback otherwise.
+        // TTL=0 forces the kernel to re-validate on every access, ensuring
+        // resolve_attr can provide accurate just-in-time data.
+        let kind = FileKind::from(node.kind());
+        let size = node
+            .readable()
+            .and_then(Readable::size)
+            .unwrap_or_else(|| if kind == FileKind::File { u64::from(BLKSIZE) } else { 0 });
+
+        (
+            make_attr(
+                ino,
+                size,
+                file_kind_to_fuse(kind),
+                Self::node_permissions(node),
+                node.timestamps(),
+                req,
+            ),
+            Duration::ZERO,
+        )
+    }
+
+    /// Build a `FileAttr` for the root directory from real filesystem metadata.
+    fn root_attr(&self, req: &Request) -> fuser::FileAttr {
+        let (size, ts, perm) = self.backing_fs.metadata(Path::new("")).map_or_else(
+            |_| (0, Timestamps::default(), 0o555),
+            |m| {
+                (
+                    m.size,
+                    m.timestamps,
+                    u16::try_from(m.permissions & 0o7777).unwrap_or(0o755),
+                )
+            },
+        );
+        make_attr(ROOT_INODE, size, fuser::FileType::Directory, perm, ts, req)
+    }
+
+    /// Convert a `NamedNode`'s permissions to FUSE permission bits.
+    fn node_permissions(node: &NamedNode) -> u16 {
+        let perms = node.permissions();
+        let mut mode: u16 = 0;
+        if perms.contains(Permissions::READ) {
+            mode |= 0o444;
+        }
+        if perms.contains(Permissions::WRITE) {
+            mode |= 0o200;
+        }
+        if perms.contains(Permissions::EXECUTE) {
+            mode |= 0o111;
+        }
+        mode
+    }
+
+    /// Reply with attrs for an inode, or ENOENT.
+    pub(super) fn reply_attr(&self, ino: u64, req: &Request, reply: ReplyAttr) {
+        match self.resolve_attr(ino, req) {
+            Some((attr, ttl)) => reply.attr(&ttl, &attr),
+            None => reply.error(Errno::ENOENT),
+        }
+    }
+
+    /// Allocate or find an existing inode for a (`dir_path`, name) pair.
+    pub(super) fn ensure_inode(&self, dir_path: &Path, name: &str, parent_inode: u64) -> u64 {
+        self.inodes.find_inode(dir_path, name).unwrap_or_else(|| {
+            self.inodes.allocate(InodeEntry {
+                dir_path: dir_path.to_path_buf(),
+                name: name.to_owned(),
+                parent_inode,
+            })
+        })
+    }
+
+    /// Resolve a child entry: lookup via the chain, allocate an inode if found.
+    ///
+    /// Combines [`lookup_node`](Self::lookup_node) and
+    /// [`ensure_inode`](Self::ensure_inode) into a single call, returning
+    /// both the stable inode number and the resolved node. Callers can then
+    /// pass the node directly to [`node_attr`](Self::node_attr) without a
+    /// redundant second chain dispatch.
+    pub(super) fn resolve_inode(
+        &self,
+        dir_path: &Path,
+        name: &str,
+        parent_inode: u64,
+        process: Option<Process>,
+    ) -> eyre::Result<Option<(u64, NamedNode)>> {
+        let Some(node) = self.lookup_node(dir_path, name, process)? else {
+            return Ok(None);
+        };
+        let ino = self.ensure_inode(dir_path, name, parent_inode);
+        Ok(Some((ino, node)))
+    }
+
+    /// Check whether a parent directory inode permits child mutations.
+    ///
+    /// Returns `true` if the directory's permission bits include owner-write.
+    /// Used by mutation handlers (create, mkdir, remove, rename) to reject
+    /// operations in read-only directories before dispatching through the chain.
+    pub(super) fn is_writable_dir(&self, ino: u64, req: &Request) -> bool {
+        self.resolve_attr(ino, req)
+            .is_some_and(|(attr, _)| attr.perm & 0o200 != 0)
+    }
+
+    /// Execute the flush pipeline for a single file handle.
+    ///
+    /// Acquires the per-inode write lock, snapshots the dirty buffer,
+    /// writes through the chain, and updates both the handle's dirty
+    /// generation and the inode error map atomically.
+    ///
+    /// The `O_TRUNC` deferral guard is only applied in [`FlushMode::Eager`]
+    /// (from the `flush` callback). [`FlushMode::Final`] (from `release`)
+    /// always flushes, even if the buffer is empty from truncation.
+    fn do_flush(&self, ino: u64, fh: u64, mode: FlushMode) -> FlushOutcome {
+        let Some(snapshot) = self.handles.dirty_snapshot(fh) else {
+            debug!(target: "nyne::fuse", ino, fh, ?mode, "do_flush: not dirty");
+            return FlushOutcome::Clean;
+        };
+        debug!(target: "nyne::fuse", ino, fh, ?mode, data_len = snapshot.data.len(), truncated = snapshot.truncated, gen = snapshot.generation, "do_flush: dirty snapshot");
+
+        // The Linux FUSE kernel module handles O_TRUNC by stripping the
+        // flag from open and sending setattr(size=0) + flush BEFORE the
+        // write data arrives. Without this guard, the empty-buffer flush
+        // would splice "" into the source file, destroying the symbol
+        // before the actual content arrives.
+        //
+        // Deferring to release is safe: if writes follow (echo > file),
+        // the next flush sends the actual data. If no writes follow
+        // (: > file), release flushes the empty truncation.
+        if matches!(mode, FlushMode::Eager) && snapshot.data.is_empty() && snapshot.truncated {
+            trace!(target: "nyne::fuse", ino, fh, "flush: deferring empty truncation to release");
+            return FlushOutcome::Clean;
+        }
+
+        // Per-inode write lock prevents concurrent flushes.
+        let lock = Arc::clone(
+            self.write_locks
+                .write()
+                .unwrap_or_else(PoisonError::into_inner)
+                .entry(ino)
+                .or_default(),
+        );
+        let _guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
+
+        match self.flush_content(ino, &snapshot.data) {
+            Ok(()) => {
+                self.handles.clear_dirty(fh, snapshot.generation);
+                if let Ok(mut errors) = self.write_errors.write() {
+                    errors.remove(&ino);
+                }
+                FlushOutcome::Flushed
+            }
+            Err(e) => {
+                debug!(target: "nyne::fuse", ino, error = %e, "flush failed");
+                if let Ok(mut errors) = self.write_errors.write() {
+                    errors.insert(ino, format!("{e:#}"));
+                }
+                FlushOutcome::Failed(e)
+            }
+        }
+    }
+}
+
+impl Filesystem for FuseFilesystem {
     fn init(&mut self, _req: &Request, config: &mut fuser::KernelConfig) -> io::Result<()> {
         if let Err(unsupported) = config.add_capabilities(InitFlags::FUSE_PASSTHROUGH) {
             warn!(target: "nyne::fuse", ?unsupported, "kernel does not support FUSE_PASSTHROUGH");
@@ -56,7 +262,7 @@ impl Filesystem for NyneFs {
                     info!(target: "nyne::fuse", "passthrough enabled (max_stack_depth=1)");
                 }
                 Err(nearest) => {
-                    warn!(target: "nyne::fuse", nearest, "kernel rejected max_stack_depth=1, passthrough unavailable");
+                    warn!(target: "nyne::fuse", nearest, "kernel rejected max_stack_depth=1");
                 }
             }
         }
@@ -64,55 +270,34 @@ impl Filesystem for NyneFs {
             config.add_capabilities(InitFlags::FUSE_DO_READDIRPLUS | InitFlags::FUSE_READDIRPLUS_AUTO)
         {
             warn!(target: "nyne::fuse", ?unsupported, "kernel does not support READDIRPLUS");
-        } else {
-            info!(target: "nyne::fuse", "READDIRPLUS enabled");
         }
-
         info!(target: "nyne::fuse", "FUSE filesystem initialized");
         Ok(())
     }
 
-    /// Looks up a child entry by name within a parent directory.
-    ///
-    /// Passthrough processes (`None` visibility) use `lookup_real` to see
-    /// only real filesystem entries. All other processes use `lookup_name`,
-    /// which includes virtual nodes from providers.
     fn lookup(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
-        with_parent_ctx!(self, parent, name, reply, "lookup", |parent_ino, name_str, ctx| {
-            // None-visibility processes see only real filesystem entries.
-            let result = if self.process_visibility(req) == ProcessVisibility::None {
-                fuse_try!(reply, self.router.lookup_real(&name_str, &ctx),
-                    parent_ino, name = %name_str, "lookup failed")
-            } else {
-                fuse_try!(reply, self.router.lookup_name(&name_str, &ctx),
-                    parent_ino, name = %name_str, "lookup failed")
-            };
-            if let Some(inode) = result {
-                self.reply_entry(inode, req, reply);
-            } else {
-                trace!(target: "nyne::fuse", parent_ino, name = %name_str, "lookup: not found");
+        let parent = u64::from(parent);
+        let dir_path = ensure_dir_path!(self, parent, reply);
+        let name = name.to_string_lossy();
+        trace!(target: "nyne::fuse", parent, path = %dir_path.display(), name = %name, "lookup");
+
+        match self.resolve_inode(&dir_path, &name, parent, Some(self.process_from(req))) {
+            Ok(Some((ino, node))) => {
+                let (attr, ttl) = self.node_attr(ino, &node, req);
+                reply.entry(&ttl, &attr, GENERATION);
+            }
+            Ok(None) => {
+                trace!(target: "nyne::fuse", parent, name = %name, "lookup: not found");
                 reply.error(Errno::ENOENT);
             }
-        });
+            Err(e) => reply.error(extract_errno(&e)),
+        }
     }
 
-    /// Returns file attributes for an inode.
     fn getattr(&self, req: &Request, ino: INodeNo, _fh: Option<FileHandle>, reply: ReplyAttr) {
-        let ino = u64::from(ino);
-        trace!(target: "nyne::fuse", ino, "getattr");
-        self.reply_attr(ino, req, reply);
+        self.reply_attr(u64::from(ino), req, reply);
     }
 
-    /// Sets file attributes (size, timestamps) for an inode.
-    ///
-    /// Only two attributes are actually handled:
-    /// - **size** — triggers buffer truncation (via file handle or by inode).
-    ///   This is how the kernel implements `O_TRUNC` and `ftruncate()`.
-    /// - **atime** — stored in the session-scoped `atime_overrides` map for
-    ///   hooks that use `touch -a` to communicate timestamps.
-    ///
-    /// All other attributes (mode, uid, gid, mtime, etc.) are silently
-    /// accepted but ignored — virtual files don't have real metadata to update.
     fn setattr(
         &self,
         req: &Request,
@@ -121,8 +306,8 @@ impl Filesystem for NyneFs {
         _uid: Option<u32>,
         _gid: Option<u32>,
         size: Option<u64>,
-        atime: Option<fuser::TimeOrNow>,
-        _mtime: Option<fuser::TimeOrNow>,
+        atime: Option<TimeOrNow>,
+        _mtime: Option<TimeOrNow>,
         _ctime: Option<SystemTime>,
         fh: Option<FileHandle>,
         _crtime: Option<SystemTime>,
@@ -132,7 +317,6 @@ impl Filesystem for NyneFs {
         reply: ReplyAttr,
     ) {
         let ino = u64::from(ino);
-        debug!(target: "nyne::fuse", ino, size, ?atime, "setattr");
 
         if let Some(new_size) = size {
             if let Some(fh) = fh {
@@ -142,129 +326,182 @@ impl Filesystem for NyneFs {
             }
         }
 
-        if let Some(atime_val) = atime {
-            let ts = match atime_val {
-                fuser::TimeOrNow::SpecificTime(t) => t,
-                fuser::TimeOrNow::Now => SystemTime::now(),
+        if let Some(t) = atime {
+            let time = match t {
+                TimeOrNow::SpecificTime(t) => t,
+                TimeOrNow::Now => SystemTime::now(),
             };
-            self.atime_overrides.write().insert(ino, ts);
+            if let Ok(mut overrides) = self.atime_overrides.write() {
+                overrides.insert(ino, time);
+            }
         }
 
         self.reply_attr(ino, req, reply);
     }
 
-    /// Lists directory entries for a directory inode.
-    fn readdir(&self, req: &Request, ino: INodeNo, _fh: FileHandle, offset: u64, mut reply: ReplyDirectory) {
+    /// List directory entries for a directory inode.
+    ///
+    /// See [`readdir_offset`] for the offset protocol.
+    fn readdir(&self, req: &Request, ino: INodeNo, _fh: FileHandle, offset: u64, mut reply: fuser::ReplyDirectory) {
         let ino = u64::from(ino);
-        let result = self.resolve_readdir(req, ino, offset, |entry_ino, next_offset, entry| {
-            reply.add(
-                INodeNo(entry_ino),
-                next_offset,
-                file_kind_to_fuse(entry.kind),
-                &entry.name,
-            )
-        });
-        match result {
-            Ok(()) => reply.ok(),
-            Err(e) => {
-                warn!(target: "nyne::fuse", error = %e, ino, "readdir failed");
-                reply.error(extract_errno(&e));
+        let dir_path = ensure_dir_path!(self, ino, reply);
+        let nodes = fuse_try!(
+            reply,
+            self.read_dir_nodes(&dir_path, Some(self.process_from(req))),
+            ino,
+            "readdir failed"
+        );
+
+        let parent = self.inodes.get(ino).map_or(ROOT_INODE, |e| e.parent_inode);
+        if offset < OFFSET_DOT && reply.add(INodeNo(ino), OFFSET_DOT, fuser::FileType::Directory, ".") {
+            reply.ok();
+            return;
+        }
+        if offset < OFFSET_DOTDOT && reply.add(INodeNo(parent), OFFSET_DOTDOT, fuser::FileType::Directory, "..") {
+            reply.ok();
+            return;
+        }
+
+        for (i, node) in nodes.iter().enumerate().skip(readdir_skip(offset)) {
+            let child_ino = self.ensure_inode(&dir_path, node.name(), ino);
+            let kind = file_kind_to_fuse(FileKind::from(node.kind()));
+            if reply.add(INodeNo(child_ino), readdir_offset(i), kind, node.name()) {
+                break;
             }
         }
+        reply.ok();
     }
 
-    /// Lists directory entries with attributes for a directory inode.
-    fn readdirplus(&self, req: &Request, ino: INodeNo, _fh: FileHandle, offset: u64, mut reply: ReplyDirectoryPlus) {
+    /// List directory entries with attributes. Same offset protocol as
+    /// [`readdir`](Self::readdir). Uses [`node_attr`](FuseFilesystem::build_node_attr)
+    /// with the already-resolved nodes to avoid per-entry chain dispatches.
+    fn readdirplus(
+        &self,
+        req: &Request,
+        ino: INodeNo,
+        _fh: FileHandle,
+        offset: u64,
+        mut reply: fuser::ReplyDirectoryPlus,
+    ) {
         let ino = u64::from(ino);
-        let result = self.resolve_readdir(req, ino, offset, |entry_ino, next_offset, entry| {
-            self.add_dirplus_entry(&mut reply, entry_ino, next_offset, entry, req)
-        });
-        match result {
-            Ok(()) => reply.ok(),
-            Err(e) => {
-                warn!(target: "nyne::fuse", error = %e, ino, "readdirplus failed");
-                reply.error(extract_errno(&e));
+        let dir_path = ensure_dir_path!(self, ino, reply);
+        let nodes = fuse_try!(
+            reply,
+            self.read_dir_nodes(&dir_path, Some(self.process_from(req))),
+            ino,
+            "readdirplus failed"
+        );
+
+        let parent = self.inodes.get(ino).map_or(ROOT_INODE, |e| e.parent_inode);
+        if offset < OFFSET_DOT
+            && let Some((attr, ttl)) = self.resolve_attr(ino, req)
+            && reply.add(INodeNo(ino), OFFSET_DOT, ".", &ttl, &attr, GENERATION)
+        {
+            reply.ok();
+            return;
+        }
+        if offset < OFFSET_DOTDOT
+            && let Some((attr, ttl)) = self.resolve_attr(parent, req)
+            && reply.add(INodeNo(parent), OFFSET_DOTDOT, "..", &ttl, &attr, GENERATION)
+        {
+            reply.ok();
+            return;
+        }
+
+        for (i, node) in nodes.iter().enumerate().skip(readdir_skip(offset)) {
+            let child_ino = self.ensure_inode(&dir_path, node.name(), ino);
+            let (attr, ttl) = self.node_attr(child_ino, node, req);
+            if reply.add(
+                INodeNo(child_ino),
+                readdir_offset(i),
+                node.name(),
+                &ttl,
+                &attr,
+                GENERATION,
+            ) {
+                break;
             }
         }
+        reply.ok();
     }
 
-    /// Opens a file, selecting the optimal I/O strategy.
-    ///
-    /// Tries three paths in order:
-    /// 1. **Kernel passthrough** — zero-copy for real files if `FUSE_PASSTHROUGH`
-    ///    was negotiated in `init()`. Disabled permanently on first rejection.
-    /// 2. **Direct fd** — `pread()`-based I/O for real files when passthrough is
-    ///    unavailable. Avoids loading large files (e.g., git pack files) into memory.
-    /// 3. **Buffered** — content loaded into [`HandleTable`](super::handles::HandleTable)
-    ///    with COW semantics. Used for virtual files and `O_TRUNC` real files.
-    ///
-    /// All paths use `FOPEN_DIRECT_IO` so the kernel bypasses its page cache
-    /// and always consults our handle table for content.
     fn open(&self, req: &Request, ino: INodeNo, flags: OpenFlags, reply: ReplyOpen) {
         let ino = u64::from(ino);
-        let resolved = self.resolve_for_request(ino, req);
-        debug!(target: "nyne::fuse", ino, path = resolved.as_ref().map_or("?", ResolvedInode::path_str), "open");
+        trace!(target: "nyne::fuse", ino, "open");
+
+        // Resolve the node once for all open paths.
+        let process = Some(self.process_from(req));
+        let entry = self.inodes.get(ino);
+        let node = entry
+            .as_ref()
+            .and_then(|e| self.lookup_node(&e.dir_path, &e.name, process.clone()).ok().flatten());
+        // Resolve backing file path for passthrough/direct-fd I/O.
+        // backing_path() returns a path relative to the filesystem root;
+        // source_dir().join() makes it absolute for std::fs::File::open.
+        let backing_file = node.as_ref().and_then(|n| {
+            let rel = n.readable()?.backing_path()?;
+            let abs = self.backing_fs.source_dir().join(rel);
+            File::open(&abs).ok()
+        });
 
         // Try FUSE kernel passthrough for real files.
-        if self.passthrough_enabled.load(Ordering::Relaxed)
-            && let Some(ResolvedInode::Real { path, .. }) = resolved.as_ref()
-            && let Some(file) = self.router.real_fs().open_raw(path)
+        if let Some(file) = backing_file.as_ref()
+            && self.passthrough_enabled.load(Ordering::Relaxed)
         {
-            match reply.open_backing(&file) {
+            match reply.open_backing(file) {
                 Ok(backing_id) => {
                     trace!(target: "nyne::fuse", ino, "open: passthrough");
                     reply.opened_passthrough(FileHandle(0), FopenFlags::empty(), &backing_id);
                     return;
                 }
                 Err(e) => {
-                    // Passthrough not usable — disable to avoid repeated syscalls.
-                    // The kernel requires CAP_SYS_ADMIN for FUSE_DEV_IOC_BACKING_OPEN.
                     self.passthrough_enabled.store(false, Ordering::Relaxed);
-                    info!(target: "nyne::fuse", path = %path, error = %e,
-                        "passthrough unavailable (requires CAP_SYS_ADMIN), falling back to buffered I/O");
+                    info!(target: "nyne::fuse", ino, error = %e,
+                            "passthrough unavailable, falling back to buffered I/O");
                 }
             }
         }
 
-        // Direct fd path: real files get pread()-based I/O when kernel
-        // passthrough is unavailable. Avoids loading entire file contents
-        // into memory (critical for large files like git pack files).
+        // Direct fd path: pread()-based I/O for real files. Avoids loading
+        // large files (e.g., git pack files) into memory.
+        //
+        // FOPEN_KEEP_CACHE (not FOPEN_DIRECT_IO) is used here so the kernel
+        // page cache backs mmap(). libgit2's pack reader mmaps .pack/.idx
+        // files unconditionally; FOPEN_DIRECT_IO would make mmap fail with
+        // ENODEV. Our userspace still reads via pread() — only the kernel's
+        // caching behavior changes.
         let open_flags = flags.0;
-        let mode = super::handles::OpenMode::parse(open_flags);
-        if let Some(ResolvedInode::Real { path, .. }) = resolved.as_ref()
+        let mode = OpenMode::parse(open_flags);
+        if let Some(file) = backing_file
             && !mode.truncate
-            && let Some(file) = self.router.real_fs().open_raw(path)
         {
             let fh = self.handles.open_direct(ino, file, open_flags);
-            reply.opened(FileHandle(fh), FopenFlags::FOPEN_DIRECT_IO);
+            reply.opened(FileHandle(fh), FopenFlags::FOPEN_KEEP_CACHE);
             return;
         }
 
-        // Virtual-node permission check: reject write opens on nodes
-        // without the Writable capability. Failing here (instead of at
-        // flush time) ensures the shell redirect `> file` returns EACCES
-        // before the command runs — shells don't propagate close() errors.
+        // Write permission check.
         if mode.write_intent
-            && let Some(ResolvedInode::Virtual { node, .. }) = resolved.as_ref()
-            && node.writable().is_none()
+            && let Some(ref n) = node
+            && n.writable().is_none()
         {
-            debug!(target: "nyne::fuse", ino, name = node.name(), "open: write rejected (not writable)");
+            debug!(target: "nyne::fuse", ino, "open: write rejected (not writable)");
             reply.error(Errno::EACCES);
             return;
         }
 
-        // Call lifecycle open hook for virtual nodes.
-        if let Some(ResolvedInode::Virtual { node, dir_path, .. }) = resolved.as_ref()
-            && let Some(lc) = node.lifecycle()
+        // Lifecycle open hook.
+        if let Some(ref n) = node
+            && let Some(lc) = n.lifecycle()
         {
-            let ctx = self.router.make_request_context(dir_path);
-            fuse_try!(reply, lc.open(&ctx), ino, "lifecycle open failed");
+            lc.on_open();
         }
 
         // Buffered path: load content into handle table.
-        // Skip the read pipeline for O_TRUNC — HandleTable::open discards
-        // the content anyway, so loading it is pure waste.
-        let content: Arc<[u8]> = if mode.truncate {
+        // Skip read when truncating (content will be discarded) or when the
+        // node has no readable (write-only nodes like batch edit staging).
+        let has_readable = node.as_ref().is_some_and(|n| n.readable().is_some());
+        let content: Arc<[u8]> = if mode.truncate || !has_readable {
             Arc::from([])
         } else {
             fuse_try!(reply, self.load_content(ino), ino, "open failed")
@@ -273,7 +510,6 @@ impl Filesystem for NyneFs {
         reply.opened(FileHandle(fh), FopenFlags::FOPEN_DIRECT_IO);
     }
 
-    /// Reads data from an open file handle at the given offset.
     fn read(
         &self,
         _req: &Request,
@@ -285,19 +521,16 @@ impl Filesystem for NyneFs {
         _lock_owner: Option<LockOwner>,
         reply: ReplyData,
     ) {
-        let (ino, fh) = (u64::from(ino), u64::from(fh));
-        trace!(target: "nyne::fuse", ino, fh, offset, size, "read");
-
-        match self.handles.read(fh, offset, size) {
+        let ino = u64::from(ino);
+        match self.handles.read(u64::from(fh), offset, size) {
             Ok(data) => reply.data(&data),
             Err(e) => {
-                warn!(target: "nyne::fuse", ino, fh, error = %e, "read failed");
+                debug!(target: "nyne::fuse", ino, error = %e, "read failed");
                 reply.error(Errno::EIO);
             }
         }
     }
 
-    /// Writes data to an open file handle at the given offset.
     fn write(
         &self,
         _req: &Request,
@@ -312,67 +545,34 @@ impl Filesystem for NyneFs {
     ) {
         let ino = u64::from(ino);
         let fh = u64::from(fh);
-        debug!(target: "nyne::fuse", ino, fh, offset, size = data.len(), "write");
-
         match self.handles.write(fh, offset, data) {
-            Some(written) => reply.written(written),
-            None => reply.error(Errno::EIO),
+            Some(WriteOutcome::Buffered(n)) => reply.written(n),
+            Some(WriteOutcome::Replacement(n)) => {
+                // First write after O_TRUNC — eagerly flush to surface
+                // validation errors on the write() syscall itself, rather
+                // than deferring to close() where shells discard the error.
+                match self.do_flush(ino, fh, FlushMode::Final) {
+                    FlushOutcome::Failed(e) => reply.error(extract_errno(&e)),
+                    _ => reply.written(n),
+                }
+            }
+            None => {
+                debug!(target: "nyne::fuse", ino, "write failed");
+                reply.error(Errno::EIO);
+            }
         }
     }
 
-    /// Flushes dirty buffer contents for an open file handle.
-    ///
-    /// Called on every `close()` (possibly multiple times per handle if the fd
-    /// was dup'd). Empty truncations are deferred to `release` to avoid a race
-    /// with the kernel's `O_TRUNC` → `setattr(size=0)` + `flush` sequence
-    /// that arrives before the actual write data.
-    ///
-    /// On failure, stores the error message in `write_errors` for retrieval
-    /// via the `user.error` extended attribute. Drains router events after
-    /// every flush (FUSE owns the drain for I/O ops).
     fn flush(&self, _req: &Request, ino: INodeNo, fh: FileHandle, _lock_owner: LockOwner, reply: ReplyEmpty) {
-        let (ino, fh) = (u64::from(ino), u64::from(fh));
-        trace!(target: "nyne::fuse", ino, fh, "flush");
-
-        if let Some((data, mode, dirty_gen)) = self.handles.dirty_snapshot(fh) {
-            // The Linux FUSE kernel module handles O_TRUNC by stripping
-            // the flag from open and sending setattr(size=0) + flush
-            // BEFORE the write data arrives. Without this guard, the
-            // empty-buffer flush would splice "" into the source file,
-            // destroying the symbol before the actual content arrives.
-            //
-            // Deferring to release is safe: if writes follow (echo > file),
-            // the next flush sends the actual data. If no writes follow
-            // (: > file), release flushes the empty truncation.
-            if data.is_empty() && matches!(mode, WriteMode::Truncate) {
-                trace!(target: "nyne::fuse", ino, fh, "flush: deferring empty truncation to release");
-                self.router.process_events();
-                reply.ok();
-                return;
-            }
-            if let Err(e) = self.flush_content(ino, &data, mode) {
-                warn!(target: "nyne::fuse", error = %e, ino, fh, "flush failed");
-                self.write_errors.write().insert(ino, e.to_string());
-                reply.error(extract_errno(&e));
-                return;
-            }
-            self.handles.clear_dirty(fh, dirty_gen);
-            self.write_errors.write().remove(&ino);
+        match self.do_flush(u64::from(ino), u64::from(fh), FlushMode::Eager) {
+            FlushOutcome::Clean | FlushOutcome::Flushed => reply.ok(),
+            FlushOutcome::Failed(e) => reply.error(extract_errno(&e)),
         }
-        self.router.process_events();
-        reply.ok();
     }
 
-    /// Releases a file handle, flushing any remaining dirty data.
-    ///
-    /// This is the last chance to persist writes — after release, the handle
-    /// is gone. Flush errors are stored in `write_errors` (not returned to
-    /// the caller, since `close()` errors are typically ignored by shells).
-    /// Also invokes the lifecycle `release` hook for virtual nodes and cleans
-    /// up per-inode write locks when no handles remain.
     fn release(
         &self,
-        req: &Request,
+        _req: &Request,
         ino: INodeNo,
         fh: FileHandle,
         _flags: OpenFlags,
@@ -382,133 +582,82 @@ impl Filesystem for NyneFs {
     ) {
         let ino = u64::from(ino);
         let fh = u64::from(fh);
-        trace!(target: "nyne::fuse", ino, fh, "release");
 
-        let Some(entry) = self.handles.release(fh) else {
-            self.router.process_events();
-            reply.ok();
-            return;
-        };
+        // Flush remaining dirty data (Final = never defer truncations).
+        self.do_flush(ino, fh, FlushMode::Final);
 
-        if entry.is_dirty() {
-            if let Err(e) = self.flush_content(entry.inode, entry.buffer.as_bytes(), entry.write_mode()) {
-                warn!(target: "nyne::fuse", inode = entry.inode, error = %e, "flush on release failed");
-                self.write_errors.write().insert(ino, e.to_string());
-            } else {
-                self.write_errors.write().remove(&ino);
-            }
-        }
-
-        // Call lifecycle release hook for virtual nodes.
-        if let Some(ResolvedInode::Virtual { node, dir_path, .. }) = self.resolve_for_request(ino, req)
+        // Lifecycle close hook — fires when the last handle is released.
+        if !self.handles.has_handles_for_inode(ino)
+            && let Some(entry) = self.inodes.get(ino)
+            && let Ok(Some(node)) = self.lookup_node(&entry.dir_path, &entry.name, None)
             && let Some(lc) = node.lifecycle()
         {
-            let ctx = self.router.make_request_context(&dir_path);
-            if let Err(e) = lc.release(&ctx) {
-                warn!(target: "nyne::fuse", ino, error = %e, "lifecycle release failed");
-            }
+            lc.on_close();
         }
 
-        // Evict per-inode write lock when no handles remain for this inode.
-        if !self.handles.has_handles_for_inode(ino) {
-            self.write_locks.write().remove(&ino);
-        }
-
-        self.router.process_events();
+        self.handles.release(fh);
         reply.ok();
     }
 
-    /// Opens a directory for reading.
-    fn opendir(&self, _req: &Request, ino: INodeNo, _flags: OpenFlags, reply: ReplyOpen) {
-        let ino = u64::from(ino);
-        trace!(target: "nyne::fuse", ino, "opendir");
+    fn opendir(&self, _req: &Request, _ino: INodeNo, _flags: OpenFlags, reply: ReplyOpen) {
         reply.opened(FileHandle(0), FopenFlags::empty());
     }
 
-    /// Releases a directory handle.
-    fn releasedir(&self, _req: &Request, ino: INodeNo, _fh: FileHandle, _flags: OpenFlags, reply: ReplyEmpty) {
-        let ino = u64::from(ino);
-        trace!(target: "nyne::fuse", ino, "releasedir");
+    fn releasedir(&self, _req: &Request, _ino: INodeNo, _fh: FileHandle, _flags: OpenFlags, reply: ReplyEmpty) {
         reply.ok();
     }
 
-    /// Checks access permissions for an inode.
-    ///
-    /// Only `W_OK` is meaningfully enforced — read/execute are always allowed.
-    /// Write access is denied for real directories (prevents atomic-save
-    /// strategies in editors) and for virtual nodes without the `Writable`
-    /// capability (consistent with the `open()` rejection). Since
-    /// `default_permissions` is not set, actual mutation syscalls still reach
-    /// FUSE handlers regardless of what `access()` returns.
-    fn access(&self, req: &Request, ino: INodeNo, mask: AccessFlags, reply: ReplyEmpty) {
+    fn access(&self, _req: &Request, ino: INodeNo, mask: AccessFlags, reply: ReplyEmpty) {
         let ino = u64::from(ino);
         trace!(target: "nyne::fuse", ino, ?mask, "access");
 
-        let resolved = self.resolve_for_request(ino, req);
-
-        if mask.contains(AccessFlags::W_OK) {
-            // Deny W_OK on real directories so editors skip atomic-save
-            // (rename-to-backup → create → unlink-backup) and use direct
-            // writes instead.  The actual create/rename/unlink syscalls
-            // still reach FUSE handlers — without `default_permissions` the
-            // kernel never gates operations on access() results.
-            if let Some(ResolvedInode::Real {
-                file_type: FileKind::Directory,
-                ..
-            }) = resolved
-            {
-                reply.error(Errno::EACCES);
-                return;
-            }
-
-            // Deny W_OK on virtual nodes without the Writable capability.
-            // Consistent with the open() rejection — tools that probe
-            // access before opening get a correct answer.
-            if let Some(ResolvedInode::Virtual { node, .. }) = resolved.as_ref()
-                && node.writable().is_none()
-            {
-                reply.error(Errno::EACCES);
-                return;
-            }
+        if ino == ROOT_INODE {
+            reply.ok();
+            return;
         }
 
-        reply.ok();
-    }
-
-    /// Reads the target of a symbolic link.
-    fn readlink(&self, req: &Request, ino: INodeNo, reply: ReplyData) {
-        let ino = u64::from(ino);
-        debug!(target: "nyne::fuse", ino, "readlink");
-
-        let Some(resolved) = self.resolve_for_request(ino, req) else {
+        let Some(entry) = self.inodes.get(ino) else {
+            reply.error(Errno::ENOENT);
+            return;
+        };
+        let Some(node) = self.lookup_node(&entry.dir_path, &entry.name, None).ok().flatten() else {
             reply.error(Errno::ENOENT);
             return;
         };
 
-        match resolved {
-            ResolvedInode::Real {
-                file_type: FileKind::Symlink,
-                path,
-            } => {
-                let target = fuse_try!(
-                    reply,
-                    self.router.real_fs().symlink_target(&path),
-                    ino,
-                    "readlink failed"
-                );
-                reply.data(target.as_os_str().as_encoded_bytes());
-            }
-            ResolvedInode::Virtual { node, .. } =>
-                if let NodeKind::Symlink { target } = node.kind() {
-                    reply.data(target.as_os_str().as_encoded_bytes());
-                } else {
-                    reply.error(Errno::EINVAL);
-                },
-            ResolvedInode::Real { .. } => reply.error(Errno::EINVAL),
+        let mode = Self::node_permissions(&node);
+        // Check owner bits (high triple) against the requested mask.
+        if mask.contains(AccessFlags::R_OK) && mode & 0o400 == 0 {
+            reply.error(Errno::EACCES);
+            return;
+        }
+        if mask.contains(AccessFlags::W_OK) && mode & 0o200 == 0 {
+            reply.error(Errno::EACCES);
+            return;
+        }
+        if mask.contains(AccessFlags::X_OK) && mode & 0o100 == 0 {
+            reply.error(Errno::EACCES);
+            return;
+        }
+        reply.ok();
+    }
+
+    fn readlink(&self, _req: &Request, ino: INodeNo, reply: ReplyData) {
+        let ino = u64::from(ino);
+        let Some(entry) = self.inodes.get(ino) else {
+            reply.error(Errno::ENOENT);
+            return;
+        };
+        match self.lookup_node(&entry.dir_path, &entry.name, None) {
+            Ok(Some(node)) => match node.target() {
+                Some(target) => reply.data(target.as_os_str().as_encoded_bytes()),
+                None => reply.error(Errno::EINVAL),
+            },
+            Ok(None) => reply.error(Errno::ENOENT),
+            Err(e) => reply.error(extract_errno(&e)),
         }
     }
 
-    /// Creates a new file in the given parent directory.
     fn create(
         &self,
         req: &Request,
@@ -522,25 +671,21 @@ impl Filesystem for NyneFs {
         self.do_create(req, parent, name, flags, reply);
     }
 
-    /// Creates a new directory in the given parent directory.
     fn mkdir(&self, req: &Request, parent: INodeNo, name: &OsStr, _mode: u32, _umask: u32, reply: ReplyEntry) {
         self.do_mkdir(req, parent, name, reply);
     }
 
-    /// Removes a file from the given parent directory.
-    fn unlink(&self, _req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
-        self.do_remove(parent, name, false, reply);
+    fn unlink(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
+        self.do_remove(req, parent, name, reply);
     }
 
-    /// Removes a directory from the given parent directory.
-    fn rmdir(&self, _req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
-        self.do_remove(parent, name, true, reply);
+    fn rmdir(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
+        self.do_remove(req, parent, name, reply);
     }
 
-    /// Renames or moves a file or directory.
     fn rename(
         &self,
-        _req: &Request,
+        req: &Request,
         parent: INodeNo,
         name: &OsStr,
         newparent: INodeNo,
@@ -548,20 +693,17 @@ impl Filesystem for NyneFs {
         _flags: RenameFlags,
         reply: ReplyEmpty,
     ) {
-        self.do_rename(parent, name, newparent, newname, reply);
+        self.do_rename(req, parent, name, newparent, newname, reply);
     }
 
-    /// Gets an extended attribute value by name.
     fn getxattr(&self, _req: &Request, ino: INodeNo, name: &OsStr, size: u32, reply: ReplyXattr) {
         self.do_getxattr(ino, name, size, reply);
     }
 
-    /// Lists all extended attribute names for an inode.
     fn listxattr(&self, _req: &Request, ino: INodeNo, size: u32, reply: ReplyXattr) {
         self.do_listxattr(ino, size, reply);
     }
 
-    /// Sets an extended attribute value.
     fn setxattr(
         &self,
         _req: &Request,
@@ -575,84 +717,29 @@ impl Filesystem for NyneFs {
         self.do_setxattr(ino, name, value, reply);
     }
 
-    /// Removes an extended attribute (not supported).
-    fn removexattr(&self, _req: &Request, ino: INodeNo, name: &OsStr, reply: ReplyEmpty) {
-        let ino = u64::from(ino);
-        debug!(target: "nyne::fuse", ino, name = ?name, "removexattr");
-        reply.error(Errno::ENOTSUP);
+    fn removexattr(&self, _req: &Request, _ino: INodeNo, _name: &OsStr, reply: ReplyEmpty) {
+        reply.error(Errno::from_i32(libc::ENOTSUP));
     }
 
-    /// Called when the filesystem is unmounted.
     fn destroy(&mut self) {
-        info!(target: "nyne::fuse", "filesystem destroyed");
+        info!(target: "nyne::fuse", "FUSE session destroyed");
     }
 
-    /// Forgets an inode, decrementing its lookup count.
-    fn forget(&self, _req: &Request, ino: INodeNo, nlookup: u64) {
-        trace!(target: "nyne::fuse", ino = u64::from(ino), nlookup, "forget");
-    }
+    fn forget(&self, _req: &Request, _ino: INodeNo, _nlookup: u64) {}
 
-    /// Creates a special file node (not supported).
-    fn mknod(
-        &self,
-        _req: &Request,
-        parent: INodeNo,
-        name: &OsStr,
-        _mode: u32,
-        _umask: u32,
-        _rdev: u32,
-        reply: ReplyEntry,
-    ) {
-        let parent = u64::from(parent);
-        debug!(target: "nyne::fuse", parent, name = ?name, "mknod: not supported");
-        reply.error(Errno::EPERM);
-    }
-
-    /// Creates a symbolic link (not supported).
-    fn symlink(&self, _req: &Request, parent: INodeNo, link_name: &OsStr, _target: &Path, reply: ReplyEntry) {
-        let parent = u64::from(parent);
-        debug!(target: "nyne::fuse", parent, link_name = ?link_name, "symlink: not supported");
-        reply.error(Errno::EPERM);
-    }
-
-    /// Creates a hard link (not supported).
-    fn link(&self, _req: &Request, _ino: INodeNo, newparent: INodeNo, newname: &OsStr, reply: ReplyEntry) {
-        let newparent = u64::from(newparent);
-        debug!(target: "nyne::fuse", newparent, newname = ?newname, "link: not supported");
-        reply.error(Errno::EPERM);
-    }
-
-    /// Synchronizes file contents to storage (no-op).
-    fn fsync(&self, _req: &Request, ino: INodeNo, fh: FileHandle, datasync: bool, reply: ReplyEmpty) {
-        trace!(target: "nyne::fuse", ino = u64::from(ino), fh = u64::from(fh), datasync, "fsync");
-        reply.ok();
-    }
-
-    /// Synchronizes directory contents to storage (no-op).
-    fn fsyncdir(&self, _req: &Request, ino: INodeNo, fh: FileHandle, datasync: bool, reply: ReplyEmpty) {
-        trace!(target: "nyne::fuse", ino = u64::from(ino), fh = u64::from(fh), datasync, "fsyncdir");
-        reply.ok();
-    }
-
-    /// Returns filesystem statistics from the underlying real filesystem.
-    ///
-    /// Delegates to `statvfs()` on the source directory so tools like `df`
-    /// report the backing filesystem's capacity, not artificial limits.
+    #[expect(clippy::cast_possible_truncation, reason = "fuser API requires u32")]
     fn statfs(&self, _req: &Request, _ino: INodeNo, reply: ReplyStatfs) {
-        match statvfs(self.router.real_fs().source_dir()) {
-            Ok(st) => {
-                #[expect(clippy::cast_possible_truncation, reason = "fuser API requires u32; real values fit")]
-                reply.statfs(
-                    st.f_blocks,
-                    st.f_bfree,
-                    st.f_bavail,
-                    st.f_files,
-                    st.f_ffree,
-                    st.f_bsize as u32,
-                    st.f_namemax as u32,
-                    st.f_frsize as u32,
-                );
-            }
+        match statvfs(self.backing_fs.source_dir()) {
+            Ok(st) => reply.statfs(
+                st.f_blocks,
+                st.f_bfree,
+                st.f_bavail,
+                st.f_files,
+                st.f_ffree,
+                st.f_bsize as u32,
+                st.f_namemax as u32,
+                st.f_frsize as u32,
+            ),
             Err(e) => {
                 warn!(target: "nyne::fuse", error = %e, "statfs failed");
                 reply.error(Errno::EIO);
@@ -660,55 +747,77 @@ impl Filesystem for NyneFs {
         }
     }
 
-    /// Handles an ioctl request (not supported).
-    fn ioctl(
+    fn mknod(
         &self,
         _req: &Request,
-        _ino: INodeNo,
-        _fh: FileHandle,
-        _flags: IoctlFlags,
-        _cmd: u32,
-        _in_data: &[u8],
-        _out_size: u32,
-        reply: ReplyIoctl,
+        _parent: INodeNo,
+        _name: &OsStr,
+        _mode: u32,
+        _umask: u32,
+        _rdev: u32,
+        reply: ReplyEntry,
     ) {
-        reply.error(Errno::ENOTTY);
+        reply.error(Errno::from_i32(libc::ENOTSUP));
     }
 
-    /// Allocates space for a file (not supported).
-    fn fallocate(
-        &self,
-        _req: &Request,
-        ino: INodeNo,
-        _fh: FileHandle,
-        _offset: u64,
-        _length: u64,
-        _mode: i32,
-        reply: ReplyEmpty,
-    ) {
-        debug!(target: "nyne::fuse", ino = u64::from(ino), "fallocate: not supported");
-        reply.error(Errno::ENOTSUP);
+    fn symlink(&self, _req: &Request, _parent: INodeNo, _link_name: &OsStr, _target: &Path, reply: ReplyEntry) {
+        reply.error(Errno::from_i32(libc::ENOTSUP));
     }
 
-    /// Seeks to a position in a file (not supported).
-    fn lseek(&self, _req: &Request, _ino: INodeNo, _fh: FileHandle, _offset: i64, _whence: i32, reply: ReplyLseek) {
-        reply.error(Errno::ENOTSUP);
+    fn link(&self, _req: &Request, _ino: INodeNo, _newparent: INodeNo, _newname: &OsStr, reply: ReplyEntry) {
+        reply.error(Errno::from_i32(libc::ENOTSUP));
     }
 
-    /// Copies a range of data between files (not supported).
-    fn copy_file_range(
-        &self,
-        _req: &Request,
-        _ino_in: INodeNo,
-        _fh_in: FileHandle,
-        _offset_in: u64,
-        _ino_out: INodeNo,
-        _fh_out: FileHandle,
-        _offset_out: u64,
-        _len: u64,
-        _flags: CopyFileRangeFlags,
-        reply: ReplyWrite,
-    ) {
-        reply.error(Errno::ENOTSUP);
+    fn fsync(&self, _req: &Request, _ino: INodeNo, _fh: FileHandle, _datasync: bool, reply: ReplyEmpty) { reply.ok(); }
+
+    fn fsyncdir(&self, _req: &Request, _ino: INodeNo, _fh: FileHandle, _datasync: bool, reply: ReplyEmpty) {
+        reply.ok();
+    }
+}
+
+/// FUSE readdir offset protocol.
+///
+/// The kernel calls readdir/readdirplus repeatedly to paginate results.
+/// Each `reply.add(ino, offset, ...)` associates an opaque offset cookie
+/// with the entry. On the next call, the kernel passes back the offset of
+/// the **last entry it accepted**; we must emit only entries **after** that
+/// offset. If `reply.add` returns `true`, the reply buffer is full — the
+/// kernel will call back with the last accepted offset.
+///
+/// We use a simple sequential numbering scheme:
+///
+/// | Offset | Entry |
+/// |-|-|
+/// | `OFFSET_DOT` (1) | `.` (self) |
+/// | `OFFSET_DOTDOT` (2) | `..` (parent) |
+/// | `OFFSET_ENTRIES` (3) | first real entry |
+/// | `OFFSET_ENTRIES + N` | Nth real entry |
+///
+/// `offset == 0` means "start from the beginning".
+///
+/// **Invariant:** offsets must be stable across calls for the same
+/// directory contents. `read_dir_nodes` returns a consistent ordered
+/// list per dispatch, so sequential indexing satisfies this.
+const OFFSET_DOT: u64 = 1;
+const OFFSET_DOTDOT: u64 = 2;
+const OFFSET_ENTRIES: u64 = 3;
+
+/// Convert a node index (0-based position in the `read_dir_nodes` result)
+/// to a FUSE readdir offset cookie.
+const fn readdir_offset(index: usize) -> u64 { OFFSET_ENTRIES + index as u64 }
+
+/// How many entries to skip given the kernel's last-accepted offset.
+///
+/// The kernel passes 0 on the first call. After accepting entry at
+/// offset N, it passes N on the next call. We must skip all entries
+/// with offset <= N.
+const fn readdir_skip(last_offset: u64) -> usize {
+    if last_offset < OFFSET_ENTRIES {
+        0
+    } else {
+        #[allow(clippy::cast_possible_truncation)] // readdir entry count never exceeds usize
+        {
+            (last_offset - OFFSET_ENTRIES) as usize + 1
+        }
     }
 }

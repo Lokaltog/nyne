@@ -69,6 +69,11 @@ pub(super) const HOOK_REGISTRY: &[HookDef] = &[
         script_name: "post-tool-use",
     },
     HookDef {
+        event: "PostToolUseFailure",
+        matcher: "Edit",
+        script_name: "post-tool-use-failure",
+    },
+    HookDef {
         event: "SessionStart",
         matcher: "startup|resume|clear",
         script_name: "session-start",
@@ -90,7 +95,7 @@ pub(in crate::provider) const RAW_FILE_GRACE_SECS: u64 = 300;
 /// [`HOOK_REGISTRY`] — adding a new hook only requires a registry entry.
 ///
 /// Hook commands use `nyne exec` to invoke native Rust scripts registered
-/// by the `CodingPlugin` via [`Plugin::scripts()`](nyne::plugin::Plugin::scripts).
+/// by the `SourcePlugin` via [`Plugin::scripts()`](nyne::plugin::Plugin::scripts).
 pub(super) fn injected_hooks(root: &Path) -> Map<String, Value> {
     let entry = |def: &HookDef| HookEntry {
         matcher: def.matcher.into(),
@@ -173,7 +178,6 @@ const ENV_VARS: &[(&str, &str)] = &[
     ("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "128000"),
     ("ENABLE_CLAUDEAI_MCP_SERVERS", "false"),
     ("SLASH_COMMAND_TOOL_CHAR_BUDGET", "1"),
-    ("USE_BUILTIN_RIPGREP", "0"),
 ];
 
 /// Tool names denied in Claude Code's permission settings.
@@ -192,7 +196,6 @@ const DENIED_TOOLS: &[&str] = &[
     "NotebookEdit",
     "ReadMcpResourceTool",
     "TodoWrite",
-    "ToolSearch",
     "WorktreeCreate",
     "WorktreeRemove",
 ];

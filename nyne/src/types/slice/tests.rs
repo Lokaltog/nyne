@@ -81,25 +81,25 @@ fn apply_clamps_to_bounds() {
     assert_eq!(SliceSpec::Tail(100).apply(&items), &["a", "b", "c"]);
 }
 
-/// Tests that index_range for a single index produces a one-element range.
+/// Tests that `index_range` for a single index produces a one-element range.
 #[test]
 fn index_range_single() {
     assert_eq!(SliceSpec::Single(3).index_range(5), 2..3);
 }
 
-/// Tests that index_range converts a 1-based range to a 0-based half-open range.
+/// Tests that `index_range` converts a 1-based range to a 0-based half-open range.
 #[test]
 fn index_range_range() {
     assert_eq!(SliceSpec::Range(2, 4).index_range(5), 1..4);
 }
 
-/// Tests that index_range for a tail spec covers the last N indices.
+/// Tests that `index_range` for a tail spec covers the last N indices.
 #[test]
 fn index_range_tail() {
     assert_eq!(SliceSpec::Tail(2).index_range(5), 3..5);
 }
 
-/// Verifies that index_range clamps out-of-range values to collection bounds.
+/// Verifies that `index_range` clamps out-of-range values to collection bounds.
 #[test]
 fn index_range_clamps_to_bounds() {
     assert_eq!(SliceSpec::Range(1, 100).index_range(3), 0..3);

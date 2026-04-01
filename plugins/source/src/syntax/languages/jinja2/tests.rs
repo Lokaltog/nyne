@@ -84,7 +84,7 @@ fn render_expressions_are_not_content() {
 
 // Structural symbol extraction — blocks
 
-/// Verifies that block name, kind, full_span, and signature are extracted correctly.
+/// Verifies that block name, kind, `full_span`, and signature are extracted correctly.
 #[test]
 fn block_name_and_full_span() {
     let source = "{% block title %}Hello{% endblock %}";
@@ -98,7 +98,7 @@ fn block_name_and_full_span() {
     assert_eq!(block.signature, "{% block title %}");
 }
 
-/// Verifies that block name_byte_offset points to the identifier in source.
+/// Verifies that block `name_byte_offset` points to the identifier in source.
 #[test]
 fn block_name_byte_offset_points_to_identifier() {
     let source = "{% block title %}Hello{% endblock %}";
@@ -151,7 +151,7 @@ fn macro_name_kind_and_signature() {
     assert_eq!(mac.signature, "{% macro render(items) %}");
 }
 
-/// Verifies that macro name_byte_offset points to the identifier in source.
+/// Verifies that macro `name_byte_offset` points to the identifier in source.
 #[test]
 fn macro_name_byte_offset() {
     let source = "{% macro greet(name) %}Hi {{ name }}{% endmacro %}";
@@ -181,10 +181,10 @@ fn set_variable_extracted() {
     assert_eq!(var.full_span, 0..source.len());
 }
 
-/// Verifies that set name_byte_offset points to the variable name in source.
+/// Verifies that set `name_byte_offset` points to the variable name in source.
 #[test]
 fn set_name_byte_offset() {
-    let source = r#"{% set x = 42 %}"#;
+    let source = r"{% set x = 42 %}";
     let (_, symbols) = extract(source);
 
     let var = &symbols[0];
@@ -234,7 +234,7 @@ fn empty_template() {
 
 // Mixed: content regions + symbols from the same parse
 
-/// Verifies that extract_template returns both content regions and symbols.
+/// Verifies that `extract_template` returns both content regions and symbols.
 #[test]
 fn extract_template_returns_both() {
     let source = "Header\n{% block title %}Body{% endblock %}\nFooter";
@@ -282,7 +282,7 @@ fn complex_template_content_and_symbols() {
 
 // SpanMap integration — content concatenation invariant
 
-/// Verifies that content regions produce a valid SpanMap with matching lengths.
+/// Verifies that content regions produce a valid `SpanMap` with matching lengths.
 #[test]
 fn content_regions_produce_valid_span_map() {
     let source = "{% block title %}Hello {{ name }}{% endblock %}\nTrailing";
@@ -304,7 +304,7 @@ fn content_regions_produce_valid_span_map() {
 
 // Fragment conversion
 
-/// Verifies that symbols_to_fragments produces correct kinds and names.
+/// Verifies that `symbols_to_fragments` produces correct kinds and names.
 #[test]
 fn symbols_to_fragments_correct_kinds_and_names() {
     let source = "{% block title %}Hello{% endblock %}\n{% set x = 1 %}";
@@ -326,7 +326,7 @@ fn fragment_byte_ranges_extract_correct_source() {
     assert_eq!(&source[frag.byte_range.clone()], source);
 }
 
-/// Verifies that fragment name_byte_offset extracts the correct name from source.
+/// Verifies that fragment `name_byte_offset` extracts the correct name from source.
 #[test]
 fn fragment_name_byte_offset_extracts_name() {
     let source = "{% block header %}content{% endblock %}";

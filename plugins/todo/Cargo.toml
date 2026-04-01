@@ -11,7 +11,7 @@ name = "nyne_todo"
 
 [dependencies]
 nyne.workspace = true
-nyne-macros.workspace = true
+nyne-companion.workspace = true
 nyne-source.workspace = true
 nyne-git = { workspace = true, optional = true }
 
@@ -21,7 +21,7 @@ linkme.workspace = true
 minijinja.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+toml.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

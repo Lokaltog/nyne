@@ -5,12 +5,13 @@
 //! is a valid FUSE directory entry (no `/` in names).
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
-use nyne::dispatch::context::RenameContext;
-use nyne::node::{Readable, Renameable, Unlinkable};
-use nyne::prelude::*;
+use color_eyre::eyre::Result;
+use nyne::router::{
+    AffectedFiles, NamedNode, Node, ReadContext, Readable, RenameContext, Renameable, UnlinkContext, Unlinkable,
+};
 
-use super::CommitMtimeExt as _;
 use crate::repo::Repo;
 
 /// Renameable capability for branch directory nodes.
@@ -28,12 +29,18 @@ pub(super) struct BranchRename {
 /// [`Renameable`] implementation for [`BranchRename`].
 impl Renameable for BranchRename {
     /// Renames a git branch, preserving namespace prefix.
-    fn rename(&self, ctx: &RenameContext<'_>) -> Result<()> {
-        self.repo
-            .rename_branch(&self.branch_name, &match self.branch_name.rsplit_once('/') {
-                Some((prefix, _)) => format!("{prefix}/{}", ctx.target_name),
-                None => ctx.target_name.to_owned(),
-            })
+    fn rename(&self, ctx: &RenameContext<'_>) -> Result<AffectedFiles> {
+        let new_segment = ctx
+            .target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| color_eyre::eyre::eyre!("rename target has no filename"))?;
+        let new_branch = match self.branch_name.rsplit_once('/') {
+            Some((prefix, _)) => format!("{prefix}/{new_segment}"),
+            None => new_segment.to_owned(),
+        };
+        self.repo.rename_branch(&self.branch_name, &new_branch)?;
+        Ok(vec![])
     }
 }
 /// Unlinkable capability for branch directory nodes.
@@ -49,7 +56,10 @@ pub(super) struct BranchRemove {
 /// [`Unlinkable`] implementation for [`BranchRemove`].
 impl Unlinkable for BranchRemove {
     /// Deletes a git branch.
-    fn unlink(&self, _ctx: &RequestContext<'_>) -> Result<()> { self.repo.delete_branch(&self.branch_name) }
+    fn unlink(&self, _ctx: &UnlinkContext<'_>) -> Result<AffectedFiles> {
+        self.repo.delete_branch(&self.branch_name)?;
+        Ok(vec![])
+    }
 }
 
 /// Compute the child nodes for a given branch namespace prefix.
@@ -63,8 +73,7 @@ impl Unlinkable for BranchRemove {
 ///
 /// If a name is both a leaf and an intermediate (branch `feat` coexisting with
 /// `feat/foo`), it is emitted as a leaf with `BranchRename`.
-pub(super) fn branch_segments_at_prefix(repo: &Arc<Repo>, prefix: &str) -> Nodes {
-    let head_mtime = repo.head_epoch_secs();
+pub(super) fn branch_segments_at_prefix(repo: &Arc<Repo>, prefix: &str) -> Result<Option<Vec<NamedNode>>> {
     let branches = repo.branches()?;
 
     let mut segments: BTreeSet<&str> = BTreeSet::new();
@@ -94,21 +103,20 @@ pub(super) fn branch_segments_at_prefix(repo: &Arc<Repo>, prefix: &str) -> Nodes
         segments
             .into_iter()
             .map(|segment| {
-                let node = VirtualNode::directory(segment).with_mtime(head_mtime);
-                if let Some((_, full_name)) = leaf_branches.iter().find(|(s, _)| *s == segment) {
-                    let branch_name = (*full_name).to_owned();
-                    let rename = BranchRename {
+                let Some((_, full_name)) = leaf_branches.iter().find(|(s, _)| *s == segment) else {
+                    return NamedNode::dir(segment);
+                };
+                let branch_name = (*full_name).to_owned();
+                Node::dir()
+                    .with_renameable(BranchRename {
                         repo: Arc::clone(repo),
                         branch_name: branch_name.clone(),
-                    };
-                    node.with_unlinkable(BranchRemove {
+                    })
+                    .with_unlinkable(BranchRemove {
                         repo: Arc::clone(repo),
                         branch_name,
                     })
-                    .with_renameable(rename)
-                } else {
-                    node
-                }
+                    .named(segment)
             })
             .collect(),
     ))
@@ -124,32 +132,34 @@ pub(super) struct BranchBlobContent {
 /// [`Readable`] implementation for [`BranchBlobContent`].
 impl Readable for BranchBlobContent {
     /// Reads a blob from a branch at the given path.
-    fn read(&self, _ctx: &RequestContext<'_>) -> Result<Vec<u8>> { self.repo.blob_at_ref(&self.branch, &self.path) }
+    fn read(&self, _ctx: &ReadContext<'_>) -> Result<Vec<u8>> { self.repo.blob_at_ref(&self.branch, &self.path) }
 }
 
 /// Build virtual nodes for the tree entries at `tree_path` on `branch`.
 ///
-/// Directories become `VirtualNode::directory`, files become readable nodes
+/// Directories become `NamedNode::dir`, files become readable nodes
 /// backed by [`BranchBlobContent`].
-pub(super) fn branch_tree_nodes(repo: &Arc<Repo>, branch: &str, tree_path: &str) -> Nodes {
+pub(super) fn branch_tree_nodes(repo: &Arc<Repo>, branch: &str, tree_path: &str) -> Result<Option<Vec<NamedNode>>> {
     let entries = repo.ref_tree_entries(branch, tree_path)?;
     Ok(Some(
         entries
             .into_iter()
             .map(|(name, is_dir)| {
                 if is_dir {
-                    return VirtualNode::directory(&name);
+                    return NamedNode::dir(&name);
                 }
                 let path = if tree_path.is_empty() {
                     name.clone()
                 } else {
                     format!("{tree_path}/{name}")
                 };
-                VirtualNode::file(&name, BranchBlobContent {
-                    repo: Arc::clone(repo),
-                    branch: branch.to_owned(),
-                    path,
-                })
+                Node::file()
+                    .with_readable(BranchBlobContent {
+                        repo: Arc::clone(repo),
+                        branch: branch.to_owned(),
+                        path,
+                    })
+                    .named(&name)
             })
             .collect(),
     ))

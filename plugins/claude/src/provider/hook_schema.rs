@@ -47,6 +47,9 @@ pub struct HookInput {
 
     // Stop hook guard — true when the stop hook itself triggered this event.
     pub stop_hook_active: Option<bool>,
+
+    // PostToolUseFailure: error message from the failed tool execution.
+    pub error: Option<String>,
 }
 
 /// Methods for [`HookInput`].

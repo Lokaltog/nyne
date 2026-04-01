@@ -11,10 +11,10 @@
 //! ```
 
 use std::fmt::Write;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use nyne::dispatch::activation::ActivationContext;
 use owo_colors::OwoColorize;
 use palette::{Clamp, IntoColor, Mix, Oklch, Srgb};
 
@@ -66,7 +66,8 @@ const SCALE_EXPONENT: f32 = 0.4;
 /// Everything a segment function needs to produce its output.
 pub(super) struct Context<'a> {
     pub payload: &'a StatuslinePayload,
-    pub activation: &'a ActivationContext,
+    pub root: &'a Path,
+    pub repo: Option<&'a Arc<nyne_git::Repo>>,
 }
 
 /// A segment function: given context, optionally produces a rendered string.
@@ -102,16 +103,10 @@ pub(super) fn render(ctx: &Context<'_>) -> String {
 
 /// Project root path, dimmed.
 #[expect(clippy::unnecessary_wraps, reason = "signature constrained by SegmentFn type alias")]
-fn project(ctx: &Context<'_>) -> Option<String> {
-    Some(ctx.activation.host_root().display().to_string().dimmed().to_string())
-}
+fn project(ctx: &Context<'_>) -> Option<String> { Some(ctx.root.display().to_string().dimmed().to_string()) }
 
 /// Git branch name.
-fn git_branch(ctx: &Context<'_>) -> Option<String> {
-    ctx.activation
-        .get::<Arc<nyne_git::Repo>>()
-        .map(|r| format!("\u{e0a0} {}", r.head_branch().bold()))
-}
+fn git_branch(ctx: &Context<'_>) -> Option<String> { ctx.repo.map(|r| format!("\u{e0a0} {}", r.head_branch().bold())) }
 
 /// Model display name with diamond prefix.
 fn model(ctx: &Context<'_>) -> Option<String> {

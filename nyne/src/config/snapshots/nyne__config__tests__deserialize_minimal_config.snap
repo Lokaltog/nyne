@@ -1,16 +1,15 @@
 ---
 source: nyne/src/config/tests.rs
-assertion_line: 21
 expression: config
 ---
-passthrough_processes = ['git']
-
 [repository]
 storage_strategy = 'passthrough'
 
 [sandbox]
 hostname = 'nyne-sandbox'
 bind_mounts = []
+state_root = '/tmp/nyne'
+mount_root = '/code'
 [sandbox.env]
 
 [agent_files]

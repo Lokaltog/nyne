@@ -1,0 +1,5 @@
+---
+source: nyne/src/templates/tests.rs
+expression: content
+---
+Hello, lazy!
