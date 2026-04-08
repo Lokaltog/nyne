@@ -7,10 +7,12 @@
 pub mod state;
 use std::iter;
 use std::sync::Arc;
+use std::time::Duration;
 
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use nyne::router::{
-    AffectedFiles, Filesystem, Next, Node, Op, Provider, ReadContext, Readable, Request, UnlinkContext, Unlinkable,
+    AffectedFiles, CachePolicy, Filesystem, Next, Node, Op, Provider, ReadContext, Readable, Request, UnlinkContext,
+    Unlinkable,
 };
 use nyne::text::unified_diff;
 pub use state::*;
@@ -44,6 +46,7 @@ impl Provider for DiffProvider {
                             source: Arc::clone(&diff.source),
                             root_prefix: self.root_prefix.clone(),
                         })
+                        .with_cache_policy(CachePolicy::with_ttl(Duration::ZERO))
                         .named(name),
                 );
                 Ok(())

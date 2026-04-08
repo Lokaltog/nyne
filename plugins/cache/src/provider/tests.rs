@@ -43,7 +43,9 @@ fn cached_readable_returns_correct_size_after_read() {
     let inner = Arc::new(CountingReadable::new(b"hello world"));
     let cached = CachedReadable {
         inner: inner.clone(),
-        cached: std::sync::OnceLock::new(),
+        persistent: std::sync::OnceLock::new(),
+        timed: std::sync::Mutex::new(None),
+        ttl: std::time::Duration::ZERO,
     };
 
     // Before any read, size is unknown.
@@ -66,7 +68,9 @@ fn cached_readable_delegates_backing_path() {
     let inner = Arc::new(CountingReadable::new(b""));
     let cached = CachedReadable {
         inner,
-        cached: std::sync::OnceLock::new(),
+        persistent: std::sync::OnceLock::new(),
+        timed: std::sync::Mutex::new(None),
+        ttl: std::time::Duration::ZERO,
     };
     assert_eq!(cached.backing_path(), None);
 }
