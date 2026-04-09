@@ -14,7 +14,7 @@
 //! stale cache entries expire via TTL and get re-resolved on next access.
 
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread::Builder;
 
@@ -22,6 +22,7 @@ use fuser::{INodeNo, Notifier};
 use tracing::{trace, warn};
 
 use crate::fuse::inode_map::InodeMap;
+use crate::router::Chain;
 
 /// [`KernelNotifier`] backed by a `fuser::Notifier`.
 ///
@@ -164,3 +165,45 @@ pub fn invalidate_inode_at(path: &Path, notifier: &dyn KernelNotifier, inodes: &
         notifier.inval_entry(parent_ino, name);
     }
 }
+
+/// Propagate a batch of source path changes to providers and kernel caches.
+///
+/// This is the single source of truth for "a set of source paths changed —
+/// invalidate everything that depends on them." Both the FUSE mutation path
+/// (inline writes, via [`FuseFilesystem::notify_change`]) and the filesystem
+/// watcher (external changes, via [`EventLoop::flush`]) must route through
+/// this function to keep invalidation semantics identical.
+///
+/// The sequence is:
+///
+/// 1. Each provider's [`Provider::on_change`] is called with the full batch.
+///    Providers bump internal caches (e.g. [`CacheProvider`]) and may return
+///    derived [`InvalidationEvent`]s for dependent VFS paths.
+/// 2. Every raw source path in `affected` is invalidated in the kernel via
+///    [`invalidate_inode_at`] — this drops the kernel's page cache and
+///    dentry entry for the file, so the next access re-enters FUSE and
+///    reads fresh data. Skipping this loop (as the watcher did prior to
+///    this function's introduction) leaves the kernel serving stale
+///    content for externally-modified files.
+/// 3. Every derived invalidation event from step 1 is also fed to
+///    [`invalidate_inode_at`] so companion namespaces and other
+///    provider-owned virtual paths invalidate in lockstep.
+///
+/// Best-effort: nothing here returns errors. Paths with no allocated inode
+/// are silently skipped (they'll be freshly resolved on next access
+/// anyway).
+pub fn propagate_source_changes(affected: &[PathBuf], chain: &Chain, notifier: &dyn KernelNotifier, inodes: &InodeMap) {
+    if affected.is_empty() {
+        return;
+    }
+    let events: Vec<_> = chain.providers().iter().flat_map(|p| p.on_change(affected)).collect();
+    for source_path in affected {
+        invalidate_inode_at(source_path, notifier, inodes);
+    }
+    for event in &events {
+        invalidate_inode_at(&event.path, notifier, inodes);
+    }
+}
+
+#[cfg(test)]
+mod tests;

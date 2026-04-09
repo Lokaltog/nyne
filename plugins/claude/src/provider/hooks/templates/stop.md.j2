@@ -1,12 +1,17 @@
-Review your changes to the following files: {{ changed_files | join(", ") }}.
+{% import "macros/hints" as hints %}
+{{ hints.header_review("finalization checklist before stopping.") }}
 
-Finalization checklist:
+Modified files:
+{% for f in changed_files %}
+  {{ f }}
+{% endfor %}
 
-- [ ] No deviations from task plan
-- [ ] No duplicated logic or repeated similar code blocks
-- [ ] No multi-site modifications that could be a single abstraction
-- [ ] New constants and functions do not duplicate existing ones in the codebase
-- [ ] New code is covered by tests
-- [ ] `CLAUDE.md` files are updated with any new features, changes, or important information
+Checklist:
+  [ ] No deviations from the task plan
+  [ ] No duplicated logic or repeated similar code blocks
+  [ ] No multi-site modifications that could be a single abstraction
+  [ ] New constants or functions do not duplicate existing ones
+  [ ] New code is covered by tests
+  [ ] CLAUDE.md files reflect any new features or changes
 
-If any of the above points are not met, address them by fixing the issues before proceeding. Any devations from the task plan must be reported to the user.
+If any item is unchecked, fix it before stopping. Report any deviations from the task plan to the user.

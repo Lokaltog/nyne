@@ -1,0 +1,17 @@
+{% import "macros/paths" as paths %}
+
+## Symbol Naming
+
+`{{ FILE_OVERVIEW }}` lists exact symbol names. When a name ends with `@/`, it's a nyne namespace — nested symbols are **direct children** (no intermediate `symbols/` directory):
+
+```
+OVERVIEW shows: MyImpl@/  (Impl, with nested: process@/, validate@/)
+Full path:      {{ paths.sym("file." ~ ext, "MyImpl@/process", ext) }}
+```
+
+- Top-level: `{{ paths.sym("", "my_function", ext) }}`
+- Trait/interface impls: `{{ paths.sym("", "Display_for_Foo", ext) }}`
+- Name collisions: `{{ paths.sym("", "Foo~Struct", ext) }}`, `{{ paths.sym("", "Foo~Fn", ext) }}`
+- Nested (impl methods): `{{ paths.sym("", "Foo~Impl@/new", ext) }}`
+
+When names are ambiguous, `ls file.{{ ext }}@/symbols/` shows the exact filesystem entries.

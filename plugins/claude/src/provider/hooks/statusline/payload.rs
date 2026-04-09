@@ -7,14 +7,13 @@
 
 use serde::Deserialize;
 
-/// Top-level payload piped to the statusline script via stdin.
-#[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)] // Wire type — fields exist in the JSON schema but may not be read yet.
-/// Parsed statusline JSON payload.
+/// Parsed statusline JSON payload piped to the statusline script via stdin.
 ///
 /// Mirrors the Claude Code statusline JSON schema. All fields are optional
 /// because Claude Code may omit sections depending on subscription tier
 /// and session state (e.g., `rate_limits` is only present for Pro/Max).
+#[allow(dead_code)] // Wire type — fields exist in the JSON schema but may not be read yet.
+#[derive(Debug, Clone, Deserialize)]
 pub(super) struct StatuslinePayload {
     pub model: Option<Model>,
     pub context_window: Option<ContextWindow>,
@@ -25,14 +24,14 @@ pub(super) struct StatuslinePayload {
     pub exceeds_200k_tokens: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
 /// Model information.
+#[derive(Debug, Clone, Deserialize)]
 pub(super) struct Model {
     pub display_name: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
 /// Context window usage details.
+#[derive(Debug, Clone, Deserialize)]
 pub(super) struct ContextWindow {
     pub context_window_size: Option<u64>,
     #[allow(dead_code)] // Wire field: present in Claude Code's JSON payload
@@ -40,8 +39,8 @@ pub(super) struct ContextWindow {
     pub current_usage: Option<CurrentUsage>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
 /// Current token usage.
+#[derive(Debug, Clone, Deserialize)]
 pub(super) struct CurrentUsage {
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
@@ -49,7 +48,6 @@ pub(super) struct CurrentUsage {
     pub cache_read_input_tokens: Option<u64>,
 }
 
-/// Methods for [`CurrentUsage`].
 impl CurrentUsage {
     /// Total tokens consumed (input + output + cache).
     pub fn total(&self) -> u64 {
@@ -60,35 +58,36 @@ impl CurrentUsage {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
 /// Cost information.
+#[derive(Debug, Clone, Deserialize)]
 pub(super) struct Cost {
     pub total_lines_added: Option<u64>,
     pub total_lines_removed: Option<u64>,
 }
-#[derive(Debug, Clone, Deserialize)]
+
 /// Rate limit windows (Pro/Max subscribers only).
+#[derive(Debug, Clone, Deserialize)]
 pub(super) struct RateLimits {
     pub seven_day: Option<RateWindow>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
 /// A single rate-limit window.
+#[derive(Debug, Clone, Deserialize)]
 pub(super) struct RateWindow {
     pub used_percentage: Option<f64>,
     /// Unix epoch (seconds) when this window resets.
     pub resets_at: Option<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 /// Vim editor state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub(super) struct Vim {
     pub mode: Option<VimMode>,
 }
 
+/// Vim editing mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
-/// Vim editing mode.
 pub(super) enum VimMode {
     Normal,
     Insert,

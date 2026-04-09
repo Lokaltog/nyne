@@ -140,3 +140,46 @@ fn negative_lookup_cache_hit_does_not_restore_state() {
         "negative cache hit must not overwrite request state"
     );
 }
+#[test]
+fn on_change_bumps_parent_generation() {
+    use std::path::PathBuf;
+
+    use nyne::router::{GenerationMap, Provider};
+
+    use super::CacheProvider;
+
+    // The cache provider stores `Lookup { name }` entries with
+    // `source = req.path()` — the *parent* directory. When an external
+    // change modifies a file, the watcher calls `on_change` with the file
+    // path. Bumping only the file's own generation would leave the
+    // lookup cache entry (keyed on the parent) still fresh. On_change
+    // must bump the parent as well — this mirrors the mutation branch
+    // of `accept`, which also bumps the parent via `source_from_request`.
+    let generations = Arc::new(GenerationMap::default());
+    let provider = CacheProvider::new(Arc::clone(&generations));
+
+    let parent = std::path::Path::new(".git");
+    let child = PathBuf::from(".git/index");
+
+    // Baseline: unknown paths return generation 0.
+    assert_eq!(generations.get(parent), 0);
+    assert_eq!(generations.get(&child), 0);
+
+    // Simulate a filesystem-watcher event for an externally modified file.
+    let _ = provider.on_change(&[child.clone()]);
+
+    // The child's own generation must bump (used by `source =
+    // req.path()` cases where the child itself is a directory being
+    // operated on).
+    assert!(generations.get(&child) > 0, "child generation not bumped");
+    // The parent's generation must also bump — this is the invariant
+    // that fixes stale `Lookup` cache entries for external file
+    // modifications. Without it, `git status` reading `.git/index`
+    // inside the mount would keep returning a cached pre-commit
+    // lookup after an external `git commit`.
+    assert!(
+        generations.get(parent) > 0,
+        "parent generation not bumped — lookup cache entries keyed on the \
+         parent would remain stale after external modifications to children"
+    );
+}

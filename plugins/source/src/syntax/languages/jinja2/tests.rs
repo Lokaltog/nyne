@@ -1,3 +1,4 @@
+use nyne::load_fixture;
 use rstest::rstest;
 
 use super::*;
@@ -340,9 +341,7 @@ fn fragment_name_byte_offset_extracts_name() {
 
 /// Decompose a Jinja2 fixture file into fragments.
 fn decompose_fixture(name: &str) -> Vec<super::Fragment> {
-    let source = crate::test_support::load_fixture("syntax/languages/jinja2", name);
-    let t = extract_template(&source);
-    symbols_to_fragments(t.symbols)
+    symbols_to_fragments(extract_template(&load_fixture!("syntax/languages/jinja2", name)).symbols)
 }
 
 /// Fixture has: extends, import, set, 3 blocks (head, content, footer), 1 macro.

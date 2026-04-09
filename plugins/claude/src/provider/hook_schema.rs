@@ -76,6 +76,43 @@ impl HookInput {
     pub fn tool_input_as<T: DeserializeOwned>(&self) -> Option<T> {
         self.tool_input.as_ref().and_then(|v| T::deserialize(v).ok())
     }
+
+    /// Parse [`Self::tool_name`] as a [`ToolKind`].
+    ///
+    /// Returns `None` for tools that aren't modeled by `ToolKind`
+    /// (`Grep`, `Glob`, `Bash`, …). Used by hooks that branch on
+    /// `Read`/`Edit`/`Write` — the ones where the tool name directly
+    /// controls which typed input struct to deserialize.
+    pub fn tool_kind(&self) -> Option<ToolKind> { self.tool_name.as_deref()?.try_into().ok() }
+
+    /// Deserialize `tool_input` as an [`EditToolInput`], gated on
+    /// [`Self::tool_kind`] being [`ToolKind::Edit`].
+    ///
+    /// Returns `None` for any other tool or an unparseable payload.
+    /// Canonical way to pull the Edit-specific fields — callers get
+    /// `None` automatically on non-Edit invocations instead of
+    /// open-coding the `kind == Edit` guard at every site.
+    pub fn edit_input(&self) -> Option<EditToolInput> {
+        (self.tool_kind()? == ToolKind::Edit)
+            .then(|| self.tool_input_as::<EditToolInput>())
+            .flatten()
+    }
+}
+
+/// Tool name discriminator for tool-specific hook events.
+///
+/// Parsed from [`HookInput::tool_name`] via [`std::str::FromStr`]. Only the
+/// tools nyne's hook scripts branch on are modeled; other tools (`Grep`,
+/// `Glob`, `Bash`, etc.) are handled by tool-specific hooks that parse
+/// their own `tool_input` directly and don't need this discriminator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, strum::Display, strum::EnumString, strum::AsRefStr)]
+pub enum ToolKind {
+    /// `Read` tool — read a file.
+    Read,
+    /// `Edit` tool — targeted string replacement in an existing file.
+    Edit,
+    /// `Write` tool — overwrite or create a file.
+    Write,
 }
 
 // Per-tool input schemas

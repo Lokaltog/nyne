@@ -117,16 +117,14 @@ impl Provider for CacheProvider {
             // Mutations: never cached -- always dispatch, then invalidate.
             Op::Create { .. } | Op::Mkdir { .. } | Op::Remove { .. } => {
                 next.run(req)?;
-                let path = req.path().to_owned();
-                self.invalidate(&path);
+                self.invalidate(&req.path().to_owned());
                 self.generations.bump(&source_from_request(req));
                 Ok(())
             }
             Op::Rename { ref target_dir, .. } => {
                 let target = target_dir.clone();
                 next.run(req)?;
-                let path = req.path().to_owned();
-                self.invalidate(&path);
+                self.invalidate(&req.path().to_owned());
                 self.invalidate(&target);
                 self.generations.bump(&source_from_request(req));
                 Ok(())
@@ -135,8 +133,20 @@ impl Provider for CacheProvider {
     }
 
     fn on_change(&self, changed: &[PathBuf]) -> Vec<InvalidationEvent> {
+        // Bump both the changed path and its parent directory. The cache
+        // provider stores entries with `source = req.path()` — which is
+        // the *directory* being operated on (parent for `Lookup { name }`,
+        // the dir itself for `Readdir`). Bumping only the child would
+        // leave cache entries keyed on the parent stale after an external
+        // modification. This mirrors the mutation branch of `accept`
+        // which bumps `source_from_request(req)` (= parent directory for
+        // `Op::Create`/`Op::Remove`), keeping internal and external
+        // invalidation semantics identical.
         for path in changed {
             self.generations.bump(path);
+            if let Some(parent) = path.parent() {
+                self.generations.bump(parent);
+            }
         }
         Vec::new()
     }

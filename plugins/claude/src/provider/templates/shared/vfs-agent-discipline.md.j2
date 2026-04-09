@@ -1,0 +1,38 @@
+{% import "macros/hints" as hints %}
+{% import "macros/paths" as paths %}
+## Discipline: Mandatory Behaviors
+
+### Blast-Radius Discipline
+
+**Before modifying any symbol**, read its impact files:
+
+```bash
+{{ hints.vfs_analysis() }}
+```
+
+Never modify a function signature, rename a symbol, or delete code without first understanding who depends on it. One read each — they include inline code context.
+
+### Filter by Kind
+
+```bash
+ls {{ paths.by_kind("file." ~ ext, "fn") }}       # all functions
+ls {{ paths.by_kind("file." ~ ext, "struct") }}   # all structs
+ls {{ paths.by_kind("file." ~ ext, "impl") }}     # all impl blocks
+```
+
+## Anti-Patterns
+
+| Anti-pattern | Correct approach |
+|-|-|
+| `Read file.{{ ext }}` (raw file read) | `Read {{ paths.sym_overview("file." ~ ext) }}` then targeted symbol |
+| `Grep "fn process" src/` | `ls {{ paths.by_kind("file." ~ ext, "fn") }}` or `{{ FILE_OVERVIEW }}` |
+| `Grep "process" src/` for callers | `Read {{ paths.sym_md("file." ~ ext, "process", "CALLERS") }}` |
+| Full file read for imports | `Read {{ paths.imports("file." ~ ext, ext) }}` |
+| Editing raw source files | Edit `@/symbols/` bodies (tree-sitter validated) |
+| Grep + manual line math for symbol | `readlink {{ paths.at_line("file." ~ ext, 42) }}` (instant) |
+| Reading N files for call sites | `{{ FILE_CALLERS }}` has inline code context for all sites |
+| Modifying without checking callers | **Always** read `{{ FILE_CALLERS }}` first |
+| Using symbol paths after a write without re-reading | Re-read `{{ FILE_OVERVIEW }}` after writes — the symbol table may have changed |
+| `Bash(cat {{ paths.file_overview() }})` for single reads | Use the **Read tool** — it's the default for all single-path `@/` reads |
+| Guessing path variations on `ENOENT` | `ls symbols/` or `{{ FILE_OVERVIEW }}` to find the current name |
+| Sequential direct writes to 2+ symbols | Batch edit staging — atomic, validated |

@@ -4,8 +4,8 @@ use super::*;
 
 /// Load a fixture TOML file and deserialize into `NyneConfig`.
 fn load_fixture(name: &str) -> NyneConfig {
-    let content = crate::test_support::load_fixture("config", name);
-    toml::from_str(&content).unwrap_or_else(|e| panic!("failed to parse fixture {name}: {e}"))
+    toml::from_str(&crate::load_fixture!("config", name))
+        .unwrap_or_else(|e| panic!("failed to parse fixture {name}: {e}"))
 }
 
 /// Verifies that the default `NyneConfig` passes validation.

@@ -51,15 +51,6 @@ impl Op {
     /// Whether this is a `Readdir` op.
     pub const fn is_readdir(&self) -> bool { matches!(self, Self::Readdir) }
 
-    /// Whether this is a `Create` op.
-    pub const fn is_create(&self) -> bool { matches!(self, Self::Create { .. }) }
-
-    /// Whether this is a `Remove` op.
-    pub const fn is_remove(&self) -> bool { matches!(self, Self::Remove { .. }) }
-
-    /// Whether this is a `Rename` op.
-    pub const fn is_rename(&self) -> bool { matches!(self, Self::Rename { .. }) }
-
     /// The looked-up name, if this is a `Lookup` op.
     pub fn lookup_name(&self) -> Option<&str> {
         match self {
@@ -80,10 +71,17 @@ impl Op {
         }
     }
 }
+#[cfg(test)]
+impl Op {
+    /// Whether this is a `Create` op.
+    pub const fn is_create(&self) -> bool { matches!(self, Self::Create { .. }) }
 
-/// State type that preserves the original path before any rewrites.
-#[derive(Debug, Clone)]
-struct OriginalPath(PathBuf);
+    /// Whether this is a `Remove` op.
+    pub const fn is_remove(&self) -> bool { matches!(self, Self::Remove { .. }) }
+
+    /// Whether this is a `Rename` op.
+    pub const fn is_rename(&self) -> bool { matches!(self, Self::Rename { .. }) }
+}
 
 /// Cloneable snapshot of request state, for cache middleware to store
 /// and restore cross-provider state alongside cached nodes.
@@ -120,10 +118,10 @@ impl Request {
         }
     }
 
-    /// Set the requesting process identity.
+    /// Optionally set the requesting process identity.
     #[must_use]
-    pub fn with_process(mut self, process: Process) -> Self {
-        self.process = Some(process);
+    pub fn with_opt_process(mut self, process: Option<Process>) -> Self {
+        self.process = process;
         self
     }
 
@@ -137,23 +135,10 @@ impl Request {
     pub const fn op(&self) -> &Op { &self.op }
 
     /// Rewrite the path for downstream providers.
-    /// The original path is preserved and accessible via `original_path()`.
-    pub fn rewrite_path(&mut self, new_path: PathBuf) {
-        if !self.state.contains::<OriginalPath>() {
-            self.state.insert(OriginalPath(self.path.clone()));
-        }
-        self.path = new_path;
-    }
+    pub fn rewrite_path(&mut self, new_path: PathBuf) { self.path = new_path; }
 
     /// Rewrite the operation for downstream providers.
     pub fn set_op(&mut self, op: Op) { self.op = op; }
-
-    /// Get the original path before any rewrites.
-    pub fn original_path(&self) -> &Path {
-        self.state
-            .get::<OriginalPath>()
-            .map_or(self.path.as_path(), |p| p.0.as_path())
-    }
 
     /// Insert typed state for downstream providers to read.
     pub fn set_state<T: Clone + Send + Sync + 'static>(&mut self, value: T) { self.state.insert(value); }

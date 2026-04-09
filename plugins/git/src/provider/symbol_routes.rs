@@ -212,6 +212,7 @@ impl SymbolGitCtx {
 /// line range. Uses `on_readdir`/`on_lookup` callbacks that inspect the
 /// captured `path` segments to determine scope, following the same pattern
 /// as the source plugin's `code/` and `edit/` sub-routes.
+#[allow(clippy::excessive_nesting)] // route registration closures nest inherently
 pub fn register_source_extensions(
     exts: &mut SourceExtensions,
     state: &Arc<GitState>,

@@ -29,15 +29,10 @@ pub mod err;
 pub mod cli;
 /// Configuration loading and validation from TOML.
 pub mod config;
+/// Generic deep-merge for layered configuration values.
+pub mod deep_merge;
 /// Request dispatch: routing, caching, and content pipeline.
 pub mod dispatch;
-/// Shared JSON utilities: deep merge and streaming.
-pub mod json;
-/// Shared text utilities: slugification, date formatting, diffs.
-pub mod text;
-/// TOML deep merge for layered configuration.
-pub mod toml_merge;
-
 /// FUSE filesystem implementation bridging kernel requests to the dispatch layer.
 pub(crate) mod fuse;
 /// Path utilities for virtual filesystem operations.
@@ -56,6 +51,8 @@ pub(crate) mod sandbox;
 pub(crate) mod session;
 /// MiniJinja template rendering for virtual file content.
 pub mod templates;
+/// Shared text utilities: slugification, date formatting, diffs.
+pub mod text;
 /// Shared domain types: VFS paths, file metadata, and identifiers.
 pub mod types;
 /// Filesystem watcher for real-FS change detection and cache invalidation.

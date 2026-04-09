@@ -1,4 +1,5 @@
 pub mod mem;
+pub mod mode;
 pub mod os;
 
 use std::path::{Path, PathBuf};

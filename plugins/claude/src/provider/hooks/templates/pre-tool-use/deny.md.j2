@@ -1,35 +1,15 @@
-{% from "hooks/vfs-hints" import batch_edit_hint %}
-⚠️ Blocked: broad read of raw source file ({{ total_lines }} lines, {{ total_bytes|tokens }} tokens). Use the nyne VFS instead.
+{% import "macros/hints" as hints %}
+{% import "macros/paths" as paths %}
+{{ hints.header_blocked("broad read of raw source file " ~ rel ~ " (" ~ total_lines ~ " lines, " ~ (total_bytes|tokens) ~ " tokens). Use the nyne VFS instead.") }}
 
-{% if sym %}
-Read the symbol directly:
-  Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
+Targeted access paths:
+{{ hints.edit_via_sym(rel, sym, ext) }}
 
-Edit the symbol body:
-  Edit {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
-
-Or browse the symbol table first:
-  Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
-{% else %}
-Read the symbol table, then use targeted symbol files:
-  Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
-
-Read a symbol directly:
-  Read {{ rel }}@/symbols/<symbol>@/body.{{ ext }}
-
-Edit a symbol body:
-  Edit {{ rel }}@/symbols/<symbol>@/body.{{ ext }}
-{% endif %}
-
-{{ batch_edit_hint() }}
+{{ hints.batch_edit_hint(rel) }}
 {% if config.include_symbol_table %}
 
-{{ rel }}@/symbols/{{ FILE_OVERVIEW }}:
+{{ paths.sym_overview(rel) }}:
 {% include "syntax/symbol_table" %}
 {% endif %}
 
-If VFS decomposition is insufficient (e.g. only a preamble symbol), retry the same Read — there is a grace period that allows it through on the second attempt.
-
-Read/splice/append/delete lines (escape hatch only, if all else fails; no prior read needed, not intercepted):
-  cat {{ rel }}@/lines:M-N
-  rm {{ rel }}@/lines:M-N
+{{ hints.escape_hatch_reread(rel) }}

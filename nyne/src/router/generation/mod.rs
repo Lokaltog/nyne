@@ -8,6 +8,7 @@ use std::sync::{PoisonError, RwLock};
 /// Each source file has a monotonic generation counter. Caches compare
 /// their stored generation against the current value to detect staleness.
 /// Returns 0 for unknown files -- first access always triggers computation.
+#[derive(Default)]
 pub struct GenerationMap {
     inner: RwLock<HashMap<PathBuf, u64>>,
 }
@@ -36,10 +37,6 @@ impl GenerationMap {
         *entry += 1;
         *entry
     }
-}
-
-impl Default for GenerationMap {
-    fn default() -> Self { Self::new() }
 }
 
 #[cfg(test)]

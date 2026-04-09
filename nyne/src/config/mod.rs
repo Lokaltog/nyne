@@ -432,7 +432,7 @@ impl NyneConfig {
     /// Returns an error if any config file exists but cannot be read/parsed,
     /// if the merged result fails deserialization, or if validation fails.
     pub fn load(plugins: &[Box<dyn Plugin>], project_root: Option<&Path>) -> Result<Self> {
-        use crate::toml_merge::deep_merge;
+        use crate::deep_merge::deep_merge;
 
         // Layer 1: Core defaults.
         let mut merged = toml::Value::try_from(Self::default()).wrap_err("serializing default config")?;

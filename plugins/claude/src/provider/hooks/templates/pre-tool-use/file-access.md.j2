@@ -1,7 +1,5 @@
 {% if mode == "deny" %}
 {% include "hooks/pre-tool-use/deny" %}
-{% elif mode == "hint" %}
+{% else %}
 {% include "hooks/pre-tool-use/hint" %}
-{% elif mode == "grep" %}
-{% include "hooks/pre-tool-use/grep" %}
 {% endif %}

@@ -7,7 +7,7 @@ use rstest::rstest;
 use super::*;
 use crate::router::chain::Chain;
 use crate::router::test_support::{StubReadable, test_read_ctx};
-use crate::router::{NamedNode, Next, Node, Op, Permissions, Provider, Request};
+use crate::router::{NamedNode, Next, Node, Op, Provider, Request};
 
 struct TestProvider;
 
@@ -288,114 +288,6 @@ fn capture_binds_param(#[case] path: &str, #[case] param: &str, #[case] expected
         text.contains(expected),
         "expected param {param}={expected} in content: {text}"
     );
-}
-
-#[test]
-fn named_node_into_parts_roundtrip() {
-    let node = Node::file().with_readable(StubReadable::new("content"));
-    let named = node.named("test.txt");
-
-    assert_eq!(named.name(), "test.txt");
-    assert!(named.readable().is_some());
-
-    let (name, inner) = named.into_parts();
-    assert_eq!(name, "test.txt");
-    assert!(inner.readable().is_some());
-
-    // Reconstruct
-    let rebuilt = NamedNode::new(name, inner);
-    assert_eq!(rebuilt.name(), "test.txt");
-    assert!(rebuilt.readable().is_some());
-}
-
-#[test]
-#[cfg(debug_assertions)]
-#[should_panic(expected = "cannot merge capabilities across different node kinds")]
-fn merge_rejects_kind_mismatch() {
-    let mut file = Node::file().with_readable(StubReadable::new("a"));
-    let dir = Node::dir();
-    file.merge_capabilities_from(dir);
-}
-#[test]
-fn permissions_auto_derived_file_readable() {
-    let node = Node::file().with_readable(StubReadable::new("x"));
-    assert_eq!(node.permissions(), Permissions::READ);
-}
-
-#[test]
-fn permissions_auto_derived_file_writable() {
-    let node = Node::file().with_writable(crate::router::test_support::StubWritable);
-    assert_eq!(node.permissions(), Permissions::WRITE);
-}
-
-#[test]
-fn permissions_auto_derived_file_read_write() {
-    let node = Node::file()
-        .with_readable(StubReadable::new("x"))
-        .with_writable(crate::router::test_support::StubWritable);
-    assert_eq!(node.permissions(), Permissions::READ | Permissions::WRITE);
-}
-
-#[test]
-fn permissions_auto_derived_directory() {
-    let node = Node::dir();
-    assert_eq!(node.permissions(), Permissions::READ | Permissions::EXECUTE);
-}
-
-#[test]
-fn permissions_auto_derived_symlink() {
-    let node = Node::symlink("/target");
-    assert_eq!(node.permissions(), Permissions::ALL);
-}
-
-#[test]
-fn permissions_explicit_override() {
-    let node = Node::file()
-        .with_readable(StubReadable::new("x"))
-        .with_permissions(Permissions::EXECUTE);
-    assert_eq!(node.permissions(), Permissions::EXECUTE);
-    assert!(!node.permissions().contains(Permissions::READ));
-}
-
-#[test]
-fn permissions_auto_derived_bare_file() {
-    let node = Node::file();
-    assert_eq!(node.permissions(), Permissions::NONE);
-    assert!(node.permissions().is_empty());
-}
-
-#[test]
-fn permissions_bits_accessor() {
-    assert_eq!(Permissions::NONE.bits(), 0);
-    assert_eq!(Permissions::READ.bits(), 1);
-    assert_eq!(Permissions::WRITE.bits(), 2);
-    assert_eq!(Permissions::EXECUTE.bits(), 4);
-    assert_eq!(Permissions::ALL.bits(), 7);
-    assert_eq!((Permissions::READ | Permissions::WRITE).bits(), 3);
-}
-
-#[test]
-fn permissions_bitand_assign_clears_flags() {
-    let mut perms = Permissions::READ | Permissions::WRITE;
-    perms &= !Permissions::WRITE;
-    assert_eq!(perms, Permissions::READ);
-    assert!(!perms.contains(Permissions::WRITE));
-}
-
-#[test]
-fn permissions_contains_none_is_always_true() {
-    assert!(Permissions::NONE.contains(Permissions::NONE));
-    assert!(Permissions::READ.contains(Permissions::NONE));
-    assert!(Permissions::ALL.contains(Permissions::NONE));
-}
-
-#[test]
-fn permissions_display() {
-    assert_eq!(format!("{}", Permissions::READ | Permissions::WRITE), "rw-");
-    assert_eq!(format!("{}", Permissions::READ | Permissions::EXECUTE), "r-x");
-    assert_eq!(format!("{}", Permissions::NONE), "---");
-    assert_eq!(format!("{}", Permissions::ALL), "rwx");
-    assert_eq!(format!("{}", Permissions::WRITE), "-w-");
 }
 
 #[test]

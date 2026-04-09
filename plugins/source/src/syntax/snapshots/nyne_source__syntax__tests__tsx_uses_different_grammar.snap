@@ -1,5 +1,5 @@
 ---
-source: plugins/coding/src/syntax/tests.rs
+source: plugins/source/src/syntax/tests.rs
 assertion_line: 112
 expression: "decompose(\"tsx\", \"export function App() {\\n    return <div>Hello</div>;\\n}\\n\")"
 ---

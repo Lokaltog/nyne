@@ -26,8 +26,10 @@ use tracing::{debug, info, trace, warn};
 use super::attrs::{BLKSIZE, GENERATION, TTL, file_kind_to_fuse, make_attr};
 use super::handles::{OpenMode, WriteOutcome};
 use super::inode_map::{InodeEntry, ROOT_INODE};
+use super::mode::{PermissionsExt, WRITE_BITS};
 use super::{FuseFilesystem, ensure_dir_path, extract_errno, fuse_try};
-use crate::router::{NamedNode, Permissions, Process, Readable};
+use crate::router::fs::mode as fs_mode;
+use crate::router::{NamedNode, Permissions, Process};
 use crate::types::Timestamps;
 use crate::types::file_kind::FileKind;
 /// Outcome of a flush attempt via [`FuseFilesystem::do_flush`].
@@ -73,37 +75,53 @@ impl FuseFilesystem {
     /// Build attrs from a pre-resolved `NamedNode` (no chain dispatch).
     ///
     /// Cheap path: uses [`Readable::size`] if cached, falls back to
-    /// [`BLKSIZE`] for virtual files with unknown size. Used by
-    /// `readdirplus` where reading content for every entry is too expensive.
+    /// [`BLKSIZE`] for readable virtual files with unknown size. Write-only
+    /// nodes (no `Readable`) report size 0. Used by `readdirplus` where
+    /// reading content for every entry is too expensive.
     pub(super) fn node_attr(&self, ino: u64, node: &NamedNode, req: &Request) -> (fuser::FileAttr, Duration) {
         // Real files: use backing filesystem metadata for accurate size/mtime.
         if let Some(backing) = node.readable().and_then(|r| r.backing_path())
             && let Ok(meta) = self.backing_fs.metadata(backing)
         {
-            let kind = FileKind::from(node.kind());
-            let perm = u16::try_from(meta.permissions & 0o7777).unwrap_or(0o644);
-            let mut ts = meta.timestamps;
-            if let Some(override_atime) = self.atime_overrides.read().ok().and_then(|m| m.get(&ino).copied()) {
-                ts.atime = override_atime;
-            }
-            return (make_attr(ino, meta.size, file_kind_to_fuse(kind), perm, ts, req), TTL);
+            return (
+                make_attr(
+                    ino,
+                    meta.size,
+                    file_kind_to_fuse(FileKind::from(node.kind())),
+                    fs_mode::narrow(meta.permissions, fs_mode::FILE_DEFAULT),
+                    self.atime_overrides
+                        .read()
+                        .ok()
+                        .and_then(|m| m.get(&ino).copied())
+                        .map_or(meta.timestamps, |atime| Timestamps {
+                            atime,
+                            ..meta.timestamps
+                        }),
+                    req,
+                ),
+                TTL,
+            );
         }
 
-        // Virtual files: use cached size if available, BLKSIZE fallback otherwise.
+        // Virtual files: use cached size if available, BLKSIZE fallback for
+        // readable files with unknown size. Write-only nodes (no `Readable`)
+        // report size 0 — this matches their semantics (no content to read)
+        // and avoids triggering host-side "file exists" heuristics that
+        // would otherwise gate writes on a prior read. This is what makes
+        // batch edit action files under `edit/{op}` writable without a
+        // preceding read.
         // TTL=0 forces the kernel to re-validate on every access, ensuring
         // resolve_attr can provide accurate just-in-time data.
         let kind = FileKind::from(node.kind());
-        let size = node
-            .readable()
-            .and_then(Readable::size)
-            .unwrap_or_else(|| if kind == FileKind::File { u64::from(BLKSIZE) } else { 0 });
-
         (
             make_attr(
                 ino,
-                size,
+                node.readable().map_or(0, |r| {
+                    r.size()
+                        .unwrap_or_else(|| if kind == FileKind::File { u64::from(BLKSIZE) } else { 0 })
+                }),
                 file_kind_to_fuse(kind),
-                Self::node_permissions(node),
+                node.permissions().to_mode_bits(),
                 node.timestamps(),
                 req,
             ),
@@ -114,32 +132,16 @@ impl FuseFilesystem {
     /// Build a `FileAttr` for the root directory from real filesystem metadata.
     fn root_attr(&self, req: &Request) -> fuser::FileAttr {
         let (size, ts, perm) = self.backing_fs.metadata(Path::new("")).map_or_else(
-            |_| (0, Timestamps::default(), 0o555),
+            |_| (0, Timestamps::default(), fs_mode::DIR_FALLBACK),
             |m| {
                 (
                     m.size,
                     m.timestamps,
-                    u16::try_from(m.permissions & 0o7777).unwrap_or(0o755),
+                    fs_mode::narrow(m.permissions, fs_mode::DIR_DEFAULT),
                 )
             },
         );
         make_attr(ROOT_INODE, size, fuser::FileType::Directory, perm, ts, req)
-    }
-
-    /// Convert a `NamedNode`'s permissions to FUSE permission bits.
-    fn node_permissions(node: &NamedNode) -> u16 {
-        let perms = node.permissions();
-        let mut mode: u16 = 0;
-        if perms.contains(Permissions::READ) {
-            mode |= 0o444;
-        }
-        if perms.contains(Permissions::WRITE) {
-            mode |= 0o200;
-        }
-        if perms.contains(Permissions::EXECUTE) {
-            mode |= 0o111;
-        }
-        mode
     }
 
     /// Reply with attrs for an inode, or ENOENT.
@@ -189,7 +191,7 @@ impl FuseFilesystem {
     /// operations in read-only directories before dispatching through the chain.
     pub(super) fn is_writable_dir(&self, ino: u64, req: &Request) -> bool {
         self.resolve_attr(ino, req)
-            .is_some_and(|(attr, _)| attr.perm & 0o200 != 0)
+            .is_some_and(|(attr, _)| attr.perm & WRITE_BITS != 0)
     }
 
     /// Execute the flush pipeline for a single file handle.
@@ -223,13 +225,23 @@ impl FuseFilesystem {
         }
 
         // Per-inode write lock prevents concurrent flushes.
-        let lock = Arc::clone(
-            self.write_locks
-                .write()
-                .unwrap_or_else(PoisonError::into_inner)
-                .entry(ino)
-                .or_default(),
-        );
+        // Read lock first (common case: entry exists), write lock only on miss.
+        let lock = if let Some(l) = self
+            .write_locks
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&ino)
+        {
+            Arc::clone(l)
+        } else {
+            Arc::clone(
+                self.write_locks
+                    .write()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .entry(ino)
+                    .or_default(),
+            )
+        };
         let _guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
 
         match self.flush_content(ino, &snapshot.data) {
@@ -586,16 +598,29 @@ impl Filesystem for FuseFilesystem {
         // Flush remaining dirty data (Final = never defer truncations).
         self.do_flush(ino, fh, FlushMode::Final);
 
-        // Lifecycle close hook — fires when the last handle is released.
-        if !self.handles.has_handles_for_inode(ino)
-            && let Some(entry) = self.inodes.get(ino)
-            && let Ok(Some(node)) = self.lookup_node(&entry.dir_path, &entry.name, None)
-            && let Some(lc) = node.lifecycle()
-        {
-            lc.on_close();
+        self.handles.release(fh);
+
+        // Last-handle cleanup: lifecycle hook + per-inode state eviction.
+        if !self.handles.has_handles_for_inode(ino) {
+            if let Some(entry) = self.inodes.get(ino)
+                && let Ok(Some(node)) = self.lookup_node(&entry.dir_path, &entry.name, None)
+                && let Some(lc) = node.lifecycle()
+            {
+                lc.on_close();
+            }
+
+            // Evict per-inode state to prevent unbounded growth.
+            if let Ok(mut locks) = self.write_locks.write() {
+                locks.remove(&ino);
+            }
+            if let Ok(mut errors) = self.write_errors.write() {
+                errors.remove(&ino);
+            }
+            if let Ok(mut overrides) = self.atime_overrides.write() {
+                overrides.remove(&ino);
+            }
         }
 
-        self.handles.release(fh);
         reply.ok();
     }
 
@@ -625,17 +650,18 @@ impl Filesystem for FuseFilesystem {
             return;
         };
 
-        let mode = Self::node_permissions(&node);
-        // Check owner bits (high triple) against the requested mask.
-        if mask.contains(AccessFlags::R_OK) && mode & 0o400 == 0 {
+        // Check requested access mask against the node's capability flags directly,
+        // bypassing the FUSE mode-bit round-trip.
+        let perms = node.permissions();
+        if mask.contains(AccessFlags::R_OK) && !perms.contains(Permissions::READ) {
             reply.error(Errno::EACCES);
             return;
         }
-        if mask.contains(AccessFlags::W_OK) && mode & 0o200 == 0 {
+        if mask.contains(AccessFlags::W_OK) && !perms.contains(Permissions::WRITE) {
             reply.error(Errno::EACCES);
             return;
         }
-        if mask.contains(AccessFlags::X_OK) && mode & 0o100 == 0 {
+        if mask.contains(AccessFlags::X_OK) && !perms.contains(Permissions::EXECUTE) {
             reply.error(Errno::EACCES);
             return;
         }

@@ -4,7 +4,6 @@
 //! This is the single source of truth for common test helpers — never
 //! duplicate these in individual test modules.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -45,12 +44,16 @@ impl Filesystem for StubFs {
 
 /// Load a test fixture file from `src/{module}/fixtures/{name}`.
 ///
-/// Panics if the file doesn't exist or can't be read — fixture absence
-/// is always a test setup bug.
-#[allow(clippy::panic)]
-pub fn load_fixture(module: &str, name: &str) -> String {
-    fs::read_to_string(format!("{}/src/{module}/fixtures/{name}", env!("CARGO_MANIFEST_DIR")))
-        .unwrap_or_else(|e| panic!("failed to read fixture {name}: {e}"))
+/// Expands `env!("CARGO_MANIFEST_DIR")` at the call site so each crate
+/// resolves fixtures relative to its own manifest root. Panics if the
+/// file doesn't exist or can't be read — fixture absence is always a
+/// test setup bug.
+#[macro_export]
+macro_rules! load_fixture {
+    ($module:expr, $name:expr) => {{
+        let __path = format!("{}/src/{}/fixtures/{}", env!("CARGO_MANIFEST_DIR"), $module, $name);
+        ::std::fs::read_to_string(&__path).unwrap_or_else(|e| panic!("failed to read fixture {}: {}", __path, e))
+    }};
 }
 
 /// Build a minimal [`ActivationContext`] for unit tests.

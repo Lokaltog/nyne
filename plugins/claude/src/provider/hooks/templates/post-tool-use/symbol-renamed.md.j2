@@ -1,0 +1,6 @@
+{% import "macros/hints" as hints %}
+{% if is_vfs_symbol_edit and is_enoent %}
+{{ hints.header_hint("the edit succeeded — the symbol in " ~ rel ~ " was renamed by the content change, so the old path no longer exists.") }}
+
+{{ hints.overview_reread(rel) }}
+{% endif %}

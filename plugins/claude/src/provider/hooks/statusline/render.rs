@@ -230,8 +230,7 @@ impl Gradient {
 
     /// Convert an Oklch color to an sRGB (u8) triplet.
     fn to_rgb(oklch: Oklch) -> (u8, u8, u8) {
-        let srgb: Srgb<f32> = oklch.into_color();
-        let c: Srgb<u8> = srgb.clamp().into_format();
+        let c: Srgb<u8> = <Oklch as IntoColor<Srgb<f32>>>::into_color(oklch).clamp().into_format();
         (c.red, c.green, c.blue)
     }
 
@@ -239,8 +238,12 @@ impl Gradient {
     fn rgb_at(&self, ratio: f32) -> (u8, u8, u8) { Self::to_rgb(self.interpolate(ratio.clamp(0.0, 1.0))) }
 
     /// Derive an inactive color: same hue as gradient start, reduced chroma and lightness.
+    #[expect(
+        clippy::expect_used,
+        reason = "stops is non-empty by construction from SEGMENT_GRADIENTS"
+    )]
     fn inactive_rgb(&self) -> (u8, u8, u8) {
-        let start = self.stops.first().map_or_else(|| Oklch::new(0.3, 0.0, 0.0), |s| s.1);
+        let start = self.stops.first().expect("gradient has at least one stop").1;
         Self::to_rgb(Oklch::new(
             INACTIVE_LIGHTNESS,
             start.chroma * INACTIVE_CHROMA_SCALE,
@@ -249,13 +252,13 @@ impl Gradient {
     }
 
     /// Blend in Oklch space between the bracketing stops.
+    #[expect(
+        clippy::expect_used,
+        reason = "stops is non-empty by construction from SEGMENT_GRADIENTS"
+    )]
     fn interpolate(&self, ratio: f32) -> Oklch {
-        let Some(&(t_first, first)) = self.stops.first() else {
-            return Oklch::new(0.5, 0.0, 0.0);
-        };
-        let Some(&(t_last, last)) = self.stops.last() else {
-            return first;
-        };
+        let &(t_first, first) = self.stops.first().expect("gradient has at least one stop");
+        let &(t_last, last) = self.stops.last().expect("gradient has at least one stop");
 
         if ratio <= t_first {
             return first;
@@ -274,23 +277,27 @@ impl Gradient {
                     return None;
                 }
                 let span = t_hi - t_lo;
-                let local = if span > f32::EPSILON {
-                    (ratio - t_lo) / span
-                } else {
-                    0.0
-                };
-                Some(c_lo.mix(c_hi, local))
+                Some(c_lo.mix(
+                    c_hi,
+                    if span > f32::EPSILON {
+                        (ratio - t_lo) / span
+                    } else {
+                        0.0
+                    },
+                ))
             })
             .unwrap_or(last)
     }
 }
 
 /// Apply the nonlinear scale: `(x / max)^SCALE_EXPONENT`.
+///
+/// Used to compute bar-space positions for both segment boundaries and the
+/// current fill level — early tokens occupy proportionally more bar width.
 #[expect(
     clippy::cast_precision_loss,
     reason = "token counts lose sub-integer precision — irrelevant for a progress bar"
 )]
-/// Compute scaled position for progress bar rendering.
 pub(super) fn scaled_position(tokens: u64, max: u64) -> f32 {
     if max == 0 {
         return 0.0;
@@ -368,35 +375,33 @@ fn segment_layout(context_window: u64) -> Vec<(usize, usize, Gradient)> {
 
 /// Write a single bar cell — filled (gradient-colored) or inactive (tinted).
 fn write_bar_cell(bar: &mut String, filled: bool, local_t: f32, gradient: &Gradient, inactive: (u8, u8, u8)) {
-    if filled {
-        let (r, g, b) = gradient.rgb_at(local_t);
-        let _ = write!(bar, "{}", "\u{2501}".truecolor(r, g, b));
-    } else {
-        let (r, g, b) = inactive;
-        let _ = write!(bar, "{}", "\u{2501}".truecolor(r, g, b));
-    }
+    let (r, g, b) = if filled { gradient.rgb_at(local_t) } else { inactive };
+    let _ = write!(bar, "{}", "\u{2501}".truecolor(r, g, b));
 }
 
 /// Render a progress bar showing token usage.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "bar cell indices are bounded by BAR_WIDTH (u8::MAX-safe)"
+)]
 pub(super) fn render_progress_bar(used: u64, context_window: u64) -> String {
-    let bar_width = usize::from(BAR_WIDTH);
-    let segments = segment_layout(context_window);
-    let fill_pos = scaled_position(used, context_window);
-    let fill_col = bar_fraction_to_cols(fill_pos * f32::from(BAR_WIDTH));
+    let fill_col = bar_fraction_to_cols(scaled_position(used, context_window) * f32::from(BAR_WIDTH));
 
-    // Pre-compute per-segment inactive colors and pair with gradients.
-    let segment_colors: Vec<_> = segments.iter().map(|(_, _, g)| (g, g.inactive_rgb())).collect();
-
-    // Build the bar by iterating segments → cells, carrying the gradient ref.
-    let mut bar = String::with_capacity(bar_width * 20); // ANSI codes are verbose
-    for (&(start_col, width, _), (gradient, inactive)) in segments.iter().zip(&segment_colors) {
+    // ANSI codes are verbose — reserve generously.
+    let mut bar = String::with_capacity(usize::from(BAR_WIDTH) * 20);
+    for (start_col, width, gradient) in segment_layout(context_window) {
         for j in 0..width {
-            let local_t = if width <= 1 {
-                1.0
-            } else {
-                f32::from(u8::try_from(j).unwrap_or(0)) / f32::from(u8::try_from(width - 1).unwrap_or(1))
-            };
-            write_bar_cell(&mut bar, start_col + j < fill_col, local_t, gradient, *inactive);
+            write_bar_cell(
+                &mut bar,
+                start_col + j < fill_col,
+                if width <= 1 {
+                    1.0
+                } else {
+                    (j as f32) / ((width - 1) as f32)
+                },
+                &gradient,
+                gradient.inactive_rgb(),
+            );
         }
     }
 

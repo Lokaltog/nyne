@@ -17,7 +17,7 @@ use crate::text::slugify_unbounded;
 #[serde(transparent)]
 pub struct SessionId(String);
 
-/// Construction and validation for session identifiers.
+/// 1
 impl SessionId {
     /// Create a `SessionId` from a pre-validated string.
     pub(crate) fn new(s: String) -> Result<Self> {
@@ -36,36 +36,34 @@ impl SessionId {
 
     /// Derive a session ID from a mount path, deduplicating against active sessions.
     pub(crate) fn from_path(path: &Path, registry: &SessionRegistry) -> Result<Self> {
-        let base = path
-            .file_name()
-            .ok_or_else(|| eyre!("mount path has no filename: {}", path.display()))?
-            .to_string_lossy();
-
-        let sanitized = sanitize(&base);
+        let sanitized = slugify_unbounded(
+            &path
+                .file_name()
+                .ok_or_else(|| eyre!("mount path has no filename: {}", path.display()))?
+                .to_string_lossy(),
+        );
         ensure!(
             !sanitized.is_empty(),
             "mount path produces empty session ID: {}",
             path.display()
         );
 
-        // Append -2, -3, ... if the base ID is already taken.
-        let id = if registry.is_active(&sanitized) {
+        Self::new(if registry.is_active(&sanitized) {
+            // Append -2, -3, ... if the base ID is already taken.
             (2..=u32::MAX)
                 .map(|n| format!("{sanitized}-{n}"))
                 .find(|candidate| !registry.is_active(candidate))
                 .ok_or_else(|| eyre!("could not find an available session ID for {sanitized:?}"))?
         } else {
             sanitized
-        };
-
-        Self::new(id)
+        })
     }
 
     /// Create a session ID from an explicit user-provided prefix.
     ///
     /// Hard error if the ID is already active.
     pub(crate) fn from_explicit(id: &str, registry: &SessionRegistry) -> Result<Self> {
-        let sanitized = sanitize(id);
+        let sanitized = slugify_unbounded(id);
         ensure!(
             !sanitized.is_empty(),
             "explicit session ID is empty after sanitization: {id:?}"
@@ -80,22 +78,14 @@ impl SessionId {
         Self::new(sanitized)
     }
 
-    /// Returns the session ID as a string slice.
+    /// 1
     pub(crate) fn as_str(&self) -> &str { &self.0 }
 }
 
-/// Displays the session ID as its inner string.
 impl fmt::Display for SessionId {
-    /// Formats the value for display.
+    /// 1
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(&self.0) }
 }
-
-/// Sanitize a string into a valid session ID component.
-///
-/// Delegates to [`slugify_unbounded`] to produce a lowercase-alphanumeric-hyphen
-/// string. No length cap is applied because session IDs are short (derived from
-/// the last path component of the mount directory).
-fn sanitize(s: &str) -> String { slugify_unbounded(s) }
 
 /// Unit tests.
 #[cfg(test)]

@@ -7,6 +7,7 @@ use fuser::{Errno, INodeNo, ReplyEmpty, ReplyXattr};
 use tracing::{debug, trace};
 
 use super::{FuseFilesystem, extract_errno, fuse_try};
+use crate::router::Attributable;
 
 /// Reply with xattr data, respecting the size-query protocol.
 ///
@@ -47,25 +48,19 @@ impl FuseFilesystem {
 
         // FUSE-level xattr: last write error.
         if attr_name == XATTR_ERROR {
-            let errors = self.write_errors.read().unwrap_or_else(PoisonError::into_inner);
-            return match errors.get(&ino) {
+            return match self
+                .write_errors
+                .read()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(&ino)
+            {
                 Some(msg) => reply_xattr_data(reply, size, msg.as_bytes()),
                 None => reply.error(Errno::ENODATA),
             };
         }
 
         // Delegate to the node's Attributable capability.
-        let Some(entry) = self.inodes.get(ino) else {
-            reply.error(Errno::ENOENT);
-            return;
-        };
-        let node = fuse_try!(
-            reply,
-            self.lookup_node(&entry.dir_path, &entry.name, None),
-            ino,
-            "getxattr lookup failed"
-        );
-        let Some(node) = node else {
+        let Some(node) = fuse_try!(reply, self.resolve_node_for_inode(ino), ino, "getxattr lookup failed") else {
             reply.error(Errno::ENOENT);
             return;
         };
@@ -84,14 +79,12 @@ impl FuseFilesystem {
         trace!(target: "nyne::fuse", ino, "listxattr");
 
         // Collect names from the node's Attributable capability.
-        let mut names = if let Some(entry) = self.inodes.get(ino)
-            && let Ok(Some(node)) = self.lookup_node(&entry.dir_path, &entry.name, None)
-            && let Some(attr) = node.attributable()
-        {
-            attr.list()
-        } else {
-            Vec::new()
-        };
+        let mut names = self
+            .resolve_node_for_inode(ino)
+            .ok()
+            .flatten()
+            .and_then(|n| n.attributable().map(Attributable::list))
+            .unwrap_or_default();
 
         // Include FUSE-level xattr if a write error exists.
         if self
@@ -117,17 +110,7 @@ impl FuseFilesystem {
         let attr_name = name.to_string_lossy();
         debug!(target: "nyne::fuse", ino, name = %attr_name, "setxattr");
 
-        let Some(entry) = self.inodes.get(ino) else {
-            reply.error(Errno::ENOENT);
-            return;
-        };
-        let node = fuse_try!(
-            reply,
-            self.lookup_node(&entry.dir_path, &entry.name, None),
-            ino,
-            "setxattr lookup failed"
-        );
-        let Some(node) = node else {
+        let Some(node) = fuse_try!(reply, self.resolve_node_for_inode(ino), ino, "setxattr lookup failed") else {
             reply.error(Errno::ENOENT);
             return;
         };

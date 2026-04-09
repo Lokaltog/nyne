@@ -13,6 +13,20 @@ use std::process::{Child, Command, Stdio};
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use parking_lot::Mutex;
 use tracing::{debug, info};
+#[cfg(test)]
+mod tests;
+
+/// Check whether a process is alive (equivalent to `kill(pid, 0)`).
+///
+/// Returns `false` for invalid PIDs (zero or negative values that
+/// `Pid::from_raw` rejects).
+pub fn is_pid_alive(pid: i32) -> bool {
+    use rustix::process::{Pid, test_kill_process};
+    let Some(pid) = Pid::from_raw(pid) else {
+        return false;
+    };
+    test_kill_process(pid).is_ok()
+}
 
 /// Spawns subprocesses and owns their lifecycle.
 ///
@@ -27,7 +41,6 @@ pub struct Spawner {
     children: Mutex<Vec<Child>>,
 }
 
-/// Process spawning and child lifecycle management.
 impl Spawner {
     /// Creates a new spawner with no tracked children.
     pub const fn new() -> Self {
@@ -60,11 +73,8 @@ impl Spawner {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .env_clear();
-
-        for (k, v) in env {
-            cmd.env(k, v);
-        }
+            .env_clear()
+            .envs(env.iter().map(|(k, v)| (k, v)));
 
         let mut child = cmd.spawn().wrap_err_with(|| format!("spawning process: {command}"))?;
 
@@ -81,26 +91,22 @@ impl Spawner {
             .take()
             .ok_or_else(|| eyre!("failed to capture child stderr"))?;
 
-        let stdin_fd = OwnedFd::from(stdin);
-        let stdout_fd = OwnedFd::from(stdout);
-        let stderr_fd = OwnedFd::from(stderr);
-
-        self.children.lock().push(child);
+        let mut children = self.children.lock();
+        children.retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
+        children.push(child);
 
         Ok(SpawnedFds {
-            stdin: stdin_fd,
-            stdout: stdout_fd,
-            stderr: stderr_fd,
+            stdin: stdin.into(),
+            stdout: stdout.into(),
+            stderr: stderr.into(),
         })
     }
 }
 
 /// Kills any lingering child processes on drop.
 impl Drop for Spawner {
-    /// Cleans up resources on drop.
     fn drop(&mut self) {
-        let children = self.children.get_mut();
-        for child in children {
+        for child in self.children.get_mut() {
             match child.try_wait() {
                 Ok(Some(status)) => {
                     debug!(pid = child.id(), ?status, "child already exited");

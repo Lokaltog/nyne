@@ -1,0 +1,45 @@
+{% import "macros/paths" as paths %}
+## Batch Edit Staging
+
+Batch Edit is the go-to for multi-step edits: stage multiple changes across symbols and files, then apply all changes atomically. Prefer this over sequential direct writes when changing multiple symbols. Apply returns an error if validation fails — no need to preview first.
+
+| Scenario | Approach |
+|-|-|
+| Change 1 symbol | Edit tool (read first, then old_string/new_string) |
+| Change 2+ symbols in one file | Batch edit staging |
+| Coordinated changes across files | Batch edit staging (cross-file atomic) |
+| Delete multiple symbols | Batch edit staging |
+
+### Staging edits
+
+Staging endpoints under `edit/{op}` are write-only virtual files that report size 0. That means you can stage edits with **either** Bash redirects **or** the `Write` tool — no prior `Read` is required, and repeat `Write`s to the same endpoint just stage more operations.
+
+Write tool (preferred for multi-line content — no shell quoting):
+
+    Write  {{ paths.edit_stage("file." ~ ext, "Foo", "replace") }}
+           → full replacement body
+    Write  {{ paths.edit_stage("file." ~ ext, "Bar", "insert-after") }}
+           → code to insert after Bar
+    Write  {{ paths.edit_stage("file." ~ ext, "Baz", "insert-before") }}
+           → code to insert before Baz
+
+Bash redirects (best for one-liners and pipelines):
+
+```bash
+# Stage edits (write to any symbol's edit/ namespace)
+echo 'fn new_impl(){}' >{{ paths.edit_stage("file." ~ ext, "Foo", "replace") }} # replace entire body
+echo 'fn helper(){}' >{{ paths.edit_stage("file." ~ ext, "Bar", "insert-after") }} # insert after body
+echo '/// docs' >{{ paths.edit_stage("file." ~ ext, "Baz", "insert-before") }} # insert before body
+echo 1 >{{ paths.edit_stage("file." ~ ext, "Old", "delete") }} # delete entire symbol
+echo 'fn method(){}' >{{ paths.edit_stage("file." ~ ext, "MyImpl", "append") }} # append to body
+```
+
+### Applying or clearing
+
+```bash
+# Apply all staged edits atomically (returns error if tree-sitter validation fails)
+rm {{ paths.edit_staged_diff() }}
+
+# Or clear without applying (truncate)
+> {{ paths.edit_staged_diff() }}
+```

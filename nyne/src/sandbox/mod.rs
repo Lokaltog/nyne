@@ -47,7 +47,7 @@ use signal_hook::consts::{SIGINT, SIGTERM};
 use signal_hook::iterator::Signals;
 use tracing::{debug, info};
 
-use self::namespace::Namespace;
+pub use self::namespace::Namespace;
 use self::process::{ChildGuard, ReadyPipe, fork_or_die, wait_for_exit};
 use crate::config::StorageStrategy;
 use crate::session;
@@ -288,16 +288,13 @@ pub fn run_attach(config: AttachConfig) -> Result<i32> {
     // (e.g. two parallel `nyne attach` shells running sibling init
     // PID namespaces), whereas SO_PEERCRED and `/proc/<pid>/ns/*`
     // lookups do not.
-    let control::NamespaceFds { user, mnt } =
-        control::recv_namespace_fds(&config.control_socket).wrap_err("requesting daemon namespace fds")?;
+    let ns = control::recv_namespace_fds(&config.control_socket).wrap_err("requesting daemon namespace fds")?;
 
     info!(
         path = %config.mount_path.display(),
         command = ?config.command,
         "attaching to daemon"
     );
-
-    let ns = Namespace::from_fds(user, mnt);
 
     // Capture real identity before namespace entry.
     let identity = HostIdentity {
@@ -313,10 +310,12 @@ pub fn run_attach(config: AttachConfig) -> Result<i32> {
     let command = config.command;
     let sandbox = config.sandbox;
     let state_root = sandbox.state_root.clone();
+    let mount_root = sandbox.mount_root.clone();
     let command_pid = fork_or_die(|| {
         let paths = CommandPaths {
             cwd: &cwd,
             fuse_path: &fuse_path,
+            mount_root: &mount_root,
             control_socket: &control_socket,
             session_dir: &session_dir,
         };
@@ -413,14 +412,16 @@ fn sandbox_cwd(cwd: &Path, fuse_path: &Path, mount_root: &Path) -> PathBuf {
 
 /// Bundled paths for the command child process.
 ///
-/// Groups the host-side paths needed by [`command_main`] to set up the
-/// sandbox: the original working directory (for CWD remapping), the FUSE
-/// mount path (for overlay setup and `pivot_root`), the control socket
-/// path (injected as `NYNE_CONTROL_SOCKET`), and the nested session dir
-/// (injected as `NYNE_SESSION_DIR`).
+/// Groups the host-side paths needed by [`command_main`] and [`init_main`]
+/// to set up the sandbox: the original working directory (for CWD
+/// remapping), the FUSE mount path (for overlay setup and `pivot_root`),
+/// the sandbox mount root (for CWD fallback and env setup), the control
+/// socket path (injected as `NYNE_CONTROL_SOCKET`), and the nested
+/// session dir (injected as `NYNE_SESSION_DIR`).
 struct CommandPaths<'a> {
     cwd: &'a Path,
     fuse_path: &'a Path,
+    mount_root: &'a Path,
     control_socket: &'a Path,
     session_dir: &'a Path,
 }
@@ -473,9 +474,6 @@ fn command_main(
         namespace::unshare_pid()?;
 
         let command = command.to_vec();
-        let cwd = paths.cwd.to_path_buf();
-        let fuse_path = paths.fuse_path.to_path_buf();
-        let mount_root = sandbox.mount_root.clone();
         let mut sandbox_env = sandbox.env.clone();
 
         // Inject env vars for nested nyne invocations: the control
@@ -484,7 +482,7 @@ fn command_main(
         inject_path_env(&mut sandbox_env, control::NYNE_CONTROL_SOCKET_ENV, paths.control_socket);
         inject_path_env(&mut sandbox_env, control::NYNE_SESSION_DIR_ENV, paths.session_dir);
         let init_pid = fork_or_die(|| {
-            init_main(&command, identity, &cwd, &fuse_path, &mount_root, &sandbox_env);
+            init_main(&command, identity, paths, &sandbox_env);
         })
         .wrap_err("forking init (PID 1)")?;
 
@@ -502,9 +500,7 @@ fn command_main(
 fn init_main(
     command: &[OsString],
     identity: HostIdentity,
-    cwd: &Path,
-    fuse_path: &Path,
-    mount_root: &Path,
+    paths: &CommandPaths<'_>,
     extra_env: &HashMap<String, String>,
 ) {
     run_or_exit("init", || {
@@ -519,8 +515,8 @@ fn init_main(
 
         // Set CWD: remap to mount_root if inside the FUSE-mounted project,
         // fall back to mount_root if the target doesn't exist in the sandbox.
-        if env::set_current_dir(sandbox_cwd(cwd, fuse_path, mount_root)).is_err() {
-            env::set_current_dir(mount_root).wrap_err("setting working directory to mount root fallback")?;
+        if env::set_current_dir(sandbox_cwd(paths.cwd, paths.fuse_path, paths.mount_root)).is_err() {
+            env::set_current_dir(paths.mount_root).wrap_err("setting working directory to mount root fallback")?;
         }
         debug!(cwd = %env::current_dir().unwrap_or_default().display(), "working directory set");
 

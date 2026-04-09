@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{PoisonError, RwLock};
+use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use color_eyre::eyre::{Result, bail};
 
@@ -13,6 +13,15 @@ use crate::types::Timestamps;
 enum FsNode {
     File(Vec<u8>),
     Directory,
+}
+
+impl FsNode {
+    const fn kind(&self) -> NodeKind {
+        match self {
+            Self::File(_) => NodeKind::File,
+            Self::Directory => NodeKind::Directory,
+        }
+    }
 }
 
 /// In-memory filesystem for testing.
@@ -32,53 +41,12 @@ impl MemFs {
         }
     }
 
-    /// Seed a file with content. Creates parent directories automatically.
-    pub fn add_file(&self, path: impl AsRef<Path>, content: impl AsRef<[u8]>) {
-        let path = path.as_ref().to_path_buf();
-        let mut nodes = self.nodes.write().unwrap_or_else(PoisonError::into_inner);
-        for ancestor in path.ancestors().skip(1) {
-            nodes.entry(ancestor.to_path_buf()).or_insert(FsNode::Directory);
-        }
-        nodes.insert(path, FsNode::File(content.as_ref().to_vec()));
+    fn lock_read(&self) -> RwLockReadGuard<'_, HashMap<PathBuf, FsNode>> {
+        self.nodes.read().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Seed an empty directory. Creates parent directories automatically.
-    pub fn add_dir(&self, path: impl AsRef<Path>) {
-        let path = path.as_ref().to_path_buf();
-        let mut nodes = self.nodes.write().unwrap_or_else(PoisonError::into_inner);
-        for ancestor in path.ancestors() {
-            nodes.entry(ancestor.to_path_buf()).or_insert(FsNode::Directory);
-        }
-    }
-
-    /// Read current file content (for test assertions).
-    pub fn content(&self, path: impl AsRef<Path>) -> Option<Vec<u8>> {
-        let nodes = self.nodes.read().unwrap_or_else(PoisonError::into_inner);
-        match nodes.get(path.as_ref()) {
-            Some(FsNode::File(content)) => Some(content.clone()),
-            _ => None,
-        }
-    }
-
-    /// Check if a path exists (for test assertions).
-    pub fn exists(&self, path: impl AsRef<Path>) -> bool {
-        self.nodes
-            .read()
-            .unwrap_or_else(PoisonError::into_inner)
-            .contains_key(path.as_ref())
-    }
-
-    /// List all paths in the filesystem (for debugging/assertions).
-    pub fn all_paths(&self) -> Vec<PathBuf> {
-        let mut paths: Vec<_> = self
-            .nodes
-            .read()
-            .unwrap_or_else(PoisonError::into_inner)
-            .keys()
-            .cloned()
-            .collect();
-        paths.sort();
-        paths
+    fn lock_write(&self) -> RwLockWriteGuard<'_, HashMap<PathBuf, FsNode>> {
+        self.nodes.write().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -90,7 +58,7 @@ impl Filesystem for MemFs {
     fn source_dir(&self) -> &Path { Path::new("") }
 
     fn read_dir(&self, path: &Path) -> Result<Vec<DirEntry>> {
-        let nodes = self.nodes.read().unwrap_or_else(PoisonError::into_inner);
+        let nodes = self.lock_read();
         match nodes.get(path) {
             Some(FsNode::Directory) => {}
             Some(FsNode::File(_)) => bail!("not a directory: {}", path.display()),
@@ -104,13 +72,9 @@ impl Filesystem for MemFs {
             let Some(file_name) = child_path.file_name() else {
                 continue;
             };
-            let kind = match node {
-                FsNode::File(_) => NodeKind::File,
-                FsNode::Directory => NodeKind::Directory,
-            };
             entries.push(DirEntry {
                 name: file_name.to_string_lossy().to_string(),
-                kind,
+                kind: node.kind(),
             });
         }
         entries.sort_by(|a, b| a.name.cmp(&b.name));
@@ -118,24 +82,15 @@ impl Filesystem for MemFs {
     }
 
     fn stat(&self, dir: &Path, name: &str) -> Result<Option<DirEntry>> {
-        let nodes = self.nodes.read().unwrap_or_else(PoisonError::into_inner);
-        let path = dir.join(name);
-        Ok(match nodes.get(&path) {
-            Some(FsNode::File(_)) => Some(DirEntry {
-                name: name.to_owned(),
-                kind: NodeKind::File,
-            }),
-            Some(FsNode::Directory) => Some(DirEntry {
-                name: name.to_owned(),
-                kind: NodeKind::Directory,
-            }),
-            None => None,
-        })
+        let nodes = self.lock_read();
+        Ok(nodes.get(&dir.join(name)).map(|node| DirEntry {
+            name: name.to_owned(),
+            kind: node.kind(),
+        }))
     }
 
     fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
-        let nodes = self.nodes.read().unwrap_or_else(PoisonError::into_inner);
-        match nodes.get(path) {
+        match self.lock_read().get(path) {
             Some(FsNode::File(content)) => Ok(content.clone()),
             Some(FsNode::Directory) => bail!("is a directory: {}", path.display()),
             None => bail!("file not found: {}", path.display()),
@@ -143,7 +98,7 @@ impl Filesystem for MemFs {
     }
 
     fn write_file(&self, path: &Path, content: &[u8]) -> Result<AffectedFiles> {
-        let mut nodes = self.nodes.write().unwrap_or_else(PoisonError::into_inner);
+        let mut nodes = self.lock_write();
         if matches!(nodes.get(path), Some(FsNode::Directory)) {
             bail!("is a directory: {}", path.display());
         }
@@ -152,24 +107,23 @@ impl Filesystem for MemFs {
     }
 
     fn rename(&self, from: &Path, to: &Path) -> Result<()> {
-        let mut nodes = self.nodes.write().unwrap_or_else(PoisonError::into_inner);
-        let node = nodes
+        let mut nodes = self.lock_write();
+        let removed = nodes
             .remove(from)
             .ok_or_else(|| color_eyre::eyre::eyre!("not found: {}", from.display()))?;
-        nodes.insert(to.to_path_buf(), node);
+        nodes.insert(to.to_path_buf(), removed);
         Ok(())
     }
 
     fn remove(&self, path: &Path) -> Result<()> {
-        let mut nodes = self.nodes.write().unwrap_or_else(PoisonError::into_inner);
-        nodes
+        self.lock_write()
             .remove(path)
             .ok_or_else(|| color_eyre::eyre::eyre!("not found: {}", path.display()))?;
         Ok(())
     }
 
     fn create_file(&self, path: &Path) -> Result<()> {
-        let mut nodes = self.nodes.write().unwrap_or_else(PoisonError::into_inner);
+        let mut nodes = self.lock_write();
         if nodes.contains_key(path) {
             bail!("already exists: {}", path.display());
         }
@@ -178,7 +132,7 @@ impl Filesystem for MemFs {
     }
 
     fn mkdir(&self, path: &Path) -> Result<()> {
-        let mut nodes = self.nodes.write().unwrap_or_else(PoisonError::into_inner);
+        let mut nodes = self.lock_write();
         if nodes.contains_key(path) {
             bail!("already exists: {}", path.display());
         }
@@ -187,19 +141,18 @@ impl Filesystem for MemFs {
     }
 
     fn metadata(&self, path: &Path) -> Result<super::Metadata> {
-        let nodes = self.nodes.read().unwrap_or_else(PoisonError::into_inner);
-        match nodes.get(path) {
-            Some(FsNode::File(data)) => Ok(super::Metadata {
+        match self.lock_read().get(path) {
+            Some(node @ FsNode::File(data)) => Ok(super::Metadata {
                 size: data.len() as u64,
                 timestamps: Timestamps::default(),
-                file_type: NodeKind::File,
-                permissions: 0o644,
+                file_type: node.kind(),
+                permissions: u32::from(super::mode::FILE_DEFAULT),
             }),
-            Some(FsNode::Directory) => Ok(super::Metadata {
+            Some(node @ FsNode::Directory) => Ok(super::Metadata {
                 size: 0,
                 timestamps: Timestamps::default(),
-                file_type: NodeKind::Directory,
-                permissions: 0o755,
+                file_type: node.kind(),
+                permissions: u32::from(super::mode::DIR_DEFAULT),
             }),
             None => bail!("not found: {}", path.display()),
         }

@@ -1,15 +1,16 @@
+use nyne::load_fixture;
 use rstest::{fixture, rstest};
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind};
-use crate::test_support::{load_fixture, registry};
+use crate::test_support::registry;
 
 /// Fixture: decompose the basic.md test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
-    let source = load_fixture("syntax/languages/markdown", "basic.md");
-    let reg = registry();
-    let d = reg.get("md").unwrap();
-    let (result, _tree) = d.decompose(&source, 5);
+    let (result, _tree) = registry()
+        .get("md")
+        .unwrap()
+        .decompose(&load_fixture!("syntax/languages/markdown", "basic.md"), 5);
     result
 }
 

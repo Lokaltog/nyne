@@ -38,8 +38,14 @@ pub struct Chain {
 
 impl fmt::Debug for Chain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct ProviderIds<'a>(&'a [Arc<dyn Provider>]);
+        impl fmt::Debug for ProviderIds<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.debug_list().entries(self.0.iter().map(|p| p.id())).finish()
+            }
+        }
         f.debug_struct("Chain")
-            .field("providers", &self.providers.iter().map(|p| p.id()).collect::<Vec<_>>())
+            .field("providers", &ProviderIds(&self.providers))
             .finish()
     }
 }
@@ -106,38 +112,35 @@ fn topological_sort(providers: &[Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provi
 
 fn sort_by_deps(providers: &[&Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provider>>> {
     let mut graph = DiGraph::<usize, ()>::new();
-    let mut id_to_idx: Vec<(ProviderId, NodeIndex, usize)> = Vec::new();
+    let mut id_to_idx: HashMap<ProviderId, NodeIndex> = HashMap::new();
+    let mut node_indices: Vec<NodeIndex> = Vec::new();
 
     // Add nodes
     for (i, p) in providers.iter().enumerate() {
         let idx = graph.add_node(i);
-        id_to_idx.push((p.id(), idx, i));
+        id_to_idx.insert(p.id(), idx);
+        node_indices.push(idx);
     }
 
     // Add edges (dependency → dependent)
     for (i, p) in providers.iter().enumerate() {
+        #[expect(clippy::indexing_slicing, reason = "node_indices built in lockstep with providers")]
+        let self_idx = node_indices[i];
         for dep_id in p.dependencies() {
             // Soft dependency: if the dependency isn't in the provider set,
             // skip the edge. This allows partial chains (e.g. LSP without syntax).
-            let Some((_, dep_idx, _)) = id_to_idx.iter().find(|(id, ..)| id == dep_id) else {
+            let Some(&dep_idx) = id_to_idx.get(dep_id) else {
                 continue;
             };
-            let (_, self_idx, _) = id_to_idx
-                .iter()
-                .find(|(_, _, idx)| *idx == i)
-                .ok_or_else(|| color_eyre::eyre::eyre!("internal error: missing index"))?;
             // Edge from dependency to dependent (dep must come first)
-            graph.add_edge(*dep_idx, *self_idx, ());
+            graph.add_edge(dep_idx, self_idx, ());
         }
     }
 
     // Topological sort
     let sorted_indices = toposort(&graph, None).map_err(|cycle| {
         let provider_idx = graph[cycle.node_id()];
-        let id = id_to_idx
-            .iter()
-            .find(|(_, _, i)| *i == provider_idx)
-            .map_or("unknown", |(id, ..)| id.as_str());
+        let id = providers.get(provider_idx).map_or("unknown", |p| p.id().as_str());
         color_eyre::eyre::eyre!("dependency cycle detected involving provider {:?}", id)
     })?;
 

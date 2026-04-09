@@ -45,9 +45,9 @@ use crate::path_utils::PathExt;
 
 /// Size limit for structural tmpfs mounts (newroot, /tmp).
 ///
-/// Set conservatively small — these tmpfs instances only hold directory
-/// stubs for mount points and the isolated `/tmp`. The actual project
-/// data lives on the FUSE mount or overlay, not on these tmpfs instances.
+/// These tmpfs instances only hold directory stubs for mount points and
+/// the isolated `/tmp`. The actual project data lives on the FUSE mount
+/// or overlay, not on these tmpfs instances.
 const TMPFS_SIZE: &str = "2G";
 
 /// Build the isolated sandbox root filesystem and mount FUSE at `mount_root`.

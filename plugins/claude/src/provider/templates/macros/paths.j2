@@ -1,0 +1,102 @@
+{#
+  Path-fragment macros for nyne VFS paths with sensible default fallbacks.
+
+  These macros are the **single source of truth** for how VFS paths are
+  written in rendered output across system prompts, agent definitions,
+  skill files, and hook-generated context messages. Templates should
+  call these macros instead of hand-writing `@/symbols/…` fragments.
+
+  All macros accept placeholder defaults (`<file>`, `<Symbol>`, `<ext>`,
+  `<line>`) so they can be called either with concrete values (from the
+  hook render context) or without arguments (for agent / skill docs).
+#}
+
+{#-- Symbol body (`file@/symbols/Name@/body.ext`). --#}
+{%- macro sym(file="<file>", name="<Symbol>", ext="<ext>") -%}
+{{ file }}@/symbols/{{ name }}@/body.{{ ext }}
+{%- endmacro -%}
+
+{#-- Symbol signature slice. --#}
+{%- macro sym_signature(file="<file>", name="<Symbol>", ext="<ext>") -%}
+{{ file }}@/symbols/{{ name }}@/signature.{{ ext }}
+{%- endmacro -%}
+
+{#-- Symbol decorators slice. --#}
+{%- macro sym_decorators(file="<file>", name="<Symbol>", ext="<ext>") -%}
+{{ file }}@/symbols/{{ name }}@/decorators.{{ ext }}
+{%- endmacro -%}
+
+{#-- Symbol docstring slice (auto-prefixed comment markers). --#}
+{%- macro sym_docstring(file="<file>", name="<Symbol>") -%}
+{{ file }}@/symbols/{{ name }}@/docstring.txt
+{%- endmacro -%}
+
+{#-- Symbol's namespace directory (`file@/symbols/Name@/`). --#}
+{%- macro sym_dir(file="<file>", name="<Symbol>") -%}
+{{ file }}@/symbols/{{ name }}@/
+{%- endmacro -%}
+
+{#-- Symbol metadata markdown (CALLERS, DEPS, REFERENCES, IMPLEMENTATION, DOC). --#}
+{%- macro sym_md(file="<file>", name="<Symbol>", key="CALLERS") -%}
+{{ file }}@/symbols/{{ name }}@/{{ key }}.md
+{%- endmacro -%}
+
+{#-- Per-file symbol table (OVERVIEW.md under the symbols namespace). --#}
+{%- macro sym_overview(file="<file>") -%}
+{{ file }}@/symbols/{{ FILE_OVERVIEW }}
+{%- endmacro -%}
+
+{#-- File overview (top-level `file@/OVERVIEW.md`, not under symbols). --#}
+{%- macro file_overview(file="<file>") -%}
+{{ file }}@/{{ FILE_OVERVIEW }}
+{%- endmacro -%}
+
+{#-- File-level diagnostics (LSP). --#}
+{%- macro file_diagnostics(file="<file>") -%}
+{{ file }}@/DIAGNOSTICS.md
+{%- endmacro -%}
+
+{#-- At-line symlink to the containing symbol body. --#}
+{%- macro at_line(file="<file>", line="<line>") -%}
+{{ file }}@/symbols/at-line/{{ line }}
+{%- endmacro -%}
+
+{#-- Imports slice. --#}
+{%- macro imports(file="<file>", ext="<ext>") -%}
+{{ file }}@/symbols/imports.{{ ext }}
+{%- endmacro -%}
+
+{#-- Line-range escape hatch (`file@/lines[:spec]`). --#}
+{%- macro lines(file="<file>", spec="") -%}
+{{ file }}@/lines{% if spec %}:{{ spec }}{% endif %}
+{%- endmacro -%}
+
+{#-- Filter symbols by kind (`file@/symbols/by-kind/fn/`). --#}
+{%- macro by_kind(file="<file>", kind="fn") -%}
+{{ file }}@/symbols/by-kind/{{ kind }}/
+{%- endmacro -%}
+
+{#-- Code actions directory for a symbol. --#}
+{%- macro sym_actions(file="<file>", name="<Symbol>") -%}
+{{ file }}@/symbols/{{ name }}@/actions/
+{%- endmacro -%}
+
+{#-- Single code action diff for a symbol. --#}
+{%- macro sym_action(file="<file>", name="<Symbol>", action="<action>") -%}
+{{ file }}@/symbols/{{ name }}@/actions/{{ action }}.diff
+{%- endmacro -%}
+
+{#-- Symbol rename preview diff. --#}
+{%- macro sym_rename(file="<file>", name="<Symbol>", new_name="<new_name>") -%}
+{{ file }}@/symbols/{{ name }}@/rename/{{ new_name }}.diff
+{%- endmacro -%}
+
+{#-- Edit staging entries: replace, insert-before, insert-after, delete, append. --#}
+{%- macro edit_stage(file="<file>", name="<Symbol>", kind="replace") -%}
+{{ file }}@/symbols/{{ name }}@/edit/{{ kind }}
+{%- endmacro -%}
+
+{#-- Cross-file atomic staged diff. --#}
+{%- macro edit_staged_diff() -%}
+@/edit/staged.diff
+{%- endmacro -%}

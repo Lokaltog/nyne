@@ -25,14 +25,22 @@ paths:
 
 ## Change Propagation (`Provider::on_change`)
 
-When source files change (filesystem watcher debounce, or inline after a VFS write/mutation), each provider's `on_change(&[PathBuf])` is called with the affected source paths. Providers return `Vec<InvalidationEvent>` for *derived* virtual paths that are now stale (e.g., companion `@/` namespace paths). The caller iterates the returned events and calls `invalidate_inode_at` to evict kernel page/dentry caches.
+When source files change, `fuse::notify::propagate_source_changes` is called with the affected paths. **This function is the single source of truth for change propagation** — both call sites below route through it. Divergence between them previously caused a regression where external modifications to `.git/**` (and any other non-companion path) left the kernel page cache stale. Do not reimplement the sequence in new call sites.
 
-Two call sites drive this:
+The sequence is:
 
-- **Watcher path** (`watcher::flush`) — debounced filesystem events. Calls `provider.on_change(&paths)` for every provider, then `invalidate_inode_at` for each returned event.
-- **Inline write/mutation path** (`FuseFilesystem::write_file`, `try_node_mutation`) — called synchronously after a VFS write so caches invalidate before the next read (the watcher has a 50ms debounce that would leave a stale window).
+1. Every provider's `on_change(&[PathBuf])` is called with the full batch. Providers bump their internal caches (e.g. `CacheProvider` generations) and may return `Vec<InvalidationEvent>` for *derived* virtual paths (e.g. companion `@/` namespaces).
+2. **Every raw source path in the batch** is passed to `invalidate_inode_at`, which drops the kernel's page/dentry cache entry for that file. Skipping this step leaves FUSE serving stale content for externally-modified files until the attr TTL expires.
+3. Every derived `InvalidationEvent` path is also passed to `invalidate_inode_at` so companion namespaces invalidate in lockstep with their source files.
 
-`InvalidationEvent` is a simple struct with a single `path: PathBuf` field, defined in `router::provider`. Providers that only need to invalidate their own internal caches (e.g., `DecompositionCache`, LSP file state) do so directly in `on_change` and return an empty vec.
+Two call sites invoke `propagate_source_changes`:
+
+- **Watcher path** (`watcher::EventLoop::flush`) — debounced filesystem events observed via `inotify`. Handles external mutations.
+- **Inline write/mutation path** (`FuseFilesystem::notify_change`, called from `write_file` and `try_node_mutation`) — runs synchronously after a VFS write so caches invalidate before the next read (the watcher has a 50ms debounce that would otherwise leave a stale window).
+
+`InvalidationEvent` is a simple struct with a single `path: PathBuf` field, defined in `router::provider`. Providers that only need to invalidate their own internal caches (e.g. `DecompositionCache`, LSP file state) do so directly in `on_change` and return an empty vec — the raw-path invalidation in step 2 handles kernel eviction regardless.
+
+`CacheProvider::on_change` bumps both the changed path **and** its parent directory. The cache provider stores `Lookup`/`Readdir` entries with `source = req.path()` (the parent directory for `Lookup { name }`), matching the convention its own mutation branch uses (`Op::Create`/`Op::Remove` bump `source_from_request(req)`). External changes must honour the same convention or lookup cache entries go stale.
 
 ## Test Layout
 

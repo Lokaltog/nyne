@@ -1,0 +1,14 @@
+{% import "macros/paths" as paths %}
+| What | Path |
+|-|-|
+| File overview (metadata + symbols + access guide) | Read `{{ paths.file_overview() }}` |
+| Directory overview | Read `src/module@/{{ FILE_OVERVIEW }}` |
+| Symbol body | Read/Edit `{{ paths.sym("<file>", "Foo", ext) }}` |
+| Signature only | Read/Edit `{{ paths.sym_signature("<file>", "Foo", ext) }}` |
+| Symbol docstring | Read/Edit `{{ paths.sym_docstring("<file>", "Foo") }}` ¹ |
+| File/module docstring | Read/Edit `<file>@/symbols/docstring.txt` ¹ |
+| Decorators/attrs | Read/Edit `{{ paths.sym_decorators("<file>", "Foo", ext) }}` |
+| Import block | Read/Edit `{{ paths.imports("<file>", ext) }}` |
+| Generated docs | Read `{{ paths.sym_md("<file>", "Foo", "DOC") }}` |
+
+¹ **`docstring.txt` auto-prefixes and auto-strips comment markers.** Read and write `docstring.txt` as plain text — no comment prefix needed. The VFS automatically strips the language-specific comment prefix (`///`, `//!`, `#`, `"""..."""`, etc.) on read, and re-applies the correct prefix based on filetype and location (item vs module) on write. Never include comment prefixes like `///` or `//!` in docstring content.

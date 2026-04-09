@@ -98,14 +98,11 @@ fn file_permissions_from_capabilities(
 ## Test Fixtures
 
 - **Fixture files** live in `fixtures/` inside the module directory (e.g., `src/config/fixtures/*.toml`, `src/templates/fixtures/*.j2`).
-- Load fixtures at runtime via `CARGO_MANIFEST_DIR`:
+- Load fixtures at runtime via the `nyne::load_fixture!(module, name)` macro — it expands `env!("CARGO_MANIFEST_DIR")` at the call site so each crate resolves fixtures from its own manifest root:
 
   ```rust
   fn load_fixture(name: &str) -> NyneConfig {
-      let path = format!("{}/src/config/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
-      let content = std::fs::read_to_string(&path)
-          .unwrap_or_else(|e| panic!("failed to read fixture {name}: {e}"));
-      toml::from_str(&content)
+      toml::from_str(&nyne::load_fixture!("config", name))
           .unwrap_or_else(|e| panic!("failed to parse fixture {name}: {e}"))
   }
   ```

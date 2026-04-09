@@ -119,11 +119,7 @@ impl ActivationContext {
     /// Useful when multiple plugins contribute to a shared extension point
     /// and activation order is non-deterministic.
     pub fn get_or_insert_default<T: Send + Sync + Default + 'static>(&mut self) -> &mut T {
-        if self.extensions.get::<T>().is_none() {
-            self.extensions.insert(T::default());
-        }
-        #[expect(clippy::expect_used, reason = "just inserted above if missing")]
-        self.extensions.get_mut::<T>().expect("just ensured presence")
+        self.extensions.entry::<T>().or_default()
     }
 
     /// Display root with trailing slash — for stripping absolute paths to relative.

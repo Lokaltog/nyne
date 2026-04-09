@@ -6,11 +6,14 @@
 //! dynamically injected hook scripts. The [`HOOK_REGISTRY`] is the single
 //! source of truth for hook event names, matchers, and script paths.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use color_eyre::eyre::Result;
-use nyne::json::deep_merge;
+use nyne::deep_merge::deep_merge;
 use serde_json::{Map, Value, json};
+
+use crate::provider::hooks::HOOK_REGISTRY;
 
 /// A hook entry within a Claude Code settings hook event array.
 ///
@@ -34,57 +37,6 @@ pub(super) enum HookAction {
     #[serde(rename = "command")]
     Command { command: String },
 }
-/// Declarative registration entry for a Claude Code hook.
-///
-/// Single source of truth for hook metadata shared between
-/// [`injected_hooks`] (settings JSON) and
-/// [`script_entries`](super::script_entries) (script dispatch).
-pub(super) struct HookDef {
-    /// Claude Code event name (e.g. `"PreToolUse"`).
-    pub event: &'static str,
-    /// Pipe-separated tool/event matcher (e.g. `"Read|Edit|Write|Grep"`).
-    /// Empty string matches all events.
-    pub matcher: &'static str,
-    /// Script address suffix (e.g. `"pre-tool-use"`).
-    pub script_name: &'static str,
-}
-
-/// Declarative hook registry — the single source of truth for event names,
-/// matchers, and script names.
-///
-/// Adding a new hook means adding one entry here; both `injected_hooks`
-/// and `script_entries` derive their data from this array.
-///
-/// Note: `Statusline` is omitted — it is wired via `statusLine.command` in
-/// `default_settings`, not through the hooks array.
-pub(super) const HOOK_REGISTRY: &[HookDef] = &[
-    HookDef {
-        event: "PreToolUse",
-        matcher: "Read|Edit|Write|Grep",
-        script_name: "pre-tool-use",
-    },
-    HookDef {
-        event: "PostToolUse",
-        matcher: "Bash|Edit|Write|Read|Grep|Glob",
-        script_name: "post-tool-use",
-    },
-    HookDef {
-        event: "PostToolUseFailure",
-        matcher: "Edit",
-        script_name: "post-tool-use-failure",
-    },
-    HookDef {
-        event: "SessionStart",
-        matcher: "startup|resume|clear",
-        script_name: "session-start",
-    },
-    HookDef {
-        event: "Stop",
-        matcher: "",
-        script_name: "stop",
-    },
-];
-
 /// Grace period (seconds) after a refused raw file access during which
 /// subsequent accesses are allowed through. Stored as atime via `touch -a`.
 pub(in crate::provider) const RAW_FILE_GRACE_SECS: u64 = 300;
@@ -92,26 +44,27 @@ pub(in crate::provider) const RAW_FILE_GRACE_SECS: u64 = 300;
 /// Build the hooks that nyne injects into `settings.local.json`.
 ///
 /// Returns a map of event name → list of hook entries. Derived from
-/// [`HOOK_REGISTRY`] — adding a new hook only requires a registry entry.
+/// [`HOOK_REGISTRY`](crate::provider::hooks::HOOK_REGISTRY) — adding a new
+/// hook only requires a registry entry. Multiple registry entries sharing
+/// the same `event` are accumulated under the same key (e.g., all six
+/// `PostToolUse` scripts end up in a single array under `"PostToolUse"`).
 ///
 /// Hook commands use `nyne exec` to invoke native Rust scripts registered
 /// by the `SourcePlugin` via [`Plugin::scripts()`](nyne::plugin::Plugin::scripts).
 pub(super) fn injected_hooks(root: &Path) -> Map<String, Value> {
-    let entry = |def: &HookDef| HookEntry {
-        matcher: def.matcher.into(),
-        hooks: vec![HookAction::Command {
-            command: format!("nyne exec provider.claude.{}", def.script_name),
-        }],
-    };
-
-    let mut hooks = Map::new();
+    // Accumulate entries per event so multiple scripts sharing the same
+    // event (e.g., the six PostToolUse scripts) coexist in one array.
+    let mut per_event: BTreeMap<String, Vec<HookEntry>> = BTreeMap::new();
+    let mut session_start_prepended = false;
 
     for def in HOOK_REGISTRY {
-        let mut entries = Vec::new();
+        let bucket = per_event.entry(def.event.into()).or_default();
 
-        // SessionStart: prepend a STATUS.md cat command before the script entry.
-        if def.event == "SessionStart" {
-            entries.push(HookEntry {
+        // SessionStart: prepend a STATUS.md cat command once, before any
+        // SessionStart script entry. Multiple SessionStart scripts would
+        // share the same preamble.
+        if def.event == "SessionStart" && !session_start_prepended {
+            bucket.push(HookEntry {
                 matcher: def.matcher.into(),
                 hooks: vec![HookAction::Command {
                     command: format!(
@@ -120,13 +73,21 @@ pub(super) fn injected_hooks(root: &Path) -> Map<String, Value> {
                     ),
                 }],
             });
+            session_start_prepended = true;
         }
 
-        entries.push(entry(def));
-        hooks.insert(def.event.into(), json!(entries));
+        bucket.push(HookEntry {
+            matcher: def.matcher.into(),
+            hooks: vec![HookAction::Command {
+                command: format!("nyne exec provider.claude.{}", def.id.as_ref()),
+            }],
+        });
     }
 
-    hooks
+    per_event
+        .into_iter()
+        .map(|(event, entries)| (event, json!(entries)))
+        .collect()
 }
 
 /// Merge nyne-managed hooks into a settings value.

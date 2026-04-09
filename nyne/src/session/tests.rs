@@ -1,17 +1,5 @@
 use super::*;
 
-/// Verifies that the current process PID is reported as alive.
-#[test]
-fn current_process_is_alive() {
-    assert!(state::is_pid_alive(std::process::id() as i32));
-}
-
-/// Verifies that an invalid PID is reported as not alive.
-#[test]
-fn bogus_pid_is_not_alive() {
-    assert!(!state::is_pid_alive(i32::MAX));
-}
-
 /// Verifies that `SessionInfo` survives JSON serialization and deserialization.
 #[test]
 fn session_info_roundtrip() {

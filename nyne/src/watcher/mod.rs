@@ -10,12 +10,12 @@
 //! **Debouncing:** Events are coalesced over a short window before being
 //! forwarded to the chain providers.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
-use std::thread;
+use std::sync::{Arc, PoisonError};
 use std::time::{Duration, Instant};
+use std::{mem, thread};
 
 use color_eyre::eyre::{Result, WrapErr};
 use notify::event::{CreateKind, ModifyKind};
@@ -23,9 +23,10 @@ use notify::{EventKind, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use tracing::{debug, trace, warn};
 
-use crate::fuse::SharedNotifier;
 use crate::fuse::inode_map::InodeMap;
-use crate::fuse::notify::invalidate_inode_at;
+use crate::fuse::notify::propagate_source_changes;
+use crate::fuse::{InlineWrites, SharedNotifier};
+use crate::path_utils::PathExt;
 use crate::router::Chain;
 
 /// Debounce window: events are coalesced for this duration after the
@@ -35,12 +36,18 @@ const DEBOUNCE_TIMEOUT: Duration = Duration::from_millis(50);
 /// Maximum delay from the first event in a batch to flush. Caps total
 /// latency under sustained event rates (e.g., `cargo build`).
 const MAX_BATCH_DELAY: Duration = Duration::from_millis(500);
+/// How long after an inline write we suppress matching fsnotify echoes.
+/// fsnotify latency is typically <5ms; the generous window guards against
+/// loaded systems or lazy event delivery. Entries are evicted lazily on
+/// watcher reads.
+const INLINE_WRITE_SUPPRESSION_TTL: Duration = Duration::from_secs(2);
 
 /// Shared state from [`FuseFilesystem`](crate::fuse::FuseFilesystem) needed by the watcher.
 pub struct WatcherBackend {
-    pub chain: Arc<Chain>,
-    pub inodes: Arc<InodeMap>,
-    pub notifier: SharedNotifier,
+    pub(crate) chain: Arc<Chain>,
+    pub(crate) inodes: Arc<InodeMap>,
+    pub(crate) notifier: SharedNotifier,
+    pub(crate) inline_writes: InlineWrites,
 }
 
 /// Watches the real filesystem and propagates changes to the FUSE layer.
@@ -73,7 +80,15 @@ impl FsWatcher {
         let watcher_ref = Arc::clone(&watcher);
         let event_thread = thread::Builder::new()
             .name("nyne-watcher".into())
-            .spawn(move || event_loop(&rx, &root, &watcher_ref, &backend))
+            .spawn(move || {
+                EventLoop {
+                    rx,
+                    watch_root: root,
+                    watcher: watcher_ref,
+                    backend,
+                }
+                .run();
+            })
             .wrap_err("failed to spawn watcher event thread")?;
 
         Ok(Self {
@@ -83,140 +98,134 @@ impl FsWatcher {
     }
 }
 
-fn install_initial_watches(watcher: &Mutex<notify::RecommendedWatcher>, root: &Path) -> usize {
-    let mut w = watcher.lock();
-    watch_directory_tree(&walk_builder(root), &mut w, false)
+struct EventLoop {
+    rx: Receiver<notify::Event>,
+    watch_root: PathBuf,
+    watcher: Arc<Mutex<notify::RecommendedWatcher>>,
+    backend: WatcherBackend,
 }
 
-fn event_loop(
-    rx: &Receiver<notify::Event>,
-    watch_root: &Path,
-    watcher: &Mutex<notify::RecommendedWatcher>,
-    backend: &WatcherBackend,
-) {
-    let mut pending: HashSet<PathBuf> = HashSet::new();
-    let mut batch_deadline: Option<Instant> = None;
+impl EventLoop {
+    fn run(&self) {
+        let mut pending: HashSet<PathBuf> = HashSet::new();
+        let mut batch_deadline: Option<Instant> = None;
 
-    loop {
-        if pending.is_empty() {
-            let Ok(event) = rx.recv() else { break };
-            process_raw_event(watch_root, watcher, &event, &mut pending);
-            if !pending.is_empty() {
-                batch_deadline = Some(Instant::now() + MAX_BATCH_DELAY);
-            }
-            continue;
-        }
-
-        let timeout = batch_deadline.map_or(DEBOUNCE_TIMEOUT, |d| {
-            d.saturating_duration_since(Instant::now()).min(DEBOUNCE_TIMEOUT)
-        });
-
-        if !timeout.is_zero() {
-            match rx.recv_timeout(timeout) {
-                Ok(event) => {
-                    process_raw_event(watch_root, watcher, &event, &mut pending);
-                    continue;
+        loop {
+            if pending.is_empty() {
+                let Ok(event) = self.rx.recv() else { break };
+                self.process_raw_event(&event, &mut pending);
+                if !pending.is_empty() {
+                    batch_deadline = Some(Instant::now() + MAX_BATCH_DELAY);
                 }
-                Err(RecvTimeoutError::Disconnected) => {
-                    flush(&mut pending, backend, &mut batch_deadline);
-                    break;
-                }
-                Err(RecvTimeoutError::Timeout) => {}
+                continue;
             }
+
+            let timeout = batch_deadline.map_or(DEBOUNCE_TIMEOUT, |d| {
+                d.saturating_duration_since(Instant::now()).min(DEBOUNCE_TIMEOUT)
+            });
+
+            if !timeout.is_zero() {
+                match self.rx.recv_timeout(timeout) {
+                    Ok(event) => {
+                        self.process_raw_event(&event, &mut pending);
+                        continue;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        self.flush(&mut pending);
+                        break;
+                    }
+                    Err(RecvTimeoutError::Timeout) => {}
+                }
+            }
+
+            self.flush(&mut pending);
+            batch_deadline = None;
         }
-
-        flush(&mut pending, backend, &mut batch_deadline);
-    }
-}
-
-fn process_raw_event(
-    watch_root: &Path,
-    watcher: &Mutex<notify::RecommendedWatcher>,
-    event: &notify::Event,
-    pending: &mut HashSet<PathBuf>,
-) {
-    if !is_relevant_event(event.kind) {
-        return;
     }
 
-    if matches!(event.kind, EventKind::Create(CreateKind::Folder)) {
+    fn process_raw_event(&self, event: &notify::Event, pending: &mut HashSet<PathBuf>) {
+        if !is_relevant_event(event.kind) {
+            return;
+        }
+
+        if matches!(event.kind, EventKind::Create(CreateKind::Folder)) {
+            for path in &event.paths {
+                self.watch_new_directory(path);
+            }
+        }
+
+        let now = Instant::now();
+        let mut writes = self
+            .backend
+            .inline_writes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        evict_expired_inline_writes(&mut writes, now);
+
         for path in &event.paths {
-            watch_new_directory(watcher, path);
-        }
-    }
-
-    for path in &event.paths {
-        if let Some(rel) = to_relative(watch_root, path) {
+            let Some(rel) = path.strip_root(&self.watch_root) else {
+                continue;
+            };
+            let rel = rel.to_path_buf();
+            if writes.remove(&rel).is_some() {
+                trace!(path = %rel.display(), "watcher: suppressed fsnotify echo of inline write");
+                continue;
+            }
             pending.insert(rel);
         }
     }
-}
 
-fn flush(pending: &mut HashSet<PathBuf>, backend: &WatcherBackend, batch_deadline: &mut Option<Instant>) {
-    if pending.is_empty() {
-        return;
-    }
-    let paths: Vec<PathBuf> = pending.drain().collect();
-    trace!(count = paths.len(), "flushing debounced filesystem changes");
+    fn flush(&self, pending: &mut HashSet<PathBuf>) {
+        if pending.is_empty() {
+            return;
+        }
+        let paths: Vec<PathBuf> = mem::take(pending).into_iter().collect();
+        trace!(count = paths.len(), "flushing debounced filesystem changes");
 
-    // Notify chain providers → collect invalidation events.
-    let events: Vec<_> = backend
-        .chain
-        .providers()
-        .iter()
-        .flat_map(|p| p.on_change(&paths))
-        .collect();
-
-    // Apply kernel notifications.
-    if let Some(notifier) = backend.notifier.get() {
-        for event in &events {
-            invalidate_inode_at(&event.path, notifier.as_ref(), &backend.inodes);
+        if let Some(notifier) = self.backend.notifier.get() {
+            propagate_source_changes(&paths, &self.backend.chain, notifier.as_ref(), &self.backend.inodes);
         }
     }
 
-    *batch_deadline = None;
+    /// Walk the new directory tree outside the lock, then register watches.
+    fn watch_new_directory(&self, path: &Path) {
+        let dirs: Vec<PathBuf> = ignore::WalkBuilder::new(path)
+            .hidden(false)
+            .build()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_some_and(|ft| ft.is_dir()))
+            .map(ignore::DirEntry::into_path)
+            .collect();
+
+        let mut w = self.watcher.lock();
+        for dir in &dirs {
+            match w.watch(dir, RecursiveMode::NonRecursive) {
+                Ok(()) => {}
+                Err(e) if matches!(e.kind, notify::ErrorKind::PathNotFound) => {}
+                Err(e) => warn!(path = %dir.display(), error = %e, "failed to watch directory"),
+            }
+        }
+    }
 }
 
-fn watch_new_directory(watcher: &Mutex<notify::RecommendedWatcher>, path: &Path) {
+/// Register watches for all non-ignored directories under `root`.
+///
+/// Called once at startup before the event loop starts, so no lock contention.
+fn install_initial_watches(watcher: &Mutex<notify::RecommendedWatcher>, root: &Path) -> usize {
     let mut w = watcher.lock();
-    watch_directory_tree(&walk_builder(path), &mut w, true);
-}
-
-fn watch_directory_tree(
-    builder: &ignore::WalkBuilder,
-    watcher: &mut notify::RecommendedWatcher,
-    skip_not_found: bool,
-) -> usize {
     let mut count = 0;
-    for entry in builder
+    for entry in ignore::WalkBuilder::new(root)
+        .hidden(false)
         .build()
         .filter_map(Result::ok)
         .filter(|e| e.file_type().is_some_and(|ft| ft.is_dir()))
     {
-        match watcher.watch(entry.path(), RecursiveMode::NonRecursive) {
+        match w.watch(entry.path(), RecursiveMode::NonRecursive) {
             Ok(()) => count += 1,
-            Err(e) if skip_not_found && matches!(e.kind, notify::ErrorKind::PathNotFound) => {}
             Err(e) => warn!(path = %entry.path().display(), error = %e, "failed to watch directory"),
         }
     }
     count
-}
-
-/// Build an ignore-aware directory walker.
-fn walk_builder(walk_root: &Path) -> ignore::WalkBuilder {
-    let mut builder = ignore::WalkBuilder::new(walk_root);
-    builder.hidden(false);
-    builder
-}
-
-/// Convert an absolute path under `watch_root` to a relative path.
-fn to_relative(watch_root: &Path, path: &Path) -> Option<PathBuf> {
-    let relative = path.strip_prefix(watch_root).ok()?;
-    if relative.as_os_str().is_empty() {
-        return None;
-    }
-    relative.to_str()?; // skip non-UTF-8
-    Some(relative.to_path_buf())
 }
 
 const fn is_relevant_event(kind: EventKind) -> bool {
@@ -226,3 +235,14 @@ const fn is_relevant_event(kind: EventKind) -> bool {
         _ => false,
     }
 }
+
+/// Drop entries from the inline-write suppression map whose insertion
+/// time is older than [`INLINE_WRITE_SUPPRESSION_TTL`]. Called lazily
+/// from [`EventLoop::process_raw_event`] so the map stays bounded
+/// without a background sweeper thread.
+fn evict_expired_inline_writes(writes: &mut HashMap<PathBuf, Instant>, now: Instant) {
+    writes.retain(|_, stamp| now.duration_since(*stamp) < INLINE_WRITE_SUPPRESSION_TTL);
+}
+
+#[cfg(test)]
+mod tests;

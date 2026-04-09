@@ -1,29 +1,14 @@
-{% from "hooks/vfs-hints" import batch_edit_hint %}
+{% import "macros/hints" as hints %}
+{% import "macros/paths" as paths %}
+{{ hints.header_hint("instead of " ~ (tool_name | lower) ~ "ing the raw file " ~ rel ~ ", use the symbol-targeted approach.") }}
+
+{{ hints.edit_via_sym(rel, sym, ext) }}
 {% if tool_name == "Edit" and sym %}
-Hint (nyne VFS): instead of editing the raw file, target the symbol body:
-  Read {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← read
-  Edit {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}    ← edit (same old_string/new_string)
 
-{{ batch_edit_hint() }}
-Or browse the symbol table first:
-  Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
-{% elif sym %}
-Hint (nyne VFS): instead of {{ tool_name | lower }}ing the raw file, try:
-  {{ tool_name }} {{ rel }}@/symbols/{{ sym }}@/body.{{ ext }}
-
-Or browse the symbol table:
-  Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}
-{% else %}
-Hint (nyne VFS): instead of {{ tool_name | lower }}ing the raw file, try:
-  Read {{ rel }}@/symbols/{{ FILE_OVERVIEW }}  →  then {{ tool_name | lower }} specific symbol bodies
-{% if total_lines %}
-
-Or use line ranges (escape hatch only; no prior read needed, not intercepted):
-  cat {{ rel }}@/lines:M-N ({{ total_lines }} lines, {{ total_bytes|tokens }} tokens total)
+{{ hints.batch_edit_hint(rel) }}
 {% endif %}
 {% if config.include_symbol_table %}
 
-{{ rel }}@/symbols/{{ FILE_OVERVIEW }}:
+{{ paths.sym_overview(rel) }}:
 {% include "syntax/symbol_table" %}
-{% endif %}
 {% endif %}

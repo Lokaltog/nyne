@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use color_eyre::eyre::Result;
@@ -36,13 +36,13 @@ impl Readable for CachedReadable {
         }
 
         // TTL mode — check expiry, re-read when stale.
-        if let Some((cached_at, ref content)) = *self.timed.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        if let Some((cached_at, ref content)) = *self.timed.lock().unwrap_or_else(PoisonError::into_inner)
             && cached_at.elapsed() < self.ttl
         {
             return Ok(content.to_vec());
         }
         let content = self.inner.read(ctx)?;
-        *self.timed.lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
+        *self.timed.lock().unwrap_or_else(PoisonError::into_inner) =
             Some((Instant::now(), Arc::from(content.as_slice())));
         Ok(content)
     }
@@ -53,7 +53,7 @@ impl Readable for CachedReadable {
         } else {
             self.timed
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .unwrap_or_else(PoisonError::into_inner)
                 .as_ref()
                 .map(|(_, c)| c.len() as u64)
         }
@@ -73,12 +73,8 @@ pub(super) fn wrap_readable(node: &mut NamedNode) {
     if node.readable().is_some_and(|r| r.backing_path().is_some()) {
         return;
     }
-    let ttl = match node.cache_policy().and_then(|p| p.ttl) {
-        // No policy or persistent → cache forever (ttl sentinel = ZERO).
-        None => Duration::ZERO,
-        // Explicit TTL.
-        Some(d) => d,
-    };
+    // Read policy before take_readable borrows node mutably.
+    let ttl = node.cache_policy().and_then(|p| p.ttl).unwrap_or(Duration::ZERO);
     if let Some(inner) = node.take_readable() {
         node.set_readable(CachedReadable {
             inner,

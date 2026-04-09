@@ -1,0 +1,28 @@
+{% import "macros/paths" as paths %}
+### Reading and Exploring
+
+Read the symbol at line 42 (follows symlink → body):
+
+    Read `{{ paths.at_line("<file>", 42) }}`
+
+Directly edit a symbol at a known line:
+
+    Read → Edit `{{ paths.at_line("<file>", 42) }}`
+
+    Note: at-line is symlinked directly to the full symbol body, including docstring and decorators
+
+Insert code at known location:
+
+    echo 'fn foo() { }' >> {{ paths.lines("<file>", "10") }} # append after line 10
+    echo 'fn bar() { }' > {{ paths.at_line("<file>", 42) }} # replace (splice) full symbol at line 42 with new function
+
+    Read → Edit `{{ paths.sym("<file>", "Foo", ext) }}` → Insert code before/after existing symbol
+
+Line range access (escape hatch — prefer symbol-targeted access):
+
+    Read → Edit `{{ paths.lines("<file>") }}` (full file)
+    Read → Edit `{{ paths.lines("<file>", "10-20") }}` (range)
+
+List symbols by kind:
+
+    ls {{ paths.by_kind("<file>", "fn") }}

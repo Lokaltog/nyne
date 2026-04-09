@@ -1,0 +1,17 @@
+## nyne VFS Tool Rules and Best Practices
+
+- **Read** VFS paths with the **Read tool**. **Edit** with the **Edit tool** (`old_string`/`new_string`). Use **Bash** for structural ops (`mv`, `rmdir`, `rm`), single-value writes (`echo >`), and shell pipelines. **Do not use `sed -i`** — it creates a temp file + rename, which FUSE doesn't support.
+- **Avoid using Edit on raw source files** — always target `@/` symbol bodies instead. Edit on a symbol body only sends the diff, not the full file.
+- **Read before Edit — always.** The Edit tool requires a prior Read (via the Read tool) of the same file. `cat` via Bash does NOT satisfy this. After modifying a file via Bash (`echo >`, `rmdir`, batch edit `rm`), you must Read the file again before using Edit on it.
+- **Never read raw source files** when VFS paths exist. Always Read `OVERVIEW.md` first, then specific symbol bodies.
+- **Start with `OVERVIEW.md`** to discover exact symbol names before accessing them.
+- **Use VFS analysis tools, not Grep**, for call-graph questions: `CALLERS.md` shows blast radius, `DEPS.md` for tracing callees, `REFERENCES.md` before renaming/deleting. These targeted, token-optimized files replace grep-for-usage workflows.
+- **Check `actions/`** before any refactoring task — an LSP code action `.diff` may already exist to execute the refactoring.
+- **Writes re-parse the file.** After any write to a `@/` path, symbol names may change (disambiguators added/removed, symbols deleted, nesting shifted). Re-read `OVERVIEW.md` or `ls symbols/` before accessing other symbols in the same file.
+- **Use batch edit staging for multi-symbol changes.** When changing multiple symbols in the same file, or when coordinating changes across files, stage via `edit/` and apply atomically with `rm @/edit/staged.diff`. Safe (tree-sitter validated) and cheap (one atomic write). Returns an error if validation fails.
+
+Use the Read tool for `@/` reads. When you have a line number (from errors, grep, OVERVIEW), use `/symbols/at-line/<line>` — it's a symlink to the containing symbol's body and can be read and modified directly.
+
+Uppercased files (`OVERVIEW.md`, `CALLERS.md`, etc.) are read-only and optimized for token efficient lookup and exploration.
+
+Lowercased files and directories (`body.{{ ext }}`, `docstring.txt`, etc.) are virtual files representing "slices" of a source code file: symbol bodies, docstrings, decorators, import sections, and more. These are all regular editable files; you can use your normal Read, Edit and Write tools on these files directly.

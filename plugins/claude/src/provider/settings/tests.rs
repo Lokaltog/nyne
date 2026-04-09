@@ -80,9 +80,10 @@ fn preserves_existing_hooks_for_other_events() {
     let injected = injected_hooks(root());
     let result = merge_settings(base, injected).unwrap();
 
-    // PreToolUse: original entry preserved + nyne's single consolidated entry.
+    // PreToolUse: original entry preserved + nyne's 2 narrow scripts
+    // (file-access, grep-symbol).
     let pre = result["hooks"]["PreToolUse"].as_array().unwrap();
-    assert_eq!(pre.len(), 2);
+    assert_eq!(pre.len(), 3);
     assert_eq!(pre[0]["hooks"][0]["command"], "lint");
 
     // SessionStart added (status + skills = 2 entries).
@@ -156,31 +157,49 @@ fn post_tool_use_does_not_interfere_with_session_start() {
     let session = result["hooks"]["SessionStart"].as_array().unwrap();
     assert_eq!(session.len(), 3);
 
-    // PostToolUse: single consolidated entry.
+    // PostToolUse: 5 narrow-concern scripts (bash-hints, cli-alts,
+    // vfs-reread, ssot, diagnostics).
     let post = result["hooks"]["PostToolUse"].as_array().unwrap();
-    assert_eq!(post.len(), 1);
+    assert_eq!(post.len(), 5);
 }
 
-/// Tests that all hook commands use nyne exec for dispatch.
+/// Tests that all hook commands use `nyne exec` for dispatch.
+///
+/// After the decomposition, `PreToolUse` and `PostToolUse` each register
+/// multiple narrow scripts with distinct matchers. This asserts the
+/// full post-decomposition registry wires every script's command line
+/// correctly.
 #[test]
 fn hook_commands_use_nyne_exec() {
     let hooks = injected_hooks(root());
 
-    // PostToolUse: single script handling all tools.
-    let entries = hooks["PostToolUse"].as_array().expect("PostToolUse exists");
-    assert_eq!(entries.len(), 1);
-    let cmd = entries[0]["hooks"][0]["command"].as_str().unwrap();
-    assert_eq!(cmd, "nyne exec provider.claude.post-tool-use");
+    let collect = |event: &str| -> Vec<String> {
+        hooks[event]
+            .as_array()
+            .unwrap_or_else(|| panic!("{event} exists"))
+            .iter()
+            .map(|e| e["hooks"][0]["command"].as_str().unwrap().to_owned())
+            .collect()
+    };
 
-    // PreToolUse: single script handling all tools.
-    let pre_entries = hooks["PreToolUse"].as_array().expect("PreToolUse exists");
-    assert_eq!(pre_entries.len(), 1);
-    let cmd = pre_entries[0]["hooks"][0]["command"].as_str().unwrap();
-    assert_eq!(cmd, "nyne exec provider.claude.pre-tool-use");
+    // PreToolUse: 2 narrow scripts (file-access, grep-symbol).
+    let pre = collect("PreToolUse");
+    assert_eq!(pre, vec![
+        "nyne exec provider.claude.pre-tool-use-file-access".to_owned(),
+        "nyne exec provider.claude.pre-tool-use-grep-symbol".to_owned(),
+    ]);
+
+    // PostToolUse: 5 narrow scripts (bash-hints, cli-alts, vfs-reread, ssot, diagnostics).
+    let post = collect("PostToolUse");
+    assert_eq!(post, vec![
+        "nyne exec provider.claude.post-tool-use-bash-hints".to_owned(),
+        "nyne exec provider.claude.post-tool-use-cli-alts".to_owned(),
+        "nyne exec provider.claude.post-tool-use-vfs-reread".to_owned(),
+        "nyne exec provider.claude.post-tool-use-ssot".to_owned(),
+        "nyne exec provider.claude.post-tool-use-diagnostics".to_owned(),
+    ]);
 
     // Stop: single script.
-    let stop_entries = hooks["Stop"].as_array().expect("Stop exists");
-    assert_eq!(stop_entries.len(), 1);
-    let cmd = stop_entries[0]["hooks"][0]["command"].as_str().unwrap();
-    assert_eq!(cmd, "nyne exec provider.claude.stop");
+    let stop = collect("Stop");
+    assert_eq!(stop, vec!["nyne exec provider.claude.stop".to_owned()]);
 }

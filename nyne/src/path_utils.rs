@@ -95,6 +95,30 @@ pub trait PathExt {
     /// assert_eq!(Path::new("a/b").segments(), vec!["a", "b"],);
     /// ```
     fn segments(&self) -> Vec<String>;
+
+    /// Strip a `root` prefix from this path, returning the relative remainder.
+    ///
+    /// Returns `None` if this path is not under `root`, if the relative
+    /// part is empty (path equals `root`), or if the relative part is not
+    /// valid UTF-8.
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use nyne::path_utils::PathExt;
+    /// assert_eq!(
+    ///     Path::new("/home/user/project/src/main.rs").strip_root(Path::new("/home/user/project")),
+    ///     Some(Path::new("src/main.rs")),
+    /// );
+    /// assert_eq!(
+    ///     Path::new("/home/user/project").strip_root(Path::new("/home/user/project")),
+    ///     None
+    /// );
+    /// assert_eq!(
+    ///     Path::new("/other/path").strip_root(Path::new("/home/user/project")),
+    ///     None
+    /// );
+    /// ```
+    fn strip_root(&self, root: &Path) -> Option<&Path>;
 }
 
 impl PathExt for Path {
@@ -144,5 +168,14 @@ impl PathExt for Path {
                 _ => None,
             })
             .collect()
+    }
+
+    fn strip_root(&self, root: &Path) -> Option<&Path> {
+        let relative = self.strip_prefix(root).ok()?;
+        if relative.as_os_str().is_empty() {
+            return None;
+        }
+        relative.to_str()?;
+        Some(relative)
     }
 }

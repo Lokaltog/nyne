@@ -1,15 +1,16 @@
+use nyne::load_fixture;
 use rstest::{fixture, rstest};
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::{load_fixture, registry};
+use crate::test_support::registry;
+
+/// Load `basic.py` fixture source. Single source of truth for the fixture path.
+fn load_basic() -> String { load_fixture!("syntax/languages/python", "basic.py") }
 
 /// Fixture: decompose the basic.py test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
-    let source = load_fixture("syntax/languages/python", "basic.py");
-    let reg = registry();
-    let d = reg.get("py").unwrap();
-    let (result, _tree) = d.decompose(&source, 5);
+    let (result, _tree) = registry().get("py").unwrap().decompose(&load_basic(), 5);
     result
 }
 
@@ -50,12 +51,13 @@ fn fragment_kinds(basic: DecomposedFile) {
 /// Imports are coalesced into a single Imports fragment.
 #[rstest]
 fn imports_extracted(basic: DecomposedFile) {
-    let source = load_fixture("syntax/languages/python", "basic.py");
-    let imports_frag = crate::syntax::fragment::find_fragment_of_kind(&basic, &FragmentKind::Imports)
-        .expect("imports fragment should be present");
-    let imports_text = &source[imports_frag.byte_range.clone()];
-    assert!(imports_text.contains("import os"));
-    assert!(imports_text.contains("from pathlib import Path"));
+    let range = crate::syntax::fragment::find_fragment_of_kind(&basic, &FragmentKind::Imports)
+        .expect("imports fragment should be present")
+        .byte_range
+        .clone();
+    let source = load_basic();
+    assert!(source[range.clone()].contains("import os"));
+    assert!(source[range].contains("from pathlib import Path"));
 }
 
 /// Class `Config` has docstring, decorators, field annotations and methods as children.

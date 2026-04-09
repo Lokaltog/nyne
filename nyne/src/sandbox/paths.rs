@@ -69,53 +69,52 @@ const WORK_DIR: &str = "work";
 pub(super) fn proc_root(state_root: &Path) -> PathBuf { state_root.join(PROC_SUBDIR) }
 /// Per-process state tree under `<state_root>/proc/<pid>`.
 ///
-/// Precomputes the common path prefix so individual layer accessors are
-/// single `join` calls. Also owns cleanup of its state tree via [`reap`].
+/// Layer accessors derive the `fs` subpath on-the-fly via a private
+/// helper. Also owns cleanup of its state tree via [`reap`].
 ///
 /// [`reap`]: ProcState::reap
 pub(super) struct ProcState {
     /// `<state_root>/proc/<pid>` — the process-level state root.
     state: PathBuf,
-    /// `<state_root>/proc/<pid>/fs` — parent of all overlay-layer subdirs.
-    fs: PathBuf,
 }
 
 impl ProcState {
     /// Build paths for the given process under `state_root`.
     pub(super) fn new(state_root: &Path, pid: Pid) -> Self {
-        let state = proc_root(state_root).join(pid.to_string());
         Self {
-            fs: state.join(FS_SUBDIR),
-            state,
+            state: proc_root(state_root).join(pid.to_string()),
         }
     }
+
+    /// `<state_root>/proc/<pid>/fs` — parent of all overlay-layer subdirs.
+    fn fs(&self) -> PathBuf { self.state.join(FS_SUBDIR) }
 
     /// Temporary root for `pivot_root`: `<state_root>/proc/<pid>/fs/root`.
     ///
     /// A tmpfs is mounted here as the scaffold for the sandbox filesystem.
     /// After `pivot_root`, this becomes `/` and the old root is detached.
-    pub(super) fn newroot(&self) -> PathBuf { self.fs.join(ROOT_DIR) }
+    pub(super) fn newroot(&self) -> PathBuf { self.fs().join(ROOT_DIR) }
 
     /// Base directory for overlay merged views:
     /// `<state_root>/proc/<pid>/fs/merged`.
     ///
     /// Per-path merged directories are derived via
     /// `proc_state.merged().join(relative_to_root(path))`.
-    pub(super) fn merged(&self) -> PathBuf { self.fs.join(MERGED_DIR) }
+    pub(super) fn merged(&self) -> PathBuf { self.fs().join(MERGED_DIR) }
 
     /// Base directory for clone lowerdirs:
     /// `<state_root>/proc/<pid>/fs/lower`.
     ///
     /// Per-path clone directories are derived via
     /// `proc_state.lower().join(relative_to_root(path))`.
-    pub(super) fn lower(&self) -> PathBuf { self.fs.join(LOWER_DIR) }
+    pub(super) fn lower(&self) -> PathBuf { self.fs().join(LOWER_DIR) }
 
     /// Base directory for overlay upperdirs:
     /// `<state_root>/proc/<pid>/fs/upper`.
     ///
     /// Per-path upper directories are derived via
     /// `proc_state.upper().join(relative_to_root(path))`.
-    pub(super) fn upper(&self) -> PathBuf { self.fs.join(UPPER_DIR) }
+    pub(super) fn upper(&self) -> PathBuf { self.fs().join(UPPER_DIR) }
 
     /// Base directory for overlayfs workdirs:
     /// `<state_root>/proc/<pid>/fs/work`.
@@ -123,7 +122,7 @@ impl ProcState {
     /// Overlayfs requires a workdir on the same filesystem as upperdir for
     /// kernel scratch space. Per-path work directories are derived via
     /// `proc_state.work().join(relative_to_root(path))`.
-    pub(super) fn work(&self) -> PathBuf { self.fs.join(WORK_DIR) }
+    pub(super) fn work(&self) -> PathBuf { self.fs().join(WORK_DIR) }
 
     /// Best-effort recursive removal of the per-process state tree.
     ///

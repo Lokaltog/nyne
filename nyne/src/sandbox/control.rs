@@ -29,12 +29,13 @@ use rustix::pipe::{PipeFlags, pipe_with};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, trace, warn};
 
+use super::namespace::Namespace;
 use crate::dispatch::script::ScriptContext;
 use crate::dispatch::{ControlRegistry, ScriptRegistry};
 use crate::plugin::control::{AttachedProcess, ControlContext, ProcessTable};
 use crate::prelude::*;
+use crate::process;
 use crate::router::Chain;
-use crate::session::state;
 
 /// Environment variable set inside the sandbox pointing to the control socket.
 ///
@@ -111,18 +112,6 @@ pub enum Response {
     Error { message: String },
 }
 
-/// File descriptors for the daemon's user and mount namespaces.
-///
-/// Opened from `/proc/self/ns/{user,mnt}` inside the daemon after
-/// `unshare_user_mount` has established them. These fds are sent to
-/// attach clients via `SCM_RIGHTS` on demand (see
-/// [`Request::GetNamespaceFds`]) so clients can `setns` directly
-/// without needing to resolve the daemon's PID — a resolution that
-/// breaks across sibling PID namespaces.
-pub struct NamespaceFds {
-    pub user: OwnedFd,
-    pub mnt: OwnedFd,
-}
 /// Shared state used by the control server and every request handler.
 ///
 /// Groups the per-daemon registries, process table, middleware chain,
@@ -134,7 +123,7 @@ pub struct Handlers {
     pub processes: ProcessTable,
     pub control_commands: Arc<ControlRegistry>,
     pub chain: Arc<Chain>,
-    pub ns_fds: Arc<NamespaceFds>,
+    pub ns: Arc<Namespace>,
 }
 
 impl Handlers {
@@ -144,7 +133,7 @@ impl Handlers {
         activation: Arc<ActivationContext>,
         control_commands: Arc<ControlRegistry>,
         chain: Arc<Chain>,
-        ns_fds: Arc<NamespaceFds>,
+        ns: Arc<Namespace>,
     ) -> Self {
         Self {
             registry,
@@ -152,7 +141,7 @@ impl Handlers {
             processes: Arc::new(Mutex::new(Vec::new())),
             control_commands,
             chain,
-            ns_fds,
+            ns,
         }
     }
 }
@@ -204,9 +193,10 @@ impl Drop for Server {
 /// via a pipe — dropping the returned [`Server`] closes the write end,
 /// which triggers `POLLHUP` in the server loop and causes it to exit.
 pub fn start_server(socket_path: &Path, handlers: Handlers) -> Result<Server> {
-    if socket_path.exists() {
-        fs::remove_file(socket_path)
-            .wrap_err_with(|| format!("removing stale control socket: {}", socket_path.display()))?;
+    match fs::remove_file(socket_path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e).wrap_err_with(|| format!("removing stale control socket: {}", socket_path.display())),
     }
 
     let listener = UnixListener::bind(socket_path)
@@ -239,12 +229,11 @@ pub fn start_server(socket_path: &Path, handlers: Handlers) -> Result<Server> {
 /// the poll and the loop exits cleanly.
 fn server_loop(path: &Path, listener: &UnixListener, shutdown: &OwnedFd, handlers: &Handlers) {
     let listener_fd = listener.as_fd();
+    let mut fds = [
+        PollFd::new(&listener_fd, PollFlags::IN),
+        PollFd::new(&shutdown, PollFlags::IN),
+    ];
     loop {
-        let mut fds = [
-            PollFd::new(&listener_fd, PollFlags::IN),
-            PollFd::new(&shutdown, PollFlags::IN),
-        ];
-
         if poll(&mut fds, None).is_err() {
             break;
         }
@@ -285,41 +274,45 @@ fn write_response(stream: &UnixStream, response: &Response) -> Result<()> {
 
 /// Read a single JSON request from a stream, dispatch it, and write the response.
 ///
-/// Two-phase deserialization: first try core [`Request`] variants, then fall
-/// back to plugin commands via the [`ControlRegistry`].
+/// Single-pass deserialization: parse as `Value` once, then try core
+/// [`Request`] variants before falling back to plugin commands via the
+/// [`ControlRegistry`].
 fn handle_connection(stream: &UnixStream, handlers: &Handlers) -> Result<()> {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     reader.read_line(&mut line).wrap_err("reading request")?;
 
+    let raw: serde_json::Value = serde_json::from_str(&line).map_err(|e| eyre!("{e:#}"))?;
+
     // Phase 1: try core request variants.
-    let response = if let Ok(req) = serde_json::from_str::<Request>(&line) {
+    if let Ok(req) = serde_json::from_value::<Request>(raw.clone()) {
         // `GetNamespaceFds` needs direct stream access to send fds via
         // SCM_RIGHTS ancillary, so it bypasses the `Response` return path.
         if matches!(req, Request::GetNamespaceFds) {
-            return send_namespace_fds(stream, &handlers.ns_fds);
+            return send_namespace_fds(stream, &handlers.ns);
         }
-        dispatch(req, handlers)
-    } else {
-        // Phase 2: extract `type` field and dispatch to plugin handlers.
-        let raw: serde_json::Value = serde_json::from_str(&line).map_err(|e| eyre!("{e:#}"))?;
-        let Some(command_type) = raw.get("type").and_then(|t| t.as_str().map(str::to_owned)) else {
-            return write_response(stream, &Response::Error {
-                message: "missing \"type\" field".into(),
-            });
-        };
-        let ctrl_ctx = ControlContext {
-            activation: &handlers.activation,
-            processes: &handlers.processes,
-        };
-        match handlers.control_commands.dispatch(&command_type, raw, &ctrl_ctx) {
+        return write_response(stream, &dispatch(req, handlers));
+    }
+
+    // Phase 2: extract `type` field and dispatch to plugin handlers.
+    let Some(command_type) = raw.get("type").and_then(|t| t.as_str()).map(str::to_owned) else {
+        return write_response(stream, &Response::Error {
+            message: "missing \"type\" field".into(),
+        });
+    };
+    let ctx = ControlContext {
+        activation: &handlers.activation,
+        processes: &handlers.processes,
+    };
+    write_response(
+        stream,
+        &match handlers.control_commands.dispatch(&command_type, raw, &ctx) {
             Some(payload) => Response::Plugin { payload },
             None => Response::Error {
                 message: format!("unknown command: {command_type}"),
             },
-        }
-    };
-    write_response(stream, &response)
+        },
+    )
 }
 
 /// Route a core control request to the appropriate handler.
@@ -405,7 +398,7 @@ fn handle_unregister(pid: i32, processes: &ProcessTable) -> Response {
 fn handle_list(processes: &ProcessTable) -> Response {
     let mut table = processes.lock();
     // Prune dead PIDs while we're at it.
-    table.retain(|p| state::is_pid_alive(p.pid));
+    table.retain(|p| process::is_pid_alive(p.pid));
     Response::Processes { list: table.clone() }
 }
 /// Send the daemon's namespace fds over the control socket via `SCM_RIGHTS`.
@@ -413,14 +406,14 @@ fn handle_list(processes: &ProcessTable) -> Response {
 /// Writes a `Response::NamespaceFds` JSON line as the normal payload,
 /// with the two fds (user first, mnt second) attached as ancillary
 /// data. The client receives both atomically via `recvmsg`.
-fn send_namespace_fds(stream: &UnixStream, ns_fds: &NamespaceFds) -> Result<()> {
+fn send_namespace_fds(stream: &UnixStream, ns: &Namespace) -> Result<()> {
     let response = serde_json::to_string(&Response::NamespaceFds).wrap_err("serializing NamespaceFds response")?;
     let mut payload = response.into_bytes();
     payload.push(b'\n');
 
     let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(2))];
     let mut control = SendAncillaryBuffer::new(&mut space);
-    let fds = [ns_fds.user.as_fd(), ns_fds.mnt.as_fd()];
+    let fds = [ns.user.as_fd(), ns.mnt.as_fd()];
     ensure!(
         control.push(SendAncillaryMessage::ScmRights(&fds)),
         "pushing ScmRights onto ancillary buffer"
@@ -429,6 +422,21 @@ fn send_namespace_fds(stream: &UnixStream, ns_fds: &NamespaceFds) -> Result<()> 
     let iov = [IoSlice::new(&payload)];
     sendmsg(stream, &iov, &mut control, SendFlags::empty()).wrap_err("sendmsg for NamespaceFds")?;
     Ok(())
+}
+
+/// Connect to the control socket and send a JSON request.
+///
+/// Opens a fresh `UnixStream`, writes the request as newline-delimited
+/// JSON, and shuts down the write half to signal end-of-request. Returns
+/// the connected stream for the caller to read the response.
+fn connect_and_send(socket_path: &Path, req: &impl Serialize) -> Result<UnixStream> {
+    let mut stream = UnixStream::connect(socket_path)
+        .wrap_err_with(|| format!("connecting to control socket: {}", socket_path.display()))?;
+
+    serde_json::to_writer(&mut stream, req).wrap_err("writing request")?;
+    stream.write_all(b"\n")?;
+    stream.shutdown(Shutdown::Write)?;
+    Ok(stream)
 }
 
 /// Send a control request and receive the response.
@@ -441,12 +449,7 @@ fn send_namespace_fds(stream: &UnixStream, ns_fds: &NamespaceFds) -> Result<()> 
 /// Accepts any `Serialize` type — core [`Request`] variants and plugin
 /// command payloads both work.
 pub fn send_request(socket_path: &Path, req: &impl Serialize) -> Result<Response> {
-    let mut stream = UnixStream::connect(socket_path)
-        .wrap_err_with(|| format!("connecting to control socket: {}", socket_path.display()))?;
-
-    serde_json::to_writer(&mut stream, req).wrap_err("writing request")?;
-    stream.write_all(b"\n")?;
-    stream.shutdown(Shutdown::Write)?;
+    let stream = connect_and_send(socket_path, req)?;
 
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
@@ -461,15 +464,10 @@ pub fn send_request(socket_path: &Path, req: &impl Serialize) -> Result<Response
 /// the control socket, sends [`Request::GetNamespaceFds`], and pulls
 /// the two fds out of the ancillary buffer on the response.
 ///
-/// The caller can `setns` directly from the returned [`NamespaceFds`]
+/// The caller can `setns` directly from the returned [`Namespace`]
 /// without needing to resolve the daemon's PID.
-pub fn recv_namespace_fds(socket_path: &Path) -> Result<NamespaceFds> {
-    let mut stream = UnixStream::connect(socket_path)
-        .wrap_err_with(|| format!("connecting to control socket: {}", socket_path.display()))?;
-
-    serde_json::to_writer(&mut stream, &Request::GetNamespaceFds).wrap_err("writing request")?;
-    stream.write_all(b"\n")?;
-    stream.shutdown(Shutdown::Write)?;
+pub fn recv_namespace_fds(socket_path: &Path) -> Result<Namespace> {
+    let stream = connect_and_send(socket_path, &Request::GetNamespaceFds)?;
 
     let mut iov_buf = [0u8; 256];
     let mut iov = [IoSliceMut::new(&mut iov_buf)];
@@ -499,7 +497,7 @@ pub fn recv_namespace_fds(socket_path: &Path) -> Result<NamespaceFds> {
     }
     let [user, mnt] =
         <[OwnedFd; 2]>::try_from(fds).map_err(|fds| eyre!("expected 2 fds in ancillary, got {}", fds.len()))?;
-    Ok(NamespaceFds { user, mnt })
+    Ok(Namespace { user, mnt })
 }
 
 /// Execute a script via the control socket. Returns stdout bytes.

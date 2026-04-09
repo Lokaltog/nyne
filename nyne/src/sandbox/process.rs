@@ -143,19 +143,31 @@ pub(super) fn exec(command: &[OsString]) -> Result<()> {
 /// statuses (stopped/continued) that can occur with job control. Returns
 /// the exit code directly, or `128 + signal` if the child was killed by
 /// a signal (following the shell convention).
+///
+/// Also handles two transient/edge-case errno values:
+/// - `EINTR`: signal interrupted the syscall — retries automatically.
+/// - `ECHILD`: child already reaped or never existed — returns exit code 1.
 pub(super) fn wait_for_exit(pid: Pid) -> Result<i32> {
     loop {
-        let result = waitpid(Some(pid), WaitOptions::empty()).wrap_err("waitpid")?;
-        // With no NOHANG, waitpid blocks and always returns Some.
-        let (_child, status) = result.ok_or_else(|| eyre!("waitpid returned None without NOHANG"))?;
-        if let Some(code) = status.exit_status() {
-            return Ok(code);
+        match waitpid(Some(pid), WaitOptions::empty()) {
+            Ok(Some((_, status))) => {
+                if let Some(code) = status.exit_status() {
+                    return Ok(code);
+                }
+                if let Some(sig) = status.terminating_signal() {
+                    warn!(signal = sig, "command killed by signal");
+                    return Ok(128 + sig);
+                }
+                debug!(?status, "ignoring non-terminal wait status");
+            }
+            Ok(None) => {}                   // Shouldn't happen without NOHANG.
+            Err(e) if e == Errno::INTR => {} // Signal interrupted — retry.
+            Err(e) if e == Errno::CHILD => {
+                warn!("child process disappeared unexpectedly");
+                return Ok(1);
+            }
+            Err(e) => return Err(e).wrap_err("waitpid"),
         }
-        if let Some(sig) = status.terminating_signal() {
-            warn!(signal = sig, "command killed by signal");
-            return Ok(128 + sig);
-        }
-        debug!(?status, "ignoring non-terminal wait status");
     }
 }
 
@@ -193,7 +205,6 @@ impl ChildGuard {
 /// `terminate`). Logs a warning when triggered, since drop-based cleanup
 /// indicates an abnormal code path.
 impl Drop for ChildGuard {
-    /// Cleans up resources.
     fn drop(&mut self) {
         if let Some(pid) = self.0.take() {
             warn!(pid = pid.as_raw_pid(), "child guard triggered (parent panic?)");
@@ -293,28 +304,8 @@ pub(super) fn run_init(command: &[OsString]) -> Result<i32> {
     // Wait specifically for the command child. Using Some(command_pid)
     // instead of None prevents accidentally reaping an orphaned process
     // (e.g., fish's background helpers) and missing the command exit.
-    let exit_code = loop {
-        match waitpid(Some(command_pid), WaitOptions::empty()) {
-            Ok(Some((_, status))) => {
-                if let Some(code) = status.exit_status() {
-                    debug!(code, "command exited");
-                    break code;
-                }
-                if let Some(sig) = status.terminating_signal() {
-                    warn!(signal = sig, "command killed by signal");
-                    break 128 + sig;
-                }
-                // Non-terminal status (stopped/continued) — keep waiting.
-            }
-            Ok(None) => {}                   // Shouldn't happen without NOHANG.
-            Err(e) if e == Errno::INTR => {} // Signal interrupted (if SA_RESTART wasn't set).
-            Err(e) if e == Errno::CHILD => {
-                warn!("command child disappeared unexpectedly");
-                break 1;
-            }
-            Err(e) => return Err(e).wrap_err("waitpid in init"),
-        }
-    };
+    let exit_code = wait_for_exit(command_pid).wrap_err("waiting for command in init")?;
+    debug!(exit_code, "command exited");
 
     // Drain orphaned zombies before exiting. Processes still running
     // (not yet zombies) are not reaped here — when PID 1 exits, the

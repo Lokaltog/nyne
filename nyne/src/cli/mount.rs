@@ -343,7 +343,7 @@ fn build_fuse_session(
     // daemon's PID (which breaks across sibling PID namespaces).
     // `daemon_main` has already called `unshare_user_mount`, so
     // `/proc/self/ns/{user,mnt}` point at the daemon's namespaces.
-    let ns_fds = Arc::new(sandbox::control::NamespaceFds {
+    let ns = Arc::new(sandbox::Namespace {
         user: procfs::self_ns_fd("user")?,
         mnt: procfs::self_ns_fd("mnt")?,
     });
@@ -356,7 +356,7 @@ fn build_fuse_session(
         Arc::clone(&activation_ctx),
         control_registry,
         Arc::clone(&chain),
-        ns_fds,
+        ns,
     );
     let control_server = Some(sandbox::control::start_server(control_socket_path, handlers)?);
 
@@ -364,6 +364,7 @@ fn build_fuse_session(
     let fs = FuseFilesystem::new(Arc::clone(&chain), fs_backend);
     let notifier_slot = Arc::clone(fs.notifier());
     let inodes = Arc::clone(fs.inodes());
+    let inline_writes = Arc::clone(fs.inline_writes());
 
     let mut fuse_config = fuser::Config::default();
     fuse_config.n_threads = Some(FUSE_THREADS);
@@ -381,6 +382,7 @@ fn build_fuse_session(
         chain,
         inodes,
         notifier: notifier_slot,
+        inline_writes,
     };
     let watcher = FsWatcher::new(&storage_root, watcher_backend)?;
 

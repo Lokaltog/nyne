@@ -1,0 +1,18 @@
+{% import "macros/hints" as hints %}
+{% if tool_name == "Grep" and pattern %}
+{{ hints.header_hint("faster alternatives to Grep.") }}
+
+Raw search:
+{{ hints.raw_search_alts("Grep", pattern) }}
+
+Symbol-level analysis via nyne VFS:
+{{ hints.vfs_analysis() }}
+{% elif tool_name == "Glob" and pattern %}
+{{ hints.header_hint("faster alternatives to Glob.") }}
+
+Raw file discovery:
+{{ hints.raw_search_alts("Glob", pattern) }}
+
+Structural navigation via nyne VFS:
+{{ hints.structural_nav() }}
+{% endif %}

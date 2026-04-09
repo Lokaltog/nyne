@@ -10,18 +10,6 @@
 | **Lines** | {{ total_lines }} |
 | **Tokens** | {{ total_bytes|tokens }} |
 
-## Access
-
-| Action | Path |
-|-|-|
-| Edit symbol at line N | `{{ filename }}@/symbols/at-line/N` (symlink → body, preferred for edits) |
-| Read symbol body by name | `Read {{ filename }}@/symbols/<Symbol>@/body.{{ ext }}` |
-| Symbol callers/deps/refs | `Read {{ filename }}@/symbols/<Symbol>@/CALLERS.md` |
-| LSP rename/actions | `ls {{ filename }}@/symbols/<Symbol>@/` |
-| Diagnostics | `Read {{ filename }}@/DIAGNOSTICS.md` |
-| Line range (escape hatch) | `cat {{ filename }}@/lines:M-N` (no prior read needed, not intercepted) |
-| Delete line range | `rm {{ filename }}@/lines:M-N` |
-
 ## Symbols
 
 {% include "syntax/symbol_table" %}

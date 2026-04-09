@@ -1,0 +1,10 @@
+{% import "macros/hints" as hints %}
+{% if kind in ["callers", "references"] %}
+{{ hints.header_hint("for symbol usage, use nyne's LSP-powered analysis instead of Grep.") }}
+
+{{ hints.vfs_analysis(sym=symbol) }}
+{% elif kind == "imports" %}
+{{ hints.header_hint("for import analysis, use nyne's LSP-powered slices.") }}
+
+{{ hints.imports_analysis(sym="Foo") }}
+{% endif %}

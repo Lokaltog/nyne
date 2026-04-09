@@ -1,5 +1,5 @@
 ---
-source: plugins/coding/src/syntax/tests.rs
+source: plugins/source/src/syntax/tests.rs
 assertion_line: 169
 expression: "super::fragment::find_fragment_of_kind(&result, &FragmentKind::Imports)"
 ---

@@ -9,8 +9,6 @@
 
 /// Session identifier generation and validation.
 mod id;
-pub mod state;
-
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
@@ -67,13 +65,15 @@ pub fn ensure_session_dir() -> Result<PathBuf> {
 /// environment so every nyne invocation inside the attach-chain agrees
 /// on the session directory — decoupling session scoping from any
 /// namespace identity that differs per attach.
-pub fn nested_dir(parent_id: &str) -> Result<PathBuf> { session_dir().map(|dir| dir.join(format!("{parent_id}.d"))) }
+pub fn nested_dir(parent_id: &str) -> Result<PathBuf> {
+    session_dir().map(|dir| dir.join(parent_id).with_extension("d"))
+}
 
 /// Session file path: `<session_dir>/<id>.json`.
-pub fn session_file(id: &str) -> Result<PathBuf> { session_dir().map(|dir| dir.join(format!("{id}.json"))) }
+pub fn session_file(id: &str) -> Result<PathBuf> { session_dir().map(|dir| dir.join(id).with_extension("json")) }
 
 /// Control socket path: `<session_dir>/<id>.sock`.
-pub fn control_socket(id: &str) -> Result<PathBuf> { session_dir().map(|dir| dir.join(format!("{id}.sock"))) }
+pub fn control_socket(id: &str) -> Result<PathBuf> { session_dir().map(|dir| dir.join(id).with_extension("sock")) }
 
 /// Write a session file for the given session ID and daemon PID.
 pub fn write(id: &SessionId, mount_path: &Path, daemon_pid: i32) -> Result<PathBuf> {
@@ -95,7 +95,7 @@ pub fn write(id: &SessionId, mount_path: &Path, daemon_pid: i32) -> Result<PathB
     Ok(path)
 }
 
-/// Read and validate a session file. Returns `None` for stale sessions
+/// Read and validate a session file. Returns `Err` for stale sessions
 /// (control socket missing), removing the stale file as a side effect.
 ///
 /// Uses the control socket's presence as the liveness signal rather
@@ -147,14 +147,13 @@ impl SessionRegistry {
 
         let mut sessions = Vec::new();
         for entry in fs::read_dir(&dir).wrap_err("reading session directory")? {
-            let entry = match entry {
-                Ok(e) => e,
+            let path = match entry {
+                Ok(e) => e.path(),
                 Err(e) => {
                     warn!(error = %e, "reading session dir entry");
                     continue;
                 }
             };
-            let path = entry.path();
             if path.extension().is_some_and(|ext| ext == "json")
                 && let Ok(info) = read(&path)
             {
@@ -183,17 +182,13 @@ impl SessionRegistry {
             return self.get(id).ok_or_else(|| eyre!("no active session with ID {id:?}"));
         }
 
-        match self.sessions.len() {
-            0 => Err(eyre!("no active nyne sessions")),
-            #[allow(clippy::indexing_slicing)] // len() == 1 guarantees [0] is valid
-            1 => Ok(&self.sessions[0]),
-            n => Err(eyre!(
-                "{n} active sessions — specify an ID.\nActive sessions: {}",
-                self.sessions
-                    .iter()
-                    .map(|s| s.id.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+        match self.sessions.as_slice() {
+            [] => Err(eyre!("no active nyne sessions")),
+            [single] => Ok(single),
+            sessions => Err(eyre!(
+                "{} active sessions — specify an ID.\nActive sessions: {}",
+                sessions.len(),
+                sessions.iter().map(|s| s.id.as_str()).collect::<Vec<_>>().join(", ")
             )),
         }
     }

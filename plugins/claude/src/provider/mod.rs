@@ -14,12 +14,14 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use nyne::router::{Next, Provider, Request, RouteTree};
-use nyne::templates::{HandleBuilder, TemplateEngine};
+use nyne::templates::TemplateEngine;
 use nyne_companion::{CompanionProvider, CompanionRequest};
 use nyne_visibility::{Visibility, VisibilityRequest};
 
 use crate::plugin::config::Config;
 
+/// Stable identifiers for nyne-injected Claude Code hook scripts.
+pub mod hook_id;
 /// Typed serde schemas for hook inputs and outputs.
 pub mod hook_schema;
 /// Claude Code hook implementations as script trait objects.
@@ -30,6 +32,8 @@ pub mod routes;
 mod settings;
 /// Skill definitions and template registration.
 mod skills;
+/// Shared template partials and macros registered into every engine.
+mod templates_shared;
 /// View types for settings, skills, and system prompt.
 pub mod views;
 
@@ -52,13 +56,8 @@ pub struct ClaudeProvider {
 }
 
 pub fn build_templates() -> Arc<TemplateEngine> {
-    let mut b = HandleBuilder::new();
+    let mut b = templates_shared::new_builder();
     register_skill_templates(&mut b);
-    b.register_partial("partials/nyne-vfs", include_str!("templates/partials/nyne-vfs.md.j2"));
-    b.register_partial(
-        "partials/nyne-vfs-agent",
-        include_str!("templates/partials/nyne-vfs-agent.md.j2"),
-    );
     b.register("claude/output-style", include_str!("templates/output-style.md.j2"));
     b.register("claude/system-prompt", include_str!("templates/system-prompt.md.j2"));
     b.register("claude/agent-nyne", include_str!("templates/agents/nyne.md.j2"));

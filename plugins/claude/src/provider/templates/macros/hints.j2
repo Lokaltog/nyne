@@ -1,0 +1,211 @@
+{#
+  Shared hint macros for VFS usage guidance.
+
+  These macros are the **single source of truth** for prose hints that
+  appear in system prompts, agent definitions, skill files, and
+  hook-generated context messages. Templates call these instead of
+  inlining the text — rewording in one place propagates everywhere.
+
+  Formatting rules (enforced by this file, not by the callers):
+
+  - Every hook emits a header macro (`header_blocked`, `header_hint`,
+    `header_review`, `header_diagnostics`) — no free-form prefixes.
+  - Command lists use `cmd(command, description)` — single 2-space
+    indent, single space em-dash separator, no padding alignment.
+  - No markdown emphasis (`**bold**`, `*italic*`) in output.
+  - No inline comment suffixes (`# note`) — use em-dash descriptions.
+
+  All macros accept placeholder defaults so they can be used without
+  arguments in agent / skill docs, or with concrete values from a
+  hook render context. All path fragments are produced by the
+  companion `macros/paths` module — never hand-write `@/…` here.
+#}
+
+{% import "macros/paths" as paths %}
+
+{#--
+  Section header macros — the only permitted hook output prefixes.
+
+  BLOCKED       — blocking pre-tool-use; the tool call was refused
+  HINT          — non-blocking guidance toward a better tool/path
+  REVIEW        — action-required prompt (question or checklist)
+  DIAGNOSTICS   — structured analysis report
+
+  Each renders `PREFIX: <summary>` on its own line. Callers follow the
+  header with an optional body paragraph, command list, and/or closing
+  imperative — see any hook template for the canonical layout.
+--#}
+{%- macro header_blocked(summary) -%}
+BLOCKED: {{ summary }}
+{%- endmacro -%}
+
+{%- macro header_hint(summary) -%}
+HINT: {{ summary }}
+{%- endmacro -%}
+
+{%- macro header_review(summary) -%}
+REVIEW: {{ summary }}
+{%- endmacro -%}
+
+{%- macro header_diagnostics(rel, count) -%}
+DIAGNOSTICS: {{ rel }} — {{ count }} finding{% if count != 1 %}s{% endif %}.
+{%- endmacro -%}
+
+{#--
+  Command list line — the sole permitted format for command suggestions.
+
+  Renders `  <command> — <description>` with single 2-space indent and
+  single space em-dash separator. No alignment padding (wasted tokens
+  in model-facing output).
+
+  The leading `{{ "  " }}` literal is intentional: Jinja's `{%- -%}` trim
+  markers strip ALL contiguous leading whitespace (not just newlines),
+  which would eat an indent written as plain text. An expression
+  substitution bypasses the trimmer.
+--#}
+{%- macro cmd(command, description) -%}
+{{ "  " }}{{ command }} — {{ description }}
+{%- endmacro -%}
+
+{#--
+  Read-symbol-first hint — the canonical redirect from a raw file Read.
+
+  Used by pre-tool-use file-access on `Read` of a raw source file, and
+  by post-tool-use bash-hints when `cat`/`head`/`tail`/`grep`/`wc`/`sed`
+  touches a file that has a VFS companion. Single source of truth for
+  "start at OVERVIEW.md, then read the symbol you need".
+--#}
+{%- macro read_via_overview(rel) -%}
+{{ cmd("Read " ~ paths.sym_overview(rel), "structure + token estimates, start here") }}
+{%- endmacro -%}
+
+{#--
+  Full "redirect to OVERVIEW.md" block — header + one path per hit.
+
+  The canonical shape for post-tool-use bash-hints: a per-binary
+  summary headline, then an OVERVIEW.md path per matched file. The
+  caller only picks the summary text — the loop, header, and path
+  formatting live here.
+--#}
+{%- macro overview_redirect(summary, rel_paths) -%}
+{{ header_hint(summary) }}
+
+{% for rel in rel_paths -%}
+{{ read_via_overview(rel) }}
+{% endfor -%}
+{%- endmacro -%}
+
+{#--
+  Edit-symbol-directly hint.
+
+  When the pre-tool-use file-access guard redirects an Edit on a raw
+  source file, this renders the canonical "edit the symbol body"
+  guidance. If `sym` is known (resolved by the hook), gives the direct
+  command; otherwise gives the two-step instruction (browse OVERVIEW
+  first). Always mentions the `at-line` escape hatch as a tertiary option.
+--#}
+{%- macro edit_via_sym(rel="<file>", sym=none, ext="<ext>") -%}
+{%- if sym -%}
+{{ cmd("Edit " ~ paths.sym(rel, sym, ext), "edit the symbol body directly") }}
+{{ cmd("Read " ~ paths.sym_overview(rel), "symbol table for surrounding context") }}
+{% else -%}
+{{ cmd("Read " ~ paths.sym_overview(rel), "symbol table with token estimates") }}
+{{ cmd("Edit " ~ paths.sym(rel, "<symbol>", ext), "single symbol body") }}
+{% endif -%}
+{{ cmd("Edit " ~ paths.at_line(rel, "<line>"), "symbol containing line N") }}
+{%- endmacro -%}
+
+{#--
+  Symbol analysis hint — CALLERS/DEPS/REFERENCES/IMPLEMENTATION.
+
+  The canonical blast-radius analysis for any symbol. Used by
+  pre-tool-use grep-symbol, post-tool-use cli-alts, and agent/skill
+  docs. Renders all four metadata paths — callers pick whichever
+  matches the question.
+--#}
+{%- macro vfs_analysis(file="<file>", sym="<Symbol>") -%}
+{{ cmd("Read " ~ paths.sym_md(file, sym, "CALLERS"), "who calls it (with code context)") }}
+{{ cmd("Read " ~ paths.sym_md(file, sym, "DEPS"), "what it calls") }}
+{{ cmd("Read " ~ paths.sym_md(file, sym, "REFERENCES"), "all usage sites") }}
+{{ cmd("Read " ~ paths.sym_md(file, sym, "IMPLEMENTATION"), "trait implementations") }}
+{%- endmacro -%}
+
+{#--
+  Import analysis hint — imports slice + REFERENCES for a symbol.
+
+  Used by the pre-tool-use grep-symbol script when the user's grep
+  pattern matches an import statement.
+--#}
+{%- macro imports_analysis(file="<file>", sym="Foo", ext="<ext>") -%}
+{{ cmd("Read " ~ paths.imports(file, ext), "read/write/append the import block directly") }}
+{{ cmd("Read " ~ paths.sym_md(file, sym, "REFERENCES"), "find everywhere " ~ sym ~ " is referenced") }}
+{%- endmacro -%}
+
+{#--
+  Structural navigation hint — directory OVERVIEW and symbol listing.
+--#}
+{%- macro structural_nav(dir="<dir>", file="<file>") -%}
+{{ cmd("Read " ~ paths.file_overview(dir), "aggregated view of all files and symbols") }}
+{{ cmd("ls " ~ file ~ "@/symbols/", "list all symbols in a file") }}
+{%- endmacro -%}
+
+{#--
+  Raw CLI search alternatives — `rg`/`ast-grep` for Grep, `fd` for Glob.
+
+  Used by post-tool-use cli-alts. Tool name dispatches to the right
+  alternative set; pattern is rendered into the command for copy-paste.
+--#}
+{%- macro raw_search_alts(tool, pattern) -%}
+{%- if tool == "Grep" -%}
+{{ cmd('rg "' ~ pattern ~ '"', "ripgrep, faster and already installed") }}
+{{ cmd("ast-grep -p '$PATTERN'", "structural AST-aware search") }}
+{%- elif tool == "Glob" -%}
+{{ cmd("fd '" ~ pattern ~ "'", "fast file finder (use -g for glob patterns, regex default)") }}
+{%- endif -%}
+{%- endmacro -%}
+
+{#--
+  OVERVIEW re-read reminder — used when a write reparsed the file and
+  symbol names may have shifted. Shared between vfs-reread and
+  post-tool-use-failure (symbol-renamed) hooks.
+--#}
+{%- macro overview_reread(rel) -%}
+{{ cmd("Read " ~ paths.sym_overview(rel), "refreshed symbol table") }}
+{%- endmacro -%}
+
+{#--
+  Escape hatch — force a second raw Read to bypass the file-access guard.
+--#}
+{%- macro escape_hatch_reread(rel) -%}
+Escape hatch: Read {{ rel }} again — the second read succeeds.
+{%- endmacro -%}
+
+{#--
+  SSOT/DRY reminder on significant edits.
+--#}
+{%- macro ssot_reminder(rel) -%}
+{{ header_review("SSOT/DRY check on " ~ rel ~ ".") }}
+
+Does this change duplicate logic, constants, or patterns that exist elsewhere in the codebase? If yes, stop and extract a shared abstraction before continuing.
+{%- endmacro -%}
+
+{#--
+  Canonical closing imperative for hint blocks that require follow-up
+  action. Shared between diagnostics and any future action-required hook.
+--#}
+{%- macro address_hints_closing() -%}
+Address all hints. If a fix requires a larger refactor, flag it to the user instead of silently skipping it.
+{%- endmacro -%}
+
+{#--
+  Batch edit staging hint — for multi-symbol changes.
+
+  Takes `rel` so the rendered paths are concrete and copy-pasteable.
+  Falls back to `<file>` placeholder for agent / skill docs.
+--#}
+{%- macro batch_edit_hint(rel="<file>") -%}
+Multi-symbol edits — stage a batch:
+{{ cmd("echo 'new body' >" ~ paths.edit_stage(rel, "Foo", "replace"), "stage a replacement") }}
+{{ cmd("echo 1 >" ~ paths.edit_stage(rel, "Bar", "delete"), "stage a deletion") }}
+{{ cmd("rm " ~ paths.edit_staged_diff(), "apply atomically, validated") }}
+{%- endmacro -%}

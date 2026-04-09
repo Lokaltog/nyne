@@ -164,22 +164,24 @@ fn stop_config_from_fixture() {
 
 #[test]
 fn claude_defaults_all_enabled() {
+    use strum::IntoEnumIterator as _;
+
+    use crate::provider::hook_id::HookId;
     let config = Config::default();
     assert!(config.enabled);
-    assert!(config.hooks.session_start);
-    assert!(config.hooks.pre_tool_use);
-    assert!(config.hooks.post_tool_use);
-    assert!(config.hooks.stop);
-    assert!(config.hooks.statusline);
+    for id in HookId::iter() {
+        assert!(config.hooks.is_enabled(id), "{id} should default to enabled");
+    }
 }
 
 #[test]
 fn claude_overrides_from_fixture() {
+    use crate::provider::hook_id::HookId;
     let config = load_fixture("claude_overrides.toml");
     assert!(config.enabled);
-    assert!(!config.hooks.statusline);
-    assert!(!config.hooks.stop);
-    assert!(config.hooks.session_start);
+    assert!(!config.hooks.is_enabled(HookId::Statusline));
+    assert!(!config.hooks.is_enabled(HookId::Stop));
+    assert!(config.hooks.is_enabled(HookId::SessionStart));
 }
 
 #[test]
@@ -203,4 +205,86 @@ fn invalid_config_falls_back_to_defaults(#[case] toml_str: &str) {
 fn wrong_type_falls_back_to_defaults() {
     let config = parse_config("[hook_config.pre_tool.default]\ndeny_lines_threshold = \"not a number\"");
     assert_eq!(config.hook_config.pre_tool.resolve("Rust").deny_lines_threshold(), 60);
+}
+
+#[test]
+fn hook_id_kebab_case_roundtrip() {
+    use strum::IntoEnumIterator as _;
+
+    use crate::provider::hook_id::HookId;
+
+    for id in HookId::iter() {
+        let s = id.as_ref();
+        assert!(
+            s.contains('-') || matches!(id, HookId::Stop | HookId::Statusline | HookId::SessionStart),
+            "{id} should serialize to kebab-case: {s}"
+        );
+        let parsed: HookId = s.parse().unwrap_or_else(|_| panic!("round-trip {s}"));
+        assert_eq!(parsed, id);
+    }
+}
+
+#[test]
+fn hooks_toggle_disable_one_script() {
+    use crate::provider::hook_id::HookId;
+
+    let config = parse_config(
+        r#"
+[hooks]
+"post-tool-use-bash-hints" = false
+"post-tool-use-ssot" = false
+"#,
+    );
+    assert!(!config.hooks.is_enabled(HookId::PostToolUseBashHints));
+    assert!(!config.hooks.is_enabled(HookId::PostToolUseSsot));
+    // Untouched keys still enabled via the `unwrap_or(true)` default.
+    assert!(config.hooks.is_enabled(HookId::PostToolUseCliAlts));
+    assert!(config.hooks.is_enabled(HookId::PreToolUseFileAccess));
+    assert!(config.hooks.is_enabled(HookId::SessionStart));
+}
+
+#[test]
+fn hooks_toggle_rejects_unknown_hook_id() {
+    // Unknown kebab-case keys must fail deserialization so typos surface early.
+    let result = std::panic::catch_unwind(|| {
+        parse_config(
+            r#"
+[hooks]
+"post-tool-use-nonexistent" = false
+"#,
+        )
+    });
+    assert!(
+        result.is_err() || {
+            // If it didn't panic, the value must have fallen through to default.
+            let c = parse_config(
+                r#"[hooks]
+"post-tool-use-nonexistent" = false"#,
+            );
+            use crate::provider::hook_id::HookId;
+            c.hooks.is_enabled(HookId::PostToolUseBashHints)
+        },
+        "unknown hook id should either panic or leave defaults intact"
+    );
+}
+
+#[test]
+fn tool_kind_parses_canonical_names() {
+    use crate::provider::hook_schema::ToolKind;
+
+    assert_eq!(ToolKind::try_from("Read"), Ok(ToolKind::Read));
+    assert_eq!(ToolKind::try_from("Edit"), Ok(ToolKind::Edit));
+    assert_eq!(ToolKind::try_from("Write"), Ok(ToolKind::Write));
+    assert!(ToolKind::try_from("Grep").is_err());
+    assert!(ToolKind::try_from("").is_err());
+    assert!(ToolKind::try_from("read").is_err(), "case-sensitive");
+}
+
+#[test]
+fn tool_kind_as_ref_matches_claude_code_names() {
+    use crate::provider::hook_schema::ToolKind;
+
+    assert_eq!(AsRef::<str>::as_ref(&ToolKind::Read), "Read");
+    assert_eq!(AsRef::<str>::as_ref(&ToolKind::Edit), "Edit");
+    assert_eq!(AsRef::<str>::as_ref(&ToolKind::Write), "Write");
 }

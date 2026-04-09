@@ -9,7 +9,7 @@ use crate::syntax::{SyntaxRegistry, resolve_conflicts};
 use crate::test_support::registry;
 
 /// Load a fixture file by language extension and name.
-fn load_fixture(name: &str) -> String { crate::test_support::load_fixture("syntax/view", name) }
+fn load_fixture(name: &str) -> String { nyne::load_fixture!("syntax/view", name) }
 
 /// Decompose a fixture file into a shared `DecomposedSource` for testing views.
 fn decompose_fixture(reg: &SyntaxRegistry, ext: &str, name: &str) -> Arc<DecomposedSource> {

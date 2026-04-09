@@ -1,9 +1,18 @@
+use std::ops::Range;
+use std::sync::Arc;
+
+#[cfg(feature = "lsp")]
+use nyne_lsp::DiagnosticRow;
+use nyne_source::DecomposedSource;
 use rstest::rstest;
 use serde_json::json;
 #[cfg(feature = "analysis")]
 use {super::analysis::filter_hints, nyne_analysis::HintView};
 
-use super::*;
+use super::super::util::changed_line_range;
+#[cfg(feature = "lsp")]
+use super::super::util::filter_diagnostics;
+use crate::provider::hook_schema::{EditToolInput, HookInput};
 
 // TODO: source_rel_path now requires a Chain for VFS path resolution.
 // VFS cases (edit_vfs, write_vfs, edit_nested_vfs, outside_root_vfs) need
@@ -46,6 +55,7 @@ fn hint(rule_id: &'static str, line_start: usize, line_end: usize) -> HintView {
     }
 }
 
+#[cfg(feature = "lsp")]
 /// Builds a `DiagnosticRow` fixture with the given line and message.
 fn diag(line: u32, message: &str) -> DiagnosticRow {
     DiagnosticRow {
@@ -134,6 +144,7 @@ fn filter_hints_cases(#[case] hints: Vec<HintView>, #[case] range: Option<Range<
     assert_eq!(result.len(), expected);
 }
 
+#[cfg(feature = "lsp")]
 /// Verifies that diagnostics are filtered to the given line range.
 #[rstest]
 #[case::no_range_passes_all(vec![diag(1, "a"), diag(99, "b")], None, 2)]

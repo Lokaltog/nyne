@@ -1,0 +1,50 @@
+{% import "macros/paths" as paths %}
+## Refactoring
+
+Diff files (code actions, renames) are applied by deleting them (`rm`). Preview with `cat`, apply with `rm`.
+
+```bash
+# LSP rename — immediate, project-wide, always use this instead of manual renames across files
+mv {{ paths.sym_dir("file." ~ ext, "old_name") }} {{ paths.sym_dir("file." ~ ext, "new_name") }}
+
+# Optional: Preview rename first, then apply
+cat {{ paths.sym_rename("file." ~ ext, "old_name", "new_name") }}
+rm {{ paths.sym_rename("file." ~ ext, "old_name", "new_name") }}
+
+# List available LSP code actions
+ls {{ paths.sym_actions("file." ~ ext, "process") }}
+
+# Preview a code action, then apply
+cat {{ paths.sym_action("file." ~ ext, "process", "01-fix") }}
+rm {{ paths.sym_action("file." ~ ext, "process", "01-fix") }}
+```
+
+## Extracting Symbols (Move to New File)
+
+To move symbols from one file to another (e.g., extracting helpers into a new module), use `cat` + `rmdir` — this preserves exact content (docstrings, attributes, etc.) and avoids reconstructing file contents manually.
+
+This workflow is significantly more token-efficient than reading full files and rewriting them with `Write` or `Edit` — symbol bodies are small, targeted slices, and `rmdir` + `echo >>` replace what would otherwise require reading and echoing back entire files.
+
+```bash
+# 1. Extract: cat symbol bodies into the new file
+cat {{ paths.sym("source." ~ ext, "Foo", ext) }} > new_module.{{ ext }}
+cat {{ paths.sym("source." ~ ext, "Bar", ext) }} >> new_module.{{ ext }}
+cat {{ paths.sym("source." ~ ext, "Baz", ext) }} >> new_module.{{ ext }}
+
+# 2. Remove originals from the source file
+rmdir {{ paths.sym_dir("source." ~ ext, "Foo") }}
+rmdir {{ paths.sym_dir("source." ~ ext, "Bar") }}
+rmdir {{ paths.sym_dir("source." ~ ext, "Baz") }}
+
+# 3. Add imports to the new file
+echo 'use std::sync::Arc;' >> {{ paths.imports("new_module." ~ ext, ext) }}
+
+# 4. Add module declaration to the source file's imports
+echo 'mod new_module;' >> {{ paths.imports("source." ~ ext, ext) }}
+```
+
+**Tips:**
+
+- Prefer `cat >> file` from VFS bodies over `Write` with manually composed content — it's cheaper and less error-prone.
+- **Symbol names change after removals.** After removing `Foo~Struct@/`, the disambiguator on `Foo~Impl@/` may drop — it becomes `Foo@/`. Re-run `ls symbols/` before removing further symbols if names were disambiguated.
+- Use `echo >> {{ paths.imports("<file>", ext) }}` to add imports rather than reading the whole file just to Edit the import block.

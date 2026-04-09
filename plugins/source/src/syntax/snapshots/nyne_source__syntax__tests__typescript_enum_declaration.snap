@@ -1,5 +1,5 @@
 ---
-source: plugins/coding/src/syntax/tests.rs
+source: plugins/source/src/syntax/tests.rs
 assertion_line: 125
 expression: "decompose(\"ts\", \"export enum Color {\\n    Red,\\n    Green,\\n    Blue,\\n}\\n\")"
 ---

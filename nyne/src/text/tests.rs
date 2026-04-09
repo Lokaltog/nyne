@@ -13,18 +13,12 @@ fn slugify_conversion(#[case] input: &str, #[case] max_len: usize, #[case] expec
     assert_eq!(slugify(input, max_len), expected);
 }
 
-/// Formats a known timestamp and verifies the expected date string.
-#[test]
-fn format_git_date_valid() {
-    // 2024-01-15 in UTC
-    let date = format_git_date(1_705_276_800);
-    assert_eq!(date, "2024-01-15");
-}
-
-/// Formats Unix epoch zero as `1970-01-01`.
-#[test]
-fn format_git_date_epoch() {
-    assert_eq!(format_git_date(0), "1970-01-01");
+/// Verifies git date formatting for known timestamps.
+#[rstest]
+#[case::epoch(0, "1970-01-01")]
+#[case::known_date(1_705_276_800, "2024-01-15")]
+fn format_git_date_cases(#[case] timestamp: i64, #[case] expected: &str) {
+    assert_eq!(format_git_date(timestamp), expected);
 }
 
 /// Unified diff correctly shows a replaced line.

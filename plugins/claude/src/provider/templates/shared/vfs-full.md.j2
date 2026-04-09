@@ -1,0 +1,28 @@
+{#
+  Composite VFS guidance — the canonical ordered composition of every
+  `shared/vfs-*` content block. System prompt, agent, and skill
+  templates include this single partial instead of re-listing all
+  blocks individually. Adding or reordering a block only requires an
+  edit here.
+#}
+<nyne-vfs>
+
+{% include "shared/vfs-intro" %}
+
+{% include "shared/vfs-rules" %}
+
+{% include "shared/vfs-paths-table" %}
+
+{% include "shared/vfs-reading" %}
+
+{% include "shared/vfs-writing" %}
+
+{% include "shared/vfs-batch-edit" %}
+
+{% include "shared/vfs-refactoring" %}
+
+{% include "shared/vfs-analysis-table" %}
+
+{% include "shared/vfs-symbol-naming" %}
+
+</nyne-vfs>

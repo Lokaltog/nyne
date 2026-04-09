@@ -45,22 +45,14 @@ fn unshare(flags: UnshareFlags, label: &str) -> Result<()> {
 /// Handles to a process's user and mount namespace fds.
 ///
 /// Opened from `/proc/<pid>/ns/{user,mnt}`. Used by the command child
-/// to enter the daemon's namespace before exec.
-pub(super) struct Namespace {
-    user_ns: OwnedFd,
-    mnt_ns: OwnedFd,
+/// to enter the daemon's namespace before exec. Also held by the daemon
+/// to send to attach clients via `SCM_RIGHTS`.
+pub struct Namespace {
+    pub user: OwnedFd,
+    pub mnt: OwnedFd,
 }
 
 impl Namespace {
-    /// Construct a `Namespace` directly from pre-opened namespace fds.
-    ///
-    /// The attach client receives the daemon's `user` and `mnt` namespace
-    /// fds from the daemon over the control socket via `SCM_RIGHTS` (see
-    /// [`control::recv_namespace_fds`](super::control::recv_namespace_fds)).
-    /// No PID resolution is involved, so this works across unrelated PID
-    /// namespaces (e.g. siblings under the host).
-    pub(super) const fn from_fds(user_ns: OwnedFd, mnt_ns: OwnedFd) -> Self { Self { user_ns, mnt_ns } }
-
     /// Enter this namespace (user first, then mount).
     ///
     /// Order matters: the user namespace must be entered before the mount
@@ -72,13 +64,13 @@ impl Namespace {
     pub(super) fn enter(self) -> Result<()> {
         debug!("entering user namespace");
         syscall_try!(
-            thread::move_into_link_name_space(self.user_ns.as_fd(), Some(LinkNameSpaceType::User)),
+            thread::move_into_link_name_space(self.user.as_fd(), Some(LinkNameSpaceType::User)),
             "setns(CLONE_NEWUSER)"
         );
 
         debug!("entering mount namespace");
         syscall_try!(
-            thread::move_into_link_name_space(self.mnt_ns.as_fd(), Some(LinkNameSpaceType::Mount)),
+            thread::move_into_link_name_space(self.mnt.as_fd(), Some(LinkNameSpaceType::Mount)),
             "setns(CLONE_NEWNS)"
         );
 

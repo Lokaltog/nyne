@@ -1,6 +1,6 @@
 use rstest::rstest;
 
-use super::*;
+use super::grep_symbol::{extract_first_identifier, extract_symbol_from_grep};
 
 /// Qualified paths return the last segment as a caller search.
 #[rstest]

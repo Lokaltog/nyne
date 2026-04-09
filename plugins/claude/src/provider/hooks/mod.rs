@@ -16,51 +16,43 @@ pub(in crate::provider) mod session_start;
 
 /// Statusline script -- renders ANSI status bar from JSON payload.
 mod statusline;
+
+mod util;
+
 /// Stop hook -- SSOT/DRY review after turns with code changes.
 pub(in crate::provider) mod stop;
+
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use nyne::router::{Chain, Op};
 use nyne::templates::{HandleBuilder, TemplateEngine};
 use nyne::{Script, ScriptEntry, provider_script_address};
-pub(in crate::provider) use post_tool_use::PostToolUse;
+use nyne_companion::{Companion, CompanionRequest};
+pub(in crate::provider) use post_tool_use::bash_hints::BashHints;
+pub(in crate::provider) use post_tool_use::cli_alts::CliAlts;
+pub(in crate::provider) use post_tool_use::diagnostics::Diagnostics;
+pub(in crate::provider) use post_tool_use::ssot::Ssot;
+pub(in crate::provider) use post_tool_use::vfs_reread::VfsReread;
 pub(in crate::provider) use post_tool_use_failure::PostToolUseFailure;
-pub(in crate::provider) use pre_tool_use::PreToolUse;
+pub(in crate::provider) use pre_tool_use::file_access::FileAccess;
+pub(in crate::provider) use pre_tool_use::grep_symbol::GrepSymbol;
 pub(in crate::provider) use session_start::SessionStart;
 pub(in crate::provider) use statusline::Statusline;
 pub(in crate::provider) use stop::Stop;
 
 use crate::plugin::config::Config;
+use crate::provider::hook_id::HookId;
 use crate::provider::hook_schema::HookOutput;
-use crate::provider::settings;
+use crate::provider::templates_shared;
 
-/// Shared partial template key for VFS hint macros.
+/// Create a [`HandleBuilder`] with shared template partials pre-registered.
 ///
-/// Registered once and included by multiple hook templates to render
-/// consistent VFS usage guidance across pre-tool-use and post-tool-use hooks.
-const PARTIAL_VFS_HINTS: &str = "hooks/vfs-hints";
-/// Shared partial template source for VFS hint macros.
-///
-/// Loaded at compile time from `templates/vfs-hints.j2`. The template
-/// provides Jinja macros for rendering VFS path suggestions and symbol
-/// navigation hints.
-const PARTIAL_VFS_HINTS_SRC: &str = include_str!("templates/vfs-hints.j2");
-/// Create a [`HandleBuilder`] with common hook partials pre-registered.
-///
-/// Wraps [`HandleBuilder::new()`] and registers the shared VFS hints
-/// partial that multiple hooks include. Hook constructors should call this
-/// instead of `HandleBuilder::new()` directly.
-pub(super) fn hook_builder() -> HandleBuilder {
-    let mut b = HandleBuilder::new();
-    // TODO: replace hardcoded VFS names with VfsPathRegistry (see TODO_DERIVE_PATHS.md)
-    let engine = b.engine_mut();
-    engine.add_global("FILE_OVERVIEW", "OVERVIEW.md");
-    engine.add_global("FILE_CALLERS", "CALLERS.md");
-    engine.add_global("FILE_DEPS", "DEPS.md");
-    engine.add_global("FILE_REFERENCES", "REFERENCES.md");
-    engine.add_global("FILE_IMPLEMENTATION", "IMPLEMENTATION.md");
-    b.register_partial(PARTIAL_VFS_HINTS, PARTIAL_VFS_HINTS_SRC);
-    b
-}
+/// Thin alias over [`templates_shared::new_builder`] — every hook
+/// script's `build_engine` calls this before registering its own
+/// template, so every hook template has access to the same macros and
+/// shared partials as the provider-side engine.
+pub(super) fn hook_builder() -> HandleBuilder { templates_shared::new_builder() }
 
 /// Render a hook template and wrap non-empty output as a context message.
 ///
@@ -72,20 +64,13 @@ pub(super) fn render_context(
     view: &impl serde::Serialize,
     event_name: &'static str,
 ) -> Vec<u8> {
-    let rendered = engine.render(tmpl, view);
-    let trimmed = rendered.trim();
+    let trimmed = engine.render(tmpl, view).trim().to_owned();
     if trimmed.is_empty() {
         HookOutput::empty()
     } else {
-        HookOutput::context(event_name, trimmed.to_owned()).to_bytes()
+        HookOutput::context(event_name, trimmed).to_bytes()
     }
 }
-use std::path::PathBuf;
-
-use nyne_companion::{Companion, CompanionRequest};
-
-/// Check whether a path points to a symbols OVERVIEW.md (`@/symbols/` … `OVERVIEW.md`).
-pub(super) fn is_symbols_overview(path: &str) -> bool { path.contains("@/symbols/") && path.ends_with("OVERVIEW.md") }
 
 /// Resolve a file path through the middleware chain to determine VFS status.
 ///
@@ -99,60 +84,173 @@ pub(super) fn resolve_companion(chain: &Chain, root: &str, abs_path: &str) -> Op
         .companion()
         .cloned()
 }
+/// Declarative registration entry for a Claude Code hook script.
+///
+/// Single source of truth for hook metadata — consumed by both
+/// [`script_entries`] (to dispatch `nyne exec`) and
+/// `provider::settings::injected_hooks` (to render the `settings.json`
+/// hooks array). Adding a new hook is one entry in [`HOOK_REGISTRY`].
+///
+/// `event`/`matcher` control Claude Code's event dispatch pre-filtering.
+/// `build` constructs the [`Script`] trait object on plugin activation.
+/// Both function pointers (no captures) — zero runtime cost beyond the
+/// indirect call.
+pub(in crate::provider) struct HookDef {
+    /// Stable identifier for this hook — SSOT used by the registry,
+    /// toggle map, and `nyne exec` script address.
+    pub id: HookId,
+    /// Claude Code event name (e.g. `"PreToolUse"`).
+    pub event: &'static str,
+    /// Pipe-separated tool/event matcher (e.g. `"Read|Edit|Write"`).
+    /// Empty string matches all events.
+    pub matcher: &'static str,
+    /// [`Script`] constructor invoked once per plugin activation.
+    pub build: fn(&Config) -> Arc<dyn Script>,
+}
+
+/// Declarative hook registry — the single source of truth for hook
+/// metadata and dispatch.
+///
+/// Every nyne-injected Claude Code hook script has one entry here,
+/// keyed by [`HookId`]. Consumed by:
+///
+/// - [`script_entries`] — builds the per-script [`Script`] trait objects
+///   registered on plugin activation.
+/// - `provider::settings::injected_hooks` — renders the `settings.json`
+///   `hooks` map (one event → many entries, accumulated per event).
+///
+/// Adding a new hook is one entry here (plus the corresponding
+/// [`HookId`] variant). No separate binding or sync test required.
+///
+/// Note: [`HookId::Statusline`] is omitted — it's wired via
+/// `statusLine.command` in `default_settings`, not through the hook
+/// array.
+pub(in crate::provider) const HOOK_REGISTRY: &[HookDef] = &[
+    HookDef {
+        id: HookId::PreToolUseFileAccess,
+        event: "PreToolUse",
+        matcher: "Read|Edit|Write",
+        build: |c| {
+            Arc::new(self::FileAccess {
+                engine: self::pre_tool_use::file_access::build_engine(),
+                config: c.hook_config.pre_tool.clone(),
+            })
+        },
+    },
+    HookDef {
+        id: HookId::PreToolUseGrepSymbol,
+        event: "PreToolUse",
+        matcher: "Grep",
+        build: |_| {
+            Arc::new(self::GrepSymbol {
+                engine: self::pre_tool_use::grep_symbol::build_engine(),
+            })
+        },
+    },
+    HookDef {
+        id: HookId::PostToolUseBashHints,
+        event: "PostToolUse",
+        matcher: "Bash",
+        build: |_| {
+            Arc::new(self::BashHints {
+                engine: self::post_tool_use::bash_hints::build_engine(),
+            })
+        },
+    },
+    HookDef {
+        id: HookId::PostToolUseCliAlts,
+        event: "PostToolUse",
+        matcher: "Grep|Glob",
+        build: |_| {
+            Arc::new(self::CliAlts {
+                engine: self::post_tool_use::cli_alts::build_engine(),
+            })
+        },
+    },
+    HookDef {
+        id: HookId::PostToolUseVfsReread,
+        event: "PostToolUse",
+        matcher: "Edit|Write",
+        build: |_| {
+            Arc::new(self::VfsReread {
+                engine: self::post_tool_use::vfs_reread::build_engine(),
+            })
+        },
+    },
+    HookDef {
+        id: HookId::PostToolUseSsot,
+        event: "PostToolUse",
+        matcher: "Edit|Write",
+        build: |_| {
+            Arc::new(self::Ssot {
+                engine: self::post_tool_use::ssot::build_engine(),
+            })
+        },
+    },
+    HookDef {
+        id: HookId::PostToolUseDiagnostics,
+        event: "PostToolUse",
+        matcher: "Edit|Write",
+        build: |_| {
+            Arc::new(self::Diagnostics {
+                engine: self::post_tool_use::diagnostics::build_engine(),
+            })
+        },
+    },
+    HookDef {
+        id: HookId::PostToolUseFailure,
+        event: "PostToolUseFailure",
+        matcher: "Edit",
+        build: |_| {
+            Arc::new(self::PostToolUseFailure {
+                engine: self::post_tool_use_failure::build_engine(),
+            })
+        },
+    },
+    HookDef {
+        id: HookId::SessionStart,
+        event: "SessionStart",
+        matcher: "startup|resume|clear",
+        build: |_| {
+            Arc::new(self::SessionStart {
+                engine: self::session_start::build_engine(),
+            })
+        },
+    },
+    HookDef {
+        id: HookId::Stop,
+        event: "Stop",
+        matcher: "",
+        build: |c| {
+            Arc::new(self::Stop {
+                engine: self::stop::build_engine(),
+                config: c.hook_config.stop.clone(),
+            })
+        },
+    },
+];
+
 /// Script entries registered by the source plugin on behalf of `ClaudeProvider`.
 ///
-/// Respects both the master `claude.enabled` toggle (returns empty if disabled)
-/// and individual `claude.hooks.*` toggles. Derives script names from
-/// [`HOOK_REGISTRY`](settings::HOOK_REGISTRY).
+/// Respects both the master `claude.enabled` toggle (returns empty if
+/// disabled) and individual per-script toggles in
+/// [`HooksToggle`](crate::plugin::config::HooksToggle). Derives every
+/// entry from [`HOOK_REGISTRY`] — one per enabled [`HookDef`] plus the
+/// statusline script (wired outside the hook event array).
 pub fn script_entries(config: &Config) -> Vec<ScriptEntry> {
-    use std::sync::Arc;
-
     if !config.enabled {
         return Vec::new();
     }
 
-    let t = &config.hooks;
-    let addr = |name| provider_script_address("claude", name);
-    let mut entries: Vec<ScriptEntry> = Vec::new();
+    let addr = |id: HookId| provider_script_address("claude", id.as_ref());
+    let mut entries: Vec<ScriptEntry> = HOOK_REGISTRY
+        .iter()
+        .filter(|def| config.hooks.is_enabled(def.id))
+        .map(|def| (addr(def.id), (def.build)(config)))
+        .collect();
 
-    for def in settings::HOOK_REGISTRY {
-        if !match def.script_name {
-            "pre-tool-use" => t.pre_tool_use,
-            "post-tool-use" => t.post_tool_use,
-            "post-tool-use-failure" => t.post_tool_use_failure,
-            "session-start" => t.session_start,
-            "stop" => t.stop,
-            _ => continue,
-        } {
-            continue;
-        }
-        let script: Arc<dyn Script> = match def.script_name {
-            "pre-tool-use" => Arc::new(self::PreToolUse {
-                engine: self::pre_tool_use::build_engine(),
-                config: config.hook_config.pre_tool.clone(),
-            }),
-            "post-tool-use" => Arc::new(self::PostToolUse {
-                engine: self::post_tool_use::build_engine(),
-            }),
-            "post-tool-use-failure" => Arc::new(self::PostToolUseFailure {
-                engine: self::post_tool_use_failure::build_engine(),
-            }),
-            "session-start" => Arc::new(self::SessionStart {
-                engine: self::session_start::build_engine(),
-            }),
-            "stop" => Arc::new(self::Stop {
-                engine: self::stop::build_engine(),
-                config: config.hook_config.stop.clone(),
-            }),
-            _ => unreachable!(),
-        };
-        entries.push((addr(def.script_name), script));
-    }
-
-    // Statusline is wired via `statusLine.command` in default_settings,
-    // not through the hooks array — registered separately.
-    if t.statusline {
-        entries.push((addr("statusline"), Arc::new(self::Statusline)));
+    if config.hooks.is_enabled(HookId::Statusline) {
+        entries.push((addr(HookId::Statusline), Arc::new(self::Statusline)));
     }
 
     entries

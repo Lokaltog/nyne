@@ -6,7 +6,7 @@ use serde::Serialize;
 use super::{TemplateContent, TemplateEngine, TemplateGlobals, TemplateHandle, TemplateView, serialize_view};
 
 /// Load a fixture template file.
-fn load_fixture(name: &str) -> String { crate::test_support::load_fixture("templates", name) }
+fn load_fixture(name: &str) -> String { crate::load_fixture!("templates", name) }
 
 /// Create an engine with a single fixture template loaded as "test".
 fn engine_with_fixture(name: &str) -> TemplateEngine {

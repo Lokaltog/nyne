@@ -4,7 +4,7 @@ use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
 use crate::test_support::registry;
 
 /// Load a fixture file from the syntax/injection test data directory.
-fn load_fixture(name: &str) -> String { crate::test_support::load_fixture("syntax/injection", name) }
+fn load_fixture(name: &str) -> String { nyne::load_fixture!("syntax/injection", name) }
 
 /// Decompose a `.j2` compound source through the registry.
 fn decompose_j2(inner_ext: &str, source: &str) -> DecomposedFile {

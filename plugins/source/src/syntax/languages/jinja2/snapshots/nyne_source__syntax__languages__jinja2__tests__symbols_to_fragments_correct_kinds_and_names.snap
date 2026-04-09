@@ -1,5 +1,5 @@
 ---
-source: plugins/coding/src/syntax/languages/jinja2/tests.rs
+source: plugins/source/src/syntax/languages/jinja2/tests.rs
 assertion_line: 295
 expression: fragments
 ---

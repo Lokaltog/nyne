@@ -1,5 +1,5 @@
 ---
-source: plugins/coding/src/syntax/tests.rs
+source: plugins/source/src/syntax/tests.rs
 assertion_line: 87
 expression: "decompose(\"ts\", source)"
 ---

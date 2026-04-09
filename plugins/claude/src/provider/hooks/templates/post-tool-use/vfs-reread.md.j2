@@ -1,0 +1,6 @@
+{% import "macros/hints" as hints %}
+{% if is_vfs and rel %}
+{{ hints.header_hint("writes re-parse " ~ rel ~ " — symbol names may have shifted.") }}
+
+{{ hints.overview_reread(rel) }}
+{% endif %}

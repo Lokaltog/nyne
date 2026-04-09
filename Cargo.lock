@@ -1649,6 +1649,7 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
+ "strum",
  "toml",
  "tracing",
  "tree-sitter",

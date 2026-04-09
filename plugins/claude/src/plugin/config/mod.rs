@@ -1,10 +1,13 @@
 //! Claude plugin configuration types and deserialization.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use nyne::config::PluginConfig;
-use nyne::toml_merge;
+use nyne::deep_merge;
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator as _;
+
+use crate::provider::hook_id::HookId;
 
 /// Top-level configuration for the claude plugin.
 ///
@@ -42,49 +45,30 @@ impl Default for Config {
 
 impl PluginConfig for Config {}
 
-/// Per-hook toggles for the Claude Code integration.
-#[allow(clippy::struct_excessive_bools)] // each bool is an independent feature toggle
-/// Per-hook toggle switches for Claude Code integration.
+/// Per-script toggle map for Claude Code hook integration.
 ///
-/// All hooks default to enabled; set individual fields to `false`
-/// to disable specific hooks while keeping the rest active.
+/// Keyed by [`HookId`] — the same stable identifier used by
+/// [`HOOK_REGISTRY`](crate::provider::hooks::HOOK_REGISTRY). All scripts
+/// default to enabled (see [`Default`]); users opt out by setting a
+/// specific script's entry to `false`:
+///
+/// ```toml
+/// [plugin.claude.hooks]
+/// post-tool-use-bash-hints = false
+/// post-tool-use-ssot = false
+/// ```
+///
+/// Unknown keys fail deserialization (`deny_unknown_fields`) so typos
+/// surface at load time rather than silently disabling nothing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct HooksToggle {
-    /// Session-start hook (mount status, project context).
-    pub session_start: bool,
-
-    /// Pre-tool-use hook (VFS hints, read guards).
-    pub pre_tool_use: bool,
-
-    /// Post-tool-use hook (diagnostics, SSOT checks).
-    pub post_tool_use: bool,
-
-    /// Post-tool-use failure hook (VFS rename ENOENT recovery).
-    pub post_tool_use_failure: bool,
-
-    /// Stop hook (SSOT/DRY review on session end).
-    pub stop: bool,
-
-    /// Statusline hook (live status bar updates).
-    pub statusline: bool,
-}
+#[serde(transparent)]
+pub struct HooksToggle(BTreeMap<HookId, bool>);
 
 /// Default implementation for `HooksToggle`.
 impl Default for HooksToggle {
-    /// Returns the default value.
-    fn default() -> Self {
-        Self {
-            session_start: true,
-            pre_tool_use: true,
-            post_tool_use: true,
-            post_tool_use_failure: true,
-            stop: true,
-            statusline: true,
-        }
-    }
+    /// All known [`HookId`] variants default to enabled.
+    fn default() -> Self { Self(HookId::iter().map(|id| (id, true)).collect()) }
 }
-
 /// Hook behavior configuration.
 ///
 /// ```toml
@@ -243,7 +227,7 @@ impl PreToolPolicy {
     #[expect(clippy::expect_used, reason = "serde roundtrip on a simple struct is infallible")]
     fn merge(self, over: &Self) -> Self {
         let mut base = toml::Value::try_from(&self).expect("PreToolPolicy serializes");
-        toml_merge::deep_merge(
+        deep_merge::deep_merge(
             &mut base,
             &toml::Value::try_from(over).expect("PreToolPolicy serializes"),
         );
@@ -259,3 +243,14 @@ impl PreToolPolicy {
 
 #[cfg(test)]
 mod tests;
+
+/// Accessors for [`HooksToggle`].
+impl HooksToggle {
+    /// Check whether a specific hook script is enabled.
+    ///
+    /// Unknown keys (scripts removed at a later date) default to `false`;
+    /// missing keys (not populated by the user's TOML) default to `true`
+    /// — populated by [`Default`] on load.
+    #[must_use]
+    pub fn is_enabled(&self, id: HookId) -> bool { self.0.get(&id).copied().unwrap_or(true) }
+}

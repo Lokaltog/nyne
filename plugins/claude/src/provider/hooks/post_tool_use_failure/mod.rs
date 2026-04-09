@@ -12,8 +12,8 @@ use nyne::{Script, ScriptContext};
 
 use crate::provider::hook_schema::{EditToolInput, HookInput, HookOutput};
 
-/// Template key for the post-tool-use-failure hook.
-const TMPL: &str = "claude/post-tool-use-failure";
+/// Template key for the symbol-renamed recovery hint.
+const TMPL: &str = "claude/post-tool-use-symbol-renamed";
 
 /// `PostToolUseFailure` hook script implementation.
 pub(in crate::provider) struct PostToolUseFailure {
@@ -22,7 +22,7 @@ pub(in crate::provider) struct PostToolUseFailure {
 
 pub(in crate::provider) fn build_engine() -> Arc<TemplateEngine> {
     let mut b = super::hook_builder();
-    b.register(TMPL, include_str!("../templates/post-tool-use-failure.md.j2"));
+    b.register(TMPL, include_str!("../templates/post-tool-use/symbol-renamed.md.j2"));
     b.finish()
 }
 

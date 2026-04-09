@@ -18,7 +18,7 @@ pub struct ProviderId(&'static str);
 impl ProviderId {
     pub const fn new(name: &'static str) -> Self { Self(name) }
 
-    pub const fn as_str(&self) -> &str { self.0 }
+    pub const fn as_str(&self) -> &'static str { self.0 }
 }
 
 impl fmt::Debug for ProviderId {
@@ -139,19 +139,6 @@ macro_rules! define_provider {
             fn terminal(&self) -> bool { $term }
         });
     };
-    // Deps + priority
-    ($ty:ty, $id:expr, deps: [$($dep:ty),* $(,)?], priority: $prio:expr $(,)?) => {
-        $crate::define_provider!(@impl $ty, $id, deps: [$($dep),*], extras: {
-            fn priority(&self) -> i32 { $prio }
-        });
-    };
-    // Deps + terminal
-    ($ty:ty, $id:expr, deps: [$($dep:ty),* $(,)?], terminal: $term:expr $(,)?) => {
-        $crate::define_provider!(@impl $ty, $id, deps: [$($dep),*], extras: {
-            fn terminal(&self) -> bool { $term }
-        });
-    };
-
     // Internal: generate consts + ProviderMeta impl
     (@impl $ty:ty, $id:expr, deps: [$($dep:ty),*], extras: { $($extra:tt)* }) => {
         impl $ty {

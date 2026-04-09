@@ -212,3 +212,29 @@ fn lazy_readable_propagates_errors() {
     let err = readable.read(&ctx).unwrap_err();
     assert!(err.to_string().contains("intentional failure"));
 }
+#[test]
+fn named_node_into_parts_roundtrip() {
+    let node = Node::file().with_readable(StubReadable::new("content"));
+    let named = node.named("test.txt");
+
+    assert_eq!(named.name(), "test.txt");
+    assert!(named.readable().is_some());
+
+    let (name, inner) = named.into_parts();
+    assert_eq!(name, "test.txt");
+    assert!(inner.readable().is_some());
+
+    // Reconstruct
+    let rebuilt = NamedNode::new(name, inner);
+    assert_eq!(rebuilt.name(), "test.txt");
+    assert!(rebuilt.readable().is_some());
+}
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "cannot merge capabilities across different node kinds")]
+fn merge_rejects_kind_mismatch() {
+    let mut file = Node::file().with_readable(StubReadable::new("a"));
+    let dir = Node::dir();
+    file.merge_capabilities_from(dir);
+}

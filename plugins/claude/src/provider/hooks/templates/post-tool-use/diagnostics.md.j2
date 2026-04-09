@@ -1,0 +1,23 @@
+{% import "macros/hints" as hints %}
+{% if analysis %}
+{{ hints.header_diagnostics(rel, analysis|length) }}
+
+{% for rule_id, group in analysis|groupby("rule_id") %}
+{% if group|length >= 3 %}
+{{ hints.cmd("[" ~ group[0].severity ~ "] " ~ rule_id, "×" ~ group|length ~ " occurrences") }}
+{% else %}
+{% for hint in group %}
+{{ hints.cmd("[" ~ hint.severity ~ "] " ~ hint.rule_id ~ " L" ~ hint.line_start ~ ("-" ~ hint.line_end if hint.line_end != hint.line_start else ""), hint.message) }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+{{ hints.address_hints_closing() }}
+{% endif %}
+{% if diagnostics %}
+{{ hints.header_diagnostics(rel, diagnostics|length) }} (LSP)
+
+{% for d in diagnostics %}
+{{ hints.cmd("[" ~ d.severity ~ "] L" ~ d.line ~ ":" ~ d.col, d.message ~ (" (" ~ d.code ~ ")" if d.code else "")) }}
+{% endfor %}
+{% endif %}

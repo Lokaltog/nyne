@@ -1,5 +1,5 @@
 ---
-source: plugins/coding/src/syntax/tests.rs
+source: plugins/source/src/syntax/tests.rs
 assertion_line: 120
 expression: "decompose(\"ts\", \"class Greeter {\\n    greet() { return 'hi'; }\\n}\\n\")"
 ---

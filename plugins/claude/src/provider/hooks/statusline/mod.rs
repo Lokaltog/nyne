@@ -4,8 +4,8 @@
 mod payload;
 /// ANSI statusline rendering segments.
 mod render;
-#[cfg(test)]
 /// Statusline rendering tests.
+#[cfg(test)]
 mod tests;
 
 use color_eyre::eyre::Result;

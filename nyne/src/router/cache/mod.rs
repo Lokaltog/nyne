@@ -12,8 +12,6 @@ struct CacheEntry<V> {
     value: V,
 }
 
-type Store<K, V> = HashMap<K, CacheEntry<V>>;
-
 /// A generation-aware concurrent cache.
 ///
 /// Entries are tagged with the generation they were computed at. Lookups
@@ -21,7 +19,7 @@ type Store<K, V> = HashMap<K, CacheEntry<V>>;
 /// Uses `RwLock<HashMap>` (not `DashMap`) to avoid reentrancy deadlocks
 /// in FUSE contexts.
 pub struct GenCache<K, V> {
-    store: RwLock<Store<K, V>>,
+    store: RwLock<HashMap<K, CacheEntry<V>>>,
     generations: Arc<GenerationMap>,
 }
 

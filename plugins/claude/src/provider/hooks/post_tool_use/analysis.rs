@@ -4,12 +4,15 @@
 //! `Engine`, etc.) and only exist when the `analysis` feature is enabled.
 //! The public entry point is [`run_analysis`], re-exported into the parent module.
 
+use std::ops::Range;
 use std::path::Path;
+use std::sync::Arc;
 
+use nyne::ScriptContext;
 use nyne_analysis::{AnalysisContextExt as _, HintView};
-use nyne_source::SourceContextExt as _;
+use nyne_source::{DecomposedSource, SourceContextExt as _};
 
-use super::{Arc, DecomposedSource, HookInput, Range, ScriptContext, changed_line_range, source_rel_path};
+use super::super::util::changed_line_range;
 use crate::provider::hook_schema::EditToolInput;
 
 /// Per-file analysis output: hints plus the decomposed source for change-range filtering.
@@ -18,28 +21,18 @@ struct FileAnalysis {
     decomposed: Option<Arc<DecomposedSource>>,
 }
 
-/// Run syntax analysis on the file targeted by an Edit/Write tool call.
+/// Run syntax analysis on a pre-resolved source file path.
 ///
 /// Returns hints and the decomposed source (used by the caller to compute
-/// the changed line range for filtering). Returns empty hints for non-file
-/// tools or files without tree-sitter support.
-fn run_analysis_for_tool(
-    ctx: &ScriptContext<'_>,
-    edit_input: Option<&EditToolInput>,
-    input: &HookInput,
-    tool_name: &str,
-    root: &str,
-) -> FileAnalysis {
+/// the changed line range for filtering). Returns empty for files without
+/// tree-sitter support.
+fn run_analysis_for_tool(ctx: &ScriptContext<'_>, rel: &str) -> FileAnalysis {
     let empty = FileAnalysis {
         hints: Vec::new(),
         decomposed: None,
     };
 
-    let Some(rel) = source_rel_path(edit_input, input, tool_name, root, ctx.chain()) else {
-        return empty;
-    };
-
-    let rel_path = Path::new(&rel);
+    let rel_path = Path::new(rel);
     let Some(cache) = ctx.activation().decomposition_cache() else {
         return empty;
     };
@@ -92,15 +85,13 @@ pub(super) fn filter_hints(hints: Vec<HintView>, changed: Option<&Range<usize>>)
 /// Run analysis and compute filtered hints plus the changed line range.
 ///
 /// When the `analysis` feature is disabled, a stub returning empty defaults
-/// is used instead (see `mod.rs`).
+/// is used instead (see `diagnostics.rs`).
 pub(super) fn run_analysis(
     ctx: &ScriptContext<'_>,
     edit_input: Option<&EditToolInput>,
-    input: &HookInput,
-    tool_name: &str,
-    root: &str,
+    rel: &str,
 ) -> (Vec<HintView>, Option<Range<usize>>) {
-    let result = run_analysis_for_tool(ctx, edit_input, input, tool_name, root);
+    let result = run_analysis_for_tool(ctx, rel);
     let changed = result
         .decomposed
         .as_deref()

@@ -22,6 +22,7 @@ impl FuseFilesystem {
         let parent = u64::from(parent);
         let dir_path = ensure_dir_path!(self, parent, reply);
         let name = name.to_string_lossy();
+        let process = self.process_from(req);
         debug!(target: "nyne::fuse", parent, name = %name, "create");
 
         if !self.is_writable_dir(parent, req) {
@@ -32,12 +33,12 @@ impl FuseFilesystem {
         let path = dir_path.join(name.as_ref());
         fuse_try!(
             reply,
-            self.dispatch_path_op(&path, |name| Op::Create { name }, Some(self.process_from(req))),
+            self.dispatch_path_op(&path, |name| Op::Create { name }, Some(process.clone())),
             parent,
             "create failed"
         );
 
-        match self.resolve_inode(&dir_path, &name, parent, Some(self.process_from(req))) {
+        match self.resolve_inode(&dir_path, &name, parent, Some(process)) {
             Ok(Some((ino, node))) => {
                 let fh = self.handles.open(ino, Arc::from([]), flags);
                 let (attr, ttl) = self.node_attr(ino, &node, req);
@@ -52,6 +53,7 @@ impl FuseFilesystem {
         let parent = u64::from(parent);
         let dir_path = ensure_dir_path!(self, parent, reply);
         let name = name.to_string_lossy();
+        let process = self.process_from(req);
         debug!(target: "nyne::fuse", parent, name = %name, "mkdir");
 
         if !self.is_writable_dir(parent, req) {
@@ -62,12 +64,12 @@ impl FuseFilesystem {
         let path = dir_path.join(name.as_ref());
         fuse_try!(
             reply,
-            self.dispatch_path_op(&path, |name| Op::Mkdir { name }, Some(self.process_from(req))),
+            self.dispatch_path_op(&path, |name| Op::Mkdir { name }, Some(process.clone())),
             parent,
             "mkdir failed"
         );
 
-        match self.resolve_inode(&dir_path, &name, parent, Some(self.process_from(req))) {
+        match self.resolve_inode(&dir_path, &name, parent, Some(process)) {
             Ok(Some((ino, node))) => {
                 let (attr, ttl) = self.node_attr(ino, &node, req);
                 reply.entry(&ttl, &attr, GENERATION);
@@ -131,6 +133,7 @@ impl FuseFilesystem {
         let newparent_ino = u64::from(newparent);
         let name = name.to_string_lossy();
         let newname = newname.to_string_lossy();
+        let process = self.process_from(req);
         debug!(target: "nyne::fuse", parent, name = %name, newparent_ino, newname = %newname, "rename");
 
         let src_dir = ensure_dir_path!(self, parent, reply);
@@ -144,7 +147,7 @@ impl FuseFilesystem {
         // different parents, same entry name, target is a direct child of
         // source's parent — and rewrite to the intended rename.
         let dst = if parent != newparent_ino && name == newname && dst_dir.starts_with(&src_dir) {
-            src_dir.join(dst_dir.file_name().unwrap_or(newname.as_ref().as_ref()))
+            src_dir.join(dst_dir.file_name().unwrap_or_else(|| newname.as_ref().as_ref()))
         } else {
             dst_dir.join(newname.as_ref())
         };
@@ -172,7 +175,7 @@ impl FuseFilesystem {
         }
         fuse_try!(
             reply,
-            self.dispatch_rename_op(&src, &dst, Some(self.process_from(req))),
+            self.dispatch_rename_op(&src, &dst, Some(process)),
             parent,
             "rename failed"
         );

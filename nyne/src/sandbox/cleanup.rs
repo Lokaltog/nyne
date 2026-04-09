@@ -19,7 +19,7 @@ use std::path::Path;
 use rustix::process::Pid;
 
 use super::paths::{self, ProcState};
-use crate::session::state::is_pid_alive;
+use crate::process::is_pid_alive;
 
 /// Remove per-process state trees belonging to dead processes.
 ///
