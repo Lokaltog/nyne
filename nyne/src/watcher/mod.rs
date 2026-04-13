@@ -154,24 +154,11 @@ impl EventLoop {
             }
         }
 
-        let now = Instant::now();
-        let mut writes = self
-            .backend
-            .inline_writes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        evict_expired_inline_writes(&mut writes, now);
-
         for path in &event.paths {
             let Some(rel) = path.strip_root(&self.watch_root) else {
                 continue;
             };
-            let rel = rel.to_path_buf();
-            if writes.remove(&rel).is_some() {
-                trace!(path = %rel.display(), "watcher: suppressed fsnotify echo of inline write");
-                continue;
-            }
-            pending.insert(rel);
+            pending.insert(rel.to_path_buf());
         }
     }
 
@@ -179,7 +166,36 @@ impl EventLoop {
         if pending.is_empty() {
             return;
         }
-        let paths: Vec<PathBuf> = mem::take(pending).into_iter().collect();
+
+        // Apply inline-write suppression at flush time, not on raw event arrival.
+        //
+        // Checking at the raw-event site races the FUSE write path: `fs::write`
+        // fires the inotify event before `FuseFilesystem::notify_change` has
+        // populated `inline_writes`, so a fast watcher thread can observe the
+        // event with an empty suppression map and forward it as a genuine
+        // external write. The delayed second kernel-cache invalidation that
+        // follows consistently corrupts rustc's incremental on-disk cache
+        // during `cargo clippy --fix` — see the docstring on
+        // `crate::fuse::InlineWrites` for the full story.
+        //
+        // Deferring the check until flush time closes the race: by the time
+        // this runs, `DEBOUNCE_TIMEOUT` has elapsed since the last event,
+        // which is orders of magnitude larger than the producer's
+        // insert-after-write latency. The entry is guaranteed to be visible
+        // if the write went through the VFS.
+        let now = Instant::now();
+        let mut writes = self
+            .backend
+            .inline_writes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        evict_expired_inline_writes(&mut writes, now);
+        let paths = drain_pending_with_suppression(pending, &mut writes);
+        drop(writes);
+
+        if paths.is_empty() {
+            return;
+        }
         trace!(count = paths.len(), "flushing debounced filesystem changes");
 
         if let Some(notifier) = self.backend.notifier.get() {
@@ -242,6 +258,30 @@ const fn is_relevant_event(kind: EventKind) -> bool {
 /// without a background sweeper thread.
 fn evict_expired_inline_writes(writes: &mut HashMap<PathBuf, Instant>, now: Instant) {
     writes.retain(|_, stamp| now.duration_since(*stamp) < INLINE_WRITE_SUPPRESSION_TTL);
+}
+/// Drain `pending` into a `Vec`, filtering out any paths that match an
+/// entry in the inline-write suppression map. Matched entries are removed
+/// from `writes` so each inline write suppresses at most one fsnotify echo.
+///
+/// Pure helper extracted from [`EventLoop::flush`] so the flush-time
+/// suppression logic can be unit-tested without spinning up a real
+/// filesystem watcher. See the comment in [`EventLoop::flush`] for why
+/// suppression is applied at flush time rather than on raw event arrival.
+fn drain_pending_with_suppression(
+    pending: &mut HashSet<PathBuf>,
+    writes: &mut HashMap<PathBuf, Instant>,
+) -> Vec<PathBuf> {
+    mem::take(pending)
+        .into_iter()
+        .filter(|rel| {
+            if writes.remove(rel).is_some() {
+                trace!(path = %rel.display(), "watcher: suppressed fsnotify echo of inline write");
+                false
+            } else {
+                true
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
