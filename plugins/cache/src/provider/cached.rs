@@ -13,17 +13,21 @@ use nyne_companion::CompanionRequest;
 ///   expires (generation-based invalidation evicts the whole entry).
 /// - **TTL > 0**: caches with a timestamp, re-reads from inner when expired.
 ///
+/// Nodes with `CachePolicy::with_ttl(Duration::ZERO)` opt out of caching
+/// entirely and are never wrapped — see [`wrap_readable`].
+///
 /// Shared via `Arc` across cache clones — all lookups of the same node see
 /// the same cached content.
 pub(super) struct CachedReadable {
     pub(in crate::provider) inner: Arc<dyn Readable>,
     pub(in crate::provider) persistent: OnceLock<Arc<[u8]>>,
     pub(in crate::provider) timed: Mutex<Option<(Instant, Arc<[u8]>)>>,
-    pub(in crate::provider) ttl: Duration,
+    /// `None` → persistent (`OnceLock`); `Some(d)` → timed cache with TTL `d`.
+    pub(in crate::provider) ttl: Option<Duration>,
 }
 impl Readable for CachedReadable {
     fn read(&self, ctx: &ReadContext<'_>) -> Result<Vec<u8>> {
-        if self.ttl == Duration::ZERO {
+        let Some(ttl) = self.ttl else {
             // Persistent mode — cache forever via OnceLock.
             if let Some(content) = self.persistent.get() {
                 return Ok(content.to_vec());
@@ -33,11 +37,11 @@ impl Readable for CachedReadable {
             // Race is benign: both values are correct, second init is ignored.
             let _ = self.persistent.set(Arc::clone(&arc));
             return Ok(content);
-        }
+        };
 
         // TTL mode — check expiry, re-read when stale.
         if let Some((cached_at, ref content)) = *self.timed.lock().unwrap_or_else(PoisonError::into_inner)
-            && cached_at.elapsed() < self.ttl
+            && cached_at.elapsed() < ttl
         {
             return Ok(content.to_vec());
         }
@@ -48,7 +52,7 @@ impl Readable for CachedReadable {
     }
 
     fn size(&self) -> Option<u64> {
-        if self.ttl == Duration::ZERO {
+        if self.ttl.is_none() {
             self.persistent.get().map(|c| c.len() as u64)
         } else {
             self.timed
@@ -67,14 +71,21 @@ impl Readable for CachedReadable {
 /// - **No policy** → persistent cache (generation-based invalidation only).
 /// - **`persistent()`** (ttl = None) → same as no policy.
 /// - **`with_ttl(d)`** where `d > 0` → content cached for `d`, then re-read.
+/// - **`with_ttl(Duration::ZERO)`** → opt out of caching; node is **not** wrapped.
 ///
 /// Skipped when the node has a `backing_path` (FUSE reads from the real file).
 pub(super) fn wrap_readable(node: &mut NamedNode) {
     if node.readable().is_some_and(|r| r.backing_path().is_some()) {
         return;
     }
-    // Read policy before take_readable borrows node mutably.
-    let ttl = node.cache_policy().and_then(|p| p.ttl).unwrap_or(Duration::ZERO);
+    // Three states, distinguished by `Option<Duration>`:
+    //   `Some(d)` where `d.is_zero()` → caller opted out; never wrap.
+    //   `Some(d)` where `d > 0`       → timed cache with TTL `d`.
+    //   `None`                         → persistent cache (no policy / `persistent()`).
+    let ttl: Option<Duration> = match node.cache_policy().and_then(|p| p.ttl) {
+        Some(d) if d.is_zero() => return,
+        explicit => explicit,
+    };
     if let Some(inner) = node.take_readable() {
         node.set_readable(CachedReadable {
             inner,

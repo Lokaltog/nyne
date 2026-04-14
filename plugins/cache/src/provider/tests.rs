@@ -9,16 +9,20 @@ use super::cached::{CachedReadable, wrap_readable};
 
 struct CountingReadable {
     content: Vec<u8>,
-    call_count: AtomicU32,
+    call_count: Arc<AtomicU32>,
 }
 
 impl CountingReadable {
     fn new(content: &[u8]) -> Self {
         Self {
             content: content.to_vec(),
-            call_count: AtomicU32::new(0),
+            call_count: Arc::new(AtomicU32::new(0)),
         }
     }
+
+    /// Clone the shared call counter so a test can observe it after the
+    /// `CountingReadable` is moved into a node.
+    fn counter(&self) -> Arc<AtomicU32> { Arc::clone(&self.call_count) }
 
     fn calls(&self) -> u32 { self.call_count.load(Ordering::Relaxed) }
 }
@@ -45,7 +49,8 @@ fn cached_readable_returns_correct_size_after_read() {
         inner: inner.clone(),
         persistent: std::sync::OnceLock::new(),
         timed: std::sync::Mutex::new(None),
-        ttl: std::time::Duration::ZERO,
+        // None → persistent mode (matches no-policy / `CachePolicy::persistent()`).
+        ttl: None,
     };
 
     // Before any read, size is unknown.
@@ -65,14 +70,16 @@ fn cached_readable_returns_correct_size_after_read() {
 
 #[test]
 fn cached_readable_delegates_backing_path() {
-    let inner = Arc::new(CountingReadable::new(b""));
-    let cached = CachedReadable {
-        inner,
-        persistent: std::sync::OnceLock::new(),
-        timed: std::sync::Mutex::new(None),
-        ttl: std::time::Duration::ZERO,
-    };
-    assert_eq!(cached.backing_path(), None);
+    assert_eq!(
+        CachedReadable {
+            inner: Arc::new(CountingReadable::new(b"")),
+            persistent: std::sync::OnceLock::new(),
+            timed: std::sync::Mutex::new(None),
+            ttl: None,
+        }
+        .backing_path(),
+        None
+    );
 }
 
 #[test]
@@ -181,5 +188,40 @@ fn on_change_bumps_parent_generation() {
         generations.get(parent) > 0,
         "parent generation not bumped — lookup cache entries keyed on the \
          parent would remain stale after external modifications to children"
+    );
+}
+
+#[test]
+fn wrap_readable_skips_zero_ttl_opt_out() {
+    use std::time::Duration;
+
+    use nyne::router::CachePolicy;
+
+    // CachePolicy::with_ttl(Duration::ZERO) is the explicit opt-out signal:
+    // the readable must NOT be wrapped, so consecutive reads see the live
+    // inner state. Regression for the bug where a frozen "No changes." was
+    // returned from staged.diff after the first read.
+    let counting = CountingReadable::new(b"v1");
+    let calls = counting.counter();
+    let mut node = NamedNode::new(
+        "test",
+        nyne::router::Node::file()
+            .with_readable(counting)
+            .with_cache_policy(CachePolicy::with_ttl(Duration::ZERO)),
+    );
+
+    wrap_readable(&mut node);
+
+    for _ in 0..3 {
+        node.readable()
+            .expect("readable present after wrap_readable")
+            .read(&dummy_ctx())
+            .expect("inner readable read must succeed");
+    }
+
+    assert_eq!(
+        calls.load(Ordering::Relaxed),
+        3,
+        "zero-TTL CachePolicy must opt out of caching — every read must hit the inner readable",
     );
 }
