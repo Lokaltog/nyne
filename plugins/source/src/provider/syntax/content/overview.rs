@@ -7,6 +7,7 @@
 use std::path::Path;
 
 use color_eyre::eyre::Result;
+use crop::Rope;
 use minijinja::value::Value;
 use nyne::templates::{TemplateEngine, TemplateView};
 
@@ -76,7 +77,7 @@ impl TemplateView for FileOverviewContent {
     /// Render the file-level overview with doc text and symbol table.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
-        let total_lines = shared.source.lines().count();
+        let total_lines = Rope::from(shared.source.as_str()).line_len();
         let total_bytes = shared.source.len();
         let ext = Path::new(&self.filename)
             .extension()
