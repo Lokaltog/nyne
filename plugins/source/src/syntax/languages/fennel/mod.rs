@@ -7,21 +7,14 @@ struct FennelLanguage;
 
 /// [`LanguageSpec`] implementation for Fennel.
 impl LanguageSpec for FennelLanguage {
-    /// Conflict resolution strategy for Fennel symbols.
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
-    /// Tree-sitter node kind for Fennel doc comments.
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
     /// Comment prefix patterns for Fennel doc comments.
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &[";"];
-    /// File extensions for Fennel.
     const EXTENSIONS: &'static [&'static str] = &["fnl"];
-    /// Tree-sitter node kinds for Fennel import declarations.
     const IMPORT_KINDS: &'static [&'static str] = &[];
-    /// Language name identifier.
     const NAME: &'static str = "Fennel";
-    /// Tree-sitter node kinds that support recursive decomposition in Fennel.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
-    /// Splice mode for Fennel source editing.
     const SPLICE_MODE: SpliceMode = SpliceMode::Byte;
 
     /// Returns the tree-sitter grammar for Fennel.
@@ -37,7 +30,6 @@ impl LanguageSpec for FennelLanguage {
     /// Strips doc comment markers from Fennel source.
     fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &[";;;", ";;", ";"]) }
 
-    /// Wraps text in Fennel doc comment syntax.
     fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, ";;", ";; ") }
 }
 
@@ -47,58 +39,54 @@ impl LanguageSpec for FennelLanguage {
 /// `macro_form`) are extracted as symbols.
 fn collect_fennel_fragments(node: TsNode<'_>, fragments: &mut Vec<Fragment>, parent_name: Option<&str>) {
     for child in node.children() {
-        match child.kind() {
-            "fn_form" | "lambda_form" => {
-                fragments.push(build_fn_fragment(child, parent_name));
+        let (kind, name) = match child.kind() {
+            "fn_form" | "lambda_form" => (
+                SymbolKind::Function,
+                fennel_form_name(child, &["symbol", "multi_symbol"], "anonymous"),
+            ),
+            "local_form" | "var_form" if !is_require_binding(child) => {
+                let Some(name) = extract_binding_name(child) else {
+                    continue;
+                };
+                (SymbolKind::Variable, name)
             }
-            "local_form" | "var_form" if !is_require_binding(child) =>
-                if let Some(frag) = build_binding_fragment(child, parent_name) {
-                    fragments.push(frag);
-                },
-            "macro_form" => {
-                fragments.push(build_macro_fragment(child, parent_name));
-            }
-            // Recurse into structural containers.
+            "macro_form" => (SymbolKind::Macro, fennel_form_name(child, &["symbol"], "unknown")),
             "program" => {
                 collect_fennel_fragments(child, fragments, parent_name);
+                continue;
             }
-            _ => {}
-        }
+            _ => continue,
+        };
+        let doc_range = FennelLanguage::extract_doc_range(child);
+        fragments.push(build_simple_fragment(child, name, kind, doc_range, parent_name));
     }
 }
 
-/// Extract the function name from a \``fn_form`\` or \``lambda_form`\` node.
+/// Find the first post-keyword named child matching any of `name_kinds`.
 ///
-/// The name is the first \`symbol\` or \``multi_symbol`\` child after the keyword.
-fn extract_fn_name(node: TsNode<'_>) -> String {
+/// Fennel forms start with a keyword symbol (`fn`, `lambda`, `macro`, …).
+/// This helper skips the keyword, then scans for the first child with a
+/// matching kind and returns its text. Returns `default` if no match is
+/// found, or if `sequence_arguments` appears before a match (indicating an
+/// anonymous form).
+fn fennel_form_name(node: TsNode<'_>, name_kinds: &[&str], default: &str) -> String {
     let mut past_keyword = false;
     for child in node.children() {
         if child.kind() == "symbol" && !past_keyword {
-            // First symbol is the keyword ("fn", "lambda") — skip it.
             past_keyword = true;
             continue;
         }
-        if past_keyword && (child.kind() == "symbol" || child.kind() == "multi_symbol") {
+        if !past_keyword {
+            continue;
+        }
+        if name_kinds.contains(&child.kind()) {
             return child.text().to_owned();
         }
-        // If we hit arguments before finding a name, it's anonymous.
         if child.kind() == "sequence_arguments" {
-            return "anonymous".to_owned();
+            return default.to_owned();
         }
     }
-    "anonymous".to_owned()
-}
-
-/// Build a fragment for a `fn_form` or `lambda_form`.
-fn build_fn_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragment {
-    let doc_range = FennelLanguage::extract_doc_range(node);
-    build_simple_fragment(
-        node,
-        extract_fn_name(node),
-        SymbolKind::Function,
-        doc_range,
-        parent_name,
-    )
+    default.to_owned()
 }
 
 /// Extract the binding name from a \``local_form`\` or \``var_form`\` node.
@@ -128,47 +116,6 @@ fn is_require_binding(node: TsNode<'_>) -> bool {
         .into_iter()
         .filter(|c| c.kind() != "symbol_binding")
         .any(|value| value.text().starts_with("(require "))
-}
-
-/// Build a fragment for a `local_form` or `var_form`.
-fn build_binding_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Option<Fragment> {
-    let doc_range = FennelLanguage::extract_doc_range(node);
-    Some(build_simple_fragment(
-        node,
-        extract_binding_name(node)?,
-        SymbolKind::Variable,
-        doc_range,
-        parent_name,
-    ))
-}
-
-/// Extract the macro name from a \``macro_form`\` node.
-///
-/// The name is the second \`symbol\` child (first is the "macro" keyword).
-fn extract_macro_name(node: TsNode<'_>) -> String {
-    let mut past_keyword = false;
-    for child in node.children() {
-        if child.kind() == "symbol" {
-            if !past_keyword {
-                past_keyword = true;
-                continue;
-            }
-            return child.text().to_owned();
-        }
-    }
-    "unknown".to_owned()
-}
-
-/// Build a fragment for a `macro_form`.
-fn build_macro_fragment(node: TsNode<'_>, parent_name: Option<&str>) -> Fragment {
-    let doc_range = FennelLanguage::extract_doc_range(node);
-    build_simple_fragment(
-        node,
-        extract_macro_name(node),
-        SymbolKind::Macro,
-        doc_range,
-        parent_name,
-    )
 }
 
 register_syntax!(FennelLanguage);
