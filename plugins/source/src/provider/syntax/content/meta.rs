@@ -422,7 +422,10 @@ pub(in crate::provider::syntax) fn build_meta_nodes(
                     .child_of_kind(&FragmentKind::Docstring)
                     .map(|c| &c.span.byte_range)
                     .ok_or_else(|| eyre::eyre!("no doc comment on fragment {:?}", p))?;
-                Ok(shared.decomposer.strip_doc_comment(&shared.source[range.clone()]).into_bytes())
+                Ok(shared
+                    .decomposer
+                    .strip_doc_comment(&shared.source[range.clone()])
+                    .into_bytes())
             },
             DocstringSplice {
                 meta: MetaSplice {

@@ -116,9 +116,8 @@ impl FragmentView {
                 .unwrap_or_default();
         }
         match &self.fragment.metadata {
-            Some(FragmentMetadata::Document { .. }) => {
-                section_first_line(&self.shared.source[self.fragment.span.byte_range.clone()]).unwrap_or_default()
-            }
+            Some(FragmentMetadata::Document { .. }) =>
+                section_first_line(&self.shared.source[self.fragment.span.byte_range.clone()]).unwrap_or_default(),
             _ => String::new(),
         }
     }

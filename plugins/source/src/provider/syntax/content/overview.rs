@@ -93,9 +93,12 @@ impl TemplateView for FileOverviewContent {
 pub(crate) fn file_doc_text(shared: &DecomposedSource) -> Option<String> {
     Some(
         shared.decomposer.strip_doc_comment(
-            shared
-                .source
-                .get(find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)?.span.byte_range.clone())?,
+            shared.source.get(
+                find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)?
+                    .span
+                    .byte_range
+                    .clone(),
+            )?,
         ),
     )
 }

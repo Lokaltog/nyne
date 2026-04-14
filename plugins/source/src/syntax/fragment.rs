@@ -275,7 +275,12 @@ impl Fragment {
     /// This is the single construction point for docstring fragments —
     /// language extractors should use this instead of calling `structural` directly.
     pub fn docstring_child(doc_range: Option<Range<usize>>, parent: Option<String>) -> Option<Self> {
-        Some(Self::structural("docstring", FragmentKind::Docstring, doc_range?, parent))
+        Some(Self::structural(
+            "docstring",
+            FragmentKind::Docstring,
+            doc_range?,
+            parent,
+        ))
     }
 
     /// Bounding box covering this fragment and all its direct children
