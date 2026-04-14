@@ -9,7 +9,6 @@ struct MarkdownLanguage;
 
 /// [`LanguageSpec`] implementation for Markdown.
 impl LanguageSpec for MarkdownLanguage {
-    /// Conflict resolution strategy for Markdown symbols.
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
     /// File extensions for Markdown.
     const EXTENSIONS: &'static [&'static str] = &["md", "mdx"];
@@ -19,16 +18,14 @@ impl LanguageSpec for MarkdownLanguage {
     const NAME: &'static str = "Markdown";
     /// Naming strategy for Markdown symbol deduplication.
     const NAMING_STRATEGY: NamingStrategy = NamingStrategy::Slugified { indexed: true };
-    /// Tree-sitter node kinds that support recursive decomposition in Markdown.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
 
-    /// Returns the tree-sitter grammar for Markdown.
     fn grammar(_ext: &str) -> tree_sitter::Language { tree_sitter_md::LANGUAGE.into() }
 
     /// Extracts Markdown-specific fragments (sections, code blocks, preamble).
     fn extract_custom(root: TsNode<'_>, _max_depth: usize) -> Option<Vec<Fragment>> {
         let source = root.source_str();
-        let headings = collect_headings(root, root.source());
+        let headings = collect_headings(root);
         let code_blocks = collect_code_blocks(root, source);
 
         let mut fragments = Vec::new();
@@ -82,24 +79,14 @@ struct CodeBlock {
 }
 
 /// Collect all ATX headings from the markdown parse tree.
-fn collect_headings(root: TsNode<'_>, source: &[u8]) -> Vec<Heading> {
+fn collect_headings(root: TsNode<'_>) -> Vec<Heading> {
     let mut headings = Vec::new();
-    collect_nodes(root, "atx_heading", &|n| parse_atx_heading(n, source), &mut headings);
+    collect_descendants(root, "atx_heading", &parse_atx_heading, &mut headings);
     headings
 }
 
-/// Recursively collect nodes of a given kind from the tree.
-fn collect_nodes<T>(node: TsNode<'_>, kind: &str, parse: &impl Fn(TsNode<'_>) -> T, out: &mut Vec<T>) {
-    if node.kind() == kind {
-        out.push(parse(node));
-    }
-    for child in node.children() {
-        collect_nodes(child, kind, parse, out);
-    }
-}
-
 /// Parse an ATX heading node into a Heading struct.
-fn parse_atx_heading(node: TsNode<'_>, source: &[u8]) -> Heading {
+fn parse_atx_heading(node: TsNode<'_>) -> Heading {
     let mut level = 0u8;
     let mut name = None;
 
@@ -113,7 +100,7 @@ fn parse_atx_heading(node: TsNode<'_>, source: &[u8]) -> Heading {
         if child.kind().starts_with("atx_h") && child.kind().ends_with("_marker") {
             level = child.text().len().try_into().unwrap_or(1);
         } else if child.kind() == "inline" {
-            name = Some(child.raw().utf8_text(source).unwrap_or("").trim().to_owned());
+            name = Some(child.text().trim().to_owned());
         }
     }
 
@@ -127,7 +114,7 @@ fn parse_atx_heading(node: TsNode<'_>, source: &[u8]) -> Heading {
 /// Collect all fenced code blocks from the markdown parse tree.
 fn collect_code_blocks(root: TsNode<'_>, source: &str) -> Vec<CodeBlock> {
     let mut blocks = Vec::new();
-    collect_nodes(
+    collect_descendants(
         root,
         "fenced_code_block",
         &|n| parse_fenced_code_block(n, source),
@@ -152,13 +139,13 @@ fn parse_fenced_code_block(node: TsNode<'_>, source: &str) -> CodeBlock {
                 }
             }
             "code_fence_content" => {
-                content_range = Some(child.start_byte()..child.raw().end_byte());
+                content_range = Some(child.start_byte()..child.end_byte());
             }
             _ => {}
         }
     }
 
-    let block_range = node.start_byte()..node.raw().end_byte();
+    let block_range = node.start_byte()..node.end_byte();
 
     // If there's no content node, the block is empty — use an empty range
     // at the position after the opening fence line.
@@ -167,7 +154,7 @@ fn parse_fenced_code_block(node: TsNode<'_>, source: &str) -> CodeBlock {
         let fence_end = source
             .get(node.start_byte()..)
             .and_then(|s| s.find('\n'))
-            .map_or_else(|| node.raw().end_byte(), |pos| node.start_byte() + pos + 1);
+            .map_or_else(|| node.end_byte(), |pos| node.start_byte() + pos + 1);
         fence_end..fence_end
     });
 

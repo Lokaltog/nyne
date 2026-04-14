@@ -19,7 +19,7 @@
 use std::ops::Range;
 
 use crate::syntax::fragment::{Fragment, FragmentKind, SymbolKind};
-use crate::syntax::parser::TreeSitterParser;
+use crate::syntax::parser::{TreeSitterParser, TsNode, find_first_descendant};
 
 /// Result of extracting template structure from a Jinja2 source file.
 ///
@@ -292,31 +292,13 @@ fn is_preamble_directive(node: tree_sitter::Node<'_>, source: &str) -> bool {
 ///
 /// We do a depth-first search for the first `identifier` node.
 fn extract_identifier(node: tree_sitter::Node<'_>, source: &str) -> (String, usize) {
-    if let Some(ident) = find_first_identifier(node) {
-        let name = source.get(ident.byte_range()).unwrap_or_default().to_owned();
-        return (name, ident.start_byte());
+    let wrapped = TsNode::new(node, source.as_bytes());
+    if let Some(ident) = find_first_descendant(wrapped, "identifier") {
+        return (ident.text().to_owned(), ident.start_byte());
     }
     // Fallback: use the statement kind as name.
     let name = node.kind().replace("_statement", "");
     (name, node.start_byte())
-}
-
-/// Depth-first search for the first `identifier` node.
-///
-/// Uses raw `tree_sitter::Node` rather than `TsNode` because the Jinja2
-/// parser operates on raw tree-sitter types directly (the `TsNode` wrapper
-/// is designed for inner-language decomposition).
-fn find_first_identifier(node: tree_sitter::Node<'_>) -> Option<tree_sitter::Node<'_>> {
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "identifier" {
-            return Some(child);
-        }
-        if let Some(found) = find_first_identifier(child) {
-            return Some(found);
-        }
-    }
-    None
 }
 
 /// Convert extracted [`Jinja2Symbol`]s into [`Fragment`]s.

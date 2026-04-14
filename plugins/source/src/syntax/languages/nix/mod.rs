@@ -7,19 +7,13 @@ struct NixLanguage;
 
 /// [`LanguageSpec`] implementation for Nix.
 impl LanguageSpec for NixLanguage {
-    /// Conflict resolution strategy for Nix symbols.
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
-    /// Tree-sitter node kind for Nix doc comments.
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
     /// Comment prefix patterns for Nix doc comments.
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &["#"];
-    /// File extensions for Nix.
     const EXTENSIONS: &'static [&'static str] = &["nix"];
-    /// Tree-sitter node kinds for Nix import declarations.
     const IMPORT_KINDS: &'static [&'static str] = &[];
-    /// Language name identifier.
     const NAME: &'static str = "Nix";
-    /// Tree-sitter node kinds that support recursive decomposition in Nix.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
 
     /// Returns the tree-sitter grammar for Nix.
@@ -35,7 +29,6 @@ impl LanguageSpec for NixLanguage {
     /// Strips doc comment markers from Nix source.
     fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &["#"]) }
 
-    /// Wraps text in Nix doc comment syntax.
     fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, "#", "# ") }
 }
 
@@ -90,9 +83,7 @@ fn binding_value_kind(node: TsNode<'_>) -> Option<&'static str> {
             continue;
         }
         if past_eq && child.kind() != ";" {
-            // Use raw() for the return — tree-sitter kind strings are 'static
-            // but TsNode::kind() elides the lifetime to &self.
-            return Some(child.raw().kind());
+            return Some(child.kind());
         }
     }
     None

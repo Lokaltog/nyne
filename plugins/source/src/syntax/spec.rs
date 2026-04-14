@@ -16,7 +16,7 @@ use color_eyre::eyre::Result;
 use super::extract::extract_fragments;
 use super::fragment::{ConflictSet, DecomposedFile, Fragment, Resolution, SymbolKind};
 use super::fs_mapping::{ConflictStrategy, NamingStrategy, apply_fs_mapping, resolve_conflicts};
-use super::parser::{TreeSitterParser, TsNode, merge_preceding_sibling_ranges};
+use super::parser::{TreeSitterParser, TsNode, merge_preceding_sibling_ranges, trim_trailing_newlines};
 
 /// How fragment bodies are sliced from the source file for reading and
 /// spliced back on write.
@@ -205,6 +205,30 @@ pub fn extract_preceding_doc_range(
             None
         }
     })
+}
+
+/// Extract the byte range of a leading block of file-level doc comments.
+///
+/// Walks the root's direct children top-down, taking consecutive comments of
+/// `match_kind` whose text starts with any of `match_prefixes` (e.g. `"//!"`
+/// for Rust). Returns the spanning range with trailing newlines trimmed, or
+/// `None` when no matching comments lead the file.
+pub fn extract_leading_file_doc_range(
+    root: TsNode<'_>,
+    match_kind: &str,
+    match_prefixes: &[&str],
+) -> Option<Range<usize>> {
+    let doc_nodes: Vec<_> = root
+        .children()
+        .into_iter()
+        .take_while(|child| child.kind() == match_kind && match_prefixes.iter().any(|p| child.text().starts_with(p)))
+        .collect();
+    let first = doc_nodes.first()?;
+    let last = doc_nodes.last()?;
+    Some(trim_trailing_newlines(
+        root.source(),
+        first.start_byte()..last.end_byte(),
+    ))
 }
 
 /// Extract decorator/attribute ranges by scanning preceding siblings.

@@ -7,7 +7,6 @@ struct TomlLanguage;
 
 /// [`LanguageSpec`] implementation for TOML.
 impl LanguageSpec for TomlLanguage {
-    /// Strategy for resolving name conflicts.
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
     /// AST node kind for doc comments.
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
@@ -15,9 +14,7 @@ impl LanguageSpec for TomlLanguage {
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &["#"];
     /// File extensions for TOML.
     const EXTENSIONS: &'static [&'static str] = &["toml"];
-    /// AST node kinds that represent imports.
     const IMPORT_KINDS: &'static [&'static str] = &[];
-    /// Language name identifier.
     const NAME: &'static str = "TOML";
     /// AST node kinds that can contain nested symbols.
     const RECURSABLE_KINDS: &'static [&'static str] = &[];
@@ -59,7 +56,6 @@ impl LanguageSpec for TomlLanguage {
     /// Strips doc comment prefix from a line.
     fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &["#"]) }
 
-    /// Wraps text in doc comment syntax.
     fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, "#", "# ") }
 }
 

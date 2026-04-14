@@ -25,7 +25,6 @@ impl LanguageSpec for TypeScriptLanguage {
     const IMPORT_KINDS: &'static [&'static str] = &["import_statement"];
     /// Language name identifier.
     const NAME: &'static str = "TypeScript";
-    /// AST node kinds that can contain nested symbols.
     const RECURSABLE_KINDS: &'static [&'static str] =
         &["class_declaration", "abstract_class_declaration", "internal_module"];
 
@@ -89,7 +88,6 @@ impl LanguageSpec for TypeScriptLanguage {
         node.field_text("name").unwrap_or("anonymous").to_owned()
     }
 
-    /// Extracts the `JSDoc` or line comment range for a symbol.
     fn extract_doc_range(node: TsNode<'_>) -> Option<Range<usize>> {
         extract_preceding_doc_range(unwrap_export(node), "comment", &["/**", "///", "//"], &[])
     }

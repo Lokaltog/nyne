@@ -29,7 +29,7 @@ impl<'a> TsNode<'a> {
     pub const fn new(node: tree_sitter::Node<'a>, source: &'a [u8]) -> Self { Self { node, source } }
 
     /// The tree-sitter node kind string (e.g. `"function_item"`, `"class_definition"`).
-    pub fn kind(&self) -> &str { self.node.kind() }
+    pub fn kind(&self) -> &'static str { self.node.kind() }
 
     /// The UTF-8 text of this node, or empty string if invalid.
     pub fn text(&self) -> &'a str { self.node.utf8_text(self.source).unwrap_or("") }
@@ -39,6 +39,9 @@ impl<'a> TsNode<'a> {
 
     /// Start byte offset of this node in the source.
     pub fn start_byte(&self) -> usize { self.node.start_byte() }
+
+    /// End byte offset of this node in the source.
+    pub fn end_byte(&self) -> usize { self.node.end_byte() }
 
     /// Access a named field child (e.g. `"name"`, `"body"`, `"type"`).
     pub fn field(&self, name: &str) -> Option<Self> {
@@ -99,7 +102,12 @@ impl<'a> TsNode<'a> {
             .collect()
     }
 
-    /// Access the underlying `tree_sitter::Node`.
+    /// Access the underlying `tree_sitter::Node` for operations not yet
+    /// wrapped by [`TsNode`].
+    ///
+    /// Prefer dedicated [`TsNode`] methods when they exist — this escape
+    /// hatch exists for downstream analysis plugins that need cursor walks,
+    /// descendant counts, or other raw tree-sitter APIs.
     pub const fn raw(&self) -> tree_sitter::Node<'a> { self.node }
 
     /// Source bytes this node was created with.
@@ -109,6 +117,46 @@ impl<'a> TsNode<'a> {
     pub fn source_str(&self) -> &'a str { from_utf8(self.source).unwrap_or("") }
 }
 
+/// Trim trailing `\n` bytes from a byte range.
+///
+/// Tree-sitter node ranges for line-based constructs (Rust `line_comment`,
+/// attributes) include the trailing newline. Raw `node.end_byte()` points
+/// past the `\n`, not at the last content byte. Range-merging code that
+/// produces content for splice operations must trim this newline so the
+/// separator between the collected content and the following symbol is
+/// preserved. See `syntax/CLAUDE.md` for the full convention.
+pub fn trim_trailing_newlines(source: &[u8], range: Range<usize>) -> Range<usize> {
+    let Range { start, mut end } = range;
+    while end > start && source.get(end - 1) == Some(&b'\n') {
+        end -= 1;
+    }
+    start..end
+}
+
+/// Depth-first search for the first descendant (inclusive of `node`) matching `kind`.
+pub fn find_first_descendant<'a>(node: TsNode<'a>, kind: &str) -> Option<TsNode<'a>> {
+    if node.kind() == kind {
+        return Some(node);
+    }
+    for child in node.children() {
+        if let Some(found) = find_first_descendant(child, kind) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// Recursively collect all descendants (inclusive of `node`) of the given kind,
+/// mapping each matched node via `parse` and appending the result to `out`.
+pub fn collect_descendants<T>(node: TsNode<'_>, kind: &str, parse: &impl Fn(TsNode<'_>) -> T, out: &mut Vec<T>) {
+    if node.kind() == kind {
+        out.push(parse(node));
+    }
+    for child in node.children() {
+        collect_descendants(child, kind, parse, out);
+    }
+}
+
 /// Merge byte ranges of preceding siblings matched by `collect_fn` into a single span.
 ///
 /// Walks backwards from `node`, trimming trailing newlines from the result.
@@ -116,9 +164,9 @@ impl<'a> TsNode<'a> {
 /// definition. The `collect_fn` returns `Some(true)` to include a sibling,
 /// `Some(false)` to skip it (e.g. blank lines), or `None` to stop walking.
 ///
-/// Trailing newlines are stripped because tree-sitter line-based node ranges
-/// include the `\n` -- keeping it would eat the separator between the collected
-/// content and the following symbol during splice operations.
+/// Trailing newlines are stripped via [`trim_trailing_newlines`] — keeping
+/// them would eat the separator between the collected content and the
+/// following symbol during splice operations.
 pub fn merge_preceding_sibling_ranges(
     node: TsNode<'_>,
     mut collect_fn: impl FnMut(TsNode<'_>) -> Option<bool>,
@@ -141,47 +189,31 @@ pub fn merge_preceding_sibling_ranges(
 
     // Ranges were collected bottom-up; last element is the topmost.
     let first = ranges.first()?;
-    let mut end = first.end;
+    let end = first.end;
     let start = ranges.last().map_or(first.start, |r| r.start);
 
-    // Tree-sitter node ranges for line-based constructs (comments,
-    // attributes) may include the trailing newline. Trim it — the newline
-    // is a separator between the collected nodes and the target symbol,
-    // not part of the content.
-    let source = node.source();
-    while end > start && source.get(end - 1) == Some(&b'\n') {
-        end -= 1;
-    }
-
-    Some(start..end)
+    Some(trim_trailing_newlines(node.source(), start..end))
 }
 
 /// Collect the byte range spanning all import declarations at the root level.
 ///
 /// Returns `None` when the root has no children matching `import_kinds`.
-/// Trailing newlines are trimmed (same convention as
-/// [`merge_preceding_sibling_ranges`]).
+/// Trailing newlines are trimmed via [`trim_trailing_newlines`].
 pub fn collect_import_range(root: TsNode<'_>, import_kinds: &[&str]) -> Option<Range<usize>> {
-    let (start, mut end) = root
+    let (start, end) = root
         .children()
         .into_iter()
         .filter(|child| import_kinds.contains(&child.kind()))
         .fold(None, |acc, node| {
             let s = node.start_byte();
-            let e = node.raw().end_byte();
+            let e = node.end_byte();
             Some(match acc {
                 None => (s, e),
                 Some((first, _)) => (first, e),
             })
         })?;
 
-    // Trim trailing newlines — same rationale as merge_preceding_sibling_ranges.
-    let source = root.source();
-    while end > start && source.get(end - 1) == Some(&b'\n') {
-        end -= 1;
-    }
-
-    Some(start..end)
+    Some(trim_trailing_newlines(root.source(), start..end))
 }
 
 /// Walk a tree-sitter tree and collect all ERROR and MISSING nodes.

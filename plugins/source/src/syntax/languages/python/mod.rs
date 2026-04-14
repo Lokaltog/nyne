@@ -31,7 +31,6 @@ impl LanguageSpec for PythonLanguage {
     const IMPORT_KINDS: &'static [&'static str] = &["import_statement", "import_from_statement"];
     /// Language name identifier.
     const NAME: &'static str = "Python";
-    /// AST node kinds that can contain nested symbols.
     const RECURSABLE_KINDS: &'static [&'static str] = &["class_definition"];
 
     symbol_map! {
@@ -92,7 +91,6 @@ impl LanguageSpec for PythonLanguage {
         Some(first_stmt.byte_range())
     }
 
-    /// Strips doc comment prefix from a line.
     fn strip_doc_comment(raw: &str) -> String {
         if is_triple_quoted(raw) {
             let (content, _) = strip_triple_quotes(raw);
@@ -130,7 +128,7 @@ fn extract_decorator_range_from_decorated(decorated_node: TsNode<'_>) -> Option<
             if first.is_none() {
                 first = Some(child.start_byte());
             }
-            last_end = Some(child.raw().end_byte());
+            last_end = Some(child.end_byte());
         }
     }
     Some(first?..last_end?)

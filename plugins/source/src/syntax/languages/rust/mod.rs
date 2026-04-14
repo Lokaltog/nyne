@@ -25,11 +25,9 @@ impl LanguageSpec for RustLanguage {
     const DOC_COMMENT_KIND: Option<&'static str> = Some(Self::LINE_COMMENT);
     /// Prefixes that identify doc comments.
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &["///"];
-    /// AST node kinds to skip when scanning for doc comments.
     const DOC_COMMENT_SKIP_KINDS: &'static [&'static str] = &[Self::ATTRIBUTE];
     /// File extensions for Rust.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
-    /// AST node kinds that represent imports.
     const IMPORT_KINDS: &'static [&'static str] = &["use_declaration"];
     /// Language name identifier.
     const NAME: &'static str = "Rust";
@@ -49,7 +47,6 @@ impl LanguageSpec for RustLanguage {
         "mod_item"          => Module,
     }
 
-    /// Returns the tree-sitter grammar.
     fn grammar(_ext: &str) -> tree_sitter::Language { tree_sitter_rust::LANGUAGE.into() }
 
     /// Builds a display signature for the symbol.
@@ -68,7 +65,6 @@ impl LanguageSpec for RustLanguage {
         }
     }
 
-    /// Extracts the symbol name from the AST node.
     fn extract_name(node: TsNode<'_>, kind: SymbolKind) -> String {
         if kind == SymbolKind::Impl {
             return impl_block_name(node);
@@ -76,23 +72,8 @@ impl LanguageSpec for RustLanguage {
         node.field_text("name").unwrap_or("anonymous").to_owned()
     }
 
-    /// Extracts the module-level docstring range.
     fn extract_file_doc_range(root: TsNode<'_>) -> Option<Range<usize>> {
-        let doc_nodes: Vec<_> = root
-            .children()
-            .into_iter()
-            .take_while(|child| child.kind() == Self::LINE_COMMENT && child.text().starts_with("//!"))
-            .collect();
-        let first = doc_nodes.first()?;
-        let last = doc_nodes.last()?;
-        let start = first.start_byte();
-        let mut end = last.raw().end_byte();
-        // Trim trailing newlines — same convention as merge_preceding_sibling_ranges.
-        let source = root.source();
-        while end > start && source.get(end - 1) == Some(&b'\n') {
-            end -= 1;
-        }
-        Some(start..end)
+        extract_leading_file_doc_range(root, Self::LINE_COMMENT, &["//!"])
     }
 
     /// Strips doc comment prefix from a line.
