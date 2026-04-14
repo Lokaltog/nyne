@@ -86,3 +86,29 @@ fn splice_does_not_double_trailing_newline() {
     let written = fs.read_file(&path).unwrap();
     assert_eq!(std::str::from_utf8(&written).unwrap(), "world\n");
 }
+
+/// A splice whose new content is byte-identical to the existing slice is a
+/// no-op — validation is skipped and the file is not re-written.
+///
+/// This prevents cascading cache invalidations from round-trips like
+/// `cat body.rs > body.rs` where downstream providers would otherwise
+/// evict the kernel page cache for an unchanged file.
+#[test]
+fn splice_noop_skips_validate_and_write() {
+    let (_dir, fs, path) = setup("hello world\n");
+    let validate_calls = std::cell::Cell::new(0);
+    let counting_validate = |_: &str| -> Result<(), String> {
+        validate_calls.set(validate_calls.get() + 1);
+        Ok(())
+    };
+    let mut rope = crop::Rope::from("hello world\n");
+    // Splice "world" with "world" — byte-identical, trailing newline already
+    // present. The fast path should return without invoking validate.
+    let result = splice_rope_validate_write(&fs, &path, &mut rope, 6..11, "world", counting_validate);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "world".len());
+    assert_eq!(validate_calls.get(), 0, "no-op splice must not invoke validate");
+    // File contents unchanged.
+    let written = fs.read_file(&path).unwrap();
+    assert_eq!(std::str::from_utf8(&written).unwrap(), "hello world\n");
+}
