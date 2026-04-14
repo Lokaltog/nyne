@@ -2,7 +2,7 @@ use nyne::load_fixture;
 use rstest::{fixture, rstest};
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::registry;
+use crate::test_support::decompose_fixture;
 
 /// Load `basic.rs` fixture source. Single source of truth for the fixture path.
 fn load_basic() -> String { load_fixture!("syntax/languages/rust", "basic.rs") }
@@ -10,8 +10,8 @@ fn load_basic() -> String { load_fixture!("syntax/languages/rust", "basic.rs") }
 /// Fixture: decompose the basic.rs test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
-    let (result, _tree) = registry().get("rs").unwrap().decompose(&load_basic(), 5);
-    result
+    let source = load_basic();
+    decompose_fixture("rs", &source)
 }
 
 /// Top-level: imports + const + 2 fns + struct + enum + trait + 2 impls = 9 fragments.

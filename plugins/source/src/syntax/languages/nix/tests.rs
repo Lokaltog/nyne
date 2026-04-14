@@ -2,16 +2,13 @@ use nyne::load_fixture;
 use rstest::{fixture, rstest};
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::registry;
+use crate::test_support::decompose_fixture;
 
 /// Fixture: decompose the basic.nix test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
-    let (result, _tree) = registry()
-        .get("nix")
-        .unwrap()
-        .decompose(&load_fixture!("syntax/languages/nix", "basic.nix"), 5);
-    result
+    let source = load_fixture!("syntax/languages/nix", "basic.nix");
+    decompose_fixture("nix", &source)
 }
 
 /// Top-level: 5 bindings (name, version, buildInputs, meta, shellHook).

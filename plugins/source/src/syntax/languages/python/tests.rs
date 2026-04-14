@@ -2,7 +2,7 @@ use nyne::load_fixture;
 use rstest::{fixture, rstest};
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::registry;
+use crate::test_support::decompose_fixture;
 
 /// Load `basic.py` fixture source. Single source of truth for the fixture path.
 fn load_basic() -> String { load_fixture!("syntax/languages/python", "basic.py") }
@@ -10,8 +10,8 @@ fn load_basic() -> String { load_fixture!("syntax/languages/python", "basic.py")
 /// Fixture: decompose the basic.py test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
-    let (result, _tree) = registry().get("py").unwrap().decompose(&load_basic(), 5);
-    result
+    let source = load_basic();
+    decompose_fixture("py", &source)
 }
 
 /// Top-level: imports + 2 assignments + 1 function + 2 classes = 6 fragments.

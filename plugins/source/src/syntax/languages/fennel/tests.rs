@@ -2,16 +2,13 @@ use nyne::load_fixture;
 use rstest::{fixture, rstest};
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::registry;
+use crate::test_support::decompose_fixture;
 
 /// Fixture: decompose the basic.fnl test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
-    let (result, _tree) = registry()
-        .get("fnl")
-        .unwrap()
-        .decompose(&load_fixture!("syntax/languages/fennel", "basic.fnl"), 5);
-    result
+    let source = load_fixture!("syntax/languages/fennel", "basic.fnl");
+    decompose_fixture("fnl", &source)
 }
 
 /// Top-level: MAX-RETRIES, greet, process, with-retry, config = 5 fragments.

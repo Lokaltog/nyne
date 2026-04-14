@@ -2,16 +2,13 @@ use nyne::load_fixture;
 use rstest::{fixture, rstest};
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::registry;
+use crate::test_support::decompose_fixture;
 
 /// Fixture: decompose the basic.toml test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
-    let (result, _tree) = registry()
-        .get("toml")
-        .unwrap()
-        .decompose(&load_fixture!("syntax/languages/toml", "basic.toml"), 5);
-    result
+    let source = load_fixture!("syntax/languages/toml", "basic.toml");
+    decompose_fixture("toml", &source)
 }
 
 /// Top-level: preamble (bare keys) + [package] + [dependencies] +

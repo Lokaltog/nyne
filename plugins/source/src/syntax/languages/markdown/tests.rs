@@ -2,16 +2,13 @@ use nyne::load_fixture;
 use rstest::{fixture, rstest};
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind};
-use crate::test_support::registry;
+use crate::test_support::decompose_fixture;
 
 /// Fixture: decompose the basic.md test file into fragments.
 #[fixture]
 fn basic() -> DecomposedFile {
-    let (result, _tree) = registry()
-        .get("md")
-        .unwrap()
-        .decompose(&load_fixture!("syntax/languages/markdown", "basic.md"), 5);
-    result
+    let source = load_fixture!("syntax/languages/markdown", "basic.md");
+    decompose_fixture("md", &source)
 }
 
 /// Top-level: preamble (frontmatter + pre-heading content) +
