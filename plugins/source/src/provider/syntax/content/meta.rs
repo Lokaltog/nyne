@@ -18,7 +18,7 @@ use nyne::templates::TemplateHandle;
 
 use super::FragmentResolver;
 use super::overview::SymbolOverviewContent;
-use crate::edit::splice::{indent_at_rope, line_start_of_rope, splice_validate_write};
+use crate::edit::splice::{indent_at_rope, line_start_of_rope, splice_rope_validate_write};
 use crate::plugin::config::vfs::VfsFiles;
 use crate::syntax::decomposed::DecomposedSource;
 use crate::syntax::fragment::{Fragment, FragmentKind, find_fragment_of_kind};
@@ -156,16 +156,24 @@ impl MetaSplice {
                 .byte_range
                 .clone(),
         };
-        Ok(ResolvedSplice { shared, byte_range })
+        Ok(ResolvedSplice {
+            shared,
+            byte_range,
+            rope,
+        })
     }
 
     /// Splice `new_content` into the source file, validate, write back, and
     /// invalidate the decomposition cache.
     pub(super) fn splice_write(&self, fs: &dyn Filesystem, new_content: &str) -> Result<AffectedFiles> {
-        let resolved = self.resolve()?;
+        let ResolvedSplice {
+            shared,
+            byte_range,
+            mut rope,
+        } = self.resolve()?;
         let source_file = self.resolver.source_file().to_owned();
-        splice_validate_write(fs, &source_file, resolved.byte_range, new_content, |spliced| {
-            resolved.shared.decomposer.validate(spliced).map_err(|e| e.to_string())
+        splice_rope_validate_write(fs, &source_file, &mut rope, byte_range, new_content, |spliced| {
+            shared.decomposer.validate(spliced).map_err(|e| e.to_string())
         })?;
         self.resolver.invalidate();
         Ok(vec![source_file])
@@ -207,6 +215,9 @@ impl MetaSplice {
 struct ResolvedSplice {
     shared: Arc<DecomposedSource>,
     byte_range: Range<usize>,
+    /// Rope built from `shared.source` during resolution. Handed to splice
+    /// writers so they don't rebuild it.
+    rope: crop::Rope,
 }
 
 /// [`Writable`] implementation for [`MetaSplice`].

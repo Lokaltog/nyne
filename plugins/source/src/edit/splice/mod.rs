@@ -11,6 +11,7 @@
 use std::io::ErrorKind;
 use std::ops::Range;
 use std::path::Path;
+#[cfg(test)]
 use std::str::from_utf8;
 
 use color_eyre::eyre::Result;
@@ -24,6 +25,7 @@ use nyne::router::Filesystem;
 /// `Err` with a message if the result is invalid (rejected with `EINVAL`).
 ///
 /// Returns the number of bytes in `new_content` on success.
+#[cfg(test)]
 pub fn splice_validate_write(
     fs: &dyn Filesystem,
     source_file: &Path,
@@ -55,10 +57,14 @@ pub fn splice_content(source: &str, byte_range: Range<usize>, new_content: &str)
 /// avoiding a redundant file read + rope construction when the caller
 /// needs the rope for preliminary work (e.g., line→byte offset conversion).
 ///
+/// Returns `Ok(new_content.len())` without writing when the splice would
+/// produce byte-identical content — this avoids cascading cache invalidations
+/// from no-op round trips (e.g. `cat body.rs > body.rs`).
+///
 /// If the source already fails validation before the splice, post-splice
 /// validation is skipped — edits to already-invalid files are always allowed.
-///
-/// Returns the number of bytes in `new_content` on success.
+/// The pre-splice rope is retained as a cheap clone (`crop::Rope` clones
+/// are O(1)) so the error path does not need to re-read the file.
 pub fn splice_rope_validate_write(
     fs: &dyn Filesystem,
     source_file: &Path,
@@ -80,6 +86,21 @@ pub fn splice_rope_validate_write(
             ),
         ));
     }
+
+    // No-op fast path: the splice would write byte-identical content. Skip
+    // the write so downstream caches don't invalidate on unchanged files.
+    // Trailing newline normalization is only needed when a byte is missing,
+    // so check that too before claiming no-op.
+    let trailing_newline_present = source_len == 0 || rope.byte(source_len - 1) == b'\n';
+    if trailing_newline_present && rope.byte_slice(byte_range.clone()) == new_content {
+        return Ok(new_content.len());
+    }
+
+    // Retain a cheap clone of the pre-splice rope so the error path can
+    // check whether the source was already invalid without re-reading the
+    // file (`crop::Rope` clones share structure, so this is O(1)).
+    let pre_splice = rope.clone();
+
     rope.replace(byte_range.clone(), new_content);
     // Ensure the result ends with a newline. POSIX text file convention,
     // and tree-sitter grammars (notably markdown) treat a missing final
@@ -93,24 +114,21 @@ pub fn splice_rope_validate_write(
     // invalid before the splice — if so, allow the edit through (we can't
     // make it worse). This keeps the pre-splice `to_string()` off the
     // common (success) path.
-    if let Err(e) = validate(&spliced) {
-        // Re-read the original file (not yet overwritten) to check whether
-        // it was already invalid before the splice. Only pay this cost on
-        // the error path — the common (success) path does zero extra work.
-        if validate(from_utf8(&fs.read_file(source_file)?).unwrap_or("")).is_ok() {
-            return Err(io_err(
-                ErrorKind::InvalidInput,
-                format!(
-                    "{e} (source={}, splice_range={}..{}, new_content_len={}, \
-                     source_len={source_len}, result_len={})",
-                    source_file.display(),
-                    byte_range.start,
-                    byte_range.end,
-                    new_content.len(),
-                    spliced.len(),
-                ),
-            ));
-        }
+    if let Err(e) = validate(&spliced)
+        && validate(&pre_splice.to_string()).is_ok()
+    {
+        return Err(io_err(
+            ErrorKind::InvalidInput,
+            format!(
+                "{e} (source={}, splice_range={}..{}, new_content_len={}, \
+                 source_len={source_len}, result_len={})",
+                source_file.display(),
+                byte_range.start,
+                byte_range.end,
+                new_content.len(),
+                spliced.len(),
+            ),
+        ));
     }
     fs.write_file(source_file, spliced.as_bytes())?;
     Ok(new_content.len())
