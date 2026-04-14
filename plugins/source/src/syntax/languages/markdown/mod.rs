@@ -32,20 +32,19 @@ impl LanguageSpec for MarkdownLanguage {
 
         // Content before the first heading (frontmatter, intro text) → preamble.
         let first_heading_byte = headings.first().map_or(source.len(), |h| h.start_byte);
-        let preamble_text = &source[..first_heading_byte];
-        if !preamble_text.trim().is_empty() {
-            let span = 0..first_heading_byte;
-            fragments.push(Fragment::new(
-                "preamble".to_owned(),
-                FragmentKind::Preamble,
-                span,
-                None,
-                None,
-                Some(FragmentMetadata::Document { index: 0 }),
-                0,
-                Vec::new(),
-                None,
-            ));
+        if !source[..first_heading_byte].trim().is_empty() {
+            fragments.push(Fragment {
+                name: "preamble".to_owned(),
+                kind: FragmentKind::Preamble,
+                byte_range: 0..first_heading_byte,
+                signature: None,
+                visibility: None,
+                metadata: Some(FragmentMetadata::Document { index: 0 }),
+                name_byte_offset: 0,
+                children: Vec::new(),
+                parent_name: None,
+                fs_name: None,
+            });
         }
 
         fragments.extend(build_section_fragments(&headings, &code_blocks, source.len()));
@@ -220,8 +219,12 @@ fn build_sections_at_level(
             .position(|h| h.level <= target_level)
             .map_or(headings.len(), |pos| children_start + pos);
 
-        let child_headings = headings.get(children_start..children_end).unwrap_or(&[]);
-        let children = build_sections_at_level(child_headings, code_blocks, end_byte, 0);
+        let children = build_sections_at_level(
+            headings.get(children_start..children_end).unwrap_or(&[]),
+            code_blocks,
+            end_byte,
+            0,
+        );
 
         let byte_range = heading.start_byte..end_byte;
 
@@ -232,19 +235,20 @@ fn build_sections_at_level(
         let mut all_children = children;
         all_children.extend(section_code_blocks);
 
-        fragments.push(Fragment::new(
-            heading.name.clone(),
-            FragmentKind::Section { level: heading.level },
+        fragments.push(Fragment {
+            name: heading.name.clone(),
+            kind: FragmentKind::Section { level: heading.level },
             byte_range,
-            None,
-            None,
-            Some(FragmentMetadata::Document {
+            signature: None,
+            visibility: None,
+            metadata: Some(FragmentMetadata::Document {
                 index: index_offset + fragments.len(),
             }),
-            heading.start_byte,
-            all_children,
-            None,
-        ));
+            name_byte_offset: heading.start_byte,
+            children: all_children,
+            parent_name: None,
+            fs_name: None,
+        });
 
         i = children_end;
     }
@@ -272,18 +276,17 @@ fn build_code_block_fragments(
             })
         })
         .enumerate()
-        .map(|(idx, cb)| {
-            Fragment::new(
-                cb.lang.clone().unwrap_or_default(),
-                FragmentKind::CodeBlock { lang: cb.lang.clone() },
-                cb.content_range.clone(),
-                None,
-                None,
-                Some(FragmentMetadata::CodeBlock { index: idx }),
-                cb.block_range.start,
-                Vec::new(),
-                None,
-            )
+        .map(|(idx, cb)| Fragment {
+            name: cb.lang.clone().unwrap_or_default(),
+            kind: FragmentKind::CodeBlock { lang: cb.lang.clone() },
+            byte_range: cb.content_range.clone(),
+            signature: None,
+            visibility: None,
+            metadata: Some(FragmentMetadata::CodeBlock { index: idx }),
+            name_byte_offset: cb.block_range.start,
+            children: Vec::new(),
+            parent_name: None,
+            fs_name: None,
         })
         .collect()
 }

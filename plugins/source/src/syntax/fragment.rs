@@ -173,37 +173,6 @@ pub struct Fragment {
 
 /// Construction and span computation methods for fragments.
 impl Fragment {
-    /// Construct a fragment.
-    ///
-    /// This is the single source of truth for `Fragment` assembly. All
-    /// construction sites (code symbols, document sections, code blocks)
-    /// must use this constructor instead of struct literals.
-    #[allow(clippy::too_many_arguments)]
-    pub const fn new(
-        name: String,
-        kind: FragmentKind,
-        byte_range: Range<usize>,
-        signature: Option<String>,
-        visibility: Option<String>,
-        metadata: Option<FragmentMetadata>,
-        name_byte_offset: usize,
-        children: Vec<Self>,
-        parent_name: Option<String>,
-    ) -> Self {
-        Self {
-            name,
-            kind,
-            byte_range,
-            signature,
-            visibility,
-            metadata,
-            name_byte_offset,
-            children,
-            parent_name,
-            fs_name: None,
-        }
-    }
-
     /// Construct a structural fragment (docstring, decorator, imports) from a
     /// byte range. These carry no signature, no visibility, and no children.
     pub fn structural(
@@ -212,18 +181,19 @@ impl Fragment {
         byte_range: Range<usize>,
         parent_name: Option<String>,
     ) -> Self {
-        let start = byte_range.start;
-        Self::new(
-            name.into(),
+        let name_byte_offset = byte_range.start;
+        Self {
+            name: name.into(),
             kind,
             byte_range,
-            None,
-            None,
-            None,
-            start,
-            vec![],
+            signature: None,
+            visibility: None,
+            metadata: None,
+            name_byte_offset,
+            children: vec![],
             parent_name,
-        )
+            fs_name: None,
+        }
     }
 
     /// Construct a docstring child fragment from an optional byte range.

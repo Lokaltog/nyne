@@ -5,14 +5,13 @@ use crate::syntax::fragment::{Fragment, FragmentKind, SymbolKind};
 ///
 /// `doc_range` optionally adds a Docstring child fragment.
 fn code_fragment(
-    _source: &str,
     name: &str,
     kind: SymbolKind,
     byte_range: std::ops::Range<usize>,
     doc_range: Option<std::ops::Range<usize>>,
     children: Vec<Fragment>,
 ) -> Fragment {
-    let name_offset = byte_range.start;
+    let name_byte_offset = byte_range.start;
     let mut all_children = Vec::new();
     if let Some(dr) = doc_range {
         all_children.push(Fragment::structural(
@@ -23,19 +22,18 @@ fn code_fragment(
         ));
     }
     all_children.extend(children);
-    let mut frag = Fragment::new(
-        name.to_owned(),
-        FragmentKind::Symbol(kind),
+    Fragment {
+        name: name.to_owned(),
+        kind: FragmentKind::Symbol(kind),
         byte_range,
-        Some(format!("fn {name}()")),
-        None,
-        None,
-        name_offset,
-        all_children,
-        None,
-    );
-    frag.fs_name = Some(name.to_owned());
-    frag
+        signature: Some(format!("fn {name}()")),
+        visibility: None,
+        metadata: None,
+        name_byte_offset,
+        children: all_children,
+        parent_name: None,
+        fs_name: Some(name.to_owned()),
+    }
 }
 
 // Issue 3: Replace must use full_span (matching body.rs read range)
@@ -48,7 +46,7 @@ fn replace_body_uses_full_span_including_doc_comment() {
     //            ^0              ^16              ^34^36
     // full_span covers doc comment + body: 0..36
     // byte_range covers just the fn node: 16..36
-    let mut frag = code_fragment(source, "foo", SymbolKind::Function, 16..36, Some(0..15), vec![]);
+    let mut frag = code_fragment("foo", SymbolKind::Function, 16..36, Some(0..15), vec![]);
     frag.signature = Some("fn foo()".to_owned());
 
     let plan = EditPlan {
@@ -80,7 +78,7 @@ fn replace_body_round_trip_is_noop() {
     // Round-trip: reading the body (full_span) and writing it back via
     // edit/replace must be a no-op.
     let source = "/// Doc\nfn bar() {}\n";
-    let mut frag = code_fragment(source, "bar", SymbolKind::Function, 8..20, Some(0..7), vec![]);
+    let mut frag = code_fragment("bar", SymbolKind::Function, 8..20, Some(0..7), vec![]);
     frag.signature = Some("fn bar()".to_owned());
     let frag = frag;
 
@@ -110,7 +108,7 @@ fn replace_body_round_trip_is_noop() {
 fn append_into_empty_impl_block() {
     let source = "impl Foo {}\n";
     //            ^0         ^11^12
-    let mut frag = code_fragment(source, "Foo", SymbolKind::Impl, 0..12, None, vec![]);
+    let mut frag = code_fragment("Foo", SymbolKind::Impl, 0..12, None, vec![]);
     frag.signature = Some("impl Foo".to_owned());
     let frag = frag;
 
@@ -139,11 +137,11 @@ fn append_into_empty_impl_block() {
 fn append_into_scope_with_children_still_works() {
     let source = "impl Foo {\n    fn existing() {}\n}\n";
     //            ^0          ^11               ^30^31^32
-    let mut child = code_fragment(source, "existing", SymbolKind::Function, 15..29, None, vec![]);
+    let mut child = code_fragment("existing", SymbolKind::Function, 15..29, None, vec![]);
     child.signature = Some("fn existing()".to_owned());
     child.parent_name = Some("Foo".to_owned());
 
-    let mut frag = code_fragment(source, "Foo", SymbolKind::Impl, 0..32, None, vec![child]);
+    let mut frag = code_fragment("Foo", SymbolKind::Impl, 0..32, None, vec![child]);
     frag.signature = Some("impl Foo".to_owned());
     let frag = frag;
 
@@ -173,8 +171,8 @@ fn check_conflicts_detects_zero_width_at_same_start_as_nonempty() {
     //            ^0        ^10        ^22        ^32        ^44
 
     // Two adjacent functions: aaa (0..22 full_span), bbb (22..44 full_span)
-    let frag_a = code_fragment(source, "aaa", SymbolKind::Function, 10..22, Some(0..9), vec![]);
-    let frag_b = code_fragment(source, "bbb", SymbolKind::Function, 32..44, Some(22..31), vec![]);
+    let frag_a = code_fragment("aaa", SymbolKind::Function, 10..22, Some(0..9), vec![]);
+    let frag_b = code_fragment("bbb", SymbolKind::Function, 32..44, Some(22..31), vec![]);
 
     // InsertAfter on aaa (zero-width at 22) + Replace on bbb (starts at 22).
     // These share byte_range.start = 22 and must be detected as a conflict

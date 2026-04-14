@@ -5,17 +5,18 @@ use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata, SymbolKi
 
 /// Helper: build a minimal code fragment with the given byte ranges for testing remapping.
 fn code_fragment(byte_range: Range<usize>, name_byte_offset: usize, children: Vec<Fragment>) -> Fragment {
-    Fragment::new(
-        "test".to_owned(),
-        FragmentKind::Symbol(SymbolKind::Function),
+    Fragment {
+        name: "test".to_owned(),
+        kind: FragmentKind::Symbol(SymbolKind::Function),
         byte_range,
-        None,
-        None,
-        None,
+        signature: None,
+        visibility: None,
+        metadata: None,
         name_byte_offset,
         children,
-        None,
-    )
+        parent_name: None,
+        fs_name: None,
+    }
 }
 
 /// Verifies that `SpanMap::build` produces correct virtual content and offset mapping.
@@ -229,17 +230,18 @@ fn remap_fragment_preserves_non_byte_fields() {
 fn remap_fragment_section_metadata_unchanged() {
     let map = SpanMap::new(&[(100, 50)]);
 
-    let frag = Fragment::new(
-        "section".to_owned(),
-        FragmentKind::Section { level: 2 },
-        0..20,
-        None,
-        None,
-        Some(FragmentMetadata::Document { index: 3 }),
-        0,
-        vec![],
-        None,
-    );
+    let frag = Fragment {
+        name: "section".to_owned(),
+        kind: FragmentKind::Section { level: 2 },
+        byte_range: 0..20,
+        signature: None,
+        visibility: None,
+        metadata: Some(FragmentMetadata::Document { index: 3 }),
+        name_byte_offset: 0,
+        children: vec![],
+        parent_name: None,
+        fs_name: None,
+    };
 
     let remapped = map.remap_fragment(frag);
     assert_eq!(remapped.byte_range, 100..120);
@@ -252,19 +254,20 @@ fn remap_fragment_section_metadata_unchanged() {
 fn remap_fragment_code_block_metadata_unchanged() {
     let map = SpanMap::new(&[(50, 30)]);
 
-    let frag = Fragment::new(
-        "code_block".to_owned(),
-        FragmentKind::CodeBlock {
+    let frag = Fragment {
+        name: "code_block".to_owned(),
+        kind: FragmentKind::CodeBlock {
             lang: Some("rust".to_owned()),
         },
-        5..15,
-        None,
-        None,
-        Some(FragmentMetadata::CodeBlock { index: 1 }),
-        5,
-        vec![],
-        None,
-    );
+        byte_range: 5..15,
+        signature: None,
+        visibility: None,
+        metadata: Some(FragmentMetadata::CodeBlock { index: 1 }),
+        name_byte_offset: 5,
+        children: vec![],
+        parent_name: None,
+        fs_name: None,
+    };
 
     let remapped = map.remap_fragment(frag);
     assert_eq!(remapped.byte_range, 55..65);

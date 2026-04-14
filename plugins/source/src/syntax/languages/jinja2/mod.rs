@@ -308,19 +308,17 @@ fn extract_identifier(node: tree_sitter::Node<'_>, source: &str) -> (String, usi
 pub fn symbols_to_fragments(symbols: Vec<Jinja2Symbol>) -> Vec<Fragment> {
     symbols
         .into_iter()
-        .map(|sym| {
-            let signature = (!sym.signature.is_empty()).then_some(sym.signature);
-            Fragment::new(
-                sym.name,
-                sym.kind,
-                sym.full_span,
-                signature,
-                None,
-                None,
-                sym.name_byte_offset,
-                Vec::new(),
-                None,
-            )
+        .map(|sym| Fragment {
+            name: sym.name,
+            kind: sym.kind,
+            byte_range: sym.full_span,
+            signature: (!sym.signature.is_empty()).then_some(sym.signature),
+            visibility: None,
+            metadata: None,
+            name_byte_offset: sym.name_byte_offset,
+            children: Vec::new(),
+            parent_name: None,
+            fs_name: None,
         })
         .collect()
 }

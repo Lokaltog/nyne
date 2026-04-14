@@ -281,20 +281,21 @@ pub struct CodeFragmentSpec {
 /// Build a [`Fragment`] from a tree-sitter node and a [`CodeFragmentSpec`].
 ///
 /// Thin adapter that bridges the language-specific data collected in
-/// [`CodeFragmentSpec`] with the generic [`Fragment::new`] constructor.
+/// [`CodeFragmentSpec`] with direct [`Fragment`] construction.
 /// The byte range is taken from the tree-sitter `span_node`.
 pub fn build_code_fragment(span_node: TsNode<'_>, spec: CodeFragmentSpec, parent_name: Option<&str>) -> Fragment {
-    Fragment::new(
-        spec.name,
-        FragmentKind::Symbol(spec.kind),
-        span_node.byte_range(),
-        Some(spec.signature),
-        spec.visibility,
-        None,
-        spec.name_byte_offset,
-        spec.children,
-        parent_name.map(String::from),
-    )
+    Fragment {
+        name: spec.name,
+        kind: FragmentKind::Symbol(spec.kind),
+        byte_range: span_node.byte_range(),
+        signature: Some(spec.signature),
+        visibility: spec.visibility,
+        metadata: None,
+        name_byte_offset: spec.name_byte_offset,
+        children: spec.children,
+        parent_name: parent_name.map(String::from),
+        fs_name: None,
+    }
 }
 /// Build a [`Fragment`] for nodes with the common pattern: first-line signature,
 /// docstring child from doc range, no extra children, and no visibility.
