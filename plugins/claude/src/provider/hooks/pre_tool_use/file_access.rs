@@ -200,20 +200,20 @@ fn resolve_target_symbol(
     edit_input: Option<&EditToolInput>,
 ) -> Option<String> {
     match kind {
-        ToolKind::Read => {
-            let offset = read_input.and_then(|r| r.offset).unwrap_or(0);
-            util::resolve_symbol_at_line(
-                &decomposed.decomposed,
-                usize::try_from(offset).unwrap_or(usize::MAX),
-                &decomposed.source,
-            )
-        }
+        ToolKind::Read => util::resolve_symbol_at_line(
+            &decomposed.decomposed,
+            usize::try_from(read_input.and_then(|r| r.offset).unwrap_or(0)).unwrap_or(usize::MAX),
+            &decomposed.rope,
+        ),
         ToolKind::Edit => edit_input
             .and_then(|e| e.old_string.as_deref())
             .and_then(|old| util::find_line_of_string(&decomposed.source, old))
             .and_then(|line| {
-                let line = usize::try_from(line).unwrap_or(usize::MAX);
-                util::resolve_symbol_at_line(&decomposed.decomposed, line.saturating_sub(1), &decomposed.source)
+                util::resolve_symbol_at_line(
+                    &decomposed.decomposed,
+                    usize::try_from(line).unwrap_or(usize::MAX).saturating_sub(1),
+                    &decomposed.rope,
+                )
             }),
         ToolKind::Write => None,
     }

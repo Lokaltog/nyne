@@ -94,7 +94,7 @@ impl SyntaxProvider {
         let ext = decomposer.file_extension();
 
         // at-line/ uses 1-based lines; fragment functions use 0-based.
-        let Some(frag_path) = find_nearest_fragment_at_line(&shared.decomposed, line - 1, &shared.source) else {
+        let Some(frag_path) = find_nearest_fragment_at_line(&shared.decomposed, line - 1, &shared.rope) else {
             return Ok(None);
         };
 

@@ -219,8 +219,7 @@ impl SyntaxRegistry {
         let (mut fragments, _tree) = decomposer.decompose(source, max_depth);
         decomposer.map_to_fs(&mut fragments);
         resolve_conflicts(&mut fragments, decomposer);
-        let frag = find_fragment(&fragments, fragment_path)?;
-        Some(source[frag.byte_range.start..frag.byte_range.end].to_owned())
+        Some(source[find_fragment(&fragments, fragment_path)?.span.byte_range.clone()].to_owned())
     }
 }
 
@@ -280,9 +279,27 @@ pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<
 /// resolution) are transparent — the search looks through to their children.
 /// Structural fragments (docstrings, imports, decorators) are skipped entirely.
 /// Used by LSP symlink directories to reverse-map locations to symbols.
-pub fn find_fragment_at_line(fragments: &[fragment::Fragment], line: usize, source: &str) -> Option<Vec<String>> {
-    let rope = crop::Rope::from(source);
-    find_fragment_at_line_rope(fragments, line, &rope)
+///
+/// Callers must pass a pre-built [`crop::Rope`] — typically
+/// `&shared.rope` from a [`decomposed::DecomposedSource`].
+pub fn find_fragment_at_line(
+    fragments: &[fragment::Fragment],
+    line: usize,
+    rope: &crop::Rope,
+) -> Option<Vec<String>> {
+    let frag = fragments
+        .iter()
+        .filter(|f| !f.kind.is_structural())
+        .find(|f| f.line_range(rope).contains(&line))?;
+
+    let Some(fs_name) = frag.fs_name.as_ref() else {
+        // Nameless container: look through to children.
+        return find_fragment_at_line(&frag.children, line, rope);
+    };
+
+    let mut path = find_fragment_at_line(&frag.children, line, rope).unwrap_or_default();
+    path.insert(0, fs_name.clone());
+    Some(path)
 }
 
 /// Join fragment path segments into a VFS display path.
@@ -295,23 +312,6 @@ pub fn fragment_vfs_name(companion: &nyne_companion::Companion, segments: &[impl
     segments.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(&sep)
 }
 
-/// Inner implementation that accepts a pre-built rope to avoid repeated construction.
-fn find_fragment_at_line_rope(fragments: &[fragment::Fragment], line: usize, rope: &crop::Rope) -> Option<Vec<String>> {
-    let frag = fragments
-        .iter()
-        .filter(|f| !f.kind.is_structural())
-        .find(|f| f.line_range(rope).contains(&line))?;
-
-    let Some(fs_name) = frag.fs_name.as_ref() else {
-        // Nameless container: look through to children.
-        return find_fragment_at_line_rope(&frag.children, line, rope);
-    };
-
-    let mut path = find_fragment_at_line_rope(&frag.children, line, rope).unwrap_or_default();
-    path.insert(0, fs_name.clone());
-    Some(path)
-}
-
 /// Like [`find_fragment_at_line`], but falls back to the nearest fragment
 /// when `line` is in a gap (imports, blank lines between items).
 ///
@@ -322,17 +322,10 @@ fn find_fragment_at_line_rope(fragments: &[fragment::Fragment], line: usize, rop
 /// Nameless fragments (e.g. inherent impl blocks hidden by conflict
 /// resolution) are transparent — when `line` falls inside one, the search
 /// narrows to its children.
+///
+/// Callers must pass a pre-built [`crop::Rope`] — typically
+/// `&shared.rope` from a [`decomposed::DecomposedSource`].
 pub fn find_nearest_fragment_at_line(
-    fragments: &[fragment::Fragment],
-    line: usize,
-    source: &str,
-) -> Option<Vec<String>> {
-    let rope = crop::Rope::from(source);
-    find_nearest_fragment_at_line_rope(fragments, line, &rope)
-}
-
-/// Inner implementation that accepts a pre-built rope to avoid repeated construction.
-fn find_nearest_fragment_at_line_rope(
     fragments: &[fragment::Fragment],
     line: usize,
     rope: &crop::Rope,
@@ -345,11 +338,11 @@ fn find_nearest_fragment_at_line_rope(
         .filter(|f| !f.kind.is_structural())
         .find(|f| f.line_range(rope).contains(&line) && f.fs_name.is_none())
     {
-        return find_nearest_fragment_at_line_rope(&frag.children, line, rope);
+        return find_nearest_fragment_at_line(&frag.children, line, rope);
     }
 
     // Fast path: exact match.
-    if let Some(path) = find_fragment_at_line_rope(fragments, line, rope) {
+    if let Some(path) = find_fragment_at_line(fragments, line, rope) {
         return Some(path);
     }
 
@@ -368,18 +361,13 @@ fn find_nearest_fragment_at_line_rope(
             };
             // Prefer preceding fragments (end ≤ line) at equal distance
             // by making following fragments sort after.
-            let precedes = lr.end <= line;
-            let key = (dist, !precedes);
-            (key, f)
+            ((dist, lr.end > line), f)
         })
         .min_by_key(|(key, _)| *key)?;
 
-    let fs_name = nearest.fs_name.as_ref()?;
-    let path = vec![fs_name.clone()];
-
     // Don't recurse into children — the line is outside this fragment's range,
     // so child ranges (subsets of the parent) won't contain it either.
-    Some(path)
+    Some(vec![nearest.fs_name.as_ref()?.clone()])
 }
 
 /// Navigate a fragment tree by following `fs_name` components.

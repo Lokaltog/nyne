@@ -49,7 +49,7 @@ fn resolve_symbol_link(
 ) -> Option<PathBuf> {
     ctx.syntax.decomposer_for(target_path)?;
     let target_shared = ctx.decomposition.get(target_path).ok()?;
-    let frag_path = find_fragment_at_line(&target_shared.decomposed, target_line as usize, &target_shared.source)?;
+    let frag_path = find_fragment_at_line(&target_shared.decomposed, target_line as usize, &target_shared.rope)?;
     let mut target = PathBuf::from(format!("{}/{}", companion.companion_name(rel_path), ctx.symbols_dir));
     for name in &frag_path {
         target.push(companion.companion_name(name));
@@ -142,13 +142,12 @@ pub fn resolve_lsp_symlink_dir(
         return Ok(None);
     };
 
-    let rope = crop::Rope::from(shared.source.as_str());
     let targets = query_lsp_targets(
         &lsp_handle,
         &shared.source,
-        frag.name_byte_offset,
+        frag.span.name_byte_offset,
         lsp_dir,
-        &frag.line_range(&rope),
+        &frag.line_range(&shared.rope),
     )?;
 
     if targets.is_empty() {
@@ -202,9 +201,8 @@ pub fn resolve_actions_dir(
         return Ok(None);
     };
 
-    let sym = lsp_handle.at(&shared.source, frag.name_byte_offset);
-    let rope = crop::Rope::from(shared.source.as_str());
-    let resolved = actions::resolve_code_actions(&sym, &frag.line_range(&rope));
+    let sym = lsp_handle.at(&shared.source, frag.span.name_byte_offset);
+    let resolved = actions::resolve_code_actions(&sym, &frag.line_range(&shared.rope));
     Ok(Some((resolved, sym)))
 }
 

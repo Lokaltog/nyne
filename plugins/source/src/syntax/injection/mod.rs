@@ -69,7 +69,7 @@ impl Decomposer for InjectionDecomposer {
 
         // 6. Merge Jinja2 + remapped inner fragments, sorted by position.
         let mut fragments: Vec<Fragment> = jinja2_fragments.into_iter().chain(remapped_fragments).collect();
-        fragments.sort_by_key(|f| f.byte_range.start);
+        fragments.sort_by_key(|f| f.span.byte_range.start);
 
         // Injection decomposers don't produce a usable tree — the inner tree
         // is over concatenated content with remapped offsets.

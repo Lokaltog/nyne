@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 156
 expression: frags
 ---
 [
@@ -9,7 +8,11 @@ expression: frags
         kind: Section {
             level: 1,
         },
-        byte_range: 0..48,
+        span: FragmentSpan {
+            byte_range: 0..48,
+            full_span: 0..48,
+            name_byte_offset: 0,
+        },
         signature: None,
         visibility: None,
         metadata: Some(
@@ -17,14 +20,17 @@ expression: frags
                 index: 0,
             },
         ),
-        name_byte_offset: 0,
         children: [
             Fragment {
                 name: "Quick Setup",
                 kind: Section {
                     level: 2,
                 },
-                byte_range: 26..48,
+                span: FragmentSpan {
+                    byte_range: 26..48,
+                    full_span: 26..48,
+                    name_byte_offset: 26,
+                },
                 signature: None,
                 visibility: None,
                 metadata: Some(
@@ -32,7 +38,6 @@ expression: frags
                         index: 0,
                     },
                 ),
-                name_byte_offset: 26,
                 children: [],
                 parent_name: None,
                 fs_name: Some(

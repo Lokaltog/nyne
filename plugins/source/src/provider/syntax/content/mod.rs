@@ -52,32 +52,30 @@ impl Readable for Slice {
     fn read(&self, _ctx: &ReadContext<'_>) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
         let frags = &shared.decomposed;
-        let rope = crop::Rope::from(shared.source.as_str());
+        let rope = &shared.rope;
 
         let (byte_range, mask_span) = match &self.target {
             SpliceTarget::FragmentBody(path) => {
                 let frag = syntax::require_fragment(frags, path)?;
-                let span = frag.full_span();
-                let body_start = line_start_of_rope(&rope, span.start);
+                let span = frag.span.full_span.clone();
+                let body_start = line_start_of_rope(rope, span.start);
                 match shared.decomposer.splice_mode() {
                     SpliceMode::Line => (body_start..span.end, None),
-                    SpliceMode::Byte => (body_start..line_end_of_rope(&rope, span.end), Some(span)),
+                    SpliceMode::Byte => (body_start..line_end_of_rope(rope, span.end), Some(span)),
                 }
             }
             SpliceTarget::Imports => {
                 let imports = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Imports)
                     .ok_or_else(|| eyre!("no import span in {}", self.resolver.source_file().display()))?;
-                (
-                    line_start_of_rope(&rope, imports.byte_range.start)..imports.byte_range.end,
-                    None,
-                )
+                let import_range = &imports.span.byte_range;
+                (line_start_of_rope(rope, import_range.start)..import_range.end, None)
             }
             SpliceTarget::CodeBlockBody { parent_path, fs_name } => {
                 let parent = syntax::require_fragment(frags, parent_path)?;
                 let cb = parent
                     .child_by_fs_name(fs_name)
                     .ok_or_else(|| eyre!("code block {fs_name:?} not found in {parent_path:?}"))?;
-                (cb.byte_range.clone(), None)
+                (cb.span.byte_range.clone(), None)
             }
             // Other SpliceTarget variants are handled by their own Readable types
             // (SignatureContent, DocstringContent, DecoratorsContent).

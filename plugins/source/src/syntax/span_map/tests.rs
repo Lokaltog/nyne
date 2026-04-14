@@ -1,18 +1,17 @@
 use std::ops::Range;
 
 use super::*;
-use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata, SymbolKind};
+use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata, FragmentSpan, SymbolKind};
 
 /// Helper: build a minimal code fragment with the given byte ranges for testing remapping.
 fn code_fragment(byte_range: Range<usize>, name_byte_offset: usize, children: Vec<Fragment>) -> Fragment {
     Fragment {
         name: "test".to_owned(),
         kind: FragmentKind::Symbol(SymbolKind::Function),
-        byte_range,
+        span: FragmentSpan::with_children(byte_range, name_byte_offset, &children),
         signature: None,
         visibility: None,
         metadata: None,
-        name_byte_offset,
         children,
         parent_name: None,
         fs_name: None,
@@ -170,9 +169,9 @@ fn remap_fragment_basic() {
     let frag = code_fragment(5..20, 5, vec![]);
 
     let remapped = map.remap_fragment(frag);
-    assert_eq!(remapped.byte_range, 105..120);
-    assert_eq!(remapped.full_span(), 105..120);
-    assert_eq!(remapped.name_byte_offset, 105);
+    assert_eq!(remapped.span.byte_range, 105..120);
+    assert_eq!(remapped.span.full_span, 105..120);
+    assert_eq!(remapped.span.name_byte_offset, 105);
 }
 
 /// Verifies that `remap_fragment` remaps a parent fragment with children.
@@ -183,9 +182,9 @@ fn remap_fragment_with_children() {
     let frag = code_fragment(10..30, 10, vec![]);
 
     let remapped = map.remap_fragment(frag);
-    assert_eq!(remapped.byte_range, 110..130);
-    assert_eq!(remapped.full_span(), 110..130);
-    assert_eq!(remapped.name_byte_offset, 110);
+    assert_eq!(remapped.span.byte_range, 110..130);
+    assert_eq!(remapped.span.full_span, 110..130);
+    assert_eq!(remapped.span.name_byte_offset, 110);
 }
 
 /// Verifies that `remap_fragment` recursively remaps nested children.
@@ -197,14 +196,14 @@ fn remap_fragment_recursive_children() {
     let parent = code_fragment(0..80, 0, vec![child]);
 
     let remapped = map.remap_fragment(parent);
-    assert_eq!(remapped.byte_range, 200..280);
-    assert_eq!(remapped.name_byte_offset, 200);
+    assert_eq!(remapped.span.byte_range, 200..280);
+    assert_eq!(remapped.span.name_byte_offset, 200);
 
     assert_eq!(remapped.children.len(), 1);
     let child = &remapped.children[0];
-    assert_eq!(child.byte_range, 220..240);
-    assert_eq!(child.full_span(), 220..240);
-    assert_eq!(child.name_byte_offset, 220);
+    assert_eq!(child.span.byte_range, 220..240);
+    assert_eq!(child.span.full_span, 220..240);
+    assert_eq!(child.span.name_byte_offset, 220);
 }
 
 /// Verifies that `remap_fragment` preserves name, signature, `parent_name`, and `fs_name`.
@@ -233,19 +232,18 @@ fn remap_fragment_section_metadata_unchanged() {
     let frag = Fragment {
         name: "section".to_owned(),
         kind: FragmentKind::Section { level: 2 },
-        byte_range: 0..20,
+        span: FragmentSpan::leaf(0..20, 0),
         signature: None,
         visibility: None,
         metadata: Some(FragmentMetadata::Document { index: 3 }),
-        name_byte_offset: 0,
         children: vec![],
         parent_name: None,
         fs_name: None,
     };
 
     let remapped = map.remap_fragment(frag);
-    assert_eq!(remapped.byte_range, 100..120);
-    assert_eq!(remapped.full_span(), 100..120);
+    assert_eq!(remapped.span.byte_range, 100..120);
+    assert_eq!(remapped.span.full_span, 100..120);
     assert_eq!(remapped.metadata, Some(FragmentMetadata::Document { index: 3 }));
 }
 
@@ -259,18 +257,17 @@ fn remap_fragment_code_block_metadata_unchanged() {
         kind: FragmentKind::CodeBlock {
             lang: Some("rust".to_owned()),
         },
-        byte_range: 5..15,
+        span: FragmentSpan::leaf(5..15, 5),
         signature: None,
         visibility: None,
         metadata: Some(FragmentMetadata::CodeBlock { index: 1 }),
-        name_byte_offset: 5,
         children: vec![],
         parent_name: None,
         fs_name: None,
     };
 
     let remapped = map.remap_fragment(frag);
-    assert_eq!(remapped.byte_range, 55..65);
+    assert_eq!(remapped.span.byte_range, 55..65);
     assert_eq!(remapped.metadata, Some(FragmentMetadata::CodeBlock { index: 1 }));
     assert_eq!(remapped.kind, FragmentKind::CodeBlock {
         lang: Some("rust".to_owned())

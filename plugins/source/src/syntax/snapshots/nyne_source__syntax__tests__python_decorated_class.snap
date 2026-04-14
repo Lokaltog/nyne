@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 102
 expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y: int\\n\")"
 ---
 [
@@ -9,22 +8,28 @@ expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y:
         kind: Symbol(
             Class,
         ),
-        byte_range: 0..45,
+        span: FragmentSpan {
+            byte_range: 0..45,
+            full_span: 0..45,
+            name_byte_offset: 17,
+        },
         signature: Some(
             "@dataclass",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 17,
         children: [
             Fragment {
                 name: "decorators",
                 kind: Decorator,
-                byte_range: 0..10,
+                span: FragmentSpan {
+                    byte_range: 0..10,
+                    full_span: 0..10,
+                    name_byte_offset: 0,
+                },
                 signature: None,
                 visibility: None,
                 metadata: None,
-                name_byte_offset: 0,
                 children: [],
                 parent_name: Some(
                     "Point",
@@ -36,13 +41,16 @@ expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y:
                 kind: Symbol(
                     Variable,
                 ),
-                byte_range: 28..34,
+                span: FragmentSpan {
+                    byte_range: 28..34,
+                    full_span: 28..34,
+                    name_byte_offset: 28,
+                },
                 signature: Some(
                     "x: int",
                 ),
                 visibility: None,
                 metadata: None,
-                name_byte_offset: 28,
                 children: [],
                 parent_name: Some(
                     "Point",
@@ -54,13 +62,16 @@ expression: "decompose(\"py\", \"@dataclass\\nclass Point:\\n    x: int\\n    y:
                 kind: Symbol(
                     Variable,
                 ),
-                byte_range: 39..45,
+                span: FragmentSpan {
+                    byte_range: 39..45,
+                    full_span: 39..45,
+                    name_byte_offset: 39,
+                },
                 signature: Some(
                     "y: int",
                 ),
                 visibility: None,
                 metadata: None,
-                name_byte_offset: 39,
                 children: [],
                 parent_name: Some(
                     "Point",

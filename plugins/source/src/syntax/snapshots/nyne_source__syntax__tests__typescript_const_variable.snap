@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 107
 expression: "decompose(\"ts\", \"export const API_URL = 'https://example.com';\\n\")"
 ---
 [
@@ -9,7 +8,11 @@ expression: "decompose(\"ts\", \"export const API_URL = 'https://example.com';\\
         kind: Symbol(
             Variable,
         ),
-        byte_range: 0..45,
+        span: FragmentSpan {
+            byte_range: 0..45,
+            full_span: 0..45,
+            name_byte_offset: 0,
+        },
         signature: Some(
             "export const API_URL = 'https://example.com'",
         ),
@@ -17,7 +20,6 @@ expression: "decompose(\"ts\", \"export const API_URL = 'https://example.com';\\
             "export",
         ),
         metadata: None,
-        name_byte_offset: 0,
         children: [],
         parent_name: None,
         fs_name: None,

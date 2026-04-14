@@ -25,6 +25,11 @@ use super::{SyntaxRegistry, resolve_conflicts};
 /// parsed at most once per change cycle.
 pub struct DecomposedSource {
     pub source: String,
+    /// `crop::Rope` view of `source`, built once at parse time. Shared
+    /// with every reader so byte→line conversions, line offsets, and
+    /// splice operations don't have to rebuild a rope per call.
+    /// `crop::Rope` is internally reference-counted, so cloning is cheap.
+    pub rope: crop::Rope,
     pub decomposed: DecomposedFile,
     pub decomposer: Arc<dyn Decomposer>,
     /// The tree-sitter parse tree, retained for analysis.
@@ -50,27 +55,45 @@ impl fmt::Debug for DecomposedSource {
 
 /// Read and decompose a source file, returning the shared decomposition.
 ///
-/// Reads the file via the filesystem, parses with the given decomposer, maps
-/// filesystem names, and resolves conflicts. This is the single source of
-/// truth for "read file → decomposed fragments" — all consumers must use
-/// this function rather than calling decomposer methods directly.
+/// Reads the file via the filesystem and delegates to
+/// [`build_decomposed_source`] for the parse → map → resolve pipeline.
+/// This is the single source of truth for "read file → decomposed
+/// fragments" — all consumers must use this function rather than
+/// calling decomposer methods directly.
 fn decompose_source(
     source_path: &Path,
     fs: &dyn Filesystem,
     decomposer: &Arc<dyn Decomposer>,
     max_depth: usize,
 ) -> Result<Arc<DecomposedSource>> {
-    let raw = fs.read_file(source_path)?;
-    let source = String::from_utf8(raw)?;
+    Ok(build_decomposed_source(
+        String::from_utf8(fs.read_file(source_path)?)?,
+        Arc::clone(decomposer),
+        max_depth,
+    ))
+}
+
+/// Build a [`DecomposedSource`] from already-loaded source text.
+///
+/// Runs the parse → `map_to_fs` → `resolve_conflicts` → rope-build
+/// pipeline. This is the single source of truth for assembling a
+/// `DecomposedSource` from a `String` — both the cache loader and test
+/// helpers use it so the field set never drifts.
+pub fn build_decomposed_source(
+    source: String,
+    decomposer: Arc<dyn Decomposer>,
+    max_depth: usize,
+) -> Arc<DecomposedSource> {
     let (mut fragments, tree) = decomposer.decompose(&source, max_depth);
     decomposer.map_to_fs(&mut fragments);
-    resolve_conflicts(&mut fragments, decomposer);
-    Ok(Arc::new(DecomposedSource {
+    resolve_conflicts(&mut fragments, &decomposer);
+    Arc::new(DecomposedSource {
+        rope: crop::Rope::from(source.as_str()),
         source,
         decomposed: fragments,
-        decomposer: Arc::clone(decomposer),
+        decomposer,
         tree,
-    }))
+    })
 }
 
 /// Per-file decomposition cache.

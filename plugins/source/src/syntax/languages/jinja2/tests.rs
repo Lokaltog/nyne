@@ -324,7 +324,7 @@ fn fragment_byte_ranges_extract_correct_source() {
 
     let frag = &fragments[0];
     assert_eq!(&source[frag.full_span()], source);
-    assert_eq!(&source[frag.byte_range.clone()], source);
+    assert_eq!(&source[frag.span.byte_range.clone()], source);
 }
 
 /// Verifies that fragment `name_byte_offset` extracts the correct name from source.
@@ -335,8 +335,8 @@ fn fragment_name_byte_offset_extracts_name() {
     let fragments = symbols_to_fragments(t.symbols);
 
     let frag = &fragments[0];
-    let extracted_name = &source[frag.name_byte_offset..frag.name_byte_offset + frag.name.len()];
-    assert_eq!(extracted_name, "header");
+    let offset = frag.span.name_byte_offset;
+    assert_eq!(&source[offset..offset + frag.name.len()], "header");
 }
 
 /// Decompose a Jinja2 fixture file into fragments.

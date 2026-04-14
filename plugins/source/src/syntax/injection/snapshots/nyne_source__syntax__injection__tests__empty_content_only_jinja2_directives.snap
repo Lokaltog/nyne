@@ -1,17 +1,19 @@
 ---
 source: plugins/source/src/syntax/injection/tests.rs
-assertion_line: 189
 expression: file
 ---
 [
     Fragment {
         name: "preamble",
         kind: Preamble,
-        byte_range: 0..57,
+        span: FragmentSpan {
+            byte_range: 0..57,
+            full_span: 0..57,
+            name_byte_offset: 0,
+        },
         signature: None,
         visibility: None,
         metadata: None,
-        name_byte_offset: 0,
         children: [],
         parent_name: None,
         fs_name: None,

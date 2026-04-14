@@ -2,7 +2,6 @@ pub mod config;
 use std::path::Path;
 use std::sync::Arc;
 
-use crop::Rope;
 use linkme::distributed_slice;
 use nyne::ActivationContext;
 use nyne::plugin::PluginFactory;
@@ -245,7 +244,7 @@ fn dir_overview_files(
             let decomposer = registry.decomposer_for(&path)?;
             let language = decomposer.language_name().to_owned();
             let shared = decomposition.get(&path).ok()?;
-            let lines = Rope::from(shared.source.as_str()).line_len();
+            let lines = shared.rope.line_len();
             let description = file_doc_text(&shared)
                 .and_then(|doc| doc.lines().next().map(str::to_owned))
                 .unwrap_or_default();

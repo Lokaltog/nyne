@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/injection/tests.rs
-assertion_line: 112
 expression: file
 ---
 [
@@ -9,13 +8,16 @@ expression: file
         kind: Symbol(
             Module,
         ),
-        byte_range: 0..73,
+        span: FragmentSpan {
+            byte_range: 0..73,
+            full_span: 0..73,
+            name_byte_offset: 9,
+        },
         signature: Some(
             "{% block config %}",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 9,
         children: [],
         parent_name: None,
         fs_name: None,
@@ -25,13 +27,16 @@ expression: file
         kind: Symbol(
             Module,
         ),
-        byte_range: 19..59,
+        span: FragmentSpan {
+            byte_range: 19..59,
+            full_span: 19..59,
+            name_byte_offset: 19,
+        },
         signature: Some(
             "[server]",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 19,
         children: [],
         parent_name: None,
         fs_name: None,

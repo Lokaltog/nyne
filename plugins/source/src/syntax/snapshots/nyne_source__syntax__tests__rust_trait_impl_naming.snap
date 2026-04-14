@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 163
 expression: "decompose(\"rs\", source)"
 ---
 [
@@ -9,26 +8,32 @@ expression: "decompose(\"rs\", source)"
         kind: Symbol(
             Impl,
         ),
-        byte_range: 0..102,
+        span: FragmentSpan {
+            byte_range: 0..102,
+            full_span: 0..102,
+            name_byte_offset: 0,
+        },
         signature: Some(
             "impl Display for Foo",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 0,
         children: [
             Fragment {
                 name: "fmt",
                 kind: Symbol(
                     Function,
                 ),
-                byte_range: 27..100,
+                span: FragmentSpan {
+                    byte_range: 27..100,
+                    full_span: 27..100,
+                    name_byte_offset: 30,
+                },
                 signature: Some(
                     "fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result",
                 ),
                 visibility: None,
                 metadata: None,
-                name_byte_offset: 30,
                 children: [],
                 parent_name: Some(
                     "Display_for_Foo",

@@ -12,7 +12,7 @@ use std::str::from_utf8;
 use color_eyre::eyre::{Result, eyre};
 use parking_lot::Mutex;
 
-use super::fragment::{DecomposedFile, Fragment, FragmentKind, ParseError, SymbolKind};
+use super::fragment::{DecomposedFile, Fragment, FragmentKind, FragmentSpan, ParseError, SymbolKind};
 
 /// Ergonomic wrapper around a [`tree_sitter::Node`] paired with its source
 /// bytes, eliminating the `(node, &[u8])` parameter pairs that dominate the
@@ -287,11 +287,10 @@ pub fn build_code_fragment(span_node: TsNode<'_>, spec: CodeFragmentSpec, parent
     Fragment {
         name: spec.name,
         kind: FragmentKind::Symbol(spec.kind),
-        byte_range: span_node.byte_range(),
+        span: FragmentSpan::with_children(span_node.byte_range(), spec.name_byte_offset, &spec.children),
         signature: Some(spec.signature),
         visibility: spec.visibility,
         metadata: None,
-        name_byte_offset: spec.name_byte_offset,
         children: spec.children,
         parent_name: parent_name.map(String::from),
         fs_name: None,
@@ -418,8 +417,7 @@ impl TreeSitterParser {
         let Some(tree) = self.parse(source) else {
             return (Vec::new(), None);
         };
-        let src = source.as_bytes();
-        let root = TsNode::new(tree.root_node(), src);
+        let root = TsNode::new(tree.root_node(), source.as_bytes());
         let mut fragments = extract_fragments(root, max_depth);
 
         if let Some(range) = collect_import_range(root, import_kinds) {
@@ -431,7 +429,7 @@ impl TreeSitterParser {
         }
 
         // Natural source order: file_doc → imports → preamble → symbols.
-        fragments.sort_by_key(|f| f.byte_range.start);
+        fragments.sort_by_key(|f| f.span.byte_range.start);
 
         (fragments, Some(tree))
     }

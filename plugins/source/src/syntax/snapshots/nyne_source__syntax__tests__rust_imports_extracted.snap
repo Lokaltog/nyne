@@ -1,17 +1,19 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 169
 expression: "super::fragment::find_fragment_of_kind(&result, &FragmentKind::Imports)"
 ---
 Some(
     Fragment {
         name: "imports",
         kind: Imports,
-        byte_range: 0..26,
+        span: FragmentSpan {
+            byte_range: 0..26,
+            full_span: 0..26,
+            name_byte_offset: 0,
+        },
         signature: None,
         visibility: None,
         metadata: None,
-        name_byte_offset: 0,
         children: [],
         parent_name: None,
         fs_name: None,

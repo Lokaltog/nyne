@@ -264,12 +264,13 @@ impl EditPlan {
 /// Otherwise, finds the closing brace and inserts before it.
 fn append_offset(source: &str, frag: &Fragment) -> usize {
     if let Some(last) = frag.children.last() {
-        return last.full_span().end;
+        return last.span.full_span.end;
     }
     // Empty scope: find closing brace and insert before it.
-    source[frag.byte_range.start..frag.byte_range.end]
+    let body = &frag.span.byte_range;
+    source[body.start..body.end]
         .rfind('}')
-        .map_or(frag.byte_range.end, |pos| frag.byte_range.start + pos)
+        .map_or(body.end, |pos| body.start + pos)
 }
 
 /// Ensure content has a leading newline separator when the source at `offset`

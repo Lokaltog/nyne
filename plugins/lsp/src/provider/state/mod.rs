@@ -117,7 +117,7 @@ impl LspState {
         if !feature.is_supported(lsp_handle.capabilities()) {
             return None;
         }
-        let query = lsp_handle.at(&shared.source, frag.name_byte_offset);
+        let query = lsp_handle.at(&shared.source, frag.span.name_byte_offset);
         let resolver = FragmentResolver::new(self.decomposition.clone(), sf);
         let fragment_path: Arc<[String]> = Arc::from(segments);
         Some(
@@ -385,7 +385,7 @@ impl LspState {
 
         req.set_diff_source(
             RenameDiff {
-                query: lsp_handle.at(&shared.source, frag.name_byte_offset),
+                query: lsp_handle.at(&shared.source, frag.span.name_byte_offset),
                 new_name: new_name.to_owned(),
             },
             Arc::clone(&self.fs),
@@ -421,7 +421,7 @@ impl LspState {
             let Some(frag) = find_fragment(&shared.decomposed, &path) else {
                 continue;
             };
-            let query = lsp_handle.at(&shared.source, frag.name_byte_offset);
+            let query = lsp_handle.at(&shared.source, frag.span.name_byte_offset);
             node.set_renameable(SymbolRename {
                 query,
                 fs: Arc::clone(&self.fs),

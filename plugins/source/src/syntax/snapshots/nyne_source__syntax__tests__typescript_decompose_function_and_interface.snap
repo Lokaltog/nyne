@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 87
 expression: "decompose(\"ts\", source)"
 ---
 [
@@ -9,7 +8,11 @@ expression: "decompose(\"ts\", source)"
         kind: Symbol(
             Function,
         ),
-        byte_range: 0..81,
+        span: FragmentSpan {
+            byte_range: 0..81,
+            full_span: 0..81,
+            name_byte_offset: 16,
+        },
         signature: Some(
             "export function greet(name: string): void",
         ),
@@ -17,7 +20,6 @@ expression: "decompose(\"ts\", source)"
             "export",
         ),
         metadata: None,
-        name_byte_offset: 16,
         children: [],
         parent_name: None,
         fs_name: None,
@@ -27,13 +29,16 @@ expression: "decompose(\"ts\", source)"
         kind: Symbol(
             Interface,
         ),
-        byte_range: 83..139,
+        span: FragmentSpan {
+            byte_range: 83..139,
+            full_span: 83..139,
+            name_byte_offset: 93,
+        },
         signature: Some(
             "interface Config",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 93,
         children: [],
         parent_name: None,
         fs_name: None,

@@ -378,7 +378,7 @@ fn rust_doc_comment_range_extends_fragment() {
     let frag = &result[0];
     let rope = crop::Rope::from(source);
 
-    assert_eq!(frag.byte_range.start, 14, "byte_range should start at fn keyword");
+    assert_eq!(frag.span.byte_range.start, 14, "byte_range should start at fn keyword");
     assert_eq!(frag.full_span().start, 0, "full_span should include doc comment");
     assert_eq!(frag.line_range(&rope).start, 0, "line_range should include doc comment");
 }
@@ -389,11 +389,11 @@ fn python_body_internal_docstring_does_not_shrink_range() {
     let result = decompose("py", "class Foo:\n    \"\"\"Docstring.\"\"\"\n    x = 1\n");
     let frag = &result[0];
 
-    assert_eq!(frag.byte_range.start, 0, "byte_range should start at class keyword");
+    assert_eq!(frag.span.byte_range.start, 0, "byte_range should start at class keyword");
     assert_eq!(frag.full_span().start, 0, "full_span should start at class keyword");
     assert_eq!(
         frag.full_span().end,
-        frag.byte_range.end,
+        frag.span.byte_range.end,
         "full_span should match byte_range for body-internal docstrings"
     );
 }
@@ -447,7 +447,7 @@ fn doc_comment_range_covers_expected(
     let doc_child = result[0]
         .child_of_kind(&FragmentKind::Docstring)
         .expect("should have doc comment child");
-    let text = &source[doc_child.byte_range.clone()];
+    let text = &source[doc_child.span.byte_range.clone()];
     for &expected in must_contain {
         assert!(
             text.contains(expected),
@@ -495,7 +495,7 @@ fn decorator_range_covers_expected(
     let dec_child = result[0]
         .child_of_kind(&FragmentKind::Decorator)
         .expect("should have decorator child");
-    let text = &source[dec_child.byte_range.clone()];
+    let text = &source[dec_child.span.byte_range.clone()];
     for &expected in must_contain {
         assert!(
             text.contains(expected),
@@ -526,7 +526,7 @@ fn file_level_doc_extracted(#[case] ext: &str, #[case] source: &str, #[case] exp
     let d = reg.get(ext).unwrap();
     let doc_frag = super::fragment::find_fragment_of_kind(&result, &FragmentKind::Docstring)
         .expect("should have file-level docstring fragment");
-    let raw = &source[doc_frag.byte_range.clone()];
+    let raw = &source[doc_frag.span.byte_range.clone()];
     let cleaned = d.clean_doc_comment(raw).expect("should clean doc comment");
     assert_eq!(cleaned, expected);
 }
@@ -541,7 +541,7 @@ fn file_level_doc_strip_wrap_roundtrip(#[case] ext: &str, #[case] source: &str) 
     let d = reg.get(ext).unwrap();
     let doc_frag = super::fragment::find_fragment_of_kind(&result, &FragmentKind::Docstring)
         .expect("should have file-level docstring fragment");
-    let raw = &source[doc_frag.byte_range.clone()];
+    let raw = &source[doc_frag.span.byte_range.clone()];
     let stripped = d.strip_doc_comment(raw);
     let rewrapped = d.wrap_file_doc_comment(&stripped, "");
     assert_eq!(rewrapped, raw, "strip → wrap_file_doc_comment should round-trip");
@@ -562,7 +562,7 @@ fn doc_and_decorator_ranges_are_disjoint(#[case] ext: &str, #[case] source: &str
         .child_of_kind(&FragmentKind::Decorator)
         .expect("should have decorator child");
     assert!(
-        doc.byte_range.end <= dec.byte_range.start || dec.byte_range.end <= doc.byte_range.start,
+        doc.span.byte_range.end <= dec.span.byte_range.start || dec.span.byte_range.end <= doc.span.byte_range.start,
         "ranges should not overlap"
     );
 }
@@ -616,7 +616,7 @@ fn decorator_byte_range_to_line_range() {
     let dec_child = result[0]
         .child_of_kind(&FragmentKind::Decorator)
         .expect("should have decorator child");
-    let line_range = SymbolLineRange::from_byte_range(source, &dec_child.byte_range);
+    let line_range = SymbolLineRange::from_byte_range(source, &dec_child.span.byte_range);
     assert_eq!(line_range, SymbolLineRange { start: 2, end: 2 });
 }
 
@@ -630,7 +630,7 @@ fn import_span_line_range_matches_byte_range() {
     let imports = super::fragment::find_fragment_of_kind(&result, &FragmentKind::Imports).expect("should have imports");
     let rope = crop::Rope::from(source);
     let from_line = SymbolLineRange::from_zero_based(&imports.line_range(&rope));
-    let from_bytes = SymbolLineRange::from_byte_range(source, &imports.byte_range);
+    let from_bytes = SymbolLineRange::from_byte_range(source, &imports.span.byte_range);
     assert_eq!(
         from_line, from_bytes,
         "import line_range mismatch: from_zero_based={from_line:?}, from_byte_range={from_bytes:?}"
@@ -664,7 +664,7 @@ fn full_span_bare_symbol_matches_byte_range() {
     let frag = &result[0];
     assert_eq!(
         frag.full_span(),
-        frag.byte_range,
+        frag.span.byte_range,
         "bare symbol: full_span == byte_range"
     );
 }
@@ -675,8 +675,8 @@ fn full_span_rust_decorator_only() {
     let result = decompose("rs", "#[derive(Debug)]\npub struct Foo;\n");
     let frag = &result[0];
     assert_eq!(frag.full_span().start, 0, "full_span should include attribute");
-    assert!(frag.byte_range.start > 0, "byte_range should start after attribute");
-    assert_eq!(frag.full_span().end, frag.byte_range.end, "ends should match");
+    assert!(frag.span.byte_range.start > 0, "byte_range should start after attribute");
+    assert_eq!(frag.full_span().end, frag.span.byte_range.end, "ends should match");
 }
 
 /// Verifies that `full_span` includes both doc comment and attribute for a Rust symbol.
@@ -685,8 +685,8 @@ fn full_span_rust_decorator_and_doc_comment() {
     let result = decompose("rs", "/// Documented.\n#[derive(Debug)]\npub struct Foo;\n");
     let frag = &result[0];
     assert_eq!(frag.full_span().start, 0, "full_span should start at doc comment");
-    assert!(frag.byte_range.start > 0, "byte_range should be the node range only");
-    assert_eq!(frag.full_span().end, frag.byte_range.end);
+    assert!(frag.span.byte_range.start > 0, "byte_range should be the node range only");
+    assert_eq!(frag.full_span().end, frag.span.byte_range.end);
 }
 
 /// Verifies that `full_span` includes the decorator for a Python class with a docstring.
@@ -695,8 +695,8 @@ fn full_span_python_decorated_class_with_docstring() {
     let result = decompose("py", "@dataclass\nclass Bar:\n    \"\"\"A bar.\"\"\"\n    x: int = 0\n");
     let frag = &result[0];
     assert_eq!(frag.full_span().start, 0, "full_span should include decorator");
-    assert_eq!(frag.byte_range.start, 0, "wrapper node includes decorator");
-    assert_eq!(frag.full_span().end, frag.byte_range.end);
+    assert_eq!(frag.span.byte_range.start, 0, "wrapper node includes decorator");
+    assert_eq!(frag.full_span().end, frag.span.byte_range.end);
 }
 
 /// Verifies that `full_span` includes a `JSDoc` comment for a TypeScript function.
@@ -705,8 +705,8 @@ fn full_span_typescript_jsdoc() {
     let result = decompose("ts", "/** Documented. */\nfunction greet() {}\n");
     let frag = &result[0];
     assert_eq!(frag.full_span().start, 0, "full_span should include JSDoc");
-    assert!(frag.byte_range.start > 0, "byte_range should start at function keyword");
-    assert_eq!(frag.full_span().end, frag.byte_range.end);
+    assert!(frag.span.byte_range.start > 0, "byte_range should start at function keyword");
+    assert_eq!(frag.full_span().end, frag.span.byte_range.end);
 }
 
 /// Verifies that `full_span` ranges of adjacent Python classes do not overlap.
@@ -733,7 +733,7 @@ class Second:
         "first class full_span starts at class keyword"
     );
     assert_eq!(
-        first.byte_range.start, 0,
+        first.span.byte_range.start, 0,
         "first class byte_range starts at class keyword"
     );
     assert!(
@@ -795,7 +795,7 @@ fn bar() {}
     let doc_child = frag
         .child_of_kind(&FragmentKind::Docstring)
         .expect("should have doc comment child");
-    let doc_range = &doc_child.byte_range;
+    let doc_range = &doc_child.span.byte_range;
     let raw_doc = &source[doc_range.clone()];
 
     let stripped = d.strip_doc_comment(raw_doc);
@@ -823,7 +823,7 @@ fn typescript_decorator_on_class() {
     let dec_child = result[0]
         .child_of_kind(&FragmentKind::Decorator)
         .expect("TS decorator should be captured");
-    let text = &source[dec_child.byte_range.clone()];
+    let text = &source[dec_child.span.byte_range.clone()];
     assert!(
         text.contains("@Injectable"),
         "range should cover the decorator: got {text:?}"
@@ -1071,15 +1071,19 @@ fn nearest_fragment_at_line(
     #[case] expected: &[&str],
 ) {
     let (frags, source) = alpha_beta_fragments;
-    let path = super::find_nearest_fragment_at_line(&frags, line, &source);
-    let expected: Vec<String> = expected.iter().map(|s| (*s).to_owned()).collect();
-    assert_eq!(path.as_deref(), Some(expected.as_slice()));
+    assert_eq!(
+        super::find_nearest_fragment_at_line(&frags, line, &crop::Rope::from(source.as_str())).as_deref(),
+        Some(expected.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>().as_slice())
+    );
 }
 
 /// Verifies that `find_nearest_fragment_at_line` returns None for empty fragment lists.
 #[test]
 fn nearest_fragment_at_line_empty_fragments_returns_none() {
-    assert_eq!(super::find_nearest_fragment_at_line(&[], 5, ""), None);
+    assert_eq!(
+        super::find_nearest_fragment_at_line(&[], 5, &crop::Rope::from("")),
+        None
+    );
 }
 
 /// Verifies that `find_fragment_at_line` resolves a child inside a nameless impl parent.
@@ -1087,8 +1091,10 @@ fn nearest_fragment_at_line_empty_fragments_returns_none() {
 fn fragment_at_line_inside_nameless_parent(nameless_impl_fragments: (Vec<Fragment>, String)) {
     let (frags, source) = nameless_impl_fragments;
     // Line 3 is inside bar, child of a nameless impl — should find bar.
-    let path = super::find_fragment_at_line(&frags, 3, &source);
-    assert_eq!(path.as_deref(), Some(&["bar".to_owned()][..]));
+    assert_eq!(
+        super::find_fragment_at_line(&frags, 3, &crop::Rope::from(source.as_str())).as_deref(),
+        Some(&["bar".to_owned()][..])
+    );
 }
 
 /// Verifies that `find_nearest_fragment_at_line` resolves children of nameless impl parents.
@@ -1101,9 +1107,10 @@ fn nearest_fragment_at_line_nameless_parent(
     #[case] expected: &[&str],
 ) {
     let (frags, source) = nameless_impl_fragments;
-    let path = super::find_nearest_fragment_at_line(&frags, line, &source);
-    let expected: Vec<String> = expected.iter().map(|s| (*s).to_owned()).collect();
-    assert_eq!(path.as_deref(), Some(expected.as_slice()));
+    assert_eq!(
+        super::find_nearest_fragment_at_line(&frags, line, &crop::Rope::from(source.as_str())).as_deref(),
+        Some(expected.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>().as_slice())
+    );
 }
 
 // Property-based tests
@@ -1235,10 +1242,10 @@ mod proptest_invariants {
         for frag in fragments {
             // 2. full_span contains byte_range.
             assert!(
-                frag.full_span().start <= frag.byte_range.start && frag.byte_range.end <= frag.full_span().end,
+                frag.full_span().start <= frag.span.byte_range.start && frag.span.byte_range.end <= frag.full_span().end,
                 "full_span {:?} does not contain byte_range {:?} for {}",
                 frag.full_span(),
-                frag.byte_range,
+                frag.span.byte_range,
                 frag.name,
             );
 

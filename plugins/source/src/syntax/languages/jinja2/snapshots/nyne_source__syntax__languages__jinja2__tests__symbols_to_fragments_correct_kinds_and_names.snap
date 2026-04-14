@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/languages/jinja2/tests.rs
-assertion_line: 295
 expression: fragments
 ---
 [
@@ -9,13 +8,16 @@ expression: fragments
         kind: Symbol(
             Module,
         ),
-        byte_range: 0..36,
+        span: FragmentSpan {
+            byte_range: 0..36,
+            full_span: 0..36,
+            name_byte_offset: 9,
+        },
         signature: Some(
             "{% block title %}",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 9,
         children: [],
         parent_name: None,
         fs_name: None,
@@ -25,13 +27,16 @@ expression: fragments
         kind: Symbol(
             Variable,
         ),
-        byte_range: 37..52,
+        span: FragmentSpan {
+            byte_range: 37..52,
+            full_span: 37..52,
+            name_byte_offset: 44,
+        },
         signature: Some(
             "{% set x = 1 %}",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 44,
         children: [],
         parent_name: None,
         fs_name: None,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::syntax::fragment::{Fragment, FragmentKind, SymbolKind};
+use crate::syntax::fragment::{Fragment, FragmentKind, FragmentSpan, SymbolKind};
 
 /// Helper to build a code fragment with `fs_name` set.
 ///
@@ -25,11 +25,10 @@ fn code_fragment(
     Fragment {
         name: name.to_owned(),
         kind: FragmentKind::Symbol(kind),
-        byte_range,
+        span: FragmentSpan::with_children(byte_range, name_byte_offset, &all_children),
         signature: Some(format!("fn {name}()")),
         visibility: None,
         metadata: None,
-        name_byte_offset,
         children: all_children,
         parent_name: None,
         fs_name: Some(name.to_owned()),

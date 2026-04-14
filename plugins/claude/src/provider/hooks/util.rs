@@ -261,8 +261,8 @@ pub(super) fn find_line_of_string(source: &str, needle: &str) -> Option<u64> {
 /// Returns fragment path segments joined with `/` (e.g., `Foo/bar`).
 /// TODO: use `SourceContext` from pipeline state once available to build
 /// companion-suffixed VFS display paths.
-pub(super) fn resolve_symbol_at_line(fragments: &[Fragment], line: usize, source: &str) -> Option<String> {
-    Some(find_fragment_at_line(fragments, line, source)?.join("/"))
+pub(super) fn resolve_symbol_at_line(fragments: &[Fragment], line: usize, rope: &crop::Rope) -> Option<String> {
+    Some(find_fragment_at_line(fragments, line, rope)?.join("/"))
 }
 
 /// Shared scaffolding for hook scripts — parse stdin, run the

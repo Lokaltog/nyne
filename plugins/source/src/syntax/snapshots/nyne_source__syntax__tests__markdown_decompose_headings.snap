@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 150
 expression: "decompose(\"md\", source)"
 ---
 [
@@ -9,7 +8,11 @@ expression: "decompose(\"md\", source)"
         kind: Section {
             level: 1,
         },
-        byte_range: 0..102,
+        span: FragmentSpan {
+            byte_range: 0..102,
+            full_span: 0..102,
+            name_byte_offset: 0,
+        },
         signature: None,
         visibility: None,
         metadata: Some(
@@ -17,14 +20,17 @@ expression: "decompose(\"md\", source)"
                 index: 0,
             },
         ),
-        name_byte_offset: 0,
         children: [
             Fragment {
                 name: "Installation",
                 kind: Section {
                     level: 2,
                 },
-                byte_range: 37..75,
+                span: FragmentSpan {
+                    byte_range: 37..75,
+                    full_span: 37..75,
+                    name_byte_offset: 37,
+                },
                 signature: None,
                 visibility: None,
                 metadata: Some(
@@ -32,7 +38,6 @@ expression: "decompose(\"md\", source)"
                         index: 0,
                     },
                 ),
-                name_byte_offset: 37,
                 children: [],
                 parent_name: None,
                 fs_name: None,
@@ -42,7 +47,11 @@ expression: "decompose(\"md\", source)"
                 kind: Section {
                     level: 2,
                 },
-                byte_range: 75..102,
+                span: FragmentSpan {
+                    byte_range: 75..102,
+                    full_span: 75..102,
+                    name_byte_offset: 75,
+                },
                 signature: None,
                 visibility: None,
                 metadata: Some(
@@ -50,7 +59,6 @@ expression: "decompose(\"md\", source)"
                         index: 1,
                     },
                 ),
-                name_byte_offset: 75,
                 children: [],
                 parent_name: None,
                 fs_name: None,
@@ -64,7 +72,11 @@ expression: "decompose(\"md\", source)"
         kind: Section {
             level: 1,
         },
-        byte_range: 102..133,
+        span: FragmentSpan {
+            byte_range: 102..133,
+            full_span: 102..133,
+            name_byte_offset: 102,
+        },
         signature: None,
         visibility: None,
         metadata: Some(
@@ -72,7 +84,6 @@ expression: "decompose(\"md\", source)"
                 index: 1,
             },
         ),
-        name_byte_offset: 102,
         children: [],
         parent_name: None,
         fs_name: None,

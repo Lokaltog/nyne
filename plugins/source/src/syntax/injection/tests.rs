@@ -146,8 +146,8 @@ fn inner_decomposition_fields_pass_through() {
         "imports pass-through mismatch"
     );
     assert_eq!(
-        find_fragment_of_kind(&compound, &FragmentKind::Docstring).map(|f| &f.byte_range),
-        find_fragment_of_kind(&direct, &FragmentKind::Docstring).map(|f| &f.byte_range),
+        find_fragment_of_kind(&compound, &FragmentKind::Docstring).map(|f| &f.span.byte_range),
+        find_fragment_of_kind(&direct, &FragmentKind::Docstring).map(|f| &f.span.byte_range),
         "file_doc pass-through mismatch"
     );
 }

@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 125
 expression: "decompose(\"ts\", \"export enum Color {\\n    Red,\\n    Green,\\n    Blue,\\n}\\n\")"
 ---
 [
@@ -9,7 +8,11 @@ expression: "decompose(\"ts\", \"export enum Color {\\n    Red,\\n    Green,\\n 
         kind: Symbol(
             Enum,
         ),
-        byte_range: 0..51,
+        span: FragmentSpan {
+            byte_range: 0..51,
+            full_span: 0..51,
+            name_byte_offset: 12,
+        },
         signature: Some(
             "export enum Color",
         ),
@@ -17,7 +20,6 @@ expression: "decompose(\"ts\", \"export enum Color {\\n    Red,\\n    Green,\\n 
             "export",
         ),
         metadata: None,
-        name_byte_offset: 12,
         children: [],
         parent_name: None,
         fs_name: None,

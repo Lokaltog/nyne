@@ -51,10 +51,8 @@ impl FragmentResolver {
     /// any symbol in the current parse tree.
     pub fn line_range(&self, fragment_path: &[String]) -> Result<Option<SymbolLineRange>> {
         let decomposed = self.decompose()?;
-        let rope = crop::Rope::from(decomposed.source.as_str());
-        let range = syntax::find_fragment(&decomposed.decomposed, fragment_path)
-            .map(|f| SymbolLineRange::from_zero_based(&f.line_range(&rope)));
-        Ok(range)
+        Ok(syntax::find_fragment(&decomposed.decomposed, fragment_path)
+            .map(|f| SymbolLineRange::from_zero_based(&f.line_range(&decomposed.rope))))
     }
 }
 

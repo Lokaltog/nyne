@@ -51,21 +51,18 @@ impl Object for FragmentView {
             "visibility" => Some(Value::from(self.visibility())),
             "signature" => self.fragment.signature.as_deref().map(Value::from),
             "line_range" => {
-                let rope = crop::Rope::from(self.shared.source.as_str());
-                let lr = self.fragment.line_range(&rope);
+                let lr = self.fragment.line_range(&self.shared.rope);
                 Some(Value::from(format!("{}-{}", lr.start + 1, lr.end)))
             }
-            "bytes" => Some(Value::from(self.fragment.full_span().len())),
+            "bytes" => Some(Value::from(self.fragment.span.full_span.len())),
             "children" => Some(fragment_list(&self.fragment.children, &self.shared)),
-            "child_count" => {
-                let count = self
-                    .fragment
+            "child_count" => Some(Value::from(
+                self.fragment
                     .children
                     .iter()
                     .filter(|c| !matches!(c.kind, FragmentKind::CodeBlock { .. }) && !c.kind.is_structural())
-                    .count();
-                Some(Value::from(count))
-            }
+                    .count(),
+            )),
             "fs_name" => self.fragment.fs_name.as_deref().map(Value::from),
             "code_blocks" => Some(Value::from(code_block_summary(&self.fragment.children))),
             "is_code_block" => Some(Value::from(matches!(
@@ -112,13 +109,15 @@ impl FragmentView {
     /// Extract the description: doc comment first line, or first content line for sections.
     fn description(&self) -> String {
         if let Some(doc) = self.fragment.child_of_kind(&FragmentKind::Docstring) {
-            let raw = &self.shared.source[doc.byte_range.clone()];
-            return self.shared.decomposer.clean_doc_comment(raw).unwrap_or_default();
+            return self
+                .shared
+                .decomposer
+                .clean_doc_comment(&self.shared.source[doc.span.byte_range.clone()])
+                .unwrap_or_default();
         }
         match &self.fragment.metadata {
             Some(FragmentMetadata::Document { .. }) => {
-                let body = &self.shared.source[self.fragment.byte_range.clone()];
-                section_first_line(body).unwrap_or_default()
+                section_first_line(&self.shared.source[self.fragment.span.byte_range.clone()]).unwrap_or_default()
             }
             _ => String::new(),
         }

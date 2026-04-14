@@ -36,11 +36,10 @@ impl LanguageSpec for MarkdownLanguage {
             fragments.push(Fragment {
                 name: "preamble".to_owned(),
                 kind: FragmentKind::Preamble,
-                byte_range: 0..first_heading_byte,
+                span: FragmentSpan::leaf(0..first_heading_byte, 0),
                 signature: None,
                 visibility: None,
                 metadata: Some(FragmentMetadata::Document { index: 0 }),
-                name_byte_offset: 0,
                 children: Vec::new(),
                 parent_name: None,
                 fs_name: None,
@@ -238,13 +237,12 @@ fn build_sections_at_level(
         fragments.push(Fragment {
             name: heading.name.clone(),
             kind: FragmentKind::Section { level: heading.level },
-            byte_range,
+            span: FragmentSpan::with_children(byte_range, heading.start_byte, &all_children),
             signature: None,
             visibility: None,
             metadata: Some(FragmentMetadata::Document {
                 index: index_offset + fragments.len(),
             }),
-            name_byte_offset: heading.start_byte,
             children: all_children,
             parent_name: None,
             fs_name: None,
@@ -272,18 +270,17 @@ fn build_code_block_fragments(
         .filter(|cb| {
             // Block must not be inside any child section.
             !child_sections.iter().any(|child| {
-                cb.block_range.start >= child.byte_range.start && cb.block_range.end <= child.byte_range.end
+                cb.block_range.start >= child.span.byte_range.start && cb.block_range.end <= child.span.byte_range.end
             })
         })
         .enumerate()
         .map(|(idx, cb)| Fragment {
             name: cb.lang.clone().unwrap_or_default(),
             kind: FragmentKind::CodeBlock { lang: cb.lang.clone() },
-            byte_range: cb.content_range.clone(),
+            span: FragmentSpan::leaf(cb.content_range.clone(), cb.block_range.start),
             signature: None,
             visibility: None,
             metadata: Some(FragmentMetadata::CodeBlock { index: idx }),
-            name_byte_offset: cb.block_range.start,
             children: Vec::new(),
             parent_name: None,
             fs_name: None,

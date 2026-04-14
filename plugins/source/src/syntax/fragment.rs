@@ -130,6 +130,90 @@ pub enum FragmentMetadata {
     CodeBlock { index: usize },
 }
 
+/// Byte offsets describing where a [`Fragment`] sits in its source file.
+///
+/// Groups the three byte-offset values that every fragment carries:
+/// `byte_range` (the fragment's own content), `full_span` (the bounding
+/// box including direct children), and `name_byte_offset` (where the
+/// name token starts). Constructed via [`FragmentSpan::with_children`]
+/// for symbols with metadata children, or [`FragmentSpan::leaf`] for
+/// structural fragments and code blocks that have no children.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FragmentSpan {
+    /// Byte range of this fragment's own content. For symbols, this is the
+    /// tree-sitter node range (excluding doc comments and decorators, which
+    /// are separate child fragments). Use [`full_span`](Self::full_span)
+    /// for the bounding box including children.
+    pub byte_range: Range<usize>,
+    /// Bounding box covering `byte_range` and the `byte_range` of every
+    /// direct child (docstrings, decorators, nested symbols). Pre-computed
+    /// at construction time so reads are O(1) rather than O(children).
+    ///
+    /// Always recompute via [`FragmentSpan::recompute_full_span`] when
+    /// `byte_range` or `children` change after construction.
+    pub full_span: Range<usize>,
+    /// Byte offset of the name token in the source text.
+    ///
+    /// Used by LSP operations (rename, references, call hierarchy) to send
+    /// the correct position. For sections and synthetic names (e.g. impl
+    /// blocks), this equals `byte_range.start`.
+    pub name_byte_offset: usize,
+}
+
+/// Construction and recomputation methods for [`FragmentSpan`].
+impl FragmentSpan {
+    /// Construct a span for a fragment with `children`.
+    ///
+    /// `full_span` is computed as the union of `byte_range` and every
+    /// direct child's `byte_range` — the standard bounding box used by
+    /// [`crate::syntax::find_fragment_at_line`] and editing operations.
+    pub fn with_children(byte_range: Range<usize>, name_byte_offset: usize, children: &[Fragment]) -> Self {
+        let full_span = compute_full_span(&byte_range, children);
+        Self {
+            byte_range,
+            full_span,
+            name_byte_offset,
+        }
+    }
+
+    /// Construct a span for a leaf fragment — `full_span` equals `byte_range`.
+    ///
+    /// Used by structural fragments (docstrings, decorators, imports) and
+    /// code blocks that never carry direct children.
+    pub fn leaf(byte_range: Range<usize>, name_byte_offset: usize) -> Self {
+        let full_span = byte_range.clone();
+        Self {
+            byte_range,
+            full_span,
+            name_byte_offset,
+        }
+    }
+
+    /// Recompute `full_span` from `byte_range` and the supplied children.
+    ///
+    /// Call after mutating `byte_range` or replacing children — for example
+    /// inside [`crate::syntax::span_map::SpanMap::remap_fragment`] which
+    /// remaps every byte offset in a fragment subtree.
+    pub fn recompute_full_span(&mut self, children: &[Fragment]) {
+        self.full_span = compute_full_span(&self.byte_range, children);
+    }
+}
+
+/// Compute the bounding byte range covering `byte_range` and every direct
+/// child of `children`. Used by [`FragmentSpan`] constructors and by the
+/// span remapper in [`crate::syntax::span_map`].
+pub fn compute_full_span(byte_range: &Range<usize>, children: &[Fragment]) -> Range<usize> {
+    let start = iter::once(byte_range.start)
+        .chain(children.iter().map(|c| c.span.byte_range.start))
+        .min()
+        .unwrap_or(byte_range.start);
+    let end = iter::once(byte_range.end)
+        .chain(children.iter().map(|c| c.span.byte_range.end))
+        .max()
+        .unwrap_or(byte_range.end);
+    start..end
+}
+
 /// A single decomposed piece of a file -- a code symbol, docstring, import
 /// block, decorator, or document section.
 ///
@@ -142,11 +226,8 @@ pub enum FragmentMetadata {
 pub struct Fragment {
     pub name: String,
     pub kind: FragmentKind,
-    /// Byte range of this fragment's own content. For symbols, this is the
-    /// tree-sitter node range (excluding doc comments and decorators, which
-    /// are separate child fragments). Use [`full_span()`](Self::full_span)
-    /// for the bounding box including children.
-    pub byte_range: Range<usize>,
+    /// Byte offsets locating this fragment in the source file.
+    pub span: FragmentSpan,
     pub signature: Option<String>,
     /// Visibility qualifier (`pub`, `pub(crate)`, etc.). Only meaningful for
     /// code symbols; `None` for all other fragment kinds.
@@ -154,12 +235,6 @@ pub struct Fragment {
     /// Document-specific metadata (section/code-block index). `None` for
     /// code symbols and structural fragments.
     pub metadata: Option<FragmentMetadata>,
-    /// Byte offset of the name token in the source text.
-    ///
-    /// Used by LSP operations (rename, references, call hierarchy) to send
-    /// the correct position. For sections and synthetic names (e.g. impl
-    /// blocks), this equals `byte_range.start`.
-    pub name_byte_offset: usize,
     /// Nested fragments: docstrings, decorators, methods, nested functions.
     pub children: Vec<Self>,
     /// Name of the parent fragment, if this fragment is nested inside another.
@@ -181,15 +256,13 @@ impl Fragment {
         byte_range: Range<usize>,
         parent_name: Option<String>,
     ) -> Self {
-        let name_byte_offset = byte_range.start;
         Self {
             name: name.into(),
             kind,
-            byte_range,
+            span: FragmentSpan::leaf(byte_range.clone(), byte_range.start),
             signature: None,
             visibility: None,
             metadata: None,
-            name_byte_offset,
             children: vec![],
             parent_name,
             fs_name: None,
@@ -202,28 +275,21 @@ impl Fragment {
     /// This is the single construction point for docstring fragments —
     /// language extractors should use this instead of calling `structural` directly.
     pub fn docstring_child(doc_range: Option<Range<usize>>, parent: Option<String>) -> Option<Self> {
-        let range = doc_range?;
-        Some(Self::structural("docstring", FragmentKind::Docstring, range, parent))
+        Some(Self::structural("docstring", FragmentKind::Docstring, doc_range?, parent))
     }
 
-    /// Bounding box covering this fragment and all its children (docstrings,
-    /// decorators, nested symbols). Derived from `byte_range` — never stale.
-    pub fn full_span(&self) -> Range<usize> {
-        let start = iter::once(self.byte_range.start)
-            .chain(self.children.iter().map(|c| c.byte_range.start))
-            .min()
-            .unwrap_or(self.byte_range.start);
-        let end = iter::once(self.byte_range.end)
-            .chain(self.children.iter().map(|c| c.byte_range.end))
-            .max()
-            .unwrap_or(self.byte_range.end);
-        start..end
-    }
+    /// Bounding box covering this fragment and all its direct children
+    /// (docstrings, decorators, nested symbols).
+    ///
+    /// Pre-computed at construction time and cached in
+    /// [`FragmentSpan::full_span`]; this method just clones the cached
+    /// `Range<usize>` so reads are O(1) regardless of child count.
+    pub fn full_span(&self) -> Range<usize> { self.span.full_span.clone() }
 
     /// Line range (0-based, exclusive end) covering this fragment and all
     /// its children. Requires a pre-built rope for byte→line conversion.
     pub fn line_range(&self, rope: &crop::Rope) -> Range<usize> {
-        let span = self.full_span();
+        let span = &self.span.full_span;
         rope.line_of_byte(span.start)..rope.line_of_byte(span.end) + 1
     }
 

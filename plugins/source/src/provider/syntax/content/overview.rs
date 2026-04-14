@@ -7,7 +7,6 @@
 use std::path::Path;
 
 use color_eyre::eyre::Result;
-use crop::Rope;
 use minijinja::value::Value;
 use nyne::templates::{TemplateEngine, TemplateView};
 
@@ -77,29 +76,26 @@ impl TemplateView for FileOverviewContent {
     /// Render the file-level overview with doc text and symbol table.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
         let shared = self.resolver.decompose()?;
-        let total_lines = Rope::from(shared.source.as_str()).line_len();
-        let total_bytes = shared.source.len();
-        let ext = Path::new(&self.filename)
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
-        let view = minijinja::context! {
+        Ok(engine.render_bytes(template, &minijinja::context! {
             filename => &self.filename,
             language => &self.language,
-            ext,
-            total_lines,
-            total_bytes,
+            ext => Path::new(&self.filename).extension().and_then(|e| e.to_str()).unwrap_or(""),
+            total_lines => shared.rope.line_len(),
+            total_bytes => shared.source.len(),
             file_doc => file_doc_text(&shared),
             fragments => fragment_list(&shared.decomposed, &shared),
-        };
-        Ok(engine.render_bytes(template, &view))
+        }))
     }
 }
 
 /// Extract the file-level doc comment as stripped plain text, if present.
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) fn file_doc_text(shared: &DecomposedSource) -> Option<String> {
-    let frag = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)?;
-    let raw = shared.source.get(frag.byte_range.clone())?;
-    Some(shared.decomposer.strip_doc_comment(raw))
+    Some(
+        shared.decomposer.strip_doc_comment(
+            shared
+                .source
+                .get(find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)?.span.byte_range.clone())?,
+        ),
+    )
 }

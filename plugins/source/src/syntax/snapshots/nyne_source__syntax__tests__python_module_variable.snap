@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 97
 expression: "decompose(\"py\", \"MAX_SIZE = 100\\n\")"
 ---
 [
@@ -9,13 +8,16 @@ expression: "decompose(\"py\", \"MAX_SIZE = 100\\n\")"
         kind: Symbol(
             Variable,
         ),
-        byte_range: 0..14,
+        span: FragmentSpan {
+            byte_range: 0..14,
+            full_span: 0..14,
+            name_byte_offset: 0,
+        },
         signature: Some(
             "MAX_SIZE = 100",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 0,
         children: [],
         parent_name: None,
         fs_name: None,

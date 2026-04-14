@@ -166,15 +166,16 @@ impl SpanMap {
 
     /// Deep-remap all byte-offset fields in a fragment and its children.
     ///
-    /// Remapped fields: `byte_range`, `name_byte_offset`.
-    ///
-    /// `full_span()` and `line_range()` are derived methods — they recompute
-    /// from `byte_range` and children, so no explicit remapping is needed.
+    /// Remaps `byte_range` and `name_byte_offset` on the fragment's
+    /// [`FragmentSpan`], recurses into children, then recomputes the
+    /// cached `full_span` so it reflects the real (post-remap) child
+    /// positions.
     pub(crate) fn remap_fragment(&self, mut fragment: Fragment) -> Fragment {
-        fragment.byte_range = self.remap_range(fragment.byte_range);
-        fragment.name_byte_offset = self.to_real(fragment.name_byte_offset);
+        fragment.span.byte_range = self.remap_range(fragment.span.byte_range);
+        fragment.span.name_byte_offset = self.to_real(fragment.span.name_byte_offset);
 
         fragment.children = fragment.children.into_iter().map(|c| self.remap_fragment(c)).collect();
+        fragment.span.recompute_full_span(&fragment.children);
 
         fragment
     }

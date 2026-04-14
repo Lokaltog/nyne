@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 72
 expression: "decompose(\"py\", source)"
 ---
 [
@@ -9,22 +8,28 @@ expression: "decompose(\"py\", source)"
         kind: Symbol(
             Function,
         ),
-        byte_range: 0..70,
+        span: FragmentSpan {
+            byte_range: 0..70,
+            full_span: 0..70,
+            name_byte_offset: 4,
+        },
         signature: Some(
             "def greet(name):",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 4,
         children: [
             Fragment {
                 name: "docstring",
                 kind: Docstring,
-                byte_range: 21..41,
+                span: FragmentSpan {
+                    byte_range: 21..41,
+                    full_span: 21..41,
+                    name_byte_offset: 21,
+                },
                 signature: None,
                 visibility: None,
                 metadata: None,
-                name_byte_offset: 21,
                 children: [],
                 parent_name: Some(
                     "greet",
@@ -40,26 +45,32 @@ expression: "decompose(\"py\", source)"
         kind: Symbol(
             Class,
         ),
-        byte_range: 72..140,
+        span: FragmentSpan {
+            byte_range: 72..140,
+            full_span: 72..140,
+            name_byte_offset: 78,
+        },
         signature: Some(
             "class Person:",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 78,
         children: [
             Fragment {
                 name: "__init__",
                 kind: Symbol(
                     Function,
                 ),
-                byte_range: 90..140,
+                span: FragmentSpan {
+                    byte_range: 90..140,
+                    full_span: 90..140,
+                    name_byte_offset: 94,
+                },
                 signature: Some(
                     "def __init__(self, name):",
                 ),
                 visibility: None,
                 metadata: None,
-                name_byte_offset: 94,
                 children: [],
                 parent_name: Some(
                     "Person",

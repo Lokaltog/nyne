@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 120
 expression: "decompose(\"ts\", \"class Greeter {\\n    greet() { return 'hi'; }\\n}\\n\")"
 ---
 [
@@ -9,26 +8,32 @@ expression: "decompose(\"ts\", \"class Greeter {\\n    greet() { return 'hi'; }\
         kind: Symbol(
             Class,
         ),
-        byte_range: 0..46,
+        span: FragmentSpan {
+            byte_range: 0..46,
+            full_span: 0..46,
+            name_byte_offset: 6,
+        },
         signature: Some(
             "class Greeter",
         ),
         visibility: None,
         metadata: None,
-        name_byte_offset: 6,
         children: [
             Fragment {
                 name: "greet",
                 kind: Symbol(
                     Function,
                 ),
-                byte_range: 20..44,
+                span: FragmentSpan {
+                    byte_range: 20..44,
+                    full_span: 20..44,
+                    name_byte_offset: 20,
+                },
                 signature: Some(
                     "greet()",
                 ),
                 visibility: None,
                 metadata: None,
-                name_byte_offset: 20,
                 children: [],
                 parent_name: Some(
                     "Greeter",

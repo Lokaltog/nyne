@@ -3,9 +3,9 @@ use std::sync::Arc;
 use rstest::rstest;
 
 use super::*;
-use crate::syntax::decomposed::DecomposedSource;
+use crate::syntax::SyntaxRegistry;
+use crate::syntax::decomposed::{DecomposedSource, build_decomposed_source};
 use crate::syntax::fragment::{FragmentKind, SymbolKind};
-use crate::syntax::{SyntaxRegistry, resolve_conflicts};
 use crate::test_support::registry;
 
 /// Load a fixture file by language extension and name.
@@ -13,17 +13,11 @@ fn load_fixture(name: &str) -> String { nyne::load_fixture!("syntax/view", name)
 
 /// Decompose a fixture file into a shared `DecomposedSource` for testing views.
 fn decompose_fixture(reg: &SyntaxRegistry, ext: &str, name: &str) -> Arc<DecomposedSource> {
-    let source = load_fixture(name);
-    let decomposer = reg.get(ext).expect("no decomposer for extension");
-    let (mut file, _tree) = decomposer.decompose(&source, 5);
-    decomposer.map_to_fs(&mut file);
-    resolve_conflicts(&mut file, decomposer);
-    Arc::new(DecomposedSource {
-        source,
-        decomposed: file,
-        decomposer: Arc::clone(decomposer),
-        tree: None,
-    })
+    build_decomposed_source(
+        load_fixture(name),
+        Arc::clone(reg.get(ext).expect("no decomposer for extension")),
+        5,
+    )
 }
 
 /// Extract a named `FragmentView` from the top-level fragments.

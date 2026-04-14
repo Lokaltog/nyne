@@ -53,6 +53,7 @@ fn fragment_kinds(basic: DecomposedFile) {
 fn imports_extracted(basic: DecomposedFile) {
     let range = crate::syntax::fragment::find_fragment_of_kind(&basic, &FragmentKind::Imports)
         .expect("imports fragment should be present")
+        .span
         .byte_range
         .clone();
     let source = load_basic();

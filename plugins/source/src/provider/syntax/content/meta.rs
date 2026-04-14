@@ -111,25 +111,26 @@ impl MetaSplice {
         }
 
         let shared = self.resolver.decompose()?;
-        let rope = crop::Rope::from(shared.source.as_str());
+        let rope = shared.rope.clone();
         let frags = &shared.decomposed;
         let resolve_frag = |path: &[String]| -> Result<&Fragment> { syntax::require_fragment(frags, path) };
         let byte_range = match &self.target {
             SpliceTarget::Imports => {
                 let frag = find_fragment_of_kind(frags, &FragmentKind::Imports)
                     .ok_or_else(|| eyre::eyre!("no import span in {}", self.resolver.source_file().display()))?;
-                line_aligned(&rope, frag.byte_range.clone())
+                line_aligned(&rope, frag.span.byte_range.clone())
             }
             SpliceTarget::FileDoc => {
                 let frag = find_fragment_of_kind(frags, &FragmentKind::Docstring)
                     .ok_or_else(|| eyre::eyre!("no file-level doc in {}", self.resolver.source_file().display()))?;
-                line_aligned(&rope, frag.byte_range.clone())
+                line_aligned(&rope, frag.span.byte_range.clone())
             }
             SpliceTarget::FragmentBody(path) => {
                 let frag = resolve_frag(path)?;
+                let span = frag.span.full_span.clone();
                 match shared.decomposer.splice_mode() {
-                    SpliceMode::Line => line_aligned(&rope, frag.full_span()),
-                    SpliceMode::Byte => frag.full_span(),
+                    SpliceMode::Line => line_aligned(&rope, span),
+                    SpliceMode::Byte => span,
                 }
             }
             SpliceTarget::FragmentSignature(path) => {
@@ -138,21 +139,22 @@ impl MetaSplice {
                     .signature
                     .as_deref()
                     .ok_or_else(|| eyre::eyre!("no signature on fragment {:?}", &**path))?;
-                find_signature_range(&shared.source, sig, frag.byte_range.start)
+                find_signature_range(&shared.source, sig, frag.span.byte_range.start)
             }
             SpliceTarget::FragmentDocComment(path) => resolve_frag(path)?
                 .child_of_kind(&FragmentKind::Docstring)
-                .map(|c| c.byte_range.clone())
+                .map(|c| c.span.byte_range.clone())
                 .ok_or_else(|| eyre::eyre!("no doc comment range on fragment {:?}", &**path))?,
             SpliceTarget::FragmentDecorators(path) => {
                 let child = resolve_frag(path)?
                     .child_of_kind(&FragmentKind::Decorator)
                     .ok_or_else(|| eyre::eyre!("no decorator range on fragment {:?}", &**path))?;
-                line_aligned(&rope, child.byte_range.clone())
+                line_aligned(&rope, child.span.byte_range.clone())
             }
             SpliceTarget::CodeBlockBody { parent_path, fs_name } => resolve_frag(parent_path)?
                 .child_by_fs_name(fs_name)
                 .ok_or_else(|| eyre::eyre!("code block {fs_name:?} not found in {:?}", &**parent_path))?
+                .span
                 .byte_range
                 .clone(),
         };
@@ -337,11 +339,16 @@ pub(in crate::provider::syntax) fn file_docstring_node(resolver: &FragmentResolv
         format!("{}.txt", files.docstring),
         move |_ctx| {
             let shared = r.decompose()?;
-            let range = find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)
-                .ok_or_else(|| eyre::eyre!("no file-level doc in {}", r.source_file().display()))?
-                .byte_range
-                .clone();
-            Ok(shared.decomposer.strip_doc_comment(&shared.source[range]).into_bytes())
+            Ok(shared
+                .decomposer
+                .strip_doc_comment(
+                    &shared.source[find_fragment_of_kind(&shared.decomposed, &FragmentKind::Docstring)
+                        .ok_or_else(|| eyre::eyre!("no file-level doc in {}", r.source_file().display()))?
+                        .span
+                        .byte_range
+                        .clone()],
+                )
+                .into_bytes())
         },
         FileDocstringSplice {
             meta: MetaSplice {
@@ -413,10 +420,9 @@ pub(in crate::provider::syntax) fn build_meta_nodes(
                 let frag = syntax::require_fragment(&shared.decomposed, &p)?;
                 let range = frag
                     .child_of_kind(&FragmentKind::Docstring)
-                    .map(|c| &c.byte_range)
+                    .map(|c| &c.span.byte_range)
                     .ok_or_else(|| eyre::eyre!("no doc comment on fragment {:?}", p))?;
-                let comment = &shared.source[range.clone()];
-                Ok(shared.decomposer.strip_doc_comment(comment).into_bytes())
+                Ok(shared.decomposer.strip_doc_comment(&shared.source[range.clone()]).into_bytes())
             },
             DocstringSplice {
                 meta: MetaSplice {
@@ -438,14 +444,15 @@ pub(in crate::provider::syntax) fn build_meta_nodes(
                 let frag = syntax::require_fragment(&shared.decomposed, &p)?;
                 let range = frag
                     .child_of_kind(&FragmentKind::Decorator)
-                    .map(|c| &c.byte_range)
+                    .map(|c| &c.span.byte_range)
                     .ok_or_else(|| eyre::eyre!("no decorator range on fragment {:?}", p))?;
-                let start = line_start_of_rope(&crop::Rope::from(shared.source.as_str()), range.start);
-                let bytes =
-                    shared.source.as_bytes().get(start..range.end).ok_or_else(|| {
-                        eyre::eyre!("decorator range {start}..{} out of bounds for {:?}", range.end, p,)
-                    })?;
-                Ok(bytes.to_vec())
+                let start = line_start_of_rope(&shared.rope, range.start);
+                Ok(shared
+                    .source
+                    .as_bytes()
+                    .get(start..range.end)
+                    .ok_or_else(|| eyre::eyre!("decorator range {start}..{} out of bounds for {:?}", range.end, p))?
+                    .to_vec())
             },
             DecoratorsSplice {
                 meta: MetaSplice {

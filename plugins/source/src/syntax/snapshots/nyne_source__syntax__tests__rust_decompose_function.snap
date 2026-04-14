@@ -1,6 +1,5 @@
 ---
 source: plugins/source/src/syntax/tests.rs
-assertion_line: 42
 expression: "decompose(\"rs\", \"pub fn hello() {}\\n\")"
 ---
 [
@@ -9,7 +8,11 @@ expression: "decompose(\"rs\", \"pub fn hello() {}\\n\")"
         kind: Symbol(
             Function,
         ),
-        byte_range: 0..17,
+        span: FragmentSpan {
+            byte_range: 0..17,
+            full_span: 0..17,
+            name_byte_offset: 7,
+        },
         signature: Some(
             "pub fn hello()",
         ),
@@ -17,7 +20,6 @@ expression: "decompose(\"rs\", \"pub fn hello() {}\\n\")"
             "pub",
         ),
         metadata: None,
-        name_byte_offset: 7,
         children: [],
         parent_name: None,
         fs_name: None,
