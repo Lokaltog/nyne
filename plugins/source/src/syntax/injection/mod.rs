@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 
-use super::fragment::{ConflictSet, DecomposedFile, Fragment, Resolution};
+use super::fragment::{DecomposedFile, Fragment};
 use super::languages::jinja2::{extract_template, symbols_to_fragments};
 use super::span_map::SpanMap;
 use super::spec::{Decomposer, SpliceMode};
@@ -104,13 +104,8 @@ impl Decomposer for InjectionDecomposer {
     /// Delegates doc comment cleaning to the inner decomposer.
     fn clean_doc_comment(&self, raw: &str) -> Option<String> { self.inner.clean_doc_comment(raw) }
 
-    /// Delegates filesystem mapping to the inner decomposer.
-    fn map_to_fs(&self, fragments: &mut [Fragment]) { self.inner.map_to_fs(fragments); }
-
-    /// Delegates conflict resolution to the inner decomposer.
-    fn resolve_conflicts(&self, conflicts: &[ConflictSet]) -> Vec<Resolution> {
-        self.inner.resolve_conflicts(conflicts)
-    }
+    /// Delegates filesystem name assignment to the inner decomposer.
+    fn assign_fs_names(&self, fragments: &mut [Fragment]) { self.inner.assign_fs_names(fragments); }
 
     /// Delegates file-level doc comment wrapping to the inner decomposer.
     fn wrap_file_doc_comment(&self, plain: &str, indent: &str) -> String {

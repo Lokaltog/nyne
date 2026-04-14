@@ -15,12 +15,11 @@ fn decompose(ext: &str, source: &str) -> DecomposedFile {
     result
 }
 
-/// Decompose source and apply `fs_name` mapping.
+/// Decompose source and assign filesystem names.
 fn decompose_mapped(ext: &str, source: &str) -> Vec<Fragment> {
-    let reg = registry();
-    let d = reg.get(ext).unwrap();
+    let d = registry().get(ext).unwrap().clone();
     let (mut result, _tree) = d.decompose(source, 5);
-    d.map_to_fs(&mut result);
+    d.assign_fs_names(&mut result);
     result
 }
 
@@ -389,7 +388,10 @@ fn python_body_internal_docstring_does_not_shrink_range() {
     let result = decompose("py", "class Foo:\n    \"\"\"Docstring.\"\"\"\n    x = 1\n");
     let frag = &result[0];
 
-    assert_eq!(frag.span.byte_range.start, 0, "byte_range should start at class keyword");
+    assert_eq!(
+        frag.span.byte_range.start, 0,
+        "byte_range should start at class keyword"
+    );
     assert_eq!(frag.full_span().start, 0, "full_span should start at class keyword");
     assert_eq!(
         frag.full_span().end,
@@ -675,7 +677,10 @@ fn full_span_rust_decorator_only() {
     let result = decompose("rs", "#[derive(Debug)]\npub struct Foo;\n");
     let frag = &result[0];
     assert_eq!(frag.full_span().start, 0, "full_span should include attribute");
-    assert!(frag.span.byte_range.start > 0, "byte_range should start after attribute");
+    assert!(
+        frag.span.byte_range.start > 0,
+        "byte_range should start after attribute"
+    );
     assert_eq!(frag.full_span().end, frag.span.byte_range.end, "ends should match");
 }
 
@@ -685,7 +690,10 @@ fn full_span_rust_decorator_and_doc_comment() {
     let result = decompose("rs", "/// Documented.\n#[derive(Debug)]\npub struct Foo;\n");
     let frag = &result[0];
     assert_eq!(frag.full_span().start, 0, "full_span should start at doc comment");
-    assert!(frag.span.byte_range.start > 0, "byte_range should be the node range only");
+    assert!(
+        frag.span.byte_range.start > 0,
+        "byte_range should be the node range only"
+    );
     assert_eq!(frag.full_span().end, frag.span.byte_range.end);
 }
 
@@ -705,7 +713,10 @@ fn full_span_typescript_jsdoc() {
     let result = decompose("ts", "/** Documented. */\nfunction greet() {}\n");
     let frag = &result[0];
     assert_eq!(frag.full_span().start, 0, "full_span should include JSDoc");
-    assert!(frag.span.byte_range.start > 0, "byte_range should start at function keyword");
+    assert!(
+        frag.span.byte_range.start > 0,
+        "byte_range should start at function keyword"
+    );
     assert_eq!(frag.full_span().end, frag.span.byte_range.end);
 }
 
@@ -877,26 +888,26 @@ fn structural_fragments_have_no_fs_name() {
 /// Verifies that same-name symbols of different kinds get kind-suffix disambiguation.
 #[test]
 fn kind_suffix_conflict_resolution() {
-    let reg = registry();
-    let d = reg.get("rs").unwrap();
-    let mut result = decompose("rs", "struct Foo;\nfn Foo() {}\n");
-    d.map_to_fs(&mut result);
-
     use super::fragment::{ConflictEntry, ConflictSet};
-    let conflicts = vec![ConflictSet {
-        name: "Foo".to_owned(),
-        entries: vec![
-            ConflictEntry {
-                index: 0,
-                fragment_kind: result[0].kind.clone(),
-            },
-            ConflictEntry {
-                index: 1,
-                fragment_kind: result[1].kind.clone(),
-            },
-        ],
-    }];
-    let resolutions = d.resolve_conflicts(&conflicts);
+    use super::fs_mapping::{ConflictStrategy, resolve_conflicts};
+
+    let result = decompose_mapped("rs", "struct Foo;\nfn Foo() {}\n");
+    let resolutions = resolve_conflicts(
+        &[ConflictSet {
+            name: "Foo".to_owned(),
+            entries: vec![
+                ConflictEntry {
+                    index: 0,
+                    fragment_kind: result[0].kind.clone(),
+                },
+                ConflictEntry {
+                    index: 1,
+                    fragment_kind: result[1].kind.clone(),
+                },
+            ],
+        }],
+        ConflictStrategy::KindSuffix,
+    );
     assert_eq!(resolutions.len(), 2);
     assert_eq!(resolutions[0].fs_name.as_deref(), Some("Foo~Struct"));
     assert_eq!(resolutions[1].fs_name.as_deref(), Some("Foo~Function"));
@@ -905,24 +916,24 @@ fn kind_suffix_conflict_resolution() {
 /// Verifies that same-name same-kind symbols get numbered disambiguation.
 #[test]
 fn numbered_conflict_resolution() {
-    let reg = registry();
-    let d = reg.get("md").unwrap();
-    let mut result = decompose("md", "# Intro\n\n# Intro\n\n# Intro\n");
-    d.map_to_fs(&mut result);
-
     use super::fragment::{ConflictEntry, ConflictSet};
-    let conflicts = vec![ConflictSet {
-        name: result[0].fs_name.clone().unwrap(),
-        entries: result
-            .iter()
-            .enumerate()
-            .map(|(i, f)| ConflictEntry {
-                index: i,
-                fragment_kind: f.kind.clone(),
-            })
-            .collect(),
-    }];
-    let resolutions = d.resolve_conflicts(&conflicts);
+    use super::fs_mapping::{ConflictStrategy, resolve_conflicts};
+
+    let result = decompose_mapped("md", "# Intro\n\n# Intro\n\n# Intro\n");
+    let resolutions = resolve_conflicts(
+        &[ConflictSet {
+            name: result[0].fs_name.clone().unwrap(),
+            entries: result
+                .iter()
+                .enumerate()
+                .map(|(i, f)| ConflictEntry {
+                    index: i,
+                    fragment_kind: f.kind.clone(),
+                })
+                .collect(),
+        }],
+        ConflictStrategy::Numbered,
+    );
     assert_eq!(resolutions[0].fs_name.as_deref(), Some("00-intro"));
     assert_eq!(resolutions[1].fs_name.as_deref(), Some("00-intro-2"));
     assert_eq!(resolutions[2].fs_name.as_deref(), Some("00-intro-3"));
@@ -1242,7 +1253,8 @@ mod proptest_invariants {
         for frag in fragments {
             // 2. full_span contains byte_range.
             assert!(
-                frag.full_span().start <= frag.span.byte_range.start && frag.span.byte_range.end <= frag.full_span().end,
+                frag.full_span().start <= frag.span.byte_range.start
+                    && frag.span.byte_range.end <= frag.full_span().end,
                 "full_span {:?} does not contain byte_range {:?} for {}",
                 frag.full_span(),
                 frag.span.byte_range,

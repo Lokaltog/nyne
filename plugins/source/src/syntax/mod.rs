@@ -202,11 +202,18 @@ impl SyntaxRegistry {
         exts
     }
 
-    /// Extract a symbol body from source text by decomposing and navigating the
-    /// fragment tree by `fs_name` components.
+    /// Extract a symbol body from arbitrary source text by decomposing and
+    /// navigating the fragment tree by `fs_name` components.
     ///
-    /// Returns `None` if no decomposer exists for the extension, the source is
-    /// not valid UTF-8, or the fragment path doesn't match any symbol.
+    /// Bypasses [`DecompositionCache`](super::decomposed::DecompositionCache)
+    /// because the cache is keyed by on-disk file path, while this function
+    /// operates on caller-supplied bytes (e.g. a historical git blob retrieved
+    /// from `Repo::blob_at`). The caller's bytes have no path identity, so
+    /// caching them would either be unsound or require a separate
+    /// `(path, oid)` cache key.
+    ///
+    /// Returns `None` if no decomposer exists for the extension or the
+    /// fragment path doesn't match any symbol.
     #[must_use]
     pub fn extract_symbol(
         &self,
@@ -217,57 +224,8 @@ impl SyntaxRegistry {
     ) -> Option<String> {
         let decomposer = self.get(ext)?;
         let (mut fragments, _tree) = decomposer.decompose(source, max_depth);
-        decomposer.map_to_fs(&mut fragments);
-        resolve_conflicts(&mut fragments, decomposer);
+        decomposer.assign_fs_names(&mut fragments);
         Some(source[find_fragment(&fragments, fragment_path)?.span.byte_range.clone()].to_owned())
-    }
-}
-
-/// Detect and resolve `fs_name` conflicts at each level of a fragment tree.
-///
-/// After [`Decomposer::decompose`] and [`Decomposer::map_to_fs`], sibling
-/// fragments may share the same `fs_name`. This function groups them into
-/// [`ConflictSet`](fragment::ConflictSet)s and delegates resolution to [`Decomposer::resolve_conflicts`]
-/// (which typically appends `~Kind` suffixes).
-pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<dyn Decomposer>) {
-    let mut name_indices: HashMap<&str, Vec<usize>> = HashMap::with_capacity(fragments.len());
-    for (i, frag) in fragments.iter().enumerate() {
-        if let Some(fs_name) = &frag.fs_name {
-            name_indices.entry(fs_name.as_str()).or_default().push(i);
-        }
-    }
-
-    let conflicts: Vec<_> = name_indices
-        .into_iter()
-        .filter(|(_, indices)| indices.len() > 1)
-        .map(|(name, indices)| fragment::ConflictSet {
-            name: name.to_owned(),
-            entries: indices
-                .iter()
-                .filter_map(|&i| {
-                    let frag = fragments.get(i)?;
-                    Some(fragment::ConflictEntry {
-                        index: i,
-                        fragment_kind: frag.kind.clone(),
-                    })
-                })
-                .collect(),
-        })
-        .collect();
-
-    if !conflicts.is_empty() {
-        for res in decomposer.resolve_conflicts(&conflicts) {
-            if let Some(frag) = fragments.get_mut(res.index) {
-                frag.fs_name = res.fs_name;
-            }
-        }
-    }
-
-    // Recurse into children.
-    for frag in fragments.iter_mut() {
-        if !frag.children.is_empty() {
-            resolve_conflicts(&mut frag.children, decomposer);
-        }
     }
 }
 
@@ -282,11 +240,7 @@ pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<
 ///
 /// Callers must pass a pre-built [`crop::Rope`] — typically
 /// `&shared.rope` from a [`decomposed::DecomposedSource`].
-pub fn find_fragment_at_line(
-    fragments: &[fragment::Fragment],
-    line: usize,
-    rope: &crop::Rope,
-) -> Option<Vec<String>> {
+pub fn find_fragment_at_line(fragments: &[fragment::Fragment], line: usize, rope: &crop::Rope) -> Option<Vec<String>> {
     let frag = fragments
         .iter()
         .filter(|f| !f.kind.is_structural())

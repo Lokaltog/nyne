@@ -13,9 +13,9 @@ use color_eyre::eyre::Result;
 use nyne::router::Filesystem;
 use parking_lot::RwLock;
 
+use super::SyntaxRegistry;
 use super::fragment::DecomposedFile;
 use super::spec::Decomposer;
-use super::{SyntaxRegistry, resolve_conflicts};
 
 /// A source file decomposed into its constituent fragments.
 ///
@@ -75,18 +75,17 @@ fn decompose_source(
 
 /// Build a [`DecomposedSource`] from already-loaded source text.
 ///
-/// Runs the parse → `map_to_fs` → `resolve_conflicts` → rope-build
-/// pipeline. This is the single source of truth for assembling a
-/// `DecomposedSource` from a `String` — both the cache loader and test
-/// helpers use it so the field set never drifts.
+/// Runs the parse → `assign_fs_names` → rope-build pipeline. This is the
+/// single source of truth for assembling a `DecomposedSource` from a
+/// `String` — both the cache loader and test helpers use it so the field
+/// set never drifts.
 pub fn build_decomposed_source(
     source: String,
     decomposer: Arc<dyn Decomposer>,
     max_depth: usize,
 ) -> Arc<DecomposedSource> {
     let (mut fragments, tree) = decomposer.decompose(&source, max_depth);
-    decomposer.map_to_fs(&mut fragments);
-    resolve_conflicts(&mut fragments, &decomposer);
+    decomposer.assign_fs_names(&mut fragments);
     Arc::new(DecomposedSource {
         rope: crop::Rope::from(source.as_str()),
         source,

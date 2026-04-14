@@ -14,8 +14,8 @@ use std::ops::Range;
 use color_eyre::eyre::Result;
 
 use super::extract::extract_fragments;
-use super::fragment::{ConflictSet, DecomposedFile, Fragment, Resolution, SymbolKind};
-use super::fs_mapping::{ConflictStrategy, NamingStrategy, apply_fs_mapping, resolve_conflicts};
+use super::fragment::{DecomposedFile, Fragment, SymbolKind};
+use super::fs_mapping::{ConflictStrategy, NamingStrategy, assign_fs_names};
 use super::parser::{TreeSitterParser, TsNode, merge_preceding_sibling_ranges, trim_trailing_newlines};
 
 /// How fragment bodies are sliced from the source file for reading and
@@ -315,10 +315,9 @@ pub trait Decomposer: Send + Sync {
     fn wrap_file_doc_comment(&self, plain: &str, indent: &str) -> String;
     /// Extract the first non-empty sentence from a raw doc comment for summaries.
     fn clean_doc_comment(&self, raw: &str) -> Option<String>;
-    /// Assign filesystem names to fragments according to the language's naming strategy.
-    fn map_to_fs(&self, fragments: &mut [Fragment]);
-    /// Resolve filesystem name collisions among sibling fragments.
-    fn resolve_conflicts(&self, conflicts: &[ConflictSet]) -> Vec<Resolution>;
+    /// Assign filesystem names to every fragment in the tree, including
+    /// sibling-level conflict resolution. Single recursive walk.
+    fn assign_fs_names(&self, fragments: &mut [Fragment]);
     /// How fragment bodies are sliced from source for reading and spliced back on write.
     fn splice_mode(&self) -> SpliceMode;
 }
@@ -388,12 +387,9 @@ impl<L: LanguageSpec> Decomposer for CodeDecomposer<L> {
     /// Cleans a doc comment for display.
     fn clean_doc_comment(&self, raw: &str) -> Option<String> { L::clean_doc_comment(raw) }
 
-    /// Applies filesystem name mapping to fragments.
-    fn map_to_fs(&self, fragments: &mut [Fragment]) { apply_fs_mapping(fragments, L::NAMING_STRATEGY); }
-
-    /// Resolves naming conflicts between fragments.
-    fn resolve_conflicts(&self, conflicts: &[ConflictSet]) -> Vec<Resolution> {
-        resolve_conflicts(conflicts, L::CONFLICT_STRATEGY)
+    /// Assigns filesystem names and resolves sibling conflicts in one walk.
+    fn assign_fs_names(&self, fragments: &mut [Fragment]) {
+        assign_fs_names(fragments, L::NAMING_STRATEGY, L::CONFLICT_STRATEGY);
     }
 
     /// Returns the splice mode for this language.

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use nyne::text::slugify_unbounded;
 
-use super::fragment::{ConflictSet, Fragment, FragmentKind, Resolution};
+use super::fragment::{ConflictEntry, ConflictSet, Fragment, FragmentKind, Resolution};
 
 /// Separator used for `~Kind` disambiguation in fragment filesystem names
 /// (e.g., `Foo~Struct`, `Foo~Impl`).
@@ -61,44 +61,103 @@ pub enum ConflictStrategy {
     Numbered,
 }
 
-/// Assign `fs_name` to each fragment according to the given strategy.
-/// Recurses into children.
-pub fn apply_fs_mapping(fragments: &mut [Fragment], strategy: NamingStrategy) {
+/// Run the naming and conflict-resolution pipeline over a fragment tree.
+///
+/// Performs a single recursive walk: descends into children first, then
+/// assigns `fs_name` to siblings at the current level via [`NamingStrategy`],
+/// then resolves any collisions among those siblings via [`ConflictStrategy`].
+/// This is the single entry point — callers no longer need to invoke naming
+/// and conflict resolution separately.
+pub fn assign_fs_names(fragments: &mut [Fragment], naming: NamingStrategy, conflict: ConflictStrategy) {
+    for frag in fragments.iter_mut() {
+        assign_fs_names(&mut frag.children, naming, conflict);
+    }
+    apply_naming(fragments, naming);
+    resolve_level_conflicts(fragments, conflict);
+}
+
+/// Assign `fs_name` to every non-structural fragment in `fragments` according
+/// to `strategy`. Operates on a single sibling level — recursion is owned by
+/// [`assign_fs_names`].
+fn apply_naming(fragments: &mut [Fragment], strategy: NamingStrategy) {
     match strategy {
         NamingStrategy::Identity => apply_identity(fragments),
         NamingStrategy::Slugified { indexed } => apply_slugified(fragments, indexed),
     }
 }
 
-/// Assign `fs_name` as the fragment's name verbatim (identity strategy).
+/// Identity naming: `fs_name` is the fragment's `name` verbatim.
 fn apply_identity(fragments: &mut [Fragment]) {
-    for frag in fragments {
+    for frag in fragments.iter_mut() {
         if !frag.kind.is_structural() {
             frag.fs_name = Some(frag.name.clone());
         }
-        apply_identity(&mut frag.children);
     }
 }
 
-/// Assign `fs_name` as a kebab-case slug, optionally with a numeric prefix.
-///
-/// When `indexed` is true, names are prefixed with a zero-padded sequence
-/// number (e.g. `00-getting-started`, `01-installation`) to preserve source
-/// order in directory listings. Code blocks get a separate counter multiplied
-/// by 10 to leave room for insertions.
+/// Slugified naming: kebab-case slug, optionally with a zero-padded source
+/// order prefix. Code blocks use a separate counter (multiplied by 10 to
+/// leave insertion gaps) since their slug would just be empty.
 fn apply_slugified(fragments: &mut [Fragment], indexed: bool) {
     let mut code_block_index = 0usize;
     for (i, frag) in fragments.iter_mut().enumerate() {
-        apply_slugified(&mut frag.children, indexed);
         if frag.kind.is_structural() {
             continue;
         }
-        if matches!(frag.kind, FragmentKind::CodeBlock { .. }) {
-            code_block_index += 1;
-            frag.fs_name = Some((code_block_index * 10).to_string());
-        } else {
-            let slug = slugify_unbounded(&frag.name);
-            frag.fs_name = Some(if indexed { format!("{i:02}-{slug}") } else { slug });
+        frag.fs_name = Some(slugified_fs_name(frag, i, indexed, &mut code_block_index));
+    }
+}
+
+/// Compute the slugified `fs_name` for a single fragment. Extracted so
+/// [`apply_slugified`] doesn't carry deeply nested branches.
+fn slugified_fs_name(frag: &Fragment, sibling_index: usize, indexed: bool, code_block_index: &mut usize) -> String {
+    if matches!(frag.kind, FragmentKind::CodeBlock { .. }) {
+        *code_block_index += 1;
+        return (*code_block_index * 10).to_string();
+    }
+    let slug = slugify_unbounded(&frag.name);
+    if indexed {
+        format!("{sibling_index:02}-{slug}")
+    } else {
+        slug
+    }
+}
+
+/// Detect `fs_name` collisions among `fragments` (siblings) and apply
+/// `strategy`'s resolution. Operates on a single sibling level — recursion
+/// is owned by [`assign_fs_names`].
+fn resolve_level_conflicts(fragments: &mut [Fragment], strategy: ConflictStrategy) {
+    let mut name_indices: HashMap<&str, Vec<usize>> = HashMap::with_capacity(fragments.len());
+    for (i, frag) in fragments.iter().enumerate() {
+        if let Some(fs_name) = &frag.fs_name {
+            name_indices.entry(fs_name.as_str()).or_default().push(i);
+        }
+    }
+
+    let conflicts: Vec<ConflictSet> = name_indices
+        .into_iter()
+        .filter(|(_, indices)| indices.len() > 1)
+        .map(|(name, indices)| ConflictSet {
+            name: name.to_owned(),
+            entries: indices
+                .into_iter()
+                .filter_map(|i| {
+                    fragments.get(i).map(|frag| ConflictEntry {
+                        index: i,
+                        fragment_kind: frag.kind.clone(),
+                    })
+                })
+                .collect(),
+        })
+        .collect();
+
+    if conflicts.is_empty() {
+        return;
+    }
+
+    for res in resolve_conflicts(&conflicts, strategy) {
+        if let Some(frag) = fragments.get_mut(res.index) {
+            frag.fs_name = res.fs_name;
         }
     }
 }
