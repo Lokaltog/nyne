@@ -45,17 +45,31 @@ fn splice_valid_to_invalid_is_rejected() {
     assert_eq!(std::str::from_utf8(&written).unwrap(), "fn hello() {}");
 }
 
-/// Tests that splicing into an already-invalid file skips validation.
+/// Tests that splicing into an already-invalid file is allowed even when
+/// the spliced result is also invalid.
+///
+/// This exercises the pre-splice validation fallback in
+/// [`splice_rope_validate_write`]: when post-splice validation fails, the
+/// fallback re-validates the pre-splice rope (cheaply cloned, O(1)) and
+/// suppresses the error if the source was already invalid.
+///
+/// The splice keeps the `SYNTAX_ERROR` marker in the output so that
+/// post-splice validation fails, forcing the fallback branch to fire
+/// rather than trivially passing on a clean spliced result.
 #[test]
 fn splice_already_invalid_file_allows_write() {
-    let (_dir, fs, path) = setup("fn SYNTAX_ERROR() {}");
-    // File already contains the error marker — validation would fail on the
-    // original. The splice itself doesn't introduce new errors, but the point
-    // is that validation is skipped entirely for already-invalid files.
-    let result = splice_validate_write(&fs, &path, 3..15, "still_broken", reject_if_contains_error);
-    assert!(result.is_ok());
-    let written = fs.read_file(&path).unwrap();
-    assert_eq!(std::str::from_utf8(&written).unwrap(), "fn still_broken() {}\n");
+    let (_dir, fs, path) = setup("fn SYNTAX_ERROR_old() {}");
+    // Replace "old" with "new" at bytes 16..19 — both pre- and post-splice
+    // content contain `SYNTAX_ERROR`, so `validate(&spliced)` errors and
+    // the pre-splice rope clone is what rescues the write.
+    assert!(
+        splice_validate_write(&fs, &path, 16..19, "new", reject_if_contains_error).is_ok(),
+        "pre-splice-invalid fallback should allow the write",
+    );
+    assert_eq!(
+        std::str::from_utf8(&fs.read_file(&path).unwrap()).unwrap(),
+        "fn SYNTAX_ERROR_new() {}\n",
+    );
 }
 
 /// Tests that an out-of-bounds splice range is rejected.
