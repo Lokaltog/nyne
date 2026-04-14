@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
+use nyne::path_filter::PathFilter;
 use nyne::path_utils::PathExt;
 use nyne::router::fs::Filesystem;
 use nyne::router::{
@@ -32,11 +33,21 @@ pub struct CompanionProvider {
     pub(crate) dir_tree: RouteTree<Self>,
     pub(crate) mount_tree: RouteTree<Self>,
     pub(crate) fs: Arc<dyn Filesystem>,
+    /// Gitignore-backed filter consulted to bypass companion decoration
+    /// for ignored paths. `None` means no filtering (used in tests and
+    /// minimal chains).
+    pub(crate) path_filter: Option<Arc<PathFilter>>,
 }
 
 nyne::define_provider!(CompanionProvider, "companion");
 
 impl CompanionProvider {
+    /// Returns `true` if `path` is gitignored (or otherwise excluded
+    /// via `excluded_patterns`) and companion decoration should be
+    /// skipped so the request passes through to the underlying
+    /// filesystem untouched.
+    fn is_excluded(&self, path: &Path) -> bool { self.path_filter.as_ref().is_some_and(|f| f.is_excluded(path)) }
+
     /// Select the extension tree based on companion scope.
     ///
     /// File-backed companions dispatch through `file_tree`, directory
@@ -72,6 +83,16 @@ impl CompanionProvider {
             "" => Some(parent),
             _ => Some(parent.join(real_name)),
         };
+        // Skip the rewrite when the resolved source file is gitignored.
+        // Leave `Companion` state unset so the rest of the chain treats
+        // the request as a plain real-fs access; downstream middlewares
+        // (source, lsp, git, …) no-op on their `req.companion().is_none()`
+        // guards.
+        if let Some(ref src) = source_file
+            && self.is_excluded(src)
+        {
+            return;
+        }
         let rest: PathBuf = components
             .get(idx + 1..)
             .unwrap_or_default()
@@ -115,10 +136,20 @@ impl CompanionProvider {
             return next.run(req);
         }
         // Case 3: outer `@` — entering companion context.
-        tracing::trace!("companion:rewrite:{name}->{real_name}");
-
         let source_file = req.path().join(real_name);
         let source_file = (!source_file.as_os_str().is_empty()).then_some(source_file);
+        // Skip the rewrite for gitignored source files. Without
+        // `Companion` state or an emitted `@` dir, the lookup falls
+        // through to `next.run(req)` below and the terminal filesystem
+        // provider returns `ENOENT` for the literal `<name>@` path.
+        if let Some(ref src) = source_file
+            && self.is_excluded(src)
+        {
+            tracing::trace!("companion:lookup_excluded:{}", src.display());
+            return next.run(req);
+        }
+        tracing::trace!("companion:rewrite:{name}->{real_name}");
+
         req.set_state(Companion::new(source_file, Arc::clone(&self.suffix)));
 
         req.nodes.add(NamedNode::dir(name));
@@ -171,11 +202,13 @@ impl CompanionProvider {
         if !matches!(req.visibility(), Some(Visibility::Force)) {
             return;
         }
+        let dir = req.path().to_path_buf();
         let file_names: Vec<String> = req
             .nodes
             .iter()
             .filter(|n| n.kind() == NodeKind::File)
             .map(|n| n.name().to_owned())
+            .filter(|name| !self.is_excluded(&dir.join(name)))
             .collect();
         for name in file_names {
             req.nodes.add(NamedNode::dir(format!("{name}{}", self.suffix)));

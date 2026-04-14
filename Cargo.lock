@@ -1666,6 +1666,7 @@ dependencies = [
  "rstest",
  "serde",
  "similar-asserts",
+ "tempfile",
  "toml",
  "tracing",
 ]

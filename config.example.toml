@@ -2,6 +2,18 @@
 # Place at: ~/.config/nyne/config.toml
 # Project-level overrides: .nyne/config.toml, .nyne.toml, or nyne.toml
 
+# [mount]
+# source_dir = "/path/to/project"
+# mountpoint = "/path/to/mount"
+#
+# Paths to bypass virtual-content decoration, on top of the project's
+# `.gitignore` chain (including nested `.gitignore` files,
+# `.git/info/exclude`, and git's global ignore via `core.excludesFile`).
+# Patterns use gitignore syntax. Matched paths pass straight through to
+# the underlying filesystem with no companion `@` directories, no symbol
+# parsing, and no LSP activity.
+# excluded_patterns = ["target/", "dist/", "*.log"]
+
 # [plugin.source]
 # enabled = true
 # max_depth = 5  # max nesting depth for symbol extraction (default: 5)

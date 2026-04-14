@@ -1,5 +1,8 @@
 pub mod config;
+use std::sync::Arc;
+
 use linkme::distributed_slice;
+use nyne::path_filter::PathFilter;
 use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use nyne::router::{Provider, RouteTree};
@@ -30,6 +33,7 @@ impl Plugin for CompanionPlugin {
             dir_tree: RouteTree::builder().apply(&ext.dir).build(),
             mount_tree: RouteTree::builder().apply(&ext.mount).build(),
             fs: Arc::clone(ctx.fs()),
+            path_filter: ctx.get::<Arc<PathFilter>>().cloned(),
         })])
     }
 }

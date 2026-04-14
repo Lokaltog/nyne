@@ -23,6 +23,7 @@ use crate::dispatch::activation::ActivationContext;
 use crate::dispatch::{ControlRegistry, ScriptRegistry};
 use crate::fuse::FuseFilesystem;
 use crate::fuse::notify::{AsyncNotifier, FuseNotifier};
+use crate::path_filter::PathFilter;
 use crate::process::Spawner;
 use crate::router::fs::os::OsFilesystem;
 use crate::router::{Chain, Filesystem};
@@ -313,6 +314,19 @@ fn build_fuse_session(
         Arc::clone(nyne_config),
         spawner,
     );
+
+    // Build the gitignore-backed path filter and publish it to plugins
+    // via the activation context. Middlewares consult it to bypass
+    // virtual-content decoration for ignored paths, letting those reach
+    // the underlying filesystem untouched.
+    activation_ctx.insert(Arc::new(PathFilter::build(
+        &storage_root,
+        nyne_config
+            .mount
+            .as_ref()
+            .map(|m| m.excluded_patterns.as_slice())
+            .unwrap_or_default(),
+    )));
 
     // Activate plugins in dependency order.
     let plugins = plugin::instantiate();

@@ -37,6 +37,10 @@ pub mod dispatch;
 pub(crate) mod fuse;
 /// Path utilities for virtual filesystem operations.
 pub mod path_utils;
+
+/// Gitignore-backed path filter for bypassing virtual-content decoration
+/// on ignored paths.
+pub mod path_filter;
 /// Plugin registration and lifecycle management.
 pub mod plugin;
 /// Common re-exports for convenient use across the crate.
