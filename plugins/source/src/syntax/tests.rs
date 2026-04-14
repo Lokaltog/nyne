@@ -888,12 +888,10 @@ fn kind_suffix_conflict_resolution() {
         entries: vec![
             ConflictEntry {
                 index: 0,
-                fragment_name: "Foo".to_owned(),
                 fragment_kind: result[0].kind.clone(),
             },
             ConflictEntry {
                 index: 1,
-                fragment_name: "Foo".to_owned(),
                 fragment_kind: result[1].kind.clone(),
             },
         ],
@@ -920,7 +918,6 @@ fn numbered_conflict_resolution() {
             .enumerate()
             .map(|(i, f)| ConflictEntry {
                 index: i,
-                fragment_name: f.name.clone(),
                 fragment_kind: f.kind.clone(),
             })
             .collect(),

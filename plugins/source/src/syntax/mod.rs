@@ -249,7 +249,6 @@ pub fn resolve_conflicts(fragments: &mut [fragment::Fragment], decomposer: &Arc<
                     let frag = fragments.get(i)?;
                     Some(fragment::ConflictEntry {
                         index: i,
-                        fragment_name: frag.name.clone(),
                         fragment_kind: frag.kind.clone(),
                     })
                 })

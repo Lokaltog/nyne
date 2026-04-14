@@ -7,14 +7,15 @@ use std::fmt::{self, Display, Formatter};
 use std::iter;
 use std::ops::Range;
 
-use strum::{Display as StrumDisplay, EnumString};
+use strum::IntoStaticStr;
 
 /// Kind of a top-level source-code symbol.
 ///
 /// Cross-language superset: not every variant applies to every language.
 /// Language decomposers map tree-sitter node kinds to these via
 /// `LanguageSpec::map_symbol_kind` / the `symbol_map!` macro.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, StrumDisplay, EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, IntoStaticStr)]
+#[strum(serialize_all = "lowercase")]
 pub enum SymbolKind {
     Function,
     Struct,
@@ -34,26 +35,12 @@ pub enum SymbolKind {
 
 /// Display and classification methods for `SymbolKind`.
 impl SymbolKind {
-    /// Filesystem directory name for this symbol kind (lowercased display form).
+    /// Filesystem directory name for this symbol kind (lowercased variant form).
+    ///
+    /// Derived from the `IntoStaticStr` impl on [`SymbolKind`] which uses
+    /// `#[strum(serialize_all = "lowercase")]`.
     #[must_use]
-    pub const fn directory_name(self) -> &'static str {
-        match self {
-            Self::Function => "function",
-            Self::Struct => "struct",
-            Self::Enum => "enum",
-            Self::Trait => "trait",
-            Self::Const => "const",
-            Self::Static => "static",
-            Self::TypeAlias => "typealias",
-            Self::Impl => "impl",
-            Self::Macro => "macro",
-            Self::Class => "class",
-            Self::Interface => "interface",
-            Self::Module => "module",
-            Self::Variable => "variable",
-            Self::Decorator => "decorator",
-        }
-    }
+    pub fn directory_name(self) -> &'static str { self.into() }
 
     /// Whether this symbol kind is a scope that can contain child items.
     ///
@@ -109,9 +96,16 @@ impl FragmentKind {
     }
 }
 
-/// Display implementation for `FragmentKind`.
+/// Display `SymbolKind` as its variant name (e.g. `Function`, `TypeAlias`).
+///
+/// The `IntoStaticStr` derive uses `serialize_all = "lowercase"` for the
+/// filesystem directory name, so `Display` is implemented via `Debug` to
+/// preserve the CamelCase form consumers (templates, logs) expect.
+impl Display for SymbolKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result { write!(f, "{self:?}") }
+}
+
 impl Display for FragmentKind {
-    /// Formats the fragment kind as a human-readable label.
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Symbol(kind) => write!(f, "{kind}"),
@@ -319,8 +313,6 @@ pub struct ConflictSet {
 pub struct ConflictEntry {
     /// Index into the flat fragment list for back-patching.
     pub index: usize,
-    /// The fragment's logical name.
-    pub fragment_name: String,
     /// The fragment's kind (used for `~Kind` disambiguation).
     pub fragment_kind: FragmentKind,
 }

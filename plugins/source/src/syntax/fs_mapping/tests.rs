@@ -38,17 +38,14 @@ fn resolve_kind_suffix_duplicate_kinds() {
         entries: vec![
             ConflictEntry {
                 index: 0,
-                fragment_name: "Foo".to_owned(),
                 fragment_kind: FragmentKind::Symbol(SymbolKind::Struct),
             },
             ConflictEntry {
                 index: 1,
-                fragment_name: "Foo".to_owned(),
                 fragment_kind: FragmentKind::Symbol(SymbolKind::Impl),
             },
             ConflictEntry {
                 index: 2,
-                fragment_name: "Foo".to_owned(),
                 fragment_kind: FragmentKind::Symbol(SymbolKind::Impl),
             },
         ],
@@ -70,12 +67,10 @@ fn resolve_kind_suffix_unique_kinds() {
         entries: vec![
             ConflictEntry {
                 index: 0,
-                fragment_name: "Foo".to_owned(),
                 fragment_kind: FragmentKind::Symbol(SymbolKind::Struct),
             },
             ConflictEntry {
                 index: 1,
-                fragment_name: "Foo".to_owned(),
                 fragment_kind: FragmentKind::Symbol(SymbolKind::Impl),
             },
         ],
