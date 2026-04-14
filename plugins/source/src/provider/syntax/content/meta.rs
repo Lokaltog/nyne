@@ -166,11 +166,24 @@ impl MetaSplice {
     /// Splice `new_content` into the source file, validate, write back, and
     /// invalidate the decomposition cache.
     pub(super) fn splice_write(&self, fs: &dyn Filesystem, new_content: &str) -> Result<AffectedFiles> {
+        self.write_resolved(fs, self.resolve()?, new_content)
+    }
+
+    /// Splice `new_content` into a pre-resolved target, validate, write back,
+    /// and invalidate the decomposition cache. Shared core for [`splice_write`]
+    /// and [`wrap_and_splice`], which both already hold a [`ResolvedSplice`]
+    /// and must not re-resolve.
+    fn write_resolved(
+        &self,
+        fs: &dyn Filesystem,
+        resolved: ResolvedSplice,
+        new_content: &str,
+    ) -> Result<AffectedFiles> {
         let ResolvedSplice {
             shared,
             byte_range,
             mut rope,
-        } = self.resolve()?;
+        } = resolved;
         let source_file = self.resolver.source_file().to_owned();
         splice_rope_validate_write(fs, &source_file, &mut rope, byte_range, new_content, |spliced| {
             shared.decomposer.validate(spliced).map_err(|e| e.to_string())
@@ -181,6 +194,11 @@ impl MetaSplice {
 
     /// Resolve the splice target, apply a wrapping function to the plain text
     /// (e.g. doc comment markers), then splice the result into the source file.
+    ///
+    /// Reuses the rope built by [`resolve`](Self::resolve) for indent
+    /// detection and delegates to [`write_resolved`](Self::write_resolved),
+    /// so this path does exactly one decomposition and one rope build even
+    /// though both resolve and splice need them.
     pub(super) fn wrap_and_splice(
         &self,
         fs: &dyn Filesystem,
@@ -188,10 +206,9 @@ impl MetaSplice {
         wrap_fn: impl FnOnce(&dyn Decomposer, &str, &str) -> String,
     ) -> Result<AffectedFiles> {
         let resolved = self.resolve()?;
-        let rope = crop::Rope::from(resolved.shared.source.as_str());
-        let indent = indent_at_rope(&resolved.shared.source, &rope, resolved.byte_range.start);
+        let indent = indent_at_rope(&resolved.shared.source, &resolved.rope, resolved.byte_range.start);
         let wrapped = wrap_fn(resolved.shared.decomposer.as_ref(), plain, indent);
-        self.splice_write(fs, &wrapped)
+        self.write_resolved(fs, resolved, &wrapped)
     }
 
     /// Handle truncate-write: if `data` is empty, remove the span entirely;
