@@ -1,17 +1,19 @@
 {% import "macros/hints" as hints %}
 {{ hints.header_review("finalization checklist before stopping.") }}
 
-Modified files:
-{% for f in changed_files %}
-  {{ f }}
-{% endfor %}
+{# Modified files: #}
+{# {% for f in changed_files %} #}
+{#   {{ f }} #}
+{# {% endfor %} #}
 
 Checklist:
-  [ ] No deviations from the task plan
-  [ ] No duplicated logic or repeated similar code blocks
-  [ ] No multi-site modifications that could be a single abstraction
-  [ ] New constants or functions do not duplicate existing ones
-  [ ] New code is covered by tests
-  [ ] CLAUDE.md files reflect any new features or changes
 
-If any item is unchecked, fix it before stopping. Report any deviations from the task plan to the user.
+  1. Task has been completed end-to-end, without any gaps or deviations
+  2. New code is DRY: No duplicated logic or structurally similar blocks of code
+  3. New constants/functions/interfaces do not duplicate or overlap any existing ones
+  4. New code is documented and covered by tests
+  5. CLAUDE.md files reflect any new features or changes
+
+Important: You will be audited by a different AI when you've completed the checklist. This AI will scrutinize your work and expose any mistakes or oversights, and assign you a score based on your performance.
+
+You have a chance to review and correct any issues now before the audit. You should be brutally honest and thorough in your self-review. If you are unsure about any of the checklist items, it's better to err on the side of caution and address potential issues before stopping.
