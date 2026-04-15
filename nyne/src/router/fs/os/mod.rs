@@ -33,25 +33,17 @@ impl Filesystem for OsFilesystem {
             let entry = entry?;
             entries.push(DirEntry {
                 name: entry.file_name().to_string_lossy().into_owned(),
-                kind: if entry.file_type()?.is_dir() {
-                    NodeKind::Directory
-                } else {
-                    NodeKind::File
-                },
+                kind: NodeKind::from(entry.file_type()?),
             });
         }
         Ok(entries)
     }
 
     fn stat(&self, dir: &Path, name: &str) -> Result<Option<DirEntry>> {
-        match fs::metadata(self.root.join(dir).join(name)) {
+        match fs::symlink_metadata(self.root.join(dir).join(name)) {
             Ok(meta) => Ok(Some(DirEntry {
                 name: name.to_owned(),
-                kind: if meta.is_dir() {
-                    NodeKind::Directory
-                } else {
-                    NodeKind::File
-                },
+                kind: NodeKind::from(meta.file_type()),
             })),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
             Err(e) => Err(e.into()),
@@ -86,13 +78,6 @@ impl Filesystem for OsFilesystem {
 
     fn metadata(&self, path: &Path) -> Result<Metadata> {
         let meta = fs::symlink_metadata(self.root.join(path))?;
-        let file_type = if meta.is_dir() {
-            NodeKind::Directory
-        } else if meta.is_symlink() {
-            NodeKind::Symlink
-        } else {
-            NodeKind::File
-        };
         Ok(Metadata {
             size: meta.len(),
             timestamps: Timestamps {
@@ -100,10 +85,13 @@ impl Filesystem for OsFilesystem {
                 mtime: meta.modified().unwrap_or(UNIX_EPOCH),
                 ctime: meta.created().or_else(|_| meta.modified()).unwrap_or(UNIX_EPOCH),
             },
-            file_type,
+            file_type: NodeKind::from(meta.file_type()),
             permissions: meta.mode(),
         })
     }
 
     fn symlink_target(&self, path: &Path) -> Result<PathBuf> { Ok(fs::read_link(self.root.join(path))?) }
 }
+
+#[cfg(test)]
+mod tests;

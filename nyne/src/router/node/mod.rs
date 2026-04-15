@@ -1,3 +1,4 @@
+use std::fs::FileType;
 use std::ops::{BitAndAssign, BitOrAssign, Deref, DerefMut, Not};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -119,6 +120,21 @@ pub enum NodeKind {
     File,
     Directory,
     Symlink,
+}
+
+impl From<FileType> for NodeKind {
+    /// Anything not a directory or symlink is classified as [`NodeKind::File`],
+    /// including special file types like sockets or FIFOs. Mirrors the
+    /// [`From<FileType> for FileKind`](crate::types::FileKind) conversion.
+    fn from(ft: FileType) -> Self {
+        if ft.is_dir() {
+            Self::Directory
+        } else if ft.is_symlink() {
+            Self::Symlink
+        } else {
+            Self::File
+        }
+    }
 }
 
 /// Cache policy for a node's content. Opt-in — nodes without a policy are not cached.

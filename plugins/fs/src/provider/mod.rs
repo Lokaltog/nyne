@@ -105,7 +105,14 @@ fn build_node(fs: &Arc<dyn Filesystem>, dir: &Path, entry: &DirEntry) -> NamedNo
             fs: Arc::clone(fs),
             path: file_path,
         }),
-        NodeKind::Symlink => Node::symlink(""),
+        NodeKind::Symlink => Node::symlink(fs.symlink_target(&file_path).unwrap_or_else(|e| {
+            tracing::warn!(
+                path = %file_path.display(),
+                error = %e,
+                "failed to read symlink target; using empty target",
+            );
+            PathBuf::new()
+        })),
     }
     .named(&entry.name)
 }
