@@ -173,13 +173,36 @@ pub fn build_tree(vfs: &Vfs, ext: &SourceExtensions) -> RouteTree<SyntaxProvider
         .build()
 }
 
+/// Classification of a `symbols/{..path}` path for routing.
+///
+/// Produced by [`SyntaxProvider::classify_fragment_path`] to keep the
+/// `code/` / `edit/` sub-route detection out of both `fragment_readdir`
+/// and `fragment_lookup`.
+enum FragmentSubRoute<'a> {
+    /// `Foo@/bar@/code` — code block directory under a document section.
+    CodeBlocks { parent: &'a [String] },
+    /// `Foo@/edit` — batch edit staging directory for a fragment.
+    Edit { parent: &'a [String] },
+    /// The path addresses a fragment directory itself.
+    Fragment,
+}
+
 impl SyntaxProvider {
     #[allow(clippy::unnecessary_wraps)]
+    /// Classify a `symbols/{..path}` route into one of the sub-route variants.
+    fn classify_fragment_path<'a>(&self, segments: &'a [String]) -> FragmentSubRoute<'a> {
+        match segments.split_last() {
+            Some((last, parent)) if last == "code" && !parent.is_empty() => FragmentSubRoute::CodeBlocks { parent },
+            Some((last, parent)) if *last == self.vfs.dir.edit && !parent.is_empty() =>
+                FragmentSubRoute::Edit { parent },
+            _ => FragmentSubRoute::Fragment,
+        }
+    }
+
     /// Readdir callback for `symbols/{..path}` — fragment directories (Foo@/, Foo@/Bar@/).
     ///
-    /// Lists fragment children (body, meta-files, child symbols, code/) or,
-    /// when the path ends with `code/`, lists fenced code blocks.
-    #[allow(clippy::excessive_nesting)]
+    /// Lists fragment children (body, meta-files, child symbols, code/) or
+    /// dispatches to `code/` / `edit/` sub-routes when the path ends with one.
     pub(super) fn fragment_readdir(&self, ctx: &RouteCtx, req: &mut Request) -> Result<()> {
         let Some((companion, sf)) = req.companion_context() else {
             return Ok(());
@@ -189,33 +212,23 @@ impl SyntaxProvider {
         };
         let segments: Vec<String> = path_param.split('/').map(String::from).collect();
 
-        // code/ sub-route: last segment "code" → list fenced code blocks.
-        if let Some((last, parent_segments)) = segments.split_last()
-            && last == "code"
-            && !parent_segments.is_empty()
-        {
-            if let Ok(Some(nodes)) = self.resolve_code_block_dir(&sf, parent_segments) {
-                req.nodes.extend(nodes);
-            }
-            return Ok(());
-        }
-
-        // edit/ sub-route: last segment "edit" → list edit operation kinds.
-        if let Some((last, parent_segments)) = segments.split_last()
-            && *last == self.vfs.dir.edit
-            && !parent_segments.is_empty()
-        {
-            // Verify the parent fragment exists before listing ops.
-            if self.decomposition.has_fragment(&sf, parent_segments) {
-                for kind in <EditOpKind as strum::IntoEnumIterator>::iter() {
-                    req.nodes.add(NamedNode::file(kind.name()));
+        match self.classify_fragment_path(&segments) {
+            FragmentSubRoute::CodeBlocks { parent } => {
+                if let Ok(Some(nodes)) = self.resolve_code_block_dir(&sf, parent) {
+                    req.nodes.extend(nodes);
                 }
             }
-            return Ok(());
-        }
-
-        if let Ok(Some(nodes)) = self.resolve_fragment_dir(&companion, &sf, &segments) {
-            req.nodes.extend(nodes);
+            FragmentSubRoute::Edit { parent } =>
+                if self.decomposition.has_fragment(&sf, parent) {
+                    for kind in <EditOpKind as strum::IntoEnumIterator>::iter() {
+                        req.nodes.add(NamedNode::file(kind.name()));
+                    }
+                },
+            FragmentSubRoute::Fragment => {
+                if let Ok(Some(nodes)) = self.resolve_fragment_dir(&companion, &sf, &segments) {
+                    req.nodes.extend(nodes);
+                }
+            }
         }
         Ok(())
     }
@@ -232,56 +245,44 @@ impl SyntaxProvider {
         };
         let segments: Vec<String> = path_param.split('/').map(String::from).collect();
 
-        // code/ sub-route: last segment "code" → lookup within code block dir.
-        if let Some((last, parent_segments)) = segments.split_last()
-            && last == "code"
-            && !parent_segments.is_empty()
-        {
-            if let Ok(Some(nodes)) = self.resolve_code_block_dir(&sf, parent_segments)
-                && let Some(node) = nodes.into_iter().find(|n| n.name() == name)
-            {
-                req.nodes.add(node);
+        match self.classify_fragment_path(&segments) {
+            FragmentSubRoute::CodeBlocks { parent } => {
+                if let Ok(Some(nodes)) = self.resolve_code_block_dir(&sf, parent)
+                    && let Some(node) = nodes.into_iter().find(|n| n.name() == name)
+                {
+                    req.nodes.add(node);
+                }
             }
-            return Ok(());
-        }
-
-        // edit/ sub-route: last segment "edit" → lookup edit op by name.
-        if let Some((last, parent_segments)) = segments.split_last()
-            && *last == self.vfs.dir.edit
-            && !parent_segments.is_empty()
-        {
-            if let Some(kind) = EditOpKind::from_name(name)
-                && self.decomposition.has_fragment(&sf, parent_segments)
-            {
-                req.nodes.add(
-                    Node::file()
-                        .with_writable(StageWritable {
-                            staging: self.staging.clone(),
-                            source_file: sf,
-                            fragment_path: parent_segments.to_vec(),
-                            kind,
-                        })
-                        .named(name),
-                );
+            FragmentSubRoute::Edit { parent } => {
+                if let Some(kind) = EditOpKind::from_name(name)
+                    && self.decomposition.has_fragment(&sf, parent)
+                {
+                    req.nodes.add(
+                        Node::file()
+                            .with_writable(StageWritable {
+                                staging: self.staging.clone(),
+                                source_file: sf,
+                                fragment_path: parent.to_vec(),
+                                kind,
+                            })
+                            .named(name),
+                    );
+                }
             }
-            return Ok(());
+            FragmentSubRoute::Fragment => {
+                // delete.diff — handled by the diff middleware.
+                if name == "delete.diff" {
+                    self.set_delete_diff_source(req, &sf, &segments);
+                    return Ok(());
+                }
+                if let Ok(Some(nodes)) = self.resolve_fragment_dir(&companion, &sf, &segments)
+                    && let Some(node) = nodes.into_iter().find(|n| n.name() == name)
+                {
+                    req.nodes.add(node);
+                }
+                self.attach_unlinkables(req, &companion, &sf, &segments);
+            }
         }
-
-        // delete.diff — handled by the diff middleware.
-        if name == "delete.diff" {
-            self.set_delete_diff_source(req, &sf, &segments);
-            return Ok(());
-        }
-
-        // Resolve the fragment directory and find the matching node.
-        if let Ok(Some(nodes)) = self.resolve_fragment_dir(&companion, &sf, &segments)
-            && let Some(node) = nodes.into_iter().find(|n| n.name() == name)
-        {
-            req.nodes.add(node);
-        }
-
-        // Attach Unlinkable to fragment directory nodes for rmdir support.
-        self.attach_unlinkables(req, &companion, &sf, &segments);
         Ok(())
     }
 
