@@ -9,8 +9,10 @@ struct FennelLanguage;
 impl LanguageSpec for FennelLanguage {
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
-    /// Comment prefix patterns for Fennel doc comments.
-    const DOC_COMMENT_PREFIXES: &'static [&'static str] = &[";"];
+    /// Comment prefix patterns for Fennel doc comments. Ordered longest-first
+    /// so the default strip picks the most specific match.
+    const DOC_COMMENT_PREFIXES: &'static [&'static str] = &[";;;", ";;", ";"];
+    const DOC_COMMENT_WRITE: Option<(&'static str, &'static str)> = Some((";;", ";; "));
     const EXTENSIONS: &'static [&'static str] = &["fnl"];
     const IMPORT_KINDS: &'static [&'static str] = &[];
     const NAME: &'static str = "Fennel";
@@ -26,11 +28,6 @@ impl LanguageSpec for FennelLanguage {
         collect_fennel_fragments(root, &mut fragments, None);
         Some(fragments)
     }
-
-    /// Strips doc comment markers from Fennel source.
-    fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &[";;;", ";;", ";"]) }
-
-    fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, ";;", ";; ") }
 }
 
 /// Recursively collect fragments from a Fennel AST.

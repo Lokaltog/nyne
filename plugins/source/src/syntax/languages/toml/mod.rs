@@ -12,6 +12,7 @@ impl LanguageSpec for TomlLanguage {
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
     /// Prefixes that identify doc comments.
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &["#"];
+    const DOC_COMMENT_WRITE: Option<(&'static str, &'static str)> = Some(("#", "# "));
     /// File extensions for TOML.
     const EXTENSIONS: &'static [&'static str] = &["toml"];
     const IMPORT_KINDS: &'static [&'static str] = &[];
@@ -52,11 +53,6 @@ impl LanguageSpec for TomlLanguage {
 
         Some(fragments)
     }
-
-    /// Strips doc comment prefix from a line.
-    fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &["#"]) }
-
-    fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, "#", "# ") }
 }
 
 /// Extract the key name from a TOML node's first key child.

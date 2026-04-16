@@ -12,6 +12,6 @@ pub(super) use crate::syntax::parser::{
 };
 pub(super) use crate::syntax::spec::{
     LanguageSpec, SpliceMode, WrapperInfo, extract_child_visibility, extract_leading_file_doc_range,
-    extract_preceding_decorator_range, extract_preceding_doc_range, strip_line_comment_prefixes, wrap_line_doc_comment,
+    extract_preceding_decorator_range, extract_preceding_doc_range, strip_line_comment_prefixes,
 };
 pub(super) use crate::syntax::{register_syntax, symbol_map};

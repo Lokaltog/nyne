@@ -23,11 +23,14 @@ impl RustLanguage {
 impl LanguageSpec for RustLanguage {
     /// AST node kind for doc comments.
     const DOC_COMMENT_KIND: Option<&'static str> = Some(Self::LINE_COMMENT);
-    /// Prefixes that identify doc comments.
-    const DOC_COMMENT_PREFIXES: &'static [&'static str] = &["///"];
+    /// Prefixes that identify doc comments. Includes `//!` so file-level
+    /// module docs strip cleanly through the default `strip_doc_comment`.
+    const DOC_COMMENT_PREFIXES: &'static [&'static str] = &["///", "//!"];
     const DOC_COMMENT_SKIP_KINDS: &'static [&'static str] = &[Self::ATTRIBUTE];
+    const DOC_COMMENT_WRITE: Option<(&'static str, &'static str)> = Some(("///", "/// "));
     /// File extensions for Rust.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
+    const FILE_DOC_COMMENT_WRITE: Option<(&'static str, &'static str)> = Some(("//!", "//! "));
     const IMPORT_KINDS: &'static [&'static str] = &["use_declaration"];
     /// Language name identifier.
     const NAME: &'static str = "Rust";
@@ -76,18 +79,6 @@ impl LanguageSpec for RustLanguage {
         extract_leading_file_doc_range(root, Self::LINE_COMMENT, &["//!"])
     }
 
-    /// Strips doc comment prefix from a line.
-    fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &["///", "//!"]) }
-
-    /// Wraps text in doc comment syntax.
-    fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, "///", "/// ") }
-
-    /// Wraps text in file-level doc comment syntax.
-    fn wrap_file_doc_comment(plain: &str, indent: &str) -> String {
-        wrap_line_doc_comment(plain, indent, "//!", "//! ")
-    }
-
-    /// Extracts the visibility modifier from a node.
     fn extract_visibility(node: TsNode<'_>) -> Option<String> { extract_child_visibility(node, "visibility_modifier") }
 
     /// Extracts the decorator/attribute range preceding a node.

@@ -11,6 +11,7 @@ impl LanguageSpec for NixLanguage {
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
     /// Comment prefix patterns for Nix doc comments.
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &["#"];
+    const DOC_COMMENT_WRITE: Option<(&'static str, &'static str)> = Some(("#", "# "));
     const EXTENSIONS: &'static [&'static str] = &["nix"];
     const IMPORT_KINDS: &'static [&'static str] = &[];
     const NAME: &'static str = "Nix";
@@ -25,11 +26,6 @@ impl LanguageSpec for NixLanguage {
         collect_nix_fragments(root, &mut fragments, None);
         Some(fragments)
     }
-
-    /// Strips doc comment markers from Nix source.
-    fn strip_doc_comment(raw: &str) -> String { strip_line_comment_prefixes(raw, &["#"]) }
-
-    fn wrap_doc_comment(plain: &str, indent: &str) -> String { wrap_line_doc_comment(plain, indent, "#", "# ") }
 }
 
 /// Recursively collect fragments from a Nix AST.

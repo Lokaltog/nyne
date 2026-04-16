@@ -92,9 +92,21 @@ pub trait LanguageSpec: Send + Sync + 'static {
     /// Tree-sitter comment node kind for doc range extraction. `None` disables default extraction.
     const DOC_COMMENT_KIND: Option<&'static str> = None;
     /// Prefixes that identify doc comments (e.g. `&["///"]` for Rust, `&["#"]` for Nix).
+    ///
+    /// Also consumed by the default [`strip_doc_comment`](Self::strip_doc_comment)
+    /// impl — list prefixes longest-first so the stripper picks the most
+    /// specific match (`";;;"` before `";"`).
     const DOC_COMMENT_PREFIXES: &'static [&'static str] = &[];
     /// Node kinds to skip when scanning for doc comments (e.g. `&["attribute_item"]` for Rust).
     const DOC_COMMENT_SKIP_KINDS: &'static [&'static str] = &[];
+
+    /// Markers used by the default [`wrap_doc_comment`](Self::wrap_doc_comment)
+    /// impl: `(bare_prefix, space_prefix)`, e.g. `("///", "/// ")` for Rust.
+    /// `None` disables default wrapping.
+    const DOC_COMMENT_WRITE: Option<(&'static str, &'static str)> = None;
+    /// Markers used by the default [`wrap_file_doc_comment`](Self::wrap_file_doc_comment)
+    /// impl. `None` inherits from [`DOC_COMMENT_WRITE`](Self::DOC_COMMENT_WRITE).
+    const FILE_DOC_COMMENT_WRITE: Option<(&'static str, &'static str)> = None;
 
     /// Return the tree-sitter grammar for a given extension.
     ///
@@ -157,14 +169,38 @@ pub trait LanguageSpec: Send + Sync + 'static {
     fn extract_file_doc_range(_root: TsNode<'_>) -> Option<Range<usize>> { None }
 
     /// Strip language-specific doc comment markers from raw text.
-    fn strip_doc_comment(raw: &str) -> String { raw.to_owned() }
+    ///
+    /// Default: strips prefixes listed in [`DOC_COMMENT_PREFIXES`](Self::DOC_COMMENT_PREFIXES)
+    /// (longest-first). Returns raw unchanged when prefixes are empty.
+    fn strip_doc_comment(raw: &str) -> String {
+        if Self::DOC_COMMENT_PREFIXES.is_empty() {
+            raw.to_owned()
+        } else {
+            strip_line_comment_prefixes(raw, Self::DOC_COMMENT_PREFIXES)
+        }
+    }
 
     /// Wrap plain text in language-specific doc comment markers.
-    fn wrap_doc_comment(plain: &str, _indent: &str) -> String { plain.to_owned() }
+    ///
+    /// Default: uses [`DOC_COMMENT_WRITE`](Self::DOC_COMMENT_WRITE) to apply
+    /// line-comment markers. Returns the raw text when no markers are set.
+    fn wrap_doc_comment(plain: &str, indent: &str) -> String {
+        match Self::DOC_COMMENT_WRITE {
+            Some((bare, space)) => wrap_line_doc_comment(plain, indent, bare, space),
+            None => plain.to_owned(),
+        }
+    }
 
     /// Wrap plain text in file-level doc comment markers (e.g. `//!` in Rust).
-    /// Default delegates to [`wrap_doc_comment`](Self::wrap_doc_comment).
-    fn wrap_file_doc_comment(plain: &str, indent: &str) -> String { Self::wrap_doc_comment(plain, indent) }
+    ///
+    /// Default: uses [`FILE_DOC_COMMENT_WRITE`](Self::FILE_DOC_COMMENT_WRITE)
+    /// when set, otherwise delegates to [`wrap_doc_comment`](Self::wrap_doc_comment).
+    fn wrap_file_doc_comment(plain: &str, indent: &str) -> String {
+        match Self::FILE_DOC_COMMENT_WRITE {
+            Some((bare, space)) => wrap_line_doc_comment(plain, indent, bare, space),
+            None => Self::wrap_doc_comment(plain, indent),
+        }
+    }
 
     /// Extract the first non-empty sentence from a raw doc comment.
     fn clean_doc_comment(raw: &str) -> Option<String> {
