@@ -18,13 +18,16 @@ use std::path::Path;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
+use nyne::SymbolLineRange;
 use nyne::router::{NamedNode, Request, RouteCtx};
+use nyne::templates::TemplateHandle;
 use nyne_companion::CompanionRequest;
 use nyne_source::{DecompositionCache, FragmentResolver, SourceExtensions, SyntaxRegistry};
 
 use super::state::{SymbolLoc, build_read_fn_symbol};
 use super::{GitState, views};
 use crate::history::{HistoryQueries as _, SymbolExtractCtx, filter_blame_to_range};
+use crate::repo::Repo;
 
 /// Default decomposition depth for extracting symbols from historical blobs.
 const EXTRACT_MAX_DEPTH: usize = 5;
@@ -64,25 +67,43 @@ impl SymbolGitCtx {
         }
     }
 
+    /// Build a symbol-scoped lazy template node bound to `handle` / `name`.
+    fn symbol_node<F>(
+        &self,
+        sf: &Path,
+        symbol_segs: &[&str],
+        handle: &TemplateHandle,
+        name: &str,
+        fetch: F,
+    ) -> NamedNode
+    where
+        F: Fn(&Repo, &str, &SymbolLineRange) -> Result<minijinja::Value> + Send + Sync + 'static,
+    {
+        let read_fn = build_read_fn_symbol(Arc::clone(&self.state.repo), self.symbol_loc(sf, symbol_segs), fetch);
+        handle.lazy_node(name, read_fn)
+    }
+
     /// Build a blame node for a symbol's line range.
     fn blame_node(&self, sf: &Path, symbol_segs: &[&str]) -> NamedNode {
-        let read_fn = build_read_fn_symbol(
-            Arc::clone(&self.state.repo),
-            self.symbol_loc(sf, symbol_segs),
+        self.symbol_node(
+            sf,
+            symbol_segs,
+            &self.state.handles.blame,
+            &self.state.vfs.file.blame,
             |repo, rel, range| Ok(minijinja::context!(data => filter_blame_to_range(repo.blame(rel)?, range))),
-        );
-        self.state.handles.blame.lazy_node(&self.state.vfs.file.blame, read_fn)
+        )
     }
 
     /// Build a log node for a symbol's line range.
     fn log_node(&self, sf: &Path, symbol_segs: &[&str]) -> NamedNode {
         let limit = self.state.limits.history;
-        let read_fn = build_read_fn_symbol(
-            Arc::clone(&self.state.repo),
-            self.symbol_loc(sf, symbol_segs),
+        self.symbol_node(
+            sf,
+            symbol_segs,
+            &self.state.handles.log,
+            &self.state.vfs.file.log,
             move |repo, rel, range| Ok(minijinja::context!(data => repo.file_history_in_range(rel, range, limit)?)),
-        );
-        self.state.handles.log.lazy_node(&self.state.vfs.file.log, read_fn)
+        )
     }
 
     /// Readdir for `git/` — emit BLAME.md, LOG.md, and `history/`.
@@ -124,12 +145,13 @@ impl SymbolGitCtx {
             return Ok(());
         };
         let sf = GitState::require_source_file(req)?;
-        let read_fn = build_read_fn_symbol(
-            Arc::clone(&self.state.repo),
-            self.symbol_loc(&sf, symbol_segs),
+        req.nodes.add(self.symbol_node(
+            &sf,
+            symbol_segs,
+            handle,
+            name,
             self.state.symbol_sliced_fetch(spec, is_blame),
-        );
-        req.nodes.add(handle.lazy_node(name, read_fn));
+        ));
         Ok(())
     }
 
