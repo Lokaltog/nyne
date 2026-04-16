@@ -218,6 +218,8 @@ impl Drop for ChildGuard {
 /// If the child has already exited (`ESRCH`), returns silently — this is
 /// expected when the child exits between the kill check and the actual
 /// signal delivery. Used by [`ChildGuard`] drop and explicit termination.
+/// Reaping is delegated to [`wait_for_exit`] to share the `EINTR` retry
+/// logic.
 fn kill_and_reap(pid: Pid) {
     debug!(pid = pid.as_raw_pid(), "sending SIGTERM to child");
     if let Err(e) = kill_process(pid, Signal::TERM) {
@@ -226,10 +228,8 @@ fn kill_and_reap(pid: Pid) {
         }
         return;
     }
-
-    match waitpid(Some(pid), WaitOptions::empty()) {
-        Ok(Some((_, status))) => debug!(?status, "child exited"),
-        Ok(None) => debug!("waitpid returned no status"),
+    match wait_for_exit(pid) {
+        Ok(code) => debug!(code, "child exited"),
         Err(e) => warn!(error = %e, "failed to wait for child"),
     }
 }
