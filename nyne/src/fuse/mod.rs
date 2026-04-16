@@ -29,12 +29,13 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
 use std::time::{Instant, SystemTime};
 
-use color_eyre::eyre::{Report, Result, eyre};
+use color_eyre::eyre::{Report, Result};
 use fuser::Errno;
 use handles::HandleTable;
 use inode_map::InodeMap;
 use notify::KernelNotifier;
 
+use crate::err::io_err;
 use crate::path_utils::PathExt;
 use crate::procfs::read_comm;
 use crate::router::{
@@ -183,27 +184,21 @@ impl FuseFilesystem {
     }
 
     /// Resolve an inode to its full path, or error if unknown.
-    fn inode_path(&self, ino: u64) -> Result<PathBuf> {
-        self.inodes.full_path(ino).ok_or_else(|| eyre!("inode {ino} not found"))
-    }
+    fn inode_path(&self, ino: u64) -> Result<PathBuf> { self.inodes.resolve_path(ino) }
+
 
     /// Dispatch a single-path mutation (create, remove, mkdir) through the chain.
     fn dispatch_path_op(&self, path: &Path, op_fn: impl FnOnce(String) -> Op, process: Option<Process>) -> Result<()> {
-        let (dir, name) = path
-            .split_dir_name()
-            .ok_or_else(|| eyre!("invalid path: {}", path.display()))?;
+        let (dir, name) = split_path(path)?;
         self.chain
             .dispatch(&mut Request::new(dir.to_path_buf(), op_fn(name.to_owned())).with_opt_process(process))
     }
 
+
     /// Dispatch a rename operation through the chain.
     fn dispatch_rename_op(&self, from: &Path, to: &Path, process: Option<Process>) -> Result<()> {
-        let (src_dir, src_name) = from
-            .split_dir_name()
-            .ok_or_else(|| eyre!("invalid path: {}", from.display()))?;
-        let (dst_dir, dst_name) = to
-            .split_dir_name()
-            .ok_or_else(|| eyre!("invalid path: {}", to.display()))?;
+        let (src_dir, src_name) = split_path(from)?;
+        let (dst_dir, dst_name) = split_path(to)?;
         self.chain.dispatch(
             &mut Request::new(src_dir.to_path_buf(), Op::Rename {
                 src_name: src_name.to_owned(),
@@ -213,6 +208,7 @@ impl FuseFilesystem {
             .with_opt_process(process),
         )
     }
+
 
     /// Try to dispatch a mutation via a node capability.
     ///
@@ -224,9 +220,7 @@ impl FuseFilesystem {
         path: &Path,
         invoke: impl FnOnce(&NamedNode) -> Option<Result<AffectedFiles>>,
     ) -> Result<bool> {
-        let (dir, name) = path
-            .split_dir_name()
-            .ok_or_else(|| eyre!("invalid path: {}", path.display()))?;
+        let (dir, name) = split_path(path)?;
         let Some(node) = self.lookup_node(dir, name, None)? else {
             return Ok(false);
         };
@@ -236,6 +230,15 @@ impl FuseFilesystem {
         self.notify_change(&result?);
         Ok(true)
     }
+    /// Resolve `path` to a [`NamedNode`], mapping missing entries to
+    /// [`ErrorKind::NotFound`] so the FUSE layer can surface `ENOENT`.
+    fn resolve_named(&self, path: &Path) -> Result<NamedNode> {
+        let (dir, name) = split_path(path)?;
+        self.lookup_node(dir, name, None)?
+            .ok_or_else(|| io_err(ErrorKind::NotFound, format!("not found: {}", path.display())))
+    }
+
+
 
     /// Try to rename via the node's [`Renameable`] capability.
     pub(super) fn rename_node(&self, from: &Path, to: &Path) -> Result<bool> {
@@ -320,29 +323,21 @@ impl Filesystem for FuseFilesystem {
     }
 
     fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
-        let (dir, name) = path
-            .split_dir_name()
-            .ok_or_else(|| eyre!("invalid path: {}", path.display()))?;
-        let node = self
-            .lookup_node(dir, name, None)?
-            .ok_or_else(|| eyre!("not found: {}", path.display()))?;
+        let node = self.resolve_named(path)?;
         node.readable()
-            .ok_or_else(|| eyre!("not readable: {}", path.display()))?
+            .ok_or_else(|| io_err(ErrorKind::PermissionDenied, format!("not readable: {}", path.display())))?
             .read(&ReadContext {
                 path,
                 fs: self.backing_fs.as_ref(),
             })
     }
 
+
     fn write_file(&self, path: &Path, content: &[u8]) -> Result<AffectedFiles> {
-        let (dir, name) = path
-            .split_dir_name()
-            .ok_or_else(|| eyre!("invalid path: {}", path.display()))?;
         let affected = self
-            .lookup_node(dir, name, None)?
-            .ok_or_else(|| eyre!("not found: {}", path.display()))?
+            .resolve_named(path)?
             .writable()
-            .ok_or_else(|| eyre!("not writable: {}", path.display()))?
+            .ok_or_else(|| io_err(ErrorKind::PermissionDenied, format!("not writable: {}", path.display())))?
             .write(
                 &WriteContext {
                     path,
@@ -354,6 +349,7 @@ impl Filesystem for FuseFilesystem {
         self.notify_change(&affected);
         Ok(affected)
     }
+
 
     fn rename(&self, from: &Path, to: &Path) -> Result<()> { self.dispatch_rename_op(from, to, None) }
 
@@ -394,6 +390,13 @@ macro_rules! ensure_dir_path {
 
 pub(super) use ensure_dir_path;
 pub(super) use fuse_try;
+
+/// Split a path into (parent_dir, file_name), mapping a malformed path to
+/// [`ErrorKind::InvalidInput`] so callers surface `EINVAL` rather than `EIO`.
+fn split_path(path: &Path) -> Result<(&Path, &str)> {
+    path.split_dir_name()
+        .ok_or_else(|| io_err(ErrorKind::InvalidInput, format!("invalid path: {}", path.display())))
+}
 
 /// Extract a FUSE errno from an opaque eyre error chain.
 ///

@@ -4,11 +4,15 @@
 //! Growth-only: entries are never removed to guarantee inode uniqueness.
 
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use color_eyre::eyre::Result;
 use parking_lot::RwLock;
 use slab::Slab;
+
+use crate::err::io_err;
 
 /// Metadata for a single inode — its location in the directory tree.
 #[derive(Clone, Debug)]
@@ -81,6 +85,18 @@ impl InodeMap {
         let entry = self.get(inode)?;
         Some(entry.dir_path.join(&entry.name))
     }
+    /// Resolve an inode to its full path, mapping a miss to
+    /// [`ErrorKind::NotFound`] so the FUSE layer can surface `ENOENT`.
+    pub fn resolve_path(&self, inode: u64) -> Result<PathBuf> {
+        self.full_path(inode)
+            .ok_or_else(|| io_err(ErrorKind::NotFound, format!("inode {inode} not found")))
+    }
+
+    /// Get the parent inode for an inode, defaulting to [`ROOT_INODE`] if unknown.
+    pub fn parent_of(&self, inode: u64) -> u64 {
+        self.get(inode).map_or(ROOT_INODE, |e| e.parent_inode)
+    }
+
 
     /// Update location after a rename.
     pub fn update(&self, inode: u64, dir_path: PathBuf, name: String, parent_inode: u64) -> bool {

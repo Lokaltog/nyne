@@ -364,7 +364,7 @@ impl Filesystem for FuseFilesystem {
             "readdir failed"
         );
 
-        let parent = self.inodes.get(ino).map_or(ROOT_INODE, |e| e.parent_inode);
+        let parent = self.inodes.parent_of(ino);
         if offset < OFFSET_DOT && reply.add(INodeNo(ino), OFFSET_DOT, fuser::FileType::Directory, ".") {
             reply.ok();
             return;
@@ -376,8 +376,12 @@ impl Filesystem for FuseFilesystem {
 
         for (i, node) in nodes.iter().enumerate().skip(readdir_skip(offset)) {
             let child_ino = self.ensure_inode(&dir_path, node.name(), ino);
-            let kind = file_kind_to_fuse(FileKind::from(node.kind()));
-            if reply.add(INodeNo(child_ino), readdir_offset(i), kind, node.name()) {
+            if reply.add(
+                INodeNo(child_ino),
+                readdir_offset(i),
+                file_kind_to_fuse(FileKind::from(node.kind())),
+                node.name(),
+            ) {
                 break;
             }
         }
@@ -404,7 +408,7 @@ impl Filesystem for FuseFilesystem {
             "readdirplus failed"
         );
 
-        let parent = self.inodes.get(ino).map_or(ROOT_INODE, |e| e.parent_inode);
+        let parent = self.inodes.parent_of(ino);
         if offset < OFFSET_DOT
             && let Some((attr, ttl)) = self.resolve_attr(ino, req)
             && reply.add(INodeNo(ino), OFFSET_DOT, ".", &ttl, &attr, GENERATION)
