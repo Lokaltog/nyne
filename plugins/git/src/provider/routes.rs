@@ -148,19 +148,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                 let rel = repo.rel_path(&source);
                 let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("");
                 let entries = repo.file_history(&rel, s.limits.history)?;
-                let rel: Arc<str> = Arc::from(rel);
-                for (i, entry) in entries.into_iter().enumerate() {
-                    let filename = views::history_filename(i, &entry, ext);
-                    let node = Node::file()
-                        .with_readable(history::HistoryVersionContent {
-                            repo: Arc::clone(&repo),
-                            rel_path: Arc::clone(&rel),
-                            oid: entry.oid,
-                            symbol_ctx: None,
-                        })
-                        .named(filename);
-                    req.nodes.add(node);
-                }
+                views::emit_history_nodes(req, &repo, &Arc::from(rel), ext, entries, None, None);
                 Ok(())
             });
         });

@@ -19,13 +19,13 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use nyne::SymbolLineRange;
-use nyne::router::{NamedNode, Node, Request, RouteCtx};
+use nyne::router::{NamedNode, Request, RouteCtx};
 use nyne::templates::{LazyView, TemplateEngine, TemplateHandle};
 use nyne_companion::CompanionRequest;
 use nyne_source::{DecompositionCache, FragmentResolver, SourceExtensions, SyntaxRegistry};
 
 use super::{GitState, views};
-use crate::history::{self, HistoryQueries as _, SymbolExtractCtx, filter_blame_to_range};
+use crate::history::{HistoryQueries as _, SymbolExtractCtx, filter_blame_to_range};
 use crate::repo::Repo;
 
 /// Default decomposition depth for extracting symbols from historical blobs.
@@ -182,25 +182,7 @@ impl SymbolGitCtx {
             max_depth: EXTRACT_MAX_DEPTH,
         });
         let entries = repo.file_history_in_range(&rel, &range, self.state.limits.history)?;
-        let rel: Arc<str> = Arc::from(rel);
-        for (i, entry) in entries.into_iter().enumerate() {
-            let filename = views::history_filename(i, &entry, file_ext);
-            if filter_name.is_some_and(|n| n != filename) {
-                continue;
-            }
-            let node = Node::file()
-                .with_readable(history::HistoryVersionContent {
-                    repo: Arc::clone(&repo),
-                    rel_path: Arc::clone(&rel),
-                    oid: entry.oid,
-                    symbol_ctx: Some(Arc::clone(&sym_ctx)),
-                })
-                .named(filename);
-            req.nodes.add(node);
-            if filter_name.is_some() {
-                return Ok(());
-            }
-        }
+        views::emit_history_nodes(req, &repo, &Arc::from(rel), file_ext, entries, Some(&sym_ctx), filter_name);
         Ok(())
     }
 }
