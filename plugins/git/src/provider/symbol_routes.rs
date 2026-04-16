@@ -22,7 +22,7 @@ use nyne::router::{NamedNode, Request, RouteCtx};
 use nyne_companion::CompanionRequest;
 use nyne_source::{DecompositionCache, FragmentResolver, SourceExtensions, SyntaxRegistry};
 
-use super::state::{FetchScope, build_read_fn};
+use super::state::{SymbolLoc, build_read_fn_symbol};
 use super::{GitState, views};
 use crate::history::{HistoryQueries as _, SymbolExtractCtx, filter_blame_to_range};
 
@@ -52,12 +52,12 @@ impl SymbolGitCtx {
         Arc::from(segments.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>())
     }
 
-    /// Build a [`FetchScope::Symbol`] for this source file and symbol path.
+    /// Build a [`SymbolLoc`] for this source file and symbol path.
     ///
     /// Centralizes the `source + resolver + fragment_path` triple used
     /// by every symbol-scoped lazy template.
-    fn symbol_scope(&self, sf: &Path, symbol_segs: &[&str]) -> FetchScope {
-        FetchScope::Symbol {
+    fn symbol_loc(&self, sf: &Path, symbol_segs: &[&str]) -> SymbolLoc {
+        SymbolLoc {
             source: sf.to_owned(),
             resolver: self.resolver(sf),
             fragment_path: Self::to_fragment_path(symbol_segs),
@@ -66,20 +66,22 @@ impl SymbolGitCtx {
 
     /// Build a blame node for a symbol's line range.
     fn blame_node(&self, sf: &Path, symbol_segs: &[&str]) -> NamedNode {
-        let read_fn = build_read_fn(Arc::clone(&self.state.repo), self.symbol_scope(sf, symbol_segs), |repo, ctx| {
-            let range = ctx.range.expect("symbol scope implies range");
-            Ok(minijinja::context!(data => filter_blame_to_range(repo.blame(ctx.rel)?, range)))
-        });
+        let read_fn = build_read_fn_symbol(
+            Arc::clone(&self.state.repo),
+            self.symbol_loc(sf, symbol_segs),
+            |repo, rel, range| Ok(minijinja::context!(data => filter_blame_to_range(repo.blame(rel)?, range))),
+        );
         self.state.handles.blame.lazy_node(&self.state.vfs.file.blame, read_fn)
     }
 
     /// Build a log node for a symbol's line range.
     fn log_node(&self, sf: &Path, symbol_segs: &[&str]) -> NamedNode {
         let limit = self.state.limits.history;
-        let read_fn = build_read_fn(Arc::clone(&self.state.repo), self.symbol_scope(sf, symbol_segs), move |repo, ctx| {
-            let range = ctx.range.expect("symbol scope implies range");
-            Ok(minijinja::context!(data => repo.file_history_in_range(ctx.rel, range, limit)?))
-        });
+        let read_fn = build_read_fn_symbol(
+            Arc::clone(&self.state.repo),
+            self.symbol_loc(sf, symbol_segs),
+            move |repo, rel, range| Ok(minijinja::context!(data => repo.file_history_in_range(rel, range, limit)?)),
+        );
         self.state.handles.log.lazy_node(&self.state.vfs.file.log, read_fn)
     }
 
@@ -122,8 +124,11 @@ impl SymbolGitCtx {
             return Ok(());
         };
         let sf = GitState::require_source_file(req)?;
-        let scope = self.symbol_scope(&sf, symbol_segs);
-        let read_fn = build_read_fn(Arc::clone(&self.state.repo), scope, self.state.sliced_fetch(spec, is_blame));
+        let read_fn = build_read_fn_symbol(
+            Arc::clone(&self.state.repo),
+            self.symbol_loc(&sf, symbol_segs),
+            self.state.symbol_sliced_fetch(spec, is_blame),
+        );
         req.nodes.add(handle.lazy_node(name, read_fn));
         Ok(())
     }
@@ -145,7 +150,13 @@ impl SymbolGitCtx {
             max_depth: EXTRACT_MAX_DEPTH,
         });
         let entries = repo.file_history_in_range(&rel, &range, self.state.limits.history)?;
-        views::emit_history_nodes(req, &repo, &Arc::from(rel), file_ext, entries, Some(&sym_ctx), filter_name);
+        let rel: Arc<str> = Arc::from(rel);
+        let source = views::HistorySource {
+            repo: &repo,
+            rel: &rel,
+            ext: file_ext,
+        };
+        views::emit_history_nodes(req, &source, entries, Some(&sym_ctx), filter_name);
         Ok(())
     }
 
@@ -209,10 +220,12 @@ pub fn register_source_extensions(
         });
 
         let s = Arc::clone(&c);
-        ext.on_lookup(move |ctx: &RouteCtx, req: &mut Request, name: &str| match path_segments(ctx) {
-            Some(segments) => s.dispatch_lookup(req, &segments, name),
-            None => Ok(()),
-        });
+        ext.on_lookup(
+            move |ctx: &RouteCtx, req: &mut Request, name: &str| match path_segments(ctx) {
+                Some(segments) => s.dispatch_lookup(req, &segments, name),
+                None => Ok(()),
+            },
+        );
     });
 }
 
@@ -256,4 +269,3 @@ fn classify<'a>(segments: &'a [&'a str], git_dir: &str, history_dir: &str) -> Gi
     }
     GitScope::SymbolRoot
 }
-

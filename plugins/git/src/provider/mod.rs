@@ -14,10 +14,10 @@ pub mod state;
 
 use std::sync::Arc;
 
+pub use branches::GitFileRename;
 use color_eyre::eyre::Result;
 use nyne::router::{Filesystem, Next, Provider, Request};
 use nyne_companion::{CompanionProvider, CompanionRequest};
-pub use branches::GitFileRename;
 pub use state::*;
 
 /// Branch browsing and mutation.

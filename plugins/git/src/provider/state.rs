@@ -1,10 +1,12 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use nyne::router::{NamedNode, Request, WriteContext};
 use nyne::templates::{HandleBuilder, TemplateEngine, TemplateGlobals, TemplateHandle};
-use nyne::{SliceSpec, parse_spec};
+use nyne::{SliceSpec, SymbolLineRange, parse_spec};
 use nyne_companion::CompanionRequest;
+use nyne_source::FragmentResolver;
 
 use super::views;
 use crate::history::{self, HistoryQueries as _};
@@ -62,10 +64,10 @@ impl GitState {
         req: &Request,
         handle: &TemplateHandle,
         name: impl Into<String>,
-        fetch: impl Fn(&Repo, &FetchCtx<'_>) -> Result<minijinja::Value> + Send + Sync + 'static,
+        fetch: impl Fn(&Repo, &str) -> Result<minijinja::Value> + Send + Sync + 'static,
     ) -> Option<NamedNode> {
-        let scope = FetchScope::File { source: req.source_file()? };
-        Some(handle.lazy_node(name, build_read_fn(Arc::clone(&self.repo), scope, fetch)))
+        let source = req.source_file()?;
+        Some(handle.lazy_node(name, build_read_fn_file(Arc::clone(&self.repo), source, fetch)))
     }
 
     /// Create an editable template node scoped to the request's source file.
@@ -74,17 +76,19 @@ impl GitState {
         req: &Request,
         handle: &TemplateHandle,
         name: impl Into<String>,
-        fetch: impl Fn(&Repo, &FetchCtx<'_>) -> Result<minijinja::Value> + Send + Sync + 'static,
+        fetch: impl Fn(&Repo, &str) -> Result<minijinja::Value> + Send + Sync + 'static,
         write_fn: impl Fn(&Repo, &str, &[u8]) -> Result<()> + Send + Sync + 'static,
     ) -> Option<NamedNode> {
         let source = req.source_file()?;
-        let read_fn = build_read_fn(Arc::clone(&self.repo), FetchScope::File { source: source.clone() }, fetch);
+        let read_fn = build_read_fn_file(Arc::clone(&self.repo), source.clone(), fetch);
         let write_repo = Arc::clone(&self.repo);
-        Some(handle.editable_lazy_node(name, read_fn, move |_ctx: &WriteContext<'_>, data: &[u8]| {
-            let rel = write_repo.rel_path(&source);
-            write_fn(&write_repo, &rel, data)?;
-            Ok(vec![source.clone()])
-        }))
+        Some(
+            handle.editable_lazy_node(name, read_fn, move |_ctx: &WriteContext<'_>, data: &[u8]| {
+                let rel = write_repo.rel_path(&source);
+                write_fn(&write_repo, &rel, data)?;
+                Ok(vec![source.clone()])
+            }),
+        )
     }
 
     /// Return the request's source file, or a canonical error if absent.
@@ -92,8 +96,9 @@ impl GitState {
     /// Use from fallible callback paths where a missing source file is a
     /// contract violation; use [`Request::source_file`] directly in
     /// silently-skipping paths.
-    pub(crate) fn require_source_file(req: &Request) -> Result<std::path::PathBuf> {
-        req.source_file().ok_or_else(|| color_eyre::eyre::eyre!("no source file"))
+    pub(crate) fn require_source_file(req: &Request) -> Result<PathBuf> {
+        req.source_file()
+            .ok_or_else(|| color_eyre::eyre::eyre!("no source file"))
     }
 
     /// Resolve a sliced view name (`BLAME.md:{spec}` or `LOG.md:{spec}`)
@@ -114,95 +119,89 @@ impl GitState {
         Some((handle, spec, is_blame))
     }
 
-    /// Build the fetch closure for a sliced view (`BLAME.md:{spec}` /
-    /// `LOG.md:{spec}`), covering both file-level and symbol-level scopes.
-    ///
-    /// The closure branches on `ctx.range` to apply the slice appropriately:
-    /// `None` slices the full-file dataset; `Some(range)` first clamps to
-    /// the symbol's range and then applies the spec.
-    pub(crate) fn sliced_fetch(
+    /// Fetch closure for a file-scoped sliced view (`BLAME.md:{spec}` /
+    /// `LOG.md:{spec}` on the whole file).
+    pub(crate) fn file_sliced_fetch(
         &self,
         spec: SliceSpec,
         is_blame: bool,
-    ) -> impl Fn(&Repo, &FetchCtx<'_>) -> Result<minijinja::Value> + Send + Sync + 'static + use<> {
+    ) -> impl Fn(&Repo, &str) -> Result<minijinja::Value> + Send + Sync + 'static + use<> {
         let log_limit = self.limits.log;
-        let history_limit = self.limits.history;
-        move |repo, ctx| {
+        move |repo, rel| {
             Ok(if is_blame {
-                let hunks = repo.blame(ctx.rel)?;
-                match ctx.range {
-                    None => minijinja::context!(data => history::slice_blame_hunks(hunks, &spec)),
-                    Some(r) => minijinja::context!(data => spec.apply(&history::filter_blame_to_range(hunks, r))),
-                }
+                minijinja::context!(data => history::slice_blame_hunks(repo.blame(rel)?, &spec))
             } else {
-                match ctx.range {
-                    None => minijinja::context!(data => spec.apply(&repo.file_history(ctx.rel, log_limit)?)),
-                    Some(r) => {
-                        minijinja::context!(data => spec.apply(&repo.file_history_in_range(ctx.rel, r, history_limit)?))
-                    }
-                }
+                minijinja::context!(data => spec.apply(&repo.file_history(rel, log_limit)?))
+            })
+        }
+    }
+
+    /// Fetch closure for a symbol-scoped sliced view — the blame/log set is
+    /// first clamped to the symbol's line range, then the slice spec is
+    /// applied.
+    pub(crate) fn symbol_sliced_fetch(
+        &self,
+        spec: SliceSpec,
+        is_blame: bool,
+    ) -> impl Fn(&Repo, &str, &SymbolLineRange) -> Result<minijinja::Value> + Send + Sync + 'static + use<> {
+        let history_limit = self.limits.history;
+        move |repo, rel, range| {
+            Ok(if is_blame {
+                minijinja::context!(data => spec.apply(&history::filter_blame_to_range(repo.blame(rel)?, range)))
+            } else {
+                minijinja::context!(data => spec.apply(&repo.file_history_in_range(rel, range, history_limit)?))
             })
         }
     }
 }
 
-/// Scope for a lazy git-backed template node.
-///
-/// File-level scope resolves `rel_path` from `source`. Symbol-level scope
-/// additionally resolves the symbol's line range at render time via
-/// [`FragmentResolver`], returning empty data if the symbol no longer
-/// exists in the source.
-pub(crate) enum FetchScope {
-    /// File-level: `ctx.range` is always `None` in the fetch closure.
-    File { source: std::path::PathBuf },
-    /// Symbol-level: `ctx.range` is always `Some(&range)` when the fetch
-    /// closure runs; the builder short-circuits with empty data otherwise.
-    Symbol {
-        source: std::path::PathBuf,
-        resolver: nyne_source::FragmentResolver,
-        fragment_path: Arc<[String]>,
-    },
+/// Location of a symbol-scoped lazy template — source path plus the
+/// [`FragmentResolver`] / `fragment_path` pair used to resolve the
+/// symbol's line range at render time.
+pub struct SymbolLoc {
+    pub source: PathBuf,
+    pub resolver: FragmentResolver,
+    pub fragment_path: Arc<[String]>,
 }
 
-/// Fetch context passed to template-data closures — rel path plus optional
-/// symbol line range.
+/// Build a file-scoped read closure for [`TemplateHandle::lazy_node`] and
+/// [`TemplateHandle::editable_lazy_node`].
 ///
-/// **Invariant:** `range` is always `Some` when the fetch closure is invoked
-/// under [`FetchScope::Symbol`], and always `None` under [`FetchScope::File`].
-/// [`build_read_fn`] enforces this by short-circuiting to empty data before
-/// calling fetch when the symbol's range can no longer be resolved. Symbol-
-/// only fetches may therefore `expect()` on `range`.
-pub(crate) struct FetchCtx<'a> {
-    pub rel: &'a str,
-    pub range: Option<&'a nyne::SymbolLineRange>,
-}
-
-/// Build a read closure for `TemplateHandle::lazy_node` / `editable_lazy_node`.
-///
-/// Resolves `rel_path` (and optionally the symbol range) per render, then
-/// delegates to `fetch` for the git query. Symbol scopes emit empty data
-/// when the symbol has been removed from the source.
-pub(crate) fn build_read_fn<F>(
+/// Resolves `rel_path` from `source` per render and delegates to `fetch`.
+pub fn build_read_fn_file<F>(
     repo: Arc<Repo>,
-    scope: FetchScope,
+    source: PathBuf,
     fetch: F,
 ) -> impl Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync + 'static
 where
-    F: Fn(&Repo, &FetchCtx<'_>) -> Result<minijinja::Value> + Send + Sync + 'static,
+    F: Fn(&Repo, &str) -> Result<minijinja::Value> + Send + Sync + 'static,
 {
-    move |engine: &TemplateEngine, tmpl: &str| match &scope {
-        FetchScope::File { source } => {
-            let rel = repo.rel_path(source);
-            let data = fetch(&repo, &FetchCtx { rel: &rel, range: None })?;
-            Ok(engine.render_bytes(tmpl, &data))
-        }
-        FetchScope::Symbol { source, resolver, fragment_path } => {
-            let Some(range) = resolver.line_range(fragment_path)? else {
-                return Ok(engine.render_bytes(tmpl, &minijinja::context!(data => Vec::<()>::new())));
-            };
-            let rel = repo.rel_path(source);
-            let data = fetch(&repo, &FetchCtx { rel: &rel, range: Some(&range) })?;
-            Ok(engine.render_bytes(tmpl, &data))
-        }
+    move |engine, tmpl| {
+        let rel = repo.rel_path(&source);
+        let data = fetch(&repo, &rel)?;
+        Ok(engine.render_bytes(tmpl, &data))
+    }
+}
+
+/// Build a symbol-scoped read closure for [`TemplateHandle::lazy_node`].
+///
+/// Resolves the symbol's line range lazily at render time; if the symbol
+/// no longer exists in the source, short-circuits with empty data and does
+/// not invoke `fetch`.
+pub fn build_read_fn_symbol<F>(
+    repo: Arc<Repo>,
+    loc: SymbolLoc,
+    fetch: F,
+) -> impl Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync + 'static
+where
+    F: Fn(&Repo, &str, &SymbolLineRange) -> Result<minijinja::Value> + Send + Sync + 'static,
+{
+    move |engine, tmpl| {
+        let Some(range) = loc.resolver.line_range(&loc.fragment_path)? else {
+            return Ok(engine.render_bytes(tmpl, &minijinja::context!(data => Vec::<()>::new())));
+        };
+        let rel = repo.rel_path(&loc.source);
+        let data = fetch(&repo, &rel, &range)?;
+        Ok(engine.render_bytes(tmpl, &data))
     }
 }

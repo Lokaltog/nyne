@@ -10,7 +10,7 @@ use nyne_companion::{CompanionExtensions, CompanionRequest};
 
 use super::branches::{branch_segments_at_prefix, branch_tree_nodes};
 use super::diff::{DiffContent, DiffTarget};
-use super::state::{FetchScope, build_read_fn};
+use super::state::build_read_fn_file;
 use super::status::StatusView;
 use super::{GitFileRename, GitState, views};
 use crate::history::HistoryQueries as _;
@@ -32,8 +32,8 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                 let Some((handle, spec, is_blame)) = sl.resolve_sliced_view(name) else {
                     return Ok(());
                 };
-                let scope = FetchScope::File { source: GitState::require_source_file(req)? };
-                let read_fn = build_read_fn(Arc::clone(&sl.repo), scope, sl.sliced_fetch(spec, is_blame));
+                let source = GitState::require_source_file(req)?;
+                let read_fn = build_read_fn_file(Arc::clone(&sl.repo), source, sl.file_sliced_fetch(spec, is_blame));
                 req.nodes.add(handle.lazy_node(name, read_fn));
                 Ok(())
             });
@@ -41,8 +41,8 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
             // git/BLAME.md
             let s2 = Arc::clone(&s);
             d.content(move |_ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
-                s2.file_content(req, &s2.handles.blame, &s2.vfs.file.blame, |repo, ctx| {
-                    Ok(minijinja::context!(data => repo.blame(ctx.rel)?))
+                s2.file_content(req, &s2.handles.blame, &s2.vfs.file.blame, |repo, rel| {
+                    Ok(minijinja::context!(data => repo.blame(rel)?))
                 })
             });
 
@@ -50,8 +50,8 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
             let s2 = Arc::clone(&s);
             d.content(move |_ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
                 let limits = s2.limits;
-                s2.file_content(req, &s2.handles.log, &s2.vfs.file.log, move |repo, ctx| {
-                    Ok(minijinja::context!(data => repo.file_history(ctx.rel, limits.log)?))
+                s2.file_content(req, &s2.handles.log, &s2.vfs.file.log, move |repo, rel| {
+                    Ok(minijinja::context!(data => repo.file_history(rel, limits.log)?))
                 })
             });
 
@@ -59,9 +59,12 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
             let s2 = Arc::clone(&s);
             d.content(move |_ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
                 let limits = s2.limits;
-                s2.file_content(req, &s2.handles.contributors, &s2.vfs.file.contributors, move |repo, ctx| {
-                    Ok(minijinja::context!(data => repo.contributors(ctx.rel, limits.contributors)?))
-                })
+                s2.file_content(
+                    req,
+                    &s2.handles.contributors,
+                    &s2.vfs.file.contributors,
+                    move |repo, rel| Ok(minijinja::context!(data => repo.contributors(rel, limits.contributors)?)),
+                )
             });
 
             // git/NOTES.md (readable + writable)
@@ -72,7 +75,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                     req,
                     &s2.handles.notes,
                     &s2.vfs.file.notes,
-                    move |repo, ctx| Ok(minijinja::context!(data => repo.file_notes(ctx.rel, limits.notes)?)),
+                    move |repo, rel| Ok(minijinja::context!(data => repo.file_notes(rel, limits.notes)?)),
                     |repo, rel, data| {
                         let message = from_utf8(data).wrap_err("note content must be valid UTF-8")?;
                         repo.set_note(rel, message)
@@ -135,7 +138,18 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                 let rel = repo.rel_path(&source);
                 let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("");
                 let entries = repo.file_history(&rel, s.limits.history)?;
-                views::emit_history_nodes(req, &repo, &Arc::from(rel), ext, entries, None, None);
+                let rel: Arc<str> = Arc::from(rel);
+                views::emit_history_nodes(
+                    req,
+                    &views::HistorySource {
+                        repo: &repo,
+                        rel: &rel,
+                        ext,
+                    },
+                    entries,
+                    None,
+                    None,
+                );
                 Ok(())
             });
         });

@@ -230,7 +230,10 @@ impl HistoryQueries for Repo {
             // Single diff: skip commits that don't touch the path, then check
             // whether the touched hunks overlap the requested line range.
             match diff_touches_range(&repo, &commit, &mut opts, range) {
-                Ok(true) => results.push(HistoryEntry { oid, commit: commit_info(&commit) }),
+                Ok(true) => results.push(HistoryEntry {
+                    oid,
+                    commit: commit_info(&commit),
+                }),
                 Ok(false) => {}
                 Err(e) => {
                     warn!(oid = %oid, path = rel_path, error = %e, "commit range check failed");

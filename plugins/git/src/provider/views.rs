@@ -29,6 +29,14 @@ pub const BLAME_TEMPLATE: &str = include_str!("templates/blame.md.j2");
 /// Log template content.
 pub const LOG_TEMPLATE: &str = include_str!("templates/log.md.j2");
 
+/// Source-file descriptor for [`emit_history_nodes`] — the git handle plus
+/// the rel path and file extension used to name each history entry.
+pub struct HistorySource<'a> {
+    pub repo: &'a Arc<Repo>,
+    pub rel: &'a Arc<str>,
+    pub ext: &'a str,
+}
+
 /// Emit a history-version node per commit into `req.nodes`.
 ///
 /// Shared by the file-level history handler (`register_companion_extensions`)
@@ -36,23 +44,21 @@ pub const LOG_TEMPLATE: &str = include_str!("templates/log.md.j2");
 /// single filename (lookup path) and returns early once matched.
 pub fn emit_history_nodes(
     req: &mut Request,
-    repo: &Arc<Repo>,
-    rel: &Arc<str>,
-    ext: &str,
+    source: &HistorySource<'_>,
     entries: Vec<HistoryEntry>,
     symbol_ctx: Option<&Arc<SymbolExtractCtx>>,
     filter_name: Option<&str>,
 ) {
     for (i, entry) in entries.into_iter().enumerate() {
-        let filename = history_filename(i, &entry, ext);
+        let filename = history_filename(i, &entry, source.ext);
         if filter_name.is_some_and(|n| n != filename) {
             continue;
         }
         req.nodes.add(
             Node::file()
                 .with_readable(HistoryVersionContent {
-                    repo: Arc::clone(repo),
-                    rel_path: Arc::clone(rel),
+                    repo: Arc::clone(source.repo),
+                    rel_path: Arc::clone(source.rel),
                     oid: entry.oid,
                     symbol_ctx: symbol_ctx.cloned(),
                 })

@@ -165,7 +165,10 @@ pub(super) fn branch_tree_nodes(repo: &Arc<Repo>, branch: &str, tree_path: &str)
 
 /// Extract the filename segment of a rename target path.
 fn rename_target_name<'a>(ctx: &'a RenameContext<'_>) -> Result<&'a str> {
-    ctx.target.file_name().and_then(|n| n.to_str()).ok_or_else(|| eyre!("rename target has no filename"))
+    ctx.target
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| eyre!("rename target has no filename"))
 }
 
 /// Git-aware file rename: filesystem rename + git index update.

@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+#[derive(Default)]
 pub struct Config {
     /// Caps on the number of entries rendered into git virtual files.
     pub limits: Limits,
@@ -59,13 +60,13 @@ pub struct Limits {
 
 impl Default for Limits {
     fn default() -> Self {
-        Self { history: 50, log: 200, notes: 50, contributors: 500, recent_commits: 10 }
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self { limits: Limits::default(), vfs: vfs::Vfs::default() }
+        Self {
+            history: 50,
+            log: 200,
+            notes: 50,
+            contributors: 500,
+            recent_commits: 10,
+        }
     }
 }
 
