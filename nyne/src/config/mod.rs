@@ -133,7 +133,7 @@ pub struct SandboxConfig {
     /// its overlay scaffolding. Removing `<state_root>/proc/<pid>/` reaps
     /// all state for that process.
     ///
-    /// Defaults to `/tmp/nyne` (see [`default_sandbox_state_root`]).
+    /// Defaults to `/tmp/nyne`.
     pub state_root: PathBuf,
 
     /// Mount point for the nyne VFS inside the sandbox.
@@ -142,7 +142,7 @@ pub struct SandboxConfig {
     /// sandboxed processes. After `pivot_root`, the FUSE filesystem is
     /// attached here and all project access goes through it.
     ///
-    /// Defaults to `/code` (see [`default_sandbox_mount_root`]).
+    /// Defaults to `/code`.
     pub mount_root: PathBuf,
 }
 
@@ -152,33 +152,14 @@ impl Default for SandboxConfig {
     /// env vars, state root `/tmp/nyne`, and mount root `/code`.
     fn default() -> Self {
         Self {
-            hostname: default_sandbox_hostname(),
+            hostname: "nyne-sandbox".to_owned(),
             bind_mounts: Vec::new(),
             env: HashMap::new(),
-            state_root: default_sandbox_state_root(),
-            mount_root: default_sandbox_mount_root(),
+            state_root: PathBuf::from("/tmp/nyne"),
+            mount_root: PathBuf::from("/code"),
         }
     }
 }
-
-/// Return the default sandbox hostname (`"nyne-sandbox"`).
-///
-/// Used as the serde default for [`SandboxConfig::hostname`]. Chosen to be
-/// clearly identifiable in shell prompts so users can tell at a glance
-/// whether they're inside a sandbox.
-fn default_sandbox_hostname() -> String { "nyne-sandbox".to_owned() }
-/// Return the default sandbox state root (`/tmp/nyne`).
-///
-/// The directory `<state_root>/proc/<pid>/` holds all overlay scaffolding
-/// for one running daemon or attach-command child; removing it reaps every
-/// directory that process created.
-fn default_sandbox_state_root() -> PathBuf { PathBuf::from("/tmp/nyne") }
-
-/// Return the default sandbox mount root (`/code`).
-///
-/// The nyne VFS is attached at this path inside the sandbox after
-/// `pivot_root`. All project access goes through this single mount point.
-fn default_sandbox_mount_root() -> PathBuf { PathBuf::from("/code") }
 
 /// Mount flags for user-configured bind mounts.
 ///
