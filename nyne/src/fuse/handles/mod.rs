@@ -520,9 +520,7 @@ impl HandleTable {
     /// Release a file handle, returning its entry if it existed.
     ///
     /// The caller should flush dirty buffers before or after this call.
-    pub fn release(&self, fh: u64) -> Option<HandleEntry> {
-        self.inner.write().remove(fh)
-    }
+    pub fn release(&self, fh: u64) -> Option<HandleEntry> { self.inner.write().remove(fh) }
 
     /// Read the full contents of a backing fd into `buffer`.
     ///

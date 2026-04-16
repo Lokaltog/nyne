@@ -98,7 +98,6 @@ fn repository_storage_strategy(#[case] toml_input: &str, #[case] expected: Stora
     assert_eq!(config.repository.storage_strategy, expected);
 }
 
-
 /// Tests that sandbox defaults to "nyne-sandbox" hostname when the section is omitted.
 #[test]
 fn sandbox_defaults_when_omitted() {
@@ -216,7 +215,6 @@ impl PluginConfig for Dummy {}
 fn from_section_deserializes_or_falls_back(#[case] value: toml::Value, #[case] expected: Dummy) {
     assert_eq!(Dummy::from_section(Some(&value)), expected);
 }
-
 
 #[rstest]
 #[case::none_returns_default(None, Dummy::default())]

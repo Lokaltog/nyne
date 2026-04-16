@@ -16,7 +16,6 @@ fn parse_suffix(#[case] input: &str, #[case] expected: Option<(&str, SliceSpec)>
     assert_eq!(parse_slice_suffix(input), expected);
 }
 
-
 /// [`SliceSpec::apply`] returns the selected elements, clamping out-of-range values.
 #[rstest]
 #[case::single(vec!["a", "b", "c", "d", "e"], SliceSpec::Single(3), vec!["c"])]
@@ -29,7 +28,6 @@ fn apply(#[case] items: Vec<&str>, #[case] spec: SliceSpec, #[case] expected: Ve
     assert_eq!(spec.apply(&items), expected.as_slice());
 }
 
-
 /// [`SliceSpec::index_range`] produces the right 0-based half-open range, clamping out-of-range values.
 #[rstest]
 #[case::single(SliceSpec::Single(3), 5, 2..3)]
@@ -41,5 +39,3 @@ fn apply(#[case] items: Vec<&str>, #[case] spec: SliceSpec, #[case] expected: Ve
 fn index_range(#[case] spec: SliceSpec, #[case] len: usize, #[case] expected: std::ops::Range<usize>) {
     assert_eq!(spec.index_range(len), expected);
 }
-
-

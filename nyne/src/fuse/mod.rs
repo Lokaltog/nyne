@@ -182,14 +182,12 @@ impl FuseFilesystem {
     /// Resolve an inode to its full path, or error if unknown.
     fn inode_path(&self, ino: u64) -> Result<PathBuf> { self.inodes.resolve_path(ino) }
 
-
     /// Dispatch a single-path mutation (create, remove, mkdir) through the chain.
     fn dispatch_path_op(&self, path: &Path, op_fn: impl FnOnce(String) -> Op, process: Option<Process>) -> Result<()> {
         let (dir, name) = split_path(path)?;
         self.chain
             .dispatch(&mut Request::new(dir.to_path_buf(), op_fn(name.to_owned())).with_opt_process(process))
     }
-
 
     /// Dispatch a rename operation through the chain.
     fn dispatch_rename_op(&self, from: &Path, to: &Path, process: Option<Process>) -> Result<()> {
@@ -204,7 +202,6 @@ impl FuseFilesystem {
             .with_opt_process(process),
         )
     }
-
 
     /// Try to dispatch a mutation via a node capability.
     ///
@@ -226,6 +223,7 @@ impl FuseFilesystem {
         self.notify_change(&result?);
         Ok(true)
     }
+
     /// Resolve `path` to a [`NamedNode`], mapping missing entries to
     /// [`ErrorKind::NotFound`] so the FUSE layer can surface `ENOENT`.
     fn resolve_named(&self, path: &Path) -> Result<NamedNode> {
@@ -233,8 +231,6 @@ impl FuseFilesystem {
         self.lookup_node(dir, name, None)?
             .ok_or_else(|| io_err(ErrorKind::NotFound, format!("not found: {}", path.display())))
     }
-
-
 
     /// Try to rename via the node's [`Renameable`] capability.
     pub(super) fn rename_node(&self, from: &Path, to: &Path) -> Result<bool> {
@@ -328,7 +324,6 @@ impl Filesystem for FuseFilesystem {
             })
     }
 
-
     fn write_file(&self, path: &Path, content: &[u8]) -> Result<AffectedFiles> {
         let affected = self
             .resolve_named(path)?
@@ -345,7 +340,6 @@ impl Filesystem for FuseFilesystem {
         self.notify_change(&affected);
         Ok(affected)
     }
-
 
     fn rename(&self, from: &Path, to: &Path) -> Result<()> { self.dispatch_rename_op(from, to, None) }
 
@@ -387,7 +381,7 @@ macro_rules! ensure_dir_path {
 pub(super) use ensure_dir_path;
 pub(super) use fuse_try;
 
-/// Split a path into (parent_dir, file_name), mapping a malformed path to
+/// Split a path into (`parent_dir`, `file_name`), mapping a malformed path to
 /// [`ErrorKind::InvalidInput`] so callers surface `EINVAL` rather than `EIO`.
 fn split_path(path: &Path) -> Result<(&Path, &str)> {
     path.split_dir_name()

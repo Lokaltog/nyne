@@ -296,7 +296,6 @@ bitflags! {
     }
 }
 
-
 impl Permissions {
     /// Construct from raw bits, masking to the valid 3-bit range.
     ///
@@ -308,7 +307,6 @@ impl Permissions {
         Self::from_bits_truncate(bits)
     }
 }
-
 
 impl fmt::Debug for Permissions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "Permissions({self})") }

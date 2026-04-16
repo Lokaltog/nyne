@@ -433,11 +433,10 @@ struct CommandPaths<'a> {
 /// be strings, and silently skipping would hide the missing var inside
 /// the sandbox.
 fn inject_path_env(env: &mut HashMap<String, String>, key: &str, path: &Path) {
-    match path.to_str() {
-        Some(s) => {
-            env.entry(key.to_owned()).or_insert_with(|| s.to_owned());
-        }
-        None => warn!(key, path = %path.display(), "non-UTF-8 path not injected into sandbox env"),
+    if let Some(s) = path.to_str() {
+        env.entry(key.to_owned()).or_insert_with(|| s.to_owned());
+    } else {
+        warn!(key, path = %path.display(), "non-UTF-8 path not injected into sandbox env");
     }
 }
 

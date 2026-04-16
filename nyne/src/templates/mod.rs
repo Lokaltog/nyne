@@ -219,7 +219,6 @@ pub struct LazyView<R, W = ()> {
     write_fn: W,
 }
 
-
 impl<R> LazyView<R, ()> {
     /// Create a read-only lazy view.
     pub const fn new(read_fn: R) -> Self { Self { read_fn, write_fn: () } }
@@ -233,7 +232,6 @@ impl<R> LazyView<R, ()> {
     }
 }
 
-
 impl<R, W> TemplateView for LazyView<R, W>
 where
     R: Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync,
@@ -242,7 +240,6 @@ where
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> { (self.read_fn)(engine, template) }
 }
 
-
 impl<R, W> Writable for LazyView<R, W>
 where
     R: Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync,
@@ -250,7 +247,6 @@ where
 {
     fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> { (self.write_fn)(ctx, data) }
 }
-
 
 /// Single [`Readable`](crate::node::Readable) for all template-backed
 /// virtual files.

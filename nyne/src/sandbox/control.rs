@@ -277,7 +277,9 @@ fn response_line(response: &Response) -> Result<Vec<u8>> {
 
 /// Write a JSON response to the stream followed by a newline.
 fn write_response(stream: &UnixStream, response: &Response) -> Result<()> {
-    (&mut &*stream).write_all(&response_line(response)?).wrap_err("writing response")
+    (&mut &*stream)
+        .write_all(&response_line(response)?)
+        .wrap_err("writing response")
 }
 
 /// Read a single JSON request from a stream, dispatch it, and write the response.
