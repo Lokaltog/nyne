@@ -24,6 +24,32 @@
 {% import "macros/paths" as paths %}
 
 {#--
+  Batch edit staging kinds — single source of truth.
+
+  Each row: (kind, when-to-use, body-payload). Rendered two ways:
+    - `batch_edit_kinds_table()` — full markdown table for instructional docs.
+    - `batch_edit_hint()` — inline names list with a trailing note.
+
+  Adding a kind requires one edit here; both renderings pick it up.
+--#}
+{%- set BATCH_EDIT_KINDS = [
+  ("insert-before", "Add a new symbol/docstring immediately before an existing one", "Code to insert"),
+  ("insert-after",  "Add a new symbol immediately after an existing one",            "Code to insert"),
+  ("append",        "Extend an existing body (e.g., add a method inside an impl block)", "Code appended inside the body"),
+  ("delete",        "Remove an entire symbol",                                        "Any non-empty byte — content is ignored"),
+  ("replace",       "Only when rewriting a significant portion of a symbol. For small/targeted edits, use the Edit tool.", "New body"),
+] -%}
+
+{#-- Markdown table rendering of BATCH_EDIT_KINDS. --#}
+{%- macro batch_edit_kinds_table() -%}
+| Kind | When to use | Body payload |
+|-|-|-|
+{% for kind, when, payload in BATCH_EDIT_KINDS -%}
+| `{{ kind }}` | {{ when }} | {{ payload }} |
+{% endfor -%}
+{%- endmacro -%}
+
+{#--
   Section header macros — the only permitted hook output prefixes.
 
   BLOCKED       — blocking pre-tool-use; the tool call was refused
@@ -202,10 +228,13 @@ Address all hints. If a fix requires a larger refactor, flag it to the user inst
 
   Takes `rel` so the rendered paths are concrete and copy-pasteable.
   Falls back to `<file>` placeholder for agent / skill docs.
+
+  Batch edit is for 2+ staged ops. A single stage + apply is an Edit tool
+  call with extra steps — prefer Edit for single-symbol changes.
 --#}
 {%- macro batch_edit_hint(rel="<file>") -%}
-Multi-symbol edits — stage a batch:
-{{ cmd("echo 'new body' >" ~ paths.edit_stage(rel, "Foo", "replace"), "stage a replacement") }}
-{{ cmd("echo 1 >" ~ paths.edit_stage(rel, "Bar", "delete"), "stage a deletion") }}
-{{ cmd("rm " ~ paths.edit_staged_diff(), "apply atomically, validated") }}
+Multi-symbol edits (2+ ops) — stage, then apply:
+  Stage: echo '<body>' >{{ paths.edit_stage(rel, "<Symbol>", "<kind>") }}
+  Apply: rm {{ paths.edit_staged_diff() }}
+Kinds: {% for row in BATCH_EDIT_KINDS %}{{ row[0] }}{% if not loop.last %} | {% endif %}{% endfor %}. `replace` for significant rewrites only — prefer Edit for small changes.
 {%- endmacro -%}

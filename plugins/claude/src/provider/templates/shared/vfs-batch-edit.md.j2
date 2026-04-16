@@ -1,45 +1,43 @@
 {% import "macros/paths" as paths %}
+{% import "macros/hints" as hints %}
 ## Batch Edit Staging
 
-Batch Edit is the go-to for multi-step edits: stage multiple changes across symbols and files, then apply all changes atomically. Prefer this over sequential direct writes when changing multiple symbols. Apply returns an error if validation fails — no need to preview first.
+Batch edit stages multiple operations across symbols and files, then applies them atomically in one write. Apply returns an error if validation fails — no need to preview first.
 
-| Scenario | Approach |
-|-|-|
-| Change 1 symbol | Edit tool (read first, then old_string/new_string) |
-| Change 2+ symbols in one file | Batch edit staging |
-| Coordinated changes across files | Batch edit staging (cross-file atomic) |
-| Delete multiple symbols | Batch edit staging |
+**Batch edit is for 2+ staged operations.** For a single change, use the Edit tool directly. A single staged op followed by apply is an Edit tool call with extra steps — prefer Edit.
 
-### Staging edits
+### Staging
 
-Staging endpoints under `edit/{op}` are write-only virtual files that report size 0. That means you can stage edits with **either** Bash redirects **or** the `Write` tool — no prior `Read` is required, and repeat `Write`s to the same endpoint just stage more operations.
+Staging endpoints under `edit/{kind}` are write-only virtual files that report size 0. Stage with either Bash redirects or the `Write` tool — no prior `Read` required, and repeated writes to the same endpoint stage more operations.
 
-Write tool (preferred for multi-line content — no shell quoting):
+Kinds:
 
-    Write  {{ paths.edit_stage("file." ~ ext, "Foo", "replace") }}
-           → full replacement body
-    Write  {{ paths.edit_stage("file." ~ ext, "Bar", "insert-after") }}
-           → code to insert after Bar
-    Write  {{ paths.edit_stage("file." ~ ext, "Baz", "insert-before") }}
-           → code to insert before Baz
+{{ hints.batch_edit_kinds_table() }}
+`append` writes inside the symbol's body (impls, modules, classes). `insert-after` places content as a sibling after the symbol closes.
 
-Bash redirects (best for one-liners and pipelines):
+Examples (use `Write` instead of `echo` for multi-line content):
 
 ```bash
-# Stage edits (write to any symbol's edit/ namespace)
-echo 'fn new_impl(){}' >{{ paths.edit_stage("file." ~ ext, "Foo", "replace") }} # replace entire body
-echo 'fn helper(){}' >{{ paths.edit_stage("file." ~ ext, "Bar", "insert-after") }} # insert after body
-echo '/// docs' >{{ paths.edit_stage("file." ~ ext, "Baz", "insert-before") }} # insert before body
-echo 1 >{{ paths.edit_stage("file." ~ ext, "Old", "delete") }} # delete entire symbol
-echo 'fn method(){}' >{{ paths.edit_stage("file." ~ ext, "MyImpl", "append") }} # append to body
+echo 'fn helper(){}'   >{{ paths.edit_stage("file." ~ ext, "Bar", "insert-after") }}
+echo '/// docs'        >{{ paths.edit_stage("file." ~ ext, "Baz", "insert-before") }}
+echo 'fn method(){}'   >{{ paths.edit_stage("file." ~ ext, "MyImpl", "append") }}
+echo 1                 >{{ paths.edit_stage("file." ~ ext, "Old", "delete") }}
+echo 'fn new_impl(){}' >{{ paths.edit_stage("file." ~ ext, "Foo", "replace") }}
 ```
 
-### Applying or clearing
+### Apply
 
 ```bash
-# Apply all staged edits atomically (returns error if tree-sitter validation fails)
+# Apply atomically (returns error on tree-sitter validation failure)
 rm {{ paths.edit_staged_diff() }}
 
 # Or clear without applying (truncate)
 > {{ paths.edit_staged_diff() }}
 ```
+
+### Recipes
+
+- **Rename a symbol with body changes** — `insert-before` the new + `delete` the old.
+- **Add multiple methods to an impl** — repeated `append` on the impl body.
+- **Split one function into two** — `replace` the original (significant rewrite) + `insert-after` the extracted helper.
+- **Bulk delete** — `delete` on each dead symbol, apply once.
