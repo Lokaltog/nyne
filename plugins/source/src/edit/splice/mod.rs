@@ -11,45 +11,11 @@
 use std::io::ErrorKind;
 use std::ops::Range;
 use std::path::Path;
-#[cfg(test)]
-use std::str::from_utf8;
 
 use color_eyre::eyre::Result;
 use crop::Rope;
 use nyne::err::io_err;
 use nyne::router::Filesystem;
-
-/// Read a source file, splice new content at a byte range, validate, and write back.
-///
-/// The `validate` closure receives the full spliced source and should return
-/// `Err` with a message if the result is invalid (rejected with `EINVAL`).
-///
-/// Returns the number of bytes in `new_content` on success.
-#[cfg(test)]
-pub fn splice_validate_write(
-    fs: &dyn Filesystem,
-    source_file: &Path,
-    byte_range: Range<usize>,
-    new_content: &str,
-    validate: impl Fn(&str) -> Result<(), String>,
-) -> Result<usize> {
-    let content = fs.read_file(source_file)?;
-    let mut rope = Rope::from(from_utf8(&content)?);
-    splice_rope_validate_write(fs, source_file, &mut rope, byte_range, new_content, validate)
-}
-
-/// Splice new content into source text at a byte range, returning the result.
-///
-/// This is the read-only core used by both [`splice_rope_validate_write`]
-/// (which additionally validates and writes back) and diff previews (which
-/// only need the modified text for diffing).
-#[must_use]
-#[cfg(test)]
-pub fn splice_content(source: &str, byte_range: Range<usize>, new_content: &str) -> String {
-    let mut rope = Rope::from(source);
-    rope.replace(byte_range, new_content);
-    rope.to_string()
-}
 
 /// Splice new content into a pre-built rope, validate, and write back.
 ///
@@ -140,11 +106,6 @@ pub fn splice_rope_validate_write(
 /// or calls multiple line-offset functions on the same source.
 #[must_use]
 pub fn line_start_of_rope(rope: &Rope, offset: usize) -> usize { rope.byte_of_line(rope.line_of_byte(offset)) }
-
-/// Convenience wrapper that builds a [`crop::Rope`] internally.
-#[cfg(test)]
-#[must_use]
-pub fn line_start_of(source: &str, offset: usize) -> usize { line_start_of_rope(&Rope::from(source), offset) }
 
 /// Byte offset of the end of the line containing `offset`, using a pre-built rope.
 ///

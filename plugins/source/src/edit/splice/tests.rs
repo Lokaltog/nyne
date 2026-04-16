@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use nyne::router::fs::os::OsFilesystem;
 
 use super::*;
+use crate::test_support::splice_validate_write;
 
 /// Creates a temp file with the given content and returns the test context.
 fn setup(content: &str) -> (tempfile::TempDir, OsFilesystem, PathBuf) {

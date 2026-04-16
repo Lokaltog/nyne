@@ -198,7 +198,7 @@ fn rust_imports_extracted() {
 /// duplicate headers on round-trip writes.
 #[test]
 fn markdown_section_body_roundtrip_does_not_duplicate_next_heading() {
-    use crate::edit::splice::{line_start_of, splice_content};
+    use crate::test_support::{line_start_of, splice_content};
 
     let source = "\
 # Title
@@ -249,7 +249,7 @@ Content B.
 /// to cover realistic document structure.
 #[test]
 fn markdown_fixture_all_sections_roundtrip_without_duplication() {
-    use crate::edit::splice::{line_start_of, splice_validate_write};
+    use crate::test_support::{line_start_of, splice_validate_write};
 
     let fixture = include_str!("fixtures/markdown-sections.md");
 
@@ -314,7 +314,7 @@ fn markdown_fixture_all_sections_roundtrip_without_duplication() {
 /// is `line_start_of(source, frag.full_span().start)..frag.full_span().end`.
 #[test]
 fn nested_child_body_splice_does_not_corrupt_trailing_content() {
-    use crate::edit::splice::{line_start_of, splice_content};
+    use crate::test_support::{line_start_of, splice_content};
 
     let source = "\
 pub struct Foo {
