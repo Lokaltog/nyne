@@ -210,39 +210,31 @@ pub fn serialize_view<T: Serialize>(val: &T) -> impl TemplateView + use<T> {
 
 /// Closure-backed [`TemplateView`] — captures state at dispatch time,
 /// renders lazily at read time.
-pub struct LazyView<R> {
+///
+/// When `W` is a `Fn(&WriteContext, &[u8]) -> Result<AffectedFiles>` the
+/// view also implements [`Writable`](crate::router::Writable). The default
+/// `W = ()` produces a read-only view.
+pub struct LazyView<R, W = ()> {
     read_fn: R,
+    write_fn: W,
 }
 
-impl<R> LazyView<R> {
-    /// Create a read-only lazy view.
-    pub const fn new(read_fn: R) -> Self { Self { read_fn } }
 
-    /// Attach a write callback, returning an [`EditableLazyView`].
-    pub fn writable<W>(self, write_fn: W) -> EditableLazyView<R, W> {
-        EditableLazyView {
+impl<R> LazyView<R, ()> {
+    /// Create a read-only lazy view.
+    pub const fn new(read_fn: R) -> Self { Self { read_fn, write_fn: () } }
+
+    /// Attach a write callback, producing a read+write view.
+    pub fn writable<W>(self, write_fn: W) -> LazyView<R, W> {
+        LazyView {
             read_fn: self.read_fn,
             write_fn,
         }
     }
 }
 
-impl<R> TemplateView for LazyView<R>
-where
-    R: Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync,
-{
-    fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> { (self.read_fn)(engine, template) }
-}
 
-/// Closure-backed [`TemplateView`] + [`Writable`](crate::router::Writable).
-///
-/// Created via [`LazyView::writable`].
-pub struct EditableLazyView<R, W> {
-    read_fn: R,
-    write_fn: W,
-}
-
-impl<R, W> TemplateView for EditableLazyView<R, W>
+impl<R, W> TemplateView for LazyView<R, W>
 where
     R: Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync,
     W: Send + Sync,
@@ -250,13 +242,15 @@ where
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> { (self.read_fn)(engine, template) }
 }
 
-impl<R, W> Writable for EditableLazyView<R, W>
+
+impl<R, W> Writable for LazyView<R, W>
 where
     R: Fn(&TemplateEngine, &str) -> Result<Vec<u8>> + Send + Sync,
     W: Fn(&WriteContext<'_>, &[u8]) -> Result<AffectedFiles> + Send + Sync,
 {
     fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> { (self.write_fn)(ctx, data) }
 }
+
 
 /// Single [`Readable`](crate::node::Readable) for all template-backed
 /// virtual files.
