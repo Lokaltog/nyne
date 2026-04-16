@@ -18,12 +18,7 @@ Kinds:
 Examples (use `Write` instead of `echo` for multi-line content):
 
 ```bash
-echo 'fn helper(){}'   >{{ paths.edit_stage("file." ~ ext, "Bar", "insert-after") }}
-echo '/// docs'        >{{ paths.edit_stage("file." ~ ext, "Baz", "insert-before") }}
-echo 'fn method(){}'   >{{ paths.edit_stage("file." ~ ext, "MyImpl", "append") }}
-echo 1                 >{{ paths.edit_stage("file." ~ ext, "Old", "delete") }}
-echo 'fn new_impl(){}' >{{ paths.edit_stage("file." ~ ext, "Foo", "replace") }}
-```
+{{ hints.batch_edit_kinds_examples("file." ~ ext) }}```
 
 ### Apply
 

@@ -26,26 +26,39 @@
 {#--
   Batch edit staging kinds — single source of truth.
 
-  Each row: (kind, when-to-use, body-payload). Rendered two ways:
+  Each row: (kind, when-to-use, body-payload, example-symbol, example-echo-body).
+  Rendered three ways:
     - `batch_edit_kinds_table()` — full markdown table for instructional docs.
+    - `batch_edit_kinds_examples(file_ref)` — bash `echo >...` usage lines.
     - `batch_edit_hint()` — inline names list with a trailing note.
 
-  Adding a kind requires one edit here; both renderings pick it up.
+  Adding a kind requires one edit here; every rendering picks it up.
 --#}
 {%- set BATCH_EDIT_KINDS = [
-  ("insert-before", "Add a new symbol/docstring immediately before an existing one", "Code to insert"),
-  ("insert-after",  "Add a new symbol immediately after an existing one",            "Code to insert"),
-  ("append",        "Extend an existing body (e.g., add a method inside an impl block)", "Code appended inside the body"),
-  ("delete",        "Remove an entire symbol",                                        "Any non-empty byte — content is ignored"),
-  ("replace",       "Only when rewriting a significant portion of a symbol. For small/targeted edits, use the Edit tool.", "New body"),
+  ("insert-before", "Add a new symbol/docstring immediately before an existing one",                                       "Code to insert",                   "Baz",    "/// docs"),
+  ("insert-after",  "Add a new symbol immediately after an existing one",                                                  "Code to insert",                   "Bar",    "fn helper(){}"),
+  ("append",        "Extend an existing body (e.g., add a method inside an impl block)",                                   "Code appended inside the body",    "MyImpl", "fn method(){}"),
+  ("delete",        "Remove an entire symbol",                                                                             "Any non-empty byte — content is ignored", "Old",    "1"),
+  ("replace",       "Only when rewriting a significant portion of a symbol. For small/targeted edits, use the Edit tool.", "New body",                         "Foo",    "fn new_impl(){}"),
 ] -%}
 
 {#-- Markdown table rendering of BATCH_EDIT_KINDS. --#}
 {%- macro batch_edit_kinds_table() -%}
 | Kind | When to use | Body payload |
 |-|-|-|
-{% for kind, when, payload in BATCH_EDIT_KINDS -%}
+{% for kind, when, payload, _, _ in BATCH_EDIT_KINDS -%}
 | `{{ kind }}` | {{ when }} | {{ payload }} |
+{% endfor -%}
+{%- endmacro -%}
+
+{#-- Bash `echo >...` usage lines for each kind.
+
+     `file_ref` is a template expression for the target file — pass as a
+     string so callers can substitute concrete values or placeholder
+     expressions. Example: `batch_edit_kinds_examples('file.' ~ ext)`. --#}
+{%- macro batch_edit_kinds_examples(file_ref="<file>") -%}
+{% for kind, _, _, name, body in BATCH_EDIT_KINDS -%}
+echo '{{ body }}' >{{ paths.edit_stage(file_ref, name, kind) }}
 {% endfor -%}
 {%- endmacro -%}
 
