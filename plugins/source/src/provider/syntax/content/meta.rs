@@ -212,22 +212,6 @@ impl MetaSplice {
         let wrapped = wrap_fn(resolved.shared.decomposer.as_ref(), plain, indent);
         self.write_resolved(fs, resolved, &wrapped)
     }
-
-    /// Handle truncate-write: if `data` is empty, remove the span entirely;
-    /// otherwise delegate to `write_fn`.
-    pub(super) fn truncate_or(
-        &self,
-        fs: &dyn Filesystem,
-        data: &[u8],
-        write_fn: impl FnOnce(&str) -> Result<AffectedFiles>,
-    ) -> Result<AffectedFiles> {
-        let text = from_utf8(data)?;
-        if text.is_empty() {
-            self.splice_write(fs, "")
-        } else {
-            write_fn(text)
-        }
-    }
 }
 
 /// Result of resolving a [`SpliceTarget`] against the current file state.
@@ -239,66 +223,22 @@ struct ResolvedSplice {
     rope: crop::Rope,
 }
 
-/// [`Writable`] implementation for [`MetaSplice`].
 impl Writable for MetaSplice {
-    /// Splice the data into the source file at the resolved byte range.
     fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {
-        self.splice_write(ctx.fs, from_utf8(data)?)
-    }
-}
-
-/// Writable splice for the symbol's docstring.
-///
-/// Accepts plain text (no comment markers), wraps with language-specific
-/// doc comment syntax, and splices into the source file.
-pub(in crate::provider::syntax) struct DocstringSplice {
-    pub meta: MetaSplice,
-}
-
-/// [`Writable`] implementation for [`DocstringSplice`].
-impl Writable for DocstringSplice {
-    /// Wrap plain text in doc comment syntax and splice into source.
-    /// Empty data removes the docstring entirely.
-    fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {
-        self.meta.truncate_or(ctx.fs, data, |plain| {
-            self.meta
-                .wrap_and_splice(ctx.fs, plain, |d, text, indent| d.wrap_doc_comment(text, indent))
-        })
-    }
-}
-
-/// Writable splice for the file-level docstring.
-///
-/// Accepts plain text, wraps with file-level doc comment syntax
-/// (e.g. `//!` in Rust), and splices into the source file.
-pub(in crate::provider::syntax) struct FileDocstringSplice {
-    pub meta: MetaSplice,
-}
-
-/// [`Writable`] implementation for [`FileDocstringSplice`].
-impl Writable for FileDocstringSplice {
-    /// Wrap plain text in file doc comment syntax and splice into source.
-    /// Empty data removes the file docstring entirely.
-    fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {
-        self.meta.truncate_or(ctx.fs, data, |plain| {
-            self.meta
-                .wrap_and_splice(ctx.fs, plain, |d, text, indent| d.wrap_file_doc_comment(text, indent))
-        })
-    }
-}
-
-/// Writable splice for the symbol's decorators/attributes.
-pub(in crate::provider::syntax) struct DecoratorsSplice {
-    pub meta: MetaSplice,
-}
-
-/// [`Writable`] implementation for [`DecoratorsSplice`].
-impl Writable for DecoratorsSplice {
-    /// Splice new decorator content into the source file.
-    /// Empty data removes the decorators entirely.
-    fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {
-        self.meta
-            .truncate_or(ctx.fs, data, |content| self.meta.splice_write(ctx.fs, content))
+        let text = from_utf8(data)?;
+        // Empty writes remove the span entirely.
+        if text.is_empty() {
+            return self.splice_write(ctx.fs, "");
+        }
+        // Doc-comment targets wrap plain text in language-specific markers;
+        // other targets splice raw.
+        match &self.target {
+            SpliceTarget::FragmentDocComment(_) =>
+                self.wrap_and_splice(ctx.fs, text, |d, t, indent| d.wrap_doc_comment(t, indent)),
+            SpliceTarget::FileDoc =>
+                self.wrap_and_splice(ctx.fs, text, |d, t, indent| d.wrap_file_doc_comment(t, indent)),
+            _ => self.splice_write(ctx.fs, text),
+        }
     }
 }
 
@@ -350,11 +290,9 @@ pub(in crate::provider::syntax) fn file_docstring_node(resolver: &FragmentResolv
                 )
                 .into_bytes())
         },
-        FileDocstringSplice {
-            meta: MetaSplice {
-                resolver: resolver.clone(),
-                target: SpliceTarget::FileDoc,
-            },
+        MetaSplice {
+            resolver: resolver.clone(),
+            target: SpliceTarget::FileDoc,
         },
     )
 }
@@ -427,11 +365,9 @@ pub(in crate::provider::syntax) fn build_meta_nodes(
                     .strip_doc_comment(&shared.source[range.clone()])
                     .into_bytes())
             },
-            DocstringSplice {
-                meta: MetaSplice {
-                    resolver: resolver.clone(),
-                    target: SpliceTarget::FragmentDocComment(path.clone()),
-                },
+            MetaSplice {
+                resolver: resolver.clone(),
+                target: SpliceTarget::FragmentDocComment(path.clone()),
             },
         ));
     }
@@ -457,11 +393,9 @@ pub(in crate::provider::syntax) fn build_meta_nodes(
                     .ok_or_else(|| eyre::eyre!("decorator range {start}..{} out of bounds for {:?}", range.end, p))?
                     .to_vec())
             },
-            DecoratorsSplice {
-                meta: MetaSplice {
-                    resolver: resolver.clone(),
-                    target: SpliceTarget::FragmentDecorators(path.clone()),
-                },
+            MetaSplice {
+                resolver: resolver.clone(),
+                target: SpliceTarget::FragmentDecorators(path.clone()),
             },
         ));
     }
