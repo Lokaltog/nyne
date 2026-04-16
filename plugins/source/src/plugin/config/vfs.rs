@@ -81,6 +81,9 @@ pub struct VfsFiles {
 
     /// Staged diff file name — apply on delete, clear on truncate.
     pub staged_diff: String,
+
+    /// Per-fragment delete preview file — apply on `rm`.
+    pub delete_diff: String,
 }
 
 impl Default for VfsFiles {
@@ -93,6 +96,7 @@ impl Default for VfsFiles {
             decorators: "decorators".into(),
             imports: "imports".into(),
             staged_diff: "staged.diff".into(),
+            delete_diff: "delete.diff".into(),
         }
     }
 }

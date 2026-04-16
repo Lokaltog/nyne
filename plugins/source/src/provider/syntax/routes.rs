@@ -271,7 +271,7 @@ impl SyntaxProvider {
             }
             FragmentSubRoute::Fragment => {
                 // delete.diff — handled by the diff middleware.
-                if name == "delete.diff" {
+                if name == self.vfs.file.delete_diff {
                     self.set_delete_diff_source(req, &sf, &segments);
                     return Ok(());
                 }
