@@ -65,6 +65,12 @@ pub trait Writable: Send + Sync {
     fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles>;
 }
 
+impl<T: Readable + ?Sized> Readable for Arc<T> {
+    fn read(&self, ctx: &ReadContext<'_>) -> Result<Vec<u8>> { (**self).read(ctx) }
+    fn size(&self) -> Option<u64> { (**self).size() }
+    fn backing_path(&self) -> Option<&Path> { (**self).backing_path() }
+}
+
 impl<T: Writable + ?Sized> Writable for Arc<T> {
     fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> { (**self).write(ctx, data) }
 }

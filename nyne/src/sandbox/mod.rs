@@ -45,7 +45,7 @@ use linkme::distributed_slice;
 use rustix::process::{getgid, getuid};
 use signal_hook::consts::{SIGINT, SIGTERM};
 use signal_hook::iterator::Signals;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 pub use self::namespace::Namespace;
 use self::process::{ChildGuard, ReadyPipe, fork_or_die, wait_for_exit};
@@ -429,11 +429,15 @@ struct CommandPaths<'a> {
 /// Insert a path as an env var entry, UTF-8 path permitting.
 ///
 /// Only inserts if the key is not already set (so explicit user config
-/// wins). Silently skips when the path is not UTF-8 — env values must
-/// be strings.
+/// wins). Warns and skips when the path is not UTF-8 — env values must
+/// be strings, and silently skipping would hide the missing var inside
+/// the sandbox.
 fn inject_path_env(env: &mut HashMap<String, String>, key: &str, path: &Path) {
-    if let Some(s) = path.to_str() {
-        env.entry(key.to_owned()).or_insert_with(|| s.to_owned());
+    match path.to_str() {
+        Some(s) => {
+            env.entry(key.to_owned()).or_insert_with(|| s.to_owned());
+        }
+        None => warn!(key, path = %path.display(), "non-UTF-8 path not injected into sandbox env"),
     }
 }
 
