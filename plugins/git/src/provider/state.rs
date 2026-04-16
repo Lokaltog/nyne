@@ -103,6 +103,15 @@ impl GitState {
         ))
     }
 
+    /// Return the request's source file, or a canonical error if absent.
+    ///
+    /// Use from fallible callback paths where a missing source file is a
+    /// contract violation; use [`Request::source_file`] directly in
+    /// silently-skipping paths.
+    pub(crate) fn require_source_file(req: &Request) -> Result<std::path::PathBuf> {
+        req.source_file().ok_or_else(|| color_eyre::eyre::eyre!("no source file"))
+    }
+
     /// Resolve a sliced view name (`BLAME.md:{spec}` or `LOG.md:{spec}`)
     /// to a template handle, parsed spec, and whether it's a blame view.
     ///

@@ -17,7 +17,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::Result;
 use nyne::SymbolLineRange;
 use nyne::router::{NamedNode, Node, Request, RouteCtx};
 use nyne::templates::{LazyView, TemplateEngine, TemplateHandle};
@@ -141,7 +141,7 @@ impl SymbolGitCtx {
         let Some((handle, spec, is_blame)) = self.state.resolve_sliced_view(name) else {
             return Ok(());
         };
-        let sf = req.source_file().ok_or_else(|| eyre!("no source file"))?;
+        let sf = GitState::require_source_file(req)?;
         let fragment_path = Self::to_fragment_path(symbol_segs);
         let resolver = self.resolver(&sf);
         let repo = Arc::clone(&self.state.repo);
@@ -167,7 +167,7 @@ impl SymbolGitCtx {
 
     /// Build history version nodes for a symbol, optionally filtering to a single name.
     fn history_nodes(&self, req: &mut Request, symbol_segs: &[&str], filter_name: Option<&str>) -> Result<()> {
-        let sf = req.source_file().ok_or_else(|| eyre!("no source file"))?;
+        let sf = GitState::require_source_file(req)?;
         let fragment_path = Self::to_fragment_path(symbol_segs);
         let Some(range) = self.resolver(&sf).line_range(&fragment_path)? else {
             return Ok(());

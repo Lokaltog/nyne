@@ -32,9 +32,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                 let Some((handle, spec, is_blame)) = sl.resolve_sliced_view(name) else {
                     return Ok(());
                 };
-                let source = req
-                    .source_file()
-                    .ok_or_else(|| color_eyre::eyre::eyre!("no source file"))?;
+                let source = GitState::require_source_file(req)?;
                 let repo = Arc::clone(&sl.repo);
                 let node = handle.named_node(
                     name,
@@ -104,9 +102,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                 if refspec == "HEAD" || refspec.is_empty() {
                     return Ok(());
                 }
-                let source = req
-                    .source_file()
-                    .ok_or_else(|| color_eyre::eyre::eyre!("no source file"))?;
+                let source = GitState::require_source_file(req)?;
                 let repo = Arc::clone(&s2.repo);
                 let rel = repo.rel_path(&source);
                 let node = Node::file()
@@ -143,9 +139,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
         ext.dir(state.vfs.dir.history.clone(), |d| {
             d.handler(move |_ctx: &RouteCtx, req: &mut Request, next: &Next<'_>| {
                 next.run(req)?;
-                let source = req
-                    .source_file()
-                    .ok_or_else(|| color_eyre::eyre::eyre!("no source file"))?;
+                let source = GitState::require_source_file(req)?;
                 let repo = Arc::clone(&s.repo);
                 let rel = repo.rel_path(&source);
                 let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("");
