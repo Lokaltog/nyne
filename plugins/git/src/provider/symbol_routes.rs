@@ -185,6 +185,37 @@ impl SymbolGitCtx {
         views::emit_history_nodes(req, &repo, &Arc::from(rel), file_ext, entries, Some(&sym_ctx), filter_name);
         Ok(())
     }
+
+    /// Classify `segments` and dispatch to the matching readdir handler.
+    fn dispatch_readdir(&self, req: &mut Request, segments: &[&str]) -> Result<()> {
+        match classify(segments, &self.state.vfs.dir.git, &self.state.vfs.dir.history) {
+            GitScope::History(symbol_segs) => self.history_nodes(req, symbol_segs, None),
+            GitScope::GitDir(symbol_segs) => self.readdir_git(req, symbol_segs),
+            GitScope::SymbolRoot => self.contribute_git_dir(req, segments),
+        }
+    }
+
+    /// Classify `segments` and dispatch to the matching lookup handler.
+    fn dispatch_lookup(&self, req: &mut Request, segments: &[&str], name: &str) -> Result<()> {
+        match classify(segments, &self.state.vfs.dir.git, &self.state.vfs.dir.history) {
+            GitScope::History(symbol_segs) => self.history_nodes(req, symbol_segs, Some(name)),
+            GitScope::GitDir(symbol_segs) => self.lookup_git(req, symbol_segs, name),
+            GitScope::SymbolRoot if name == self.state.vfs.dir.git => self.contribute_git_dir(req, segments),
+            GitScope::SymbolRoot => Ok(()),
+        }
+    }
+
+    /// Contribute a `git/` dir entry when `segments` resolves to a real fragment.
+    #[allow(clippy::unnecessary_wraps)]
+    fn contribute_git_dir(&self, req: &mut Request, segments: &[&str]) -> Result<()> {
+        let Some(sf) = req.source_file() else {
+            return Ok(());
+        };
+        if self.decomposition.has_fragment(&sf, &Self::to_fragment_path(segments)) {
+            req.nodes.add(NamedNode::dir(&self.state.vfs.dir.git));
+        }
+        Ok(())
+    }
 }
 
 /// Register symbol-scoped git content into [`SourceExtensions`].
@@ -209,45 +240,15 @@ pub fn register_source_extensions(
 
     exts.fragment_path.scoped("git", |ext| {
         let s = Arc::clone(&c);
-        ext.on_readdir(move |ctx: &RouteCtx, req: &mut Request| {
-            let Some(segments) = path_segments(ctx) else {
-                return Ok(());
-            };
-            match classify(&segments, &s.state.vfs.dir.git, &s.state.vfs.dir.history) {
-                GitScope::History(symbol_segs) => s.history_nodes(req, symbol_segs, None),
-                GitScope::GitDir(symbol_segs) => s.readdir_git(req, symbol_segs),
-                GitScope::SymbolRoot => {
-                    let Some(sf) = req.source_file() else {
-                        return Ok(());
-                    };
-                    if s.decomposition.has_fragment(&sf, &SymbolGitCtx::to_fragment_path(&segments)) {
-                        req.nodes.add(NamedNode::dir(&s.state.vfs.dir.git));
-                    }
-                    Ok(())
-                }
-            }
+        ext.on_readdir(move |ctx: &RouteCtx, req: &mut Request| match path_segments(ctx) {
+            Some(segments) => s.dispatch_readdir(req, &segments),
+            None => Ok(()),
         });
 
         let s = Arc::clone(&c);
-        ext.on_lookup(move |ctx: &RouteCtx, req: &mut Request, name: &str| {
-            let Some(segments) = path_segments(ctx) else {
-                return Ok(());
-            };
-            match classify(&segments, &s.state.vfs.dir.git, &s.state.vfs.dir.history) {
-                GitScope::History(symbol_segs) => s.history_nodes(req, symbol_segs, Some(name)),
-                GitScope::GitDir(symbol_segs) => s.lookup_git(req, symbol_segs, name),
-                GitScope::SymbolRoot => {
-                    if name == s.state.vfs.dir.git {
-                        let Some(sf) = req.source_file() else {
-                            return Ok(());
-                        };
-                        if s.decomposition.has_fragment(&sf, &SymbolGitCtx::to_fragment_path(&segments)) {
-                            req.nodes.add(NamedNode::dir(&s.state.vfs.dir.git));
-                        }
-                    }
-                    Ok(())
-                }
-            }
+        ext.on_lookup(move |ctx: &RouteCtx, req: &mut Request, name: &str| match path_segments(ctx) {
+            Some(segments) => s.dispatch_lookup(req, &segments, name),
+            None => Ok(()),
         });
     });
 }
