@@ -19,12 +19,6 @@ use crate::edit::plan::{EditOp, EditOpKind, EditPlan};
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::decomposed::DecompositionCache;
 
-/// Staged operations for a single source file: `(sequence_number, op)` pairs.
-pub type StagedOps = Vec<(u32, EditOp)>;
-
-/// All staged operations keyed by absolute source file path.
-pub type StagedOpsMap = HashMap<PathBuf, StagedOps>;
-
 /// Per-mount staging area for batch edits.
 ///
 /// Thread-safe: multiple concurrent writes stage independently. The `u32`
@@ -32,7 +26,7 @@ pub type StagedOpsMap = HashMap<PathBuf, StagedOps>;
 /// conflict reporting and diff output.
 #[derive(Clone)]
 pub struct EditStaging {
-    ops: Arc<Mutex<StagedOpsMap>>,
+    ops: Arc<Mutex<HashMap<PathBuf, Vec<(u32, EditOp)>>>>,
     counter: Arc<AtomicU32>,
 }
 
@@ -62,12 +56,18 @@ impl EditStaging {
             .expect("staging lock poisoned")
             .entry(source_file)
             .or_default()
-            .push((seq, EditOp::new(fragment_path, kind, content)));
+            .push((seq, EditOp {
+                fragment_path,
+                kind,
+                content,
+            }));
         seq
     }
 
     /// Take all staged operations, leaving the staging area empty.
-    pub fn drain(&self) -> StagedOpsMap { mem::take(&mut *self.ops.lock().expect("staging lock poisoned")) }
+    pub fn drain(&self) -> HashMap<PathBuf, Vec<(u32, EditOp)>> {
+        mem::take(&mut *self.ops.lock().expect("staging lock poisoned"))
+    }
 
     /// Discard all staged operations.
     pub fn clear(&self) {
@@ -79,7 +79,9 @@ impl EditStaging {
     pub fn is_empty(&self) -> bool { self.ops.lock().expect("staging lock poisoned").is_empty() }
 
     /// Snapshot current staged operations for diff preview.
-    pub fn snapshot(&self) -> StagedOpsMap { self.ops.lock().expect("staging lock poisoned").clone() }
+    pub fn snapshot(&self) -> HashMap<PathBuf, Vec<(u32, EditOp)>> {
+        self.ops.lock().expect("staging lock poisoned").clone()
+    }
 }
 
 impl Default for EditStaging {

@@ -38,10 +38,6 @@ impl EditOpKind {
     /// Kebab-case name, used as both VFS directory name and staged action label.
     #[must_use]
     pub fn name(self) -> &'static str { self.into() }
-
-    /// Parse a directory/label name back to an operation kind.
-    #[must_use]
-    pub fn from_name(name: &str) -> Option<Self> { name.parse().ok() }
 }
 
 /// A single edit operation targeting a source file.
@@ -99,16 +95,6 @@ pub struct EditPlan {
 
 /// Methods for inspecting and mutating edit operations.
 impl EditOp {
-    /// Create a new edit operation.
-    #[must_use]
-    pub fn new(fragment_path: Vec<String>, kind: EditOpKind, content: impl Into<Option<String>>) -> Self {
-        Self {
-            fragment_path,
-            kind,
-            content: content.into(),
-        }
-    }
-
     /// The content payload, or `""` when absent (`Delete`).
     #[must_use]
     pub fn content(&self) -> &str { self.content.as_deref().unwrap_or("") }

@@ -254,7 +254,7 @@ impl SyntaxProvider {
                 }
             }
             FragmentSubRoute::Edit { parent } => {
-                if let Some(kind) = EditOpKind::from_name(name)
+                if let Ok(kind) = name.parse::<EditOpKind>()
                     && self.decomposition.has_fragment(&sf, parent)
                 {
                     req.nodes.add(
