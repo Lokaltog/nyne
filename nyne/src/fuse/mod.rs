@@ -26,7 +26,7 @@ use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
+use std::sync::{Arc, OnceLock};
 use std::time::{Instant, SystemTime};
 
 use color_eyre::eyre::{Report, Result};
@@ -34,6 +34,7 @@ use fuser::Errno;
 use handles::HandleTable;
 use inode_map::InodeMap;
 use notify::KernelNotifier;
+use parking_lot::{Mutex, RwLock};
 
 use crate::err::io_err;
 use crate::path_utils::PathExt;
@@ -136,19 +137,14 @@ impl FuseFilesystem {
     /// hit procfs once.
     pub(super) fn process_from(&self, fuse_req: &fuser::Request) -> Process {
         let pid = fuse_req.pid();
-        if let Some(name) = self
-            .process_names
-            .read()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&pid)
-        {
+        if let Some(name) = self.process_names.read().get(&pid) {
             return Process {
                 pid,
                 name: name.clone(),
             };
         }
         let name = read_comm(pid);
-        let mut cache = self.process_names.write().unwrap_or_else(PoisonError::into_inner);
+        let mut cache = self.process_names.write();
         // Evict stale entries when the cache grows too large. PIDs are
         // recycled by the OS, so old entries for exited processes accumulate.
         if cache.len() >= 4096 {
@@ -285,7 +281,7 @@ impl FuseFilesystem {
             return;
         }
         let now = Instant::now();
-        let mut writes = self.inline_writes.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut writes = self.inline_writes.lock();
         for path in affected {
             writes.insert(path.clone(), now);
         }

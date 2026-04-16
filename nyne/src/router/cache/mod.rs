@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::path::PathBuf;
-use std::sync::{Arc, PoisonError, RwLock};
+use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 use crate::router::GenerationMap;
 
@@ -55,7 +57,7 @@ impl<K: Hash + Eq + Clone, V: Clone> GenCache<K, V> {
     pub fn get_or_compute(&self, key: K, compute: impl FnOnce() -> (V, PathBuf)) -> V {
         // Fast path: read lock, check freshness using the entry's stored source.
         {
-            let guard = self.store.read().unwrap_or_else(PoisonError::into_inner);
+            let guard = self.store.read();
             if let Some(entry) = guard.get(&key)
                 && entry.generation == self.generations.get(&entry.source)
             {
@@ -66,19 +68,16 @@ impl<K: Hash + Eq + Clone, V: Clone> GenCache<K, V> {
         // Miss or stale: compute lock-free, then store under write lock.
         let (value, source) = compute();
         let generation = self.generations.get(&source);
-        self.store
-            .write()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(key, CacheEntry {
-                generation,
-                source,
-                value: value.clone(),
-            });
+        self.store.write().insert(key, CacheEntry {
+            generation,
+            source,
+            value: value.clone(),
+        });
         value
     }
 
     /// Explicitly remove an entry (rare -- prefer lazy generation-based eviction).
-    pub fn invalidate(&self, key: &K) { self.store.write().unwrap_or_else(PoisonError::into_inner).remove(key); }
+    pub fn invalidate(&self, key: &K) { self.store.write().remove(key); }
 }
 
 #[cfg(test)]

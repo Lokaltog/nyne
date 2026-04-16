@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use color_eyre::eyre::{Result, bail};
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{DirEntry, Filesystem};
 use crate::router::{AffectedFiles, NodeKind};
@@ -41,13 +41,9 @@ impl MemFs {
         }
     }
 
-    fn lock_read(&self) -> RwLockReadGuard<'_, HashMap<PathBuf, FsNode>> {
-        self.nodes.read().unwrap_or_else(PoisonError::into_inner)
-    }
+    fn lock_read(&self) -> RwLockReadGuard<'_, HashMap<PathBuf, FsNode>> { self.nodes.read() }
 
-    fn lock_write(&self) -> RwLockWriteGuard<'_, HashMap<PathBuf, FsNode>> {
-        self.nodes.write().unwrap_or_else(PoisonError::into_inner)
-    }
+    fn lock_write(&self) -> RwLockWriteGuard<'_, HashMap<PathBuf, FsNode>> { self.nodes.write() }
 }
 
 impl Default for MemFs {

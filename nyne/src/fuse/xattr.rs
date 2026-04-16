@@ -1,7 +1,6 @@
 //! Extended attribute operations for error reporting and node metadata.
 
 use std::ffi::OsStr;
-use std::sync::PoisonError;
 
 use fuser::{Errno, INodeNo, ReplyEmpty, ReplyXattr};
 use tracing::{debug, trace};
@@ -48,12 +47,7 @@ impl FuseFilesystem {
 
         // FUSE-level xattr: last write error.
         if attr_name == XATTR_ERROR {
-            return match self
-                .write_errors
-                .read()
-                .unwrap_or_else(PoisonError::into_inner)
-                .get(&ino)
-            {
+            return match self.write_errors.read().get(&ino) {
                 Some(msg) => reply_xattr_data(reply, size, msg.as_bytes()),
                 None => reply.error(Errno::ENODATA),
             };
@@ -87,12 +81,7 @@ impl FuseFilesystem {
             .unwrap_or_default();
 
         // Include FUSE-level xattr if a write error exists.
-        if self
-            .write_errors
-            .read()
-            .unwrap_or_else(PoisonError::into_inner)
-            .contains_key(&ino)
-        {
+        if self.write_errors.read().contains_key(&ino) {
             names.push(XATTR_ERROR.to_owned());
         }
 

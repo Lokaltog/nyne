@@ -13,7 +13,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
-use std::sync::{Arc, PoisonError};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{mem, thread};
 
@@ -184,11 +184,7 @@ impl EventLoop {
         // insert-after-write latency. The entry is guaranteed to be visible
         // if the write went through the VFS.
         let now = Instant::now();
-        let mut writes = self
-            .backend
-            .inline_writes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut writes = self.backend.inline_writes.lock();
         evict_expired_inline_writes(&mut writes, now);
         let paths = drain_pending_with_suppression(pending, &mut writes);
         drop(writes);

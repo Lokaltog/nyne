@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io;
 use std::path::Path;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, PoisonError};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use color_eyre::eyre;
@@ -91,8 +91,8 @@ impl FuseFilesystem {
                     fs_mode::narrow(meta.permissions, fs_mode::FILE_DEFAULT),
                     self.atime_overrides
                         .read()
-                        .ok()
-                        .and_then(|m| m.get(&ino).copied())
+                        .get(&ino)
+                        .copied()
                         .map_or(meta.timestamps, |atime| Timestamps {
                             atime,
                             ..meta.timestamps
@@ -226,37 +226,22 @@ impl FuseFilesystem {
 
         // Per-inode write lock prevents concurrent flushes.
         // Read lock first (common case: entry exists), write lock only on miss.
-        let lock = if let Some(l) = self
-            .write_locks
-            .read()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&ino)
-        {
+        let lock = if let Some(l) = self.write_locks.read().get(&ino) {
             Arc::clone(l)
         } else {
-            Arc::clone(
-                self.write_locks
-                    .write()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .entry(ino)
-                    .or_default(),
-            )
+            Arc::clone(self.write_locks.write().entry(ino).or_default())
         };
-        let _guard = lock.lock().unwrap_or_else(PoisonError::into_inner);
+        let _guard = lock.lock();
 
         match self.flush_content(ino, &snapshot.data) {
             Ok(()) => {
                 self.handles.clear_dirty(fh, snapshot.generation);
-                if let Ok(mut errors) = self.write_errors.write() {
-                    errors.remove(&ino);
-                }
+                self.write_errors.write().remove(&ino);
                 FlushOutcome::Flushed
             }
             Err(e) => {
                 debug!(target: "nyne::fuse", ino, error = %e, "flush failed");
-                if let Ok(mut errors) = self.write_errors.write() {
-                    errors.insert(ino, format!("{e:#}"));
-                }
+                self.write_errors.write().insert(ino, format!("{e:#}"));
                 FlushOutcome::Failed(e)
             }
         }
@@ -343,9 +328,7 @@ impl Filesystem for FuseFilesystem {
                 TimeOrNow::SpecificTime(t) => t,
                 TimeOrNow::Now => SystemTime::now(),
             };
-            if let Ok(mut overrides) = self.atime_overrides.write() {
-                overrides.insert(ino, time);
-            }
+            self.atime_overrides.write().insert(ino, time);
         }
 
         self.reply_attr(ino, req, reply);
@@ -614,15 +597,9 @@ impl Filesystem for FuseFilesystem {
             }
 
             // Evict per-inode state to prevent unbounded growth.
-            if let Ok(mut locks) = self.write_locks.write() {
-                locks.remove(&ino);
-            }
-            if let Ok(mut errors) = self.write_errors.write() {
-                errors.remove(&ino);
-            }
-            if let Ok(mut overrides) = self.atime_overrides.write() {
-                overrides.remove(&ino);
-            }
+            self.write_locks.write().remove(&ino);
+            self.write_errors.write().remove(&ino);
+            self.atime_overrides.write().remove(&ino);
         }
 
         reply.ok();
