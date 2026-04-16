@@ -8,6 +8,7 @@
 //! calculation, indentation detection, and delete-range extension for whitespace
 //! cleanup.
 
+use std::borrow::Cow;
 use std::io::ErrorKind;
 use std::ops::Range;
 use std::path::Path;
@@ -149,6 +150,28 @@ pub fn extend_delete_range(source: &str, span: Range<usize>) -> Range<usize> {
         }
     }
     span.start..span.end + extra
+}
+
+/// Ensure content has a leading newline separator when the source at `offset`
+/// doesn't already end with one. Prevents inserted/appended content from joining
+/// directly to the previous symbol's closing delimiter.
+pub fn ensure_leading_newline<'a>(source: &str, offset: usize, content: &'a str) -> Cow<'a, str> {
+    let prev_is_newline = offset > 0 && source.as_bytes().get(offset - 1) == Some(&b'\n');
+    if prev_is_newline || content.starts_with('\n') {
+        Cow::Borrowed(content)
+    } else {
+        Cow::Owned(format!("\n{content}"))
+    }
+}
+
+/// Ensure content has a trailing newline so it doesn't join directly to the
+/// following symbol's first line.
+pub fn ensure_trailing_newline(content: &str) -> Cow<'_, str> {
+    if content.ends_with('\n') {
+        Cow::Borrowed(content)
+    } else {
+        Cow::Owned(format!("{content}\n"))
+    }
 }
 
 #[cfg(test)]

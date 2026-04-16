@@ -5,7 +5,6 @@
 //! conflicts, and applies them in reverse order to avoid offset invalidation.
 //! Tree-sitter validation ensures the result parses cleanly before write-back.
 
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::ops::Range;
 
@@ -113,7 +112,9 @@ impl EditPlan {
     /// ascending by byte offset for single-pass application via
     /// [`apply`](Self::apply).
     pub fn resolve(&self, fragments: &[Fragment], source: &str) -> Result<Vec<ResolvedEdit>> {
-        use crate::edit::splice::{extend_delete_range, line_start_of_rope};
+        use crate::edit::splice::{
+            ensure_leading_newline, ensure_trailing_newline, extend_delete_range, line_start_of_rope,
+        };
         use crate::syntax::require_fragment;
 
         let rope = crop::Rope::from(source);
@@ -274,28 +275,6 @@ fn append_offset(source: &str, frag: &Fragment) -> usize {
     source[body.start..body.end]
         .rfind('}')
         .map_or(body.end, |pos| body.start + pos)
-}
-
-/// Ensure content has a leading newline separator when the source at `offset`
-/// doesn't already end with one. Prevents inserted/appended content from joining
-/// directly to the previous symbol's closing delimiter.
-fn ensure_leading_newline<'a>(source: &str, offset: usize, content: &'a str) -> Cow<'a, str> {
-    let prev_is_newline = offset > 0 && source.as_bytes().get(offset - 1) == Some(&b'\n');
-    if prev_is_newline || content.starts_with('\n') {
-        Cow::Borrowed(content)
-    } else {
-        Cow::Owned(format!("\n{content}"))
-    }
-}
-
-/// Ensure content has a trailing newline so it doesn't join directly to the
-/// following symbol's first line.
-fn ensure_trailing_newline(content: &str) -> Cow<'_, str> {
-    if content.ends_with('\n') {
-        Cow::Borrowed(content)
-    } else {
-        Cow::Owned(format!("{content}\n"))
-    }
 }
 
 #[cfg(test)]
