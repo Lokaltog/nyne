@@ -264,12 +264,20 @@ fn server_loop(path: &Path, listener: &UnixListener, shutdown: &OwnedFd, handler
     }
 }
 
+/// Serialize a response as a newline-terminated JSON line.
+///
+/// Single source of truth for the wire format — used both by the plain
+/// [`write_response`] path and the ancillary-fd [`send_namespace_fds`]
+/// path, which need the payload as a pre-built `Vec<u8>` for `sendmsg`.
+fn response_line(response: &Response) -> Result<Vec<u8>> {
+    let mut buf = serde_json::to_vec(response).wrap_err("serializing response")?;
+    buf.push(b'\n');
+    Ok(buf)
+}
+
 /// Write a JSON response to the stream followed by a newline.
 fn write_response(stream: &UnixStream, response: &Response) -> Result<()> {
-    let mut writer = stream;
-    serde_json::to_writer(&mut writer, response).wrap_err("writing response")?;
-    writer.write_all(b"\n")?;
-    Ok(())
+    (&mut &*stream).write_all(&response_line(response)?).wrap_err("writing response")
 }
 
 /// Read a single JSON request from a stream, dispatch it, and write the response.
@@ -407,9 +415,7 @@ fn handle_list(processes: &ProcessTable) -> Response {
 /// with the two fds (user first, mnt second) attached as ancillary
 /// data. The client receives both atomically via `recvmsg`.
 fn send_namespace_fds(stream: &UnixStream, ns: &Namespace) -> Result<()> {
-    let response = serde_json::to_string(&Response::NamespaceFds).wrap_err("serializing NamespaceFds response")?;
-    let mut payload = response.into_bytes();
-    payload.push(b'\n');
+    let payload = response_line(&Response::NamespaceFds)?;
 
     let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(2))];
     let mut control = SendAncillaryBuffer::new(&mut space);
