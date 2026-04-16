@@ -256,6 +256,36 @@ impl EditPlan {
         result.push_str(&source[cursor..]);
         result
     }
+
+    /// Resolve, apply, and validate this plan against a decomposed source,
+    /// returning a [`FileEditResult`] describing the edit.
+    ///
+    /// SSOT for the resolve → apply → validate pipeline used by both
+    /// batch edit staging ([`BatchEditAction`](crate::edit::staging::BatchEditAction))
+    /// and symbol deletion previews.
+    ///
+    /// The caller supplies the validation result — callers that can't or
+    /// don't need to validate pass [`ValidationResult::Pass`] or
+    /// [`ValidationResult::Skipped`] directly rather than building a
+    /// validator closure.
+    pub fn run(
+        &self,
+        parsed: &crate::syntax::decomposed::DecomposedSource,
+        source_file: std::path::PathBuf,
+        validate: impl FnOnce(&str) -> nyne_diff::ValidationResult,
+    ) -> Result<nyne_diff::FileEditResult> {
+        let resolved = self.resolve(&parsed.decomposed, &parsed.source)?;
+        let modified = Self::apply(&parsed.source, &resolved);
+        let validation = validate(&modified);
+        Ok(nyne_diff::FileEditResult {
+            display_path: source_file.display().to_string(),
+            source_file,
+            original: parsed.source.clone(),
+            modified,
+            outcome: nyne_diff::EditOutcome::Modify,
+            validation,
+        })
+    }
 }
 
 /// Compute the byte offset for an `Append` edit within a fragment.

@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::Result;
 use nyne::router::{AffectedFiles, Writable, WriteContext};
-use nyne_diff::{DiffSource, EditOutcome, FileEditResult, ValidationResult};
+use nyne_diff::{DiffSource, FileEditResult, ValidationResult};
 
 use crate::edit::plan::{EditOp, EditOpKind, EditPlan};
 use crate::syntax::SyntaxRegistry;
@@ -99,6 +99,24 @@ pub struct BatchEditAction {
     pub(crate) registry: Arc<SyntaxRegistry>,
 }
 
+/// Build the per-file validation closure used by [`BatchEditAction::compute_edits`].
+///
+/// Returns [`ValidationResult::Skipped`] when the registry has no decomposer
+/// for the file, [`Pass`](ValidationResult::Pass) on clean parse, and
+/// [`Fail`](ValidationResult::Fail) carrying the parse error otherwise.
+fn validator_for<'a>(
+    registry: &'a SyntaxRegistry,
+    source_file: &'a std::path::Path,
+) -> impl FnOnce(&str) -> ValidationResult + 'a {
+    move |modified| match registry.decomposer_for(source_file) {
+        Some(decomposer) => match decomposer.validate(modified) {
+            Ok(()) => ValidationResult::Pass,
+            Err(e) => ValidationResult::Fail(format!("{e}")),
+        },
+        None => ValidationResult::Skipped,
+    }
+}
+
 impl DiffSource for BatchEditAction {
     fn compute_edits(&self) -> Result<Vec<FileEditResult>> {
         let snapshot = self.staging.snapshot();
@@ -113,25 +131,8 @@ impl DiffSource for BatchEditAction {
 
         for (source_file, ops) in entries {
             let parsed = self.decomposition.get(&source_file)?;
-            let resolved = EditPlan { ops }.resolve(&parsed.decomposed, &parsed.source)?;
-            let modified = EditPlan::apply(&parsed.source, &resolved);
-
-            let validation = match self.registry.decomposer_for(&source_file) {
-                Some(decomposer) => match decomposer.validate(&modified) {
-                    Ok(()) => ValidationResult::Pass,
-                    Err(e) => ValidationResult::Fail(format!("{e}")),
-                },
-                None => ValidationResult::Skipped,
-            };
-
-            results.push(FileEditResult {
-                display_path: source_file.display().to_string(),
-                source_file,
-                original: parsed.source.clone(),
-                modified,
-                outcome: EditOutcome::Modify,
-                validation,
-            });
+            let validator = validator_for(&self.registry, &source_file);
+            results.push(EditPlan { ops }.run(&parsed, source_file.clone(), validator)?);
         }
 
         Ok(results)

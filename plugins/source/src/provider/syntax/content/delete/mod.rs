@@ -4,13 +4,12 @@
 //! (`Foo@/delete.diff`) or applied via the diff middleware.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne_diff::{DiffSource, EditOutcome, FileEditResult, ValidationResult};
+use nyne_diff::{DiffSource, FileEditResult, ValidationResult};
 
 use crate::edit::plan::{EditOp, EditOpKind, EditPlan};
-use crate::syntax::decomposed::{DecomposedSource, DecompositionCache};
+use crate::syntax::decomposed::DecompositionCache;
 
 /// Delete a symbol from its source file.
 ///
@@ -26,18 +25,11 @@ pub(in crate::provider::syntax) struct SymbolDelete {
     pub fragment_path: Vec<String>,
 }
 
-/// Methods for [`SymbolDelete`].
-impl SymbolDelete {
-    /// Decompose the source file and return the shared decomposition.
-    fn decomposed(&self) -> Result<Arc<DecomposedSource>> { self.decomposition.get(&self.source_file) }
-}
-
 /// [`DiffAction`] implementation for [`SymbolDelete`].
 impl DiffSource for SymbolDelete {
     /// Compute the deletion range and produce file edits.
     fn compute_edits(&self) -> Result<Vec<FileEditResult>> {
-        let parsed = self.decomposed()?;
-
+        let parsed = self.decomposition.get(&self.source_file)?;
         let plan = EditPlan {
             ops: vec![(0, EditOp {
                 fragment_path: self.fragment_path.clone(),
@@ -45,18 +37,9 @@ impl DiffSource for SymbolDelete {
                 content: None,
             })],
         };
-
-        let resolved = plan.resolve(&parsed.decomposed, &parsed.source)?;
-        let modified = EditPlan::apply(&parsed.source, &resolved);
-
-        Ok(vec![FileEditResult {
-            display_path: self.source_file.display().to_string(),
-            source_file: self.source_file.clone(),
-            original: parsed.source.clone(),
-            modified,
-            outcome: EditOutcome::Modify,
-            validation: ValidationResult::Pass,
-        }])
+        Ok(vec![
+            plan.run(&parsed, self.source_file.clone(), |_| ValidationResult::Pass)?,
+        ])
     }
 
     /// Return a header describing the deletion.
