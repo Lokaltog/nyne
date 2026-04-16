@@ -273,6 +273,23 @@ pub fn fragment_vfs_name(companion: &nyne_companion::Companion, segments: &[impl
     segments.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(&sep)
 }
 
+/// Children of the non-structural fragment whose line range contains `line`
+/// and which has no `fs_name` — the shape of a "transparent" container
+/// (e.g. a hidden inherent impl block) that should be seen through.
+///
+/// Returns `None` when no such container exists at `line`.
+fn nameless_container_children<'a>(
+    fragments: &'a [fragment::Fragment],
+    line: usize,
+    rope: &crop::Rope,
+) -> Option<&'a [fragment::Fragment]> {
+    fragments
+        .iter()
+        .filter(|f| !f.kind.is_structural())
+        .find(|f| f.line_range(rope).contains(&line) && f.fs_name.is_none())
+        .map(|f| f.children.as_slice())
+}
+
 /// Like [`find_fragment_at_line`], but falls back to the nearest fragment
 /// when `line` is in a gap (imports, blank lines between items).
 ///
@@ -291,15 +308,10 @@ pub fn find_nearest_fragment_at_line(
     line: usize,
     rope: &crop::Rope,
 ) -> Option<Vec<String>> {
-    // If line falls inside a nameless container (e.g. hidden impl block),
-    // narrow search to its children. Structural fragments (docstrings,
-    // imports, decorators) are skipped — they're metadata, not containers.
-    if let Some(frag) = fragments
-        .iter()
-        .filter(|f| !f.kind.is_structural())
-        .find(|f| f.line_range(rope).contains(&line) && f.fs_name.is_none())
-    {
-        return find_nearest_fragment_at_line(&frag.children, line, rope);
+    // Narrow into a nameless container (e.g. hidden impl block) if the
+    // line falls inside one.
+    if let Some(children) = nameless_container_children(fragments, line, rope) {
+        return find_nearest_fragment_at_line(children, line, rope);
     }
 
     // Fast path: exact match.
