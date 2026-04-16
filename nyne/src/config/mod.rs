@@ -475,23 +475,6 @@ impl NyneConfig {
         Ok(config)
     }
 }
-/// Deserialize a plugin config from a TOML value, logging a warning and falling back to defaults on failure.
-///
-/// Prefer this over manual `toml::Value::try_into` — it borrows the value (via clone),
-/// and surfaces deserialization errors via `tracing::warn` instead of silently discarding them.
-pub fn deserialize_plugin_config<T>(value: &toml::Value) -> T
-where
-    T: for<'de> serde::Deserialize<'de> + Default,
-{
-    value.clone().try_into().unwrap_or_else(|err| {
-        tracing::warn!(
-            ?err,
-            std_type = any::type_name::<T>(),
-            "invalid plugin config, using defaults"
-        );
-        T::default()
-    })
-}
 /// Trait for plugin configuration structs.
 ///
 /// Provides a standard deserialization path from the activation context's config.
@@ -501,12 +484,21 @@ where
 /// Use `nyne::plugin_config!(ConfigType)` inside your `Plugin` impl to wire
 /// `default_config()` and `resolved_config()` automatically.
 pub trait PluginConfig: Default + serde::Serialize + for<'de> serde::Deserialize<'de> + Sized {
-    /// Deserialize from an optional TOML section, falling back to defaults.
+    /// Deserialize from an optional TOML section, falling back to defaults on
+    /// missing section or deserialization failure. Logs a `warn!` with the
+    /// type name and error when deserialization fails.
     fn from_section(section: Option<&toml::Value>) -> Self {
         let Some(value) = section else {
             return Self::default();
         };
-        deserialize_plugin_config(value)
+        value.clone().try_into().unwrap_or_else(|err| {
+            tracing::warn!(
+                ?err,
+                std_type = any::type_name::<Self>(),
+                "invalid plugin config, using defaults"
+            );
+            Self::default()
+        })
     }
 
     /// Deserialize this config from the activation context using the given plugin id.

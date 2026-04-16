@@ -1,108 +1,45 @@
+use rstest::rstest;
+
 use super::*;
 
-/// Tests that a `name:N` suffix parses into a Single spec.
-#[test]
-fn parse_single() {
-    assert_eq!(parse_slice_suffix("lines:5"), Some(("lines", SliceSpec::Single(5))));
+/// Parsing a `name:<spec>` suffix into a [`SliceSpec`] — accepts valid forms and rejects malformed ones.
+#[rstest]
+#[case::single("lines:5", Some(("lines", SliceSpec::Single(5))))]
+#[case::range("LOG.md:5-10", Some(("LOG.md", SliceSpec::Range(5, 10))))]
+#[case::tail("LOG.md:-10", Some(("LOG.md", SliceSpec::Tail(10))))]
+#[case::no_colon("lines", None)]
+#[case::empty_base(":5", None)]
+#[case::zero_rejected("lines:0", None)]
+#[case::inverted_range_rejected("lines:10-5", None)]
+#[case::zero_tail_rejected("lines:-0", None)]
+fn parse_suffix(#[case] input: &str, #[case] expected: Option<(&str, SliceSpec)>) {
+    assert_eq!(parse_slice_suffix(input), expected);
 }
 
-/// Tests that a `name:M-N` suffix parses into a Range spec.
-#[test]
-fn parse_range() {
-    assert_eq!(
-        parse_slice_suffix("LOG.md:5-10"),
-        Some(("LOG.md", SliceSpec::Range(5, 10)))
-    );
+
+/// [`SliceSpec::apply`] returns the selected elements, clamping out-of-range values.
+#[rstest]
+#[case::single(vec!["a", "b", "c", "d", "e"], SliceSpec::Single(3), vec!["c"])]
+#[case::range(vec!["a", "b", "c", "d", "e"], SliceSpec::Range(2, 4), vec!["b", "c", "d"])]
+#[case::tail(vec!["a", "b", "c", "d", "e"], SliceSpec::Tail(2), vec!["d", "e"])]
+#[case::range_clamps_high(vec!["a", "b", "c"], SliceSpec::Range(1, 100), vec!["a", "b", "c"])]
+#[case::single_out_of_range(vec!["a", "b", "c"], SliceSpec::Single(99), vec![])]
+#[case::tail_clamps_high(vec!["a", "b", "c"], SliceSpec::Tail(100), vec!["a", "b", "c"])]
+fn apply(#[case] items: Vec<&str>, #[case] spec: SliceSpec, #[case] expected: Vec<&str>) {
+    assert_eq!(spec.apply(&items), expected.as_slice());
 }
 
-/// Tests that a `name:-N` suffix parses into a Tail spec.
-#[test]
-fn parse_tail() {
-    assert_eq!(parse_slice_suffix("LOG.md:-10"), Some(("LOG.md", SliceSpec::Tail(10))));
+
+/// [`SliceSpec::index_range`] produces the right 0-based half-open range, clamping out-of-range values.
+#[rstest]
+#[case::single(SliceSpec::Single(3), 5, 2..3)]
+#[case::range(SliceSpec::Range(2, 4), 5, 1..4)]
+#[case::tail(SliceSpec::Tail(2), 5, 3..5)]
+#[case::range_clamps_high(SliceSpec::Range(1, 100), 3, 0..3)]
+#[case::single_out_of_range(SliceSpec::Single(99), 3, 3..3)]
+#[case::tail_clamps_high(SliceSpec::Tail(100), 3, 0..3)]
+fn index_range(#[case] spec: SliceSpec, #[case] len: usize, #[case] expected: std::ops::Range<usize>) {
+    assert_eq!(spec.index_range(len), expected);
 }
 
-/// Verifies that a name without a colon returns None.
-#[test]
-fn parse_no_colon() {
-    assert_eq!(parse_slice_suffix("lines"), None);
-}
 
-/// Verifies that a colon with no base name is rejected.
-#[test]
-fn parse_empty_base() {
-    assert_eq!(parse_slice_suffix(":5"), None);
-}
-
-/// Verifies that a zero index is rejected (1-based indexing).
-#[test]
-fn parse_zero_rejected() {
-    assert_eq!(parse_slice_suffix("lines:0"), None);
-}
-
-/// Verifies that an inverted range (start > end) is rejected.
-#[test]
-fn parse_inverted_range_rejected() {
-    assert_eq!(parse_slice_suffix("lines:10-5"), None);
-}
-
-/// Verifies that a zero tail count is rejected.
-#[test]
-fn parse_zero_tail_rejected() {
-    assert_eq!(parse_slice_suffix("lines:-0"), None);
-}
-
-/// Tests that apply with a single index returns exactly one element.
-#[test]
-fn apply_single() {
-    let items = vec!["a", "b", "c", "d", "e"];
-    assert_eq!(SliceSpec::Single(3).apply(&items), &["c"]);
-}
-
-/// Tests that apply with a range spec returns the correct sub-slice.
-#[test]
-fn apply_range() {
-    let items = vec!["a", "b", "c", "d", "e"];
-    assert_eq!(SliceSpec::Range(2, 4).apply(&items), &["b", "c", "d"]);
-}
-
-/// Tests that apply with a tail spec returns the last N elements.
-#[test]
-fn apply_tail() {
-    let items = vec!["a", "b", "c", "d", "e"];
-    assert_eq!(SliceSpec::Tail(2).apply(&items), &["d", "e"]);
-}
-
-/// Verifies that apply clamps out-of-range indices to collection bounds.
-#[test]
-fn apply_clamps_to_bounds() {
-    let items = vec!["a", "b", "c"];
-    assert_eq!(SliceSpec::Range(1, 100).apply(&items), &["a", "b", "c"]);
-    assert_eq!(SliceSpec::Single(99).apply(&items), &[] as &[&str]);
-    assert_eq!(SliceSpec::Tail(100).apply(&items), &["a", "b", "c"]);
-}
-
-/// Tests that `index_range` for a single index produces a one-element range.
-#[test]
-fn index_range_single() {
-    assert_eq!(SliceSpec::Single(3).index_range(5), 2..3);
-}
-
-/// Tests that `index_range` converts a 1-based range to a 0-based half-open range.
-#[test]
-fn index_range_range() {
-    assert_eq!(SliceSpec::Range(2, 4).index_range(5), 1..4);
-}
-
-/// Tests that `index_range` for a tail spec covers the last N indices.
-#[test]
-fn index_range_tail() {
-    assert_eq!(SliceSpec::Tail(2).index_range(5), 3..5);
-}
-
-/// Verifies that `index_range` clamps out-of-range values to collection bounds.
-#[test]
-fn index_range_clamps_to_bounds() {
-    assert_eq!(SliceSpec::Range(1, 100).index_range(3), 0..3);
-    assert_eq!(SliceSpec::Single(99).index_range(3), 3..3);
-    assert_eq!(SliceSpec::Tail(100).index_range(3), 0..3);
-}

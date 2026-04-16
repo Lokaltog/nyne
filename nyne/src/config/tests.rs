@@ -87,35 +87,17 @@ fn deserialize_agent_files_section_without_filenames() {
     assert_eq!(config.agent_files.filenames, default_agent_filenames());
 }
 
-/// Tests that repository defaults to passthrough strategy when the section is omitted.
-#[test]
-fn repository_defaults_when_omitted() {
-    let config = load_fixture("minimal.toml");
-    assert_eq!(config.repository.storage_strategy, StorageStrategy::Passthrough);
+/// [`NyneConfig::repository.storage_strategy`] deserializes from explicit values, defaulting when omitted.
+#[rstest]
+#[case::defaults_when_omitted("", StorageStrategy::Passthrough)]
+#[case::passthrough("[repository]\nstorage_strategy = \"passthrough\"", StorageStrategy::Passthrough)]
+#[case::snapshot("[repository]\nstorage_strategy = \"snapshot\"", StorageStrategy::Snapshot)]
+#[case::hardlink("[repository]\nstorage_strategy = \"hardlink\"", StorageStrategy::Hardlink)]
+fn repository_storage_strategy(#[case] toml_input: &str, #[case] expected: StorageStrategy) {
+    let config: NyneConfig = toml::from_str(toml_input).unwrap();
+    assert_eq!(config.repository.storage_strategy, expected);
 }
 
-/// Tests that the hardlink storage strategy deserializes correctly.
-#[test]
-fn repository_hardlink_strategy() {
-    let config = load_fixture("repository_hardlink.toml");
-    assert_eq!(config.repository.storage_strategy, StorageStrategy::Hardlink);
-}
-
-/// Tests that the snapshot storage strategy deserializes correctly.
-#[test]
-fn repository_snapshot_strategy() {
-    let toml = "[repository]\nstorage_strategy = \"snapshot\"";
-    let config: NyneConfig = toml::from_str(toml).unwrap();
-    assert_eq!(config.repository.storage_strategy, StorageStrategy::Snapshot);
-}
-
-/// Tests that the passthrough storage strategy deserializes correctly.
-#[test]
-fn repository_passthrough_strategy() {
-    let toml = "[repository]\nstorage_strategy = \"passthrough\"";
-    let config: NyneConfig = toml::from_str(toml).unwrap();
-    assert_eq!(config.repository.storage_strategy, StorageStrategy::Passthrough);
-}
 
 /// Tests that sandbox defaults to "nyne-sandbox" hostname when the section is omitted.
 #[test]
@@ -227,28 +209,14 @@ struct Dummy {
 
 impl PluginConfig for Dummy {}
 
-#[test]
-fn deserialize_plugin_config_valid() {
-    let value: toml::Value = toml::toml! { name = "test" }.into();
-    let result: Dummy = deserialize_plugin_config(&value);
-    assert_eq!(result.name, "test");
+#[rstest]
+#[case::valid(toml::toml! { name = "test" }.into(), Dummy { name: "test".into() })]
+#[case::unknown_field_falls_back(toml::toml! { bogus = true }.into(), Dummy::default())]
+#[case::non_table_falls_back(toml::Value::Boolean(false), Dummy::default())]
+fn from_section_deserializes_or_falls_back(#[case] value: toml::Value, #[case] expected: Dummy) {
+    assert_eq!(Dummy::from_section(Some(&value)), expected);
 }
 
-#[test]
-fn deserialize_plugin_config_falls_back_on_error() {
-    // deny_unknown_fields should reject "bogus", but the helper falls back to Default.
-    let value: toml::Value = toml::toml! { bogus = true }.into();
-    let result: Dummy = deserialize_plugin_config(&value);
-    assert_eq!(result, Dummy::default());
-}
-
-#[test]
-fn deserialize_plugin_config_falls_back_on_non_table() {
-    // A non-table value can't deserialize into a struct — falls back to Default.
-    let value = toml::Value::Boolean(false);
-    let result: Dummy = deserialize_plugin_config(&value);
-    assert_eq!(result, Dummy::default());
-}
 
 #[rstest]
 #[case::none_returns_default(None, Dummy::default())]
