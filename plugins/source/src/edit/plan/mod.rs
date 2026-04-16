@@ -73,15 +73,10 @@ pub struct ResolvedEdit {
     /// Replacement content (empty string for deletions).
     pub replacement: String,
 }
-/// Ordering support for resolved edits.
-///
-/// Edits are sorted ascending by byte offset for conflict detection, then
-/// reversed (descending) for bottom-up application so that earlier byte
-/// ranges are not invalidated by later splices.
 impl ResolvedEdit {
-    /// Ascending order: by `byte_range.start`, then zero-width (insertions)
-    /// before non-empty (replacements/deletions). This ensures insertions at
-    /// a boundary are processed before the adjacent non-empty edit.
+    /// Ascending order by `byte_range.start`, with zero-width insertions
+    /// sorting before non-empty edits (replacements/deletions) at the same
+    /// offset so insertions at a boundary are processed first.
     fn cmp_ascending(&self, other: &Self) -> Ordering {
         self.byte_range
             .start
@@ -131,8 +126,9 @@ impl EditPlan {
     /// Resolve all edit ops to concrete byte ranges in the source.
     ///
     /// Navigates the fragment tree for each op, computes the target byte
-    /// range, checks for overlapping edits, and returns resolved edits
-    /// sorted bottom-up (descending byte offset) for safe application.
+    /// range, detects overlapping edits, and returns resolved edits sorted
+    /// ascending by byte offset for single-pass application via
+    /// [`apply`](Self::apply).
     pub fn resolve(&self, fragments: &[Fragment], source: &str) -> Result<Vec<ResolvedEdit>> {
         use crate::edit::splice::{extend_delete_range, line_start_of_rope};
         use crate::syntax::require_fragment;
@@ -203,24 +199,17 @@ impl EditPlan {
             resolved.push(edit);
         }
 
-        // Detect overlapping non-empty ranges (conflicts).
+        // Sort ascending by byte offset (insertions before non-empty edits
+        // at the same offset), then detect overlaps by walking adjacent pairs.
+        resolved.sort_by(ResolvedEdit::cmp_ascending);
         Self::check_conflicts(&resolved)?;
-
-        // Sort descending (reverse of ascending) for bottom-up application.
-        // After `.rev()` in `apply`, this becomes ascending order with
-        // zero-width insertions before non-empty edits at each offset.
-        resolved.sort_by(|a, b| a.cmp_ascending(b).reverse());
-
         Ok(resolved)
     }
 
-    /// Check for overlapping edit ranges.
+    /// Check for overlapping edit ranges — `edits` must be pre-sorted ascending.
     fn check_conflicts(edits: &[ResolvedEdit]) -> Result<()> {
-        let mut sorted: Vec<&ResolvedEdit> = edits.iter().collect();
-        sorted.sort_by(|a, b| a.cmp_ascending(b));
-
-        for pair in sorted.windows(2) {
-            let &[a, b] = pair else { continue };
+        for pair in edits.windows(2) {
+            let [a, b] = pair else { continue };
             // Two zero-width insertions at the same point are fine.
             if a.byte_range.is_empty() && b.byte_range.is_empty() {
                 continue;
@@ -242,13 +231,14 @@ impl EditPlan {
 
     /// Apply resolved edits to source text, returning the modified result.
     ///
-    /// Edits must be sorted by `byte_range.start` descending (bottom-up).
-    /// Internally reverses to ascending order for a single-pass O(L) build.
+    /// Edits must be pre-sorted ascending by `byte_range.start` (as produced
+    /// by [`resolve`](Self::resolve)) so a single O(L) pass copies the
+    /// source in order, splicing each edit at its target range.
     #[must_use]
     pub fn apply(source: &str, edits: &[ResolvedEdit]) -> String {
         let mut result = String::with_capacity(source.len());
         let mut cursor = 0;
-        for edit in edits.iter().rev() {
+        for edit in edits {
             result.push_str(&source[cursor..edit.byte_range.start]);
             result.push_str(&edit.replacement);
             cursor = edit.byte_range.end;

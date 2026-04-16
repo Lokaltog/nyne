@@ -199,27 +199,24 @@ fn check_conflicts_detects_zero_width_at_same_start_as_nonempty() {
     assert!(modified.contains("fn bbb()"), "replaced function present");
 }
 
-/// Regression: apply must not panic when edits at the same offset are
-/// processed in the wrong order due to unstable sort on `byte_range.start`.
+/// `apply` requires edits pre-sorted ascending with zero-width insertions
+/// before non-empty edits at the same offset — matching the ordering
+/// produced by [`EditPlan::resolve`] via [`ResolvedEdit::cmp_ascending`].
 #[test]
 fn apply_handles_zero_width_and_nonempty_at_same_offset() {
     let source = "aaabbbccc";
-    // Zero-width insertion at offset 3 + non-empty replace of 3..6.
     let edits = vec![
-        ResolvedEdit {
-            staged_index: 1,
-            byte_range: 3..6,
-            replacement: "BBB".to_owned(),
-        },
         ResolvedEdit {
             staged_index: 0,
             byte_range: 3..3,
             replacement: "INSERT".to_owned(),
         },
+        ResolvedEdit {
+            staged_index: 1,
+            byte_range: 3..6,
+            replacement: "BBB".to_owned(),
+        },
     ];
-    // Sorted descending by start: both at 3, order is arbitrary.
-    // apply().rev() must produce correct output regardless of order.
     let result = EditPlan::apply(source, &edits);
-    // The insertion should appear before the replacement.
     assert_eq!(result, "aaaINSERTBBBccc");
 }
