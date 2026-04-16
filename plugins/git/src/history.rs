@@ -49,7 +49,12 @@ pub struct BlameHunk {
 pub fn slice_blame_hunks(hunks: Vec<BlameHunk>, spec: &SliceSpec) -> Vec<BlameHunk> {
     let range = spec.index_range(hunks.last().map_or(0, |h| h.end_line));
     // index_range returns 0-based half-open; blame lines are 1-based inclusive.
-    let (start, end) = (range.start + 1, range.end);
+    clamp_blame(hunks, range.start + 1, range.end)
+}
+
+/// Clamp blame hunks to a 1-based inclusive line range `[start, end]`,
+/// dropping hunks outside the range entirely.
+fn clamp_blame(hunks: Vec<BlameHunk>, start: usize, end: usize) -> Vec<BlameHunk> {
     hunks
         .into_iter()
         .filter(|h| h.start_line <= end && h.end_line >= start)
@@ -63,18 +68,9 @@ pub fn slice_blame_hunks(hunks: Vec<BlameHunk>, spec: &SliceSpec) -> Vec<BlameHu
 /// Filter blame hunks to those overlapping a symbol line range, clamping boundaries.
 ///
 /// Similar to [`slice_blame_hunks`] but takes a [`SymbolLineRange`] directly
-/// rather than a [`SliceSpec`]. Hunks that partially overlap the range are
-/// clamped to fit within it.
+/// rather than a [`SliceSpec`].
 pub fn filter_blame_to_range(hunks: Vec<BlameHunk>, range: &SymbolLineRange) -> Vec<BlameHunk> {
-    hunks
-        .into_iter()
-        .filter(|h| h.start_line <= range.end && h.end_line >= range.start)
-        .map(|mut h| {
-            h.start_line = h.start_line.max(range.start);
-            h.end_line = h.end_line.min(range.end);
-            h
-        })
-        .collect()
+    clamp_blame(hunks, range.start, range.end)
 }
 
 /// A single history entry (commit that touched a file).
@@ -82,10 +78,8 @@ pub fn filter_blame_to_range(hunks: Vec<BlameHunk>, range: &SymbolLineRange) -> 
 pub struct HistoryEntry {
     #[serde(skip)]
     pub oid: Oid,
-    pub hash: String,
-    pub author: String,
-    pub date: String,
-    pub message: String,
+    #[serde(flatten)]
+    pub commit: CommitInfo,
 }
 
 /// An author with commit count.
@@ -98,9 +92,8 @@ pub struct Contributor {
 /// A git note attached to a commit.
 #[derive(serde::Serialize)]
 pub struct NoteEntry {
-    pub hash: String,
-    pub date: String,
-    pub commit_message: String,
+    #[serde(flatten)]
+    pub commit: CommitInfo,
     pub note: String,
 }
 
@@ -207,7 +200,10 @@ impl HistoryQueries for Repo {
     /// Commits that touched `rel_path`, newest first, capped at `limit`.
     fn file_history(&self, rel_path: &str, limit: usize) -> Result<Vec<HistoryEntry>> {
         let repo = self.lock();
-        walk_file_commits(&repo, rel_path, limit, |commit, _oid| commit_entry(commit))
+        walk_file_commits(&repo, rel_path, limit, |commit, oid| HistoryEntry {
+            oid,
+            commit: commit_info(commit),
+        })
     }
 
     /// Commits that touched `rel_path` within the given line range, newest first.
@@ -235,7 +231,7 @@ impl HistoryQueries for Repo {
             // Single diff: skip commits that don't touch the path, then check
             // whether the touched hunks overlap the requested line range.
             match diff_touches_range(&repo, &commit, &mut opts, range) {
-                Ok(true) => results.push(commit_entry(&commit)),
+                Ok(true) => results.push(HistoryEntry { oid, commit: commit_info(&commit) }),
                 Ok(false) => {}
                 Err(e) => {
                     warn!(oid = %oid, path = rel_path, error = %e, "commit range check failed");
@@ -293,11 +289,8 @@ impl HistoryQueries for Repo {
                 }
             };
             let Some(note_text) = note.message() else { return };
-            let info = commit_info(commit);
             entries.push(NoteEntry {
-                hash: info.hash,
-                date: info.date,
-                commit_message: info.message,
+                commit: commit_info(commit),
                 note: note_text.to_owned(),
             });
         })?;
@@ -309,7 +302,9 @@ impl HistoryQueries for Repo {
     /// Empty or whitespace-only `message` removes the existing note.
     fn set_note(&self, rel_path: &str, message: &str) -> Result<()> {
         let repo = self.lock();
-        let oid = first_file_commit(&repo, rel_path)?;
+        let oid = walk_file_commits(&repo, rel_path, 1, |_, oid| oid)?
+            .pop()
+            .ok_or_else(|| color_eyre::eyre::eyre!("no commits found touching {rel_path}"))?;
         let sig = repo.signature().wrap_err("git user.name/user.email not configured")?;
 
         if message.trim().is_empty() {
@@ -342,18 +337,6 @@ fn blame_hunk(repo: &git2::Repository, hunk: &git2::BlameHunk<'_>) -> Result<Bla
     })
 }
 
-/// Convert a `git2::Commit` into a [`HistoryEntry`].
-fn commit_entry(commit: &git2::Commit<'_>) -> HistoryEntry {
-    let info = commit_info(commit);
-    HistoryEntry {
-        oid: commit.id(),
-        hash: info.hash,
-        author: info.author,
-        date: info.date,
-        message: info.message,
-    }
-}
-
 /// Walk commits that touched `rel_path`, collecting results via `visit`.
 ///
 /// Stops after `limit` successful visits or [`MAX_REVWALK`] total commits examined.
@@ -377,19 +360,11 @@ fn walk_file_commits<T>(
         }
         let oid = oid_result?;
         let commit = repo.find_commit(oid)?;
-        if commit_touches_path(repo, &commit, &mut opts)? {
+        if commit_diff(repo, &commit, &mut opts)?.deltas().next().is_some() {
             results.push(visit(&commit, oid));
         }
     }
     Ok(results)
-}
-
-/// Find the OID of the most recent commit that touched `rel_path`.
-fn first_file_commit(repo: &git2::Repository, rel_path: &str) -> Result<Oid> {
-    let mut results = walk_file_commits(repo, rel_path, 1, |_, oid| oid)?;
-    results
-        .pop()
-        .ok_or_else(|| color_eyre::eyre::eyre!("no commits found touching {rel_path}"))
 }
 
 /// Compute the diff for a single commit's changes to `rel_path`.
@@ -405,15 +380,6 @@ fn commit_diff<'repo>(
         Some(opts),
     )?)
 }
-/// Check whether a commit's diff touches the given path.
-fn commit_touches_path(
-    repo: &git2::Repository,
-    commit: &git2::Commit<'_>,
-    opts: &mut git2::DiffOptions,
-) -> Result<bool> {
-    Ok(commit_diff(repo, commit, opts)?.deltas().next().is_some())
-}
-
 /// Single-diff check: does this commit touch any lines in `range`?
 ///
 /// Computes one diff and inspects its hunks — returns `false` early when the

@@ -10,11 +10,12 @@ use crate::history::HistoryEntry;
 /// directory listings. The message is slugified and truncated to 50 chars.
 pub fn history_filename(index: usize, entry: &HistoryEntry, ext: &str) -> String {
     let seq = index + 1;
-    let kebab = text::slugify(&entry.message, 50);
+    let c = &entry.commit;
+    let kebab = text::slugify(&c.message, 50);
     if ext.is_empty() {
-        format!("{seq:03}_{}_{}_{kebab}", entry.date, entry.hash)
+        format!("{seq:03}_{}_{}_{kebab}", c.date, c.hash)
     } else {
-        format!("{seq:03}_{}_{}_{kebab}.{ext}", entry.date, entry.hash)
+        format!("{seq:03}_{}_{}_{kebab}.{ext}", c.date, c.hash)
     }
 }
 
