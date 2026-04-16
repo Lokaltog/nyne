@@ -151,7 +151,7 @@ DIAGNOSTICS: {{ rel }} — {{ count }} finding{% if count != 1 %}s{% endif %}.
 {{ cmd("Read " ~ paths.sym_overview(rel), "symbol table with token estimates") }}
 {{ cmd("Edit " ~ paths.sym(rel, "<symbol>", ext), "single symbol body") }}
 {% endif -%}
-{{ cmd("Edit " ~ paths.at_line(rel, "<line>"), "symbol containing line N") }}
+{{ cmd("Edit " ~ paths.at_line(rel, "<line>"), "symbol body at line N") }}
 {%- endmacro -%}
 
 {#--
