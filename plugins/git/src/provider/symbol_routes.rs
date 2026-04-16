@@ -18,15 +18,13 @@ use std::path::Path;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::SymbolLineRange;
 use nyne::router::{NamedNode, Request, RouteCtx};
-use nyne::templates::{LazyView, TemplateEngine, TemplateHandle};
 use nyne_companion::CompanionRequest;
 use nyne_source::{DecompositionCache, FragmentResolver, SourceExtensions, SyntaxRegistry};
 
+use super::state::{FetchScope, build_read_fn};
 use super::{GitState, views};
 use crate::history::{HistoryQueries as _, SymbolExtractCtx, filter_blame_to_range};
-use crate::repo::Repo;
 
 /// Default decomposition depth for extracting symbols from historical blobs.
 const EXTRACT_MAX_DEPTH: usize = 5;
@@ -54,53 +52,35 @@ impl SymbolGitCtx {
         Arc::from(segments.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>())
     }
 
-    /// Create a lazy template node for a symbol-scoped git feature.
+    /// Build a [`FetchScope::Symbol`] for this source file and symbol path.
     ///
-    /// Resolves the symbol's line range lazily at render time via
-    /// [`FragmentResolver`], then delegates to `fetch` for the git query.
-    /// Returns empty data when the symbol no longer exists in the source.
-    fn lazy_template(
-        &self,
-        sf: &Path,
-        symbol_segs: &[&str],
-        handle: &TemplateHandle,
-        name: &str,
-        fetch: impl Fn(&Repo, &str, &SymbolLineRange) -> Result<minijinja::Value> + Send + Sync + 'static,
-    ) -> NamedNode {
-        let fragment_path = Self::to_fragment_path(symbol_segs);
-        let resolver = self.resolver(sf);
-        let repo = Arc::clone(&self.state.repo);
-        let sf = sf.to_owned();
-        handle.lazy_node(name, move |engine: &TemplateEngine, tmpl: &str| {
-            let Some(range) = resolver.line_range(&fragment_path)? else {
-                return Ok(engine.render_bytes(tmpl, &minijinja::context!(data => Vec::<()>::new())));
-            };
-            let data = fetch(&repo, &repo.rel_path(&sf), &range)?;
-            Ok(engine.render_bytes(tmpl, &data))
-        })
+    /// Centralizes the `source + resolver + fragment_path` triple used
+    /// by every symbol-scoped lazy template.
+    fn symbol_scope(&self, sf: &Path, symbol_segs: &[&str]) -> FetchScope {
+        FetchScope::Symbol {
+            source: sf.to_owned(),
+            resolver: self.resolver(sf),
+            fragment_path: Self::to_fragment_path(symbol_segs),
+        }
     }
 
     /// Build a blame node for a symbol's line range.
     fn blame_node(&self, sf: &Path, symbol_segs: &[&str]) -> NamedNode {
-        self.lazy_template(
-            sf,
-            symbol_segs,
-            &self.state.handles.blame,
-            &self.state.vfs.file.blame,
-            |repo, rel, range| Ok(minijinja::context!(data => filter_blame_to_range(repo.blame(rel)?, range))),
-        )
+        let read_fn = build_read_fn(Arc::clone(&self.state.repo), self.symbol_scope(sf, symbol_segs), |repo, ctx| {
+            let range = ctx.range.expect("symbol scope implies range");
+            Ok(minijinja::context!(data => filter_blame_to_range(repo.blame(ctx.rel)?, range)))
+        });
+        self.state.handles.blame.lazy_node(&self.state.vfs.file.blame, read_fn)
     }
 
     /// Build a log node for a symbol's line range.
     fn log_node(&self, sf: &Path, symbol_segs: &[&str]) -> NamedNode {
         let limit = self.state.limits.history;
-        self.lazy_template(
-            sf,
-            symbol_segs,
-            &self.state.handles.log,
-            &self.state.vfs.file.log,
-            move |repo, rel, range| Ok(minijinja::context!(data => repo.file_history_in_range(rel, range, limit)?)),
-        )
+        let read_fn = build_read_fn(Arc::clone(&self.state.repo), self.symbol_scope(sf, symbol_segs), move |repo, ctx| {
+            let range = ctx.range.expect("symbol scope implies range");
+            Ok(minijinja::context!(data => repo.file_history_in_range(ctx.rel, range, limit)?))
+        });
+        self.state.handles.log.lazy_node(&self.state.vfs.file.log, read_fn)
     }
 
     /// Readdir for `git/` — emit BLAME.md, LOG.md, and `history/`.
@@ -142,26 +122,9 @@ impl SymbolGitCtx {
             return Ok(());
         };
         let sf = GitState::require_source_file(req)?;
-        let fragment_path = Self::to_fragment_path(symbol_segs);
-        let resolver = self.resolver(&sf);
-        let repo = Arc::clone(&self.state.repo);
-        let limit = self.state.limits.history;
-        let node = handle.named_node(
-            name,
-            LazyView::new(move |engine: &TemplateEngine, tmpl: &str| {
-                let Some(range) = resolver.line_range(&fragment_path)? else {
-                    return Ok(engine.render_bytes(tmpl, &minijinja::context!(data => Vec::<()>::new())));
-                };
-                let rel = repo.rel_path(&sf);
-                let data = if is_blame {
-                    minijinja::context!(data => spec.apply(&filter_blame_to_range(repo.blame(&rel)?, &range)))
-                } else {
-                    minijinja::context!(data => spec.apply(&repo.file_history_in_range(&rel, &range, limit)?))
-                };
-                Ok(engine.render_bytes(tmpl, &data))
-            }),
-        );
-        req.nodes.add(node);
+        let scope = self.symbol_scope(&sf, symbol_segs);
+        let read_fn = build_read_fn(Arc::clone(&self.state.repo), scope, self.state.sliced_fetch(spec, is_blame));
+        req.nodes.add(handle.lazy_node(name, read_fn));
         Ok(())
     }
 

@@ -6,14 +6,14 @@ use std::time::Duration;
 
 use color_eyre::eyre::{Result, WrapErr};
 use nyne::router::{CachePolicy, Filesystem, NamedNode, Next, Node, Op, Request, RouteCtx};
-use nyne::templates::{LazyView, TemplateEngine};
 use nyne_companion::{CompanionExtensions, CompanionRequest};
 
 use super::branches::{branch_segments_at_prefix, branch_tree_nodes};
 use super::diff::{DiffContent, DiffTarget};
+use super::state::{FetchScope, build_read_fn};
 use super::status::StatusView;
 use super::{GitFileRename, GitState, views};
-use crate::history::{self, HistoryQueries as _};
+use crate::history::HistoryQueries as _;
 use crate::repo::Repo;
 
 /// Register per-file companion content into [`CompanionExtensions`].
@@ -32,30 +32,17 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                 let Some((handle, spec, is_blame)) = sl.resolve_sliced_view(name) else {
                     return Ok(());
                 };
-                let source = GitState::require_source_file(req)?;
-                let repo = Arc::clone(&sl.repo);
-                let limits = sl.limits;
-                let node = handle.named_node(
-                    name,
-                    LazyView::new(move |engine: &TemplateEngine, tmpl: &str| {
-                        let rel = repo.rel_path(&source);
-                        let data = if is_blame {
-                            minijinja::context!(data => history::slice_blame_hunks(repo.blame(&rel)?, &spec))
-                        } else {
-                            minijinja::context!(data => spec.apply(&repo.file_history(&rel, limits.log)?))
-                        };
-                        Ok(engine.render_bytes(tmpl, &data))
-                    }),
-                );
-                req.nodes.add(node);
+                let scope = FetchScope::File { source: GitState::require_source_file(req)? };
+                let read_fn = build_read_fn(Arc::clone(&sl.repo), scope, sl.sliced_fetch(spec, is_blame));
+                req.nodes.add(handle.lazy_node(name, read_fn));
                 Ok(())
             });
 
             // git/BLAME.md
             let s2 = Arc::clone(&s);
             d.content(move |_ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
-                s2.file_content(req, &s2.handles.blame, &s2.vfs.file.blame, |repo, rel| {
-                    Ok(minijinja::context!(data => repo.blame(rel)?))
+                s2.file_content(req, &s2.handles.blame, &s2.vfs.file.blame, |repo, ctx| {
+                    Ok(minijinja::context!(data => repo.blame(ctx.rel)?))
                 })
             });
 
@@ -63,8 +50,8 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
             let s2 = Arc::clone(&s);
             d.content(move |_ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
                 let limits = s2.limits;
-                s2.file_content(req, &s2.handles.log, &s2.vfs.file.log, move |repo, rel| {
-                    Ok(minijinja::context!(data => repo.file_history(rel, limits.log)?))
+                s2.file_content(req, &s2.handles.log, &s2.vfs.file.log, move |repo, ctx| {
+                    Ok(minijinja::context!(data => repo.file_history(ctx.rel, limits.log)?))
                 })
             });
 
@@ -72,8 +59,8 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
             let s2 = Arc::clone(&s);
             d.content(move |_ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
                 let limits = s2.limits;
-                s2.file_content(req, &s2.handles.contributors, &s2.vfs.file.contributors, move |repo, rel| {
-                    Ok(minijinja::context!(data => repo.contributors(rel, limits.contributors)?))
+                s2.file_content(req, &s2.handles.contributors, &s2.vfs.file.contributors, move |repo, ctx| {
+                    Ok(minijinja::context!(data => repo.contributors(ctx.rel, limits.contributors)?))
                 })
             });
 
@@ -85,7 +72,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                     req,
                     &s2.handles.notes,
                     &s2.vfs.file.notes,
-                    move |repo, rel| Ok(minijinja::context!(data => repo.file_notes(rel, limits.notes)?)),
+                    move |repo, ctx| Ok(minijinja::context!(data => repo.file_notes(ctx.rel, limits.notes)?)),
                     |repo, rel, data| {
                         let message = from_utf8(data).wrap_err("note content must be valid UTF-8")?;
                         repo.set_note(rel, message)
