@@ -93,7 +93,7 @@ impl SymbolGitCtx {
 
     /// Build a log node for a symbol's line range.
     fn log_node(&self, sf: &Path, symbol_segs: &[&str]) -> NamedNode {
-        let limit = self.state.history_limit;
+        let limit = self.state.limits.history;
         self.lazy_template(
             sf,
             symbol_segs,
@@ -145,7 +145,7 @@ impl SymbolGitCtx {
         let fragment_path = Self::to_fragment_path(symbol_segs);
         let resolver = self.resolver(&sf);
         let repo = Arc::clone(&self.state.repo);
-        let limit = self.state.history_limit;
+        let limit = self.state.limits.history;
         let node = handle.named_node(
             name,
             LazyView::new(move |engine: &TemplateEngine, tmpl: &str| {
@@ -181,7 +181,7 @@ impl SymbolGitCtx {
             fragment_path,
             max_depth: EXTRACT_MAX_DEPTH,
         });
-        let entries = repo.file_history_in_range(&rel, &range, self.state.history_limit)?;
+        let entries = repo.file_history_in_range(&rel, &range, self.state.limits.history)?;
         let rel: Arc<str> = Arc::from(rel);
         for (i, entry) in entries.into_iter().enumerate() {
             let filename = views::history_filename(i, &entry, file_ext);

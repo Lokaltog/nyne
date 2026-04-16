@@ -58,7 +58,7 @@ impl Plugin for GitPlugin {
         let state = Arc::new(GitState {
             repo: Arc::clone(&repo),
             handles: provider::build_handles(&config.vfs),
-            history_limit: config.history_limit,
+            limits: config.limits,
             vfs: config.vfs,
         });
 

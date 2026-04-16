@@ -6,8 +6,12 @@ use serde::{Deserialize, Serialize};
 /// Top-level configuration for the git plugin.
 ///
 /// ```toml
-/// [plugin.git]
-/// history_limit = 50
+/// [plugin.git.limits]
+/// history = 50
+/// log = 200
+/// notes = 50
+/// contributors = 500
+/// recent_commits = 10
 ///
 /// [plugin.git.vfs.dir]
 /// git = "git"
@@ -20,21 +24,48 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    /// Maximum number of history entries shown per file.
-    pub history_limit: usize,
+    /// Caps on the number of entries rendered into git virtual files.
+    pub limits: Limits,
 
     /// Configurable VFS directory and file names.
     pub vfs: vfs::Vfs,
 }
 
-const fn default_history_limit() -> usize { 50 }
+/// Caps on the number of entries rendered into git virtual files.
+///
+/// All limits are per-file (except `recent_commits`, which applies to
+/// the repository-wide `STATUS.md`). Set high enough that content
+/// remains useful but bounded to keep rendering fast.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Limits {
+    /// Maximum commits rendered into `file.rs@/history/` and
+    /// `file.rs@/git/history/`.
+    pub history: usize,
+
+    /// Maximum commits rendered into `file.rs@/git/LOG.md`.
+    pub log: usize,
+
+    /// Maximum commits scanned for notes rendered into
+    /// `file.rs@/git/NOTES.md`.
+    pub notes: usize,
+
+    /// Maximum commits examined when computing contributors for a file.
+    pub contributors: usize,
+
+    /// Number of recent commits shown in `@/git/STATUS.md`.
+    pub recent_commits: usize,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self { history: 50, log: 200, notes: 50, contributors: 500, recent_commits: 10 }
+    }
+}
 
 impl Default for Config {
     fn default() -> Self {
-        Self {
-            history_limit: default_history_limit(),
-            vfs: vfs::Vfs::default(),
-        }
+        Self { limits: Limits::default(), vfs: vfs::Vfs::default() }
     }
 }
 

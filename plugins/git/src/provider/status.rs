@@ -3,6 +3,7 @@
 use nyne::prelude::*;
 use nyne::templates::TemplateEngine;
 
+use crate::plugin::config::Limits;
 use crate::repo::Repo;
 use crate::status::StatusQueries as _;
 
@@ -13,13 +14,14 @@ use crate::status::StatusQueries as _;
 /// recent commits, then renders the result via Jinja template.
 pub(super) struct StatusView {
     pub repo: Arc<Repo>,
+    pub limits: Limits,
 }
 
 /// [`TemplateView`] implementation for [`StatusView`].
 impl TemplateView for StatusView {
     /// Renders the working tree status using a template.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
-        let data = self.repo.status()?;
+        let data = self.repo.status(self.limits.recent_commits)?;
         Ok(engine.render_bytes(template, &minijinja::context!(data)))
     }
 }

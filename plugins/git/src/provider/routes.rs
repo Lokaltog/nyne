@@ -12,7 +12,7 @@ use nyne_companion::{CompanionExtensions, CompanionRequest};
 use super::branches::{branch_segments_at_prefix, branch_tree_nodes};
 use super::diff::{DiffContent, DiffTarget};
 use super::status::StatusView;
-use super::{GitFileRename, GitState, LOG_LIMIT, NOTES_LIMIT, views};
+use super::{GitFileRename, GitState, views};
 use crate::history::{self, HistoryQueries as _};
 use crate::repo::Repo;
 
@@ -34,6 +34,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                 };
                 let source = GitState::require_source_file(req)?;
                 let repo = Arc::clone(&sl.repo);
+                let limits = sl.limits;
                 let node = handle.named_node(
                     name,
                     LazyView::new(move |engine: &TemplateEngine, tmpl: &str| {
@@ -41,7 +42,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                         let data = if is_blame {
                             minijinja::context!(data => history::slice_blame_hunks(repo.blame(&rel)?, &spec))
                         } else {
-                            minijinja::context!(data => spec.apply(&repo.file_history(&rel, LOG_LIMIT)?))
+                            minijinja::context!(data => spec.apply(&repo.file_history(&rel, limits.log)?))
                         };
                         Ok(engine.render_bytes(tmpl, &data))
                     }),
@@ -61,27 +62,30 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
             // git/LOG.md
             let s2 = Arc::clone(&s);
             d.content(move |_ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
-                s2.file_content(req, &s2.handles.log, &s2.vfs.file.log, |repo, rel| {
-                    Ok(minijinja::context!(data => repo.file_history(rel, LOG_LIMIT)?))
+                let limits = s2.limits;
+                s2.file_content(req, &s2.handles.log, &s2.vfs.file.log, move |repo, rel| {
+                    Ok(minijinja::context!(data => repo.file_history(rel, limits.log)?))
                 })
             });
 
             // git/CONTRIBUTORS.md
             let s2 = Arc::clone(&s);
             d.content(move |_ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
-                s2.file_content(req, &s2.handles.contributors, &s2.vfs.file.contributors, |repo, rel| {
-                    Ok(minijinja::context!(data => repo.contributors(rel)?))
+                let limits = s2.limits;
+                s2.file_content(req, &s2.handles.contributors, &s2.vfs.file.contributors, move |repo, rel| {
+                    Ok(minijinja::context!(data => repo.contributors(rel, limits.contributors)?))
                 })
             });
 
             // git/NOTES.md (readable + writable)
             let s2 = Arc::clone(&s);
             d.content(move |_ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
+                let limits = s2.limits;
                 s2.editable_file_content(
                     req,
                     &s2.handles.notes,
                     &s2.vfs.file.notes,
-                    |repo, rel| Ok(minijinja::context!(data => repo.file_notes(rel, NOTES_LIMIT)?)),
+                    move |repo, rel| Ok(minijinja::context!(data => repo.file_notes(rel, limits.notes)?)),
                     |repo, rel, data| {
                         let message = from_utf8(data).wrap_err("note content must be valid UTF-8")?;
                         repo.set_note(rel, message)
@@ -143,7 +147,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                 let repo = Arc::clone(&s.repo);
                 let rel = repo.rel_path(&source);
                 let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("");
-                let entries = repo.file_history(&rel, s.history_limit)?;
+                let entries = repo.file_history(&rel, s.limits.history)?;
                 let rel: Arc<str> = Arc::from(rel);
                 for (i, entry) in entries.into_iter().enumerate() {
                     let filename = views::history_filename(i, &entry, ext);
@@ -181,6 +185,7 @@ pub fn register_mount_extensions(ext: &mut CompanionExtensions, state: &Arc<GitS
                     .status
                     .named_node(&file_status, StatusView {
                         repo: Arc::clone(&s2.repo),
+                        limits: s2.limits,
                     })
                     .into_parts();
                 Some(

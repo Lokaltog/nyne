@@ -275,7 +275,7 @@ mod sliced_content_tests {
     {
         let rel = rel.to_owned();
         LazyView::new(move |engine: &nyne::templates::TemplateEngine, tmpl: &str| {
-            let entries = repo.file_history(&rel, super::LOG_LIMIT)?;
+            let entries = repo.file_history(&rel, 200)?;
             let sliced = spec.apply(&entries);
             Ok(engine.render_bytes(tmpl, &minijinja::context!(data => sliced)))
         })

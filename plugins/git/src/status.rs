@@ -50,7 +50,10 @@ pub struct StatusEntry {
 /// live in `status` and are available wherever the trait is in scope.
 pub trait StatusQueries {
     /// Snapshot the full repository status.
-    fn status(&self) -> Result<RepoStatus>;
+    ///
+    /// `recent_commits_limit` caps the number of commits returned in
+    /// [`RepoStatus::recent_commits`].
+    fn status(&self, recent_commits_limit: usize) -> Result<RepoStatus>;
 }
 
 /// [`StatusQueries`] implementation for [`Repo`].
@@ -61,13 +64,13 @@ pub trait StatusQueries {
 impl StatusQueries for Repo {
     /// Snapshot the full repository status: branch, tracking, stashes,
     /// recent commits, and per-file index/workdir state.
-    fn status(&self) -> Result<RepoStatus> {
+    fn status(&self, recent_commits_limit: usize) -> Result<RepoStatus> {
         let branch = self.head_branch();
         let mut repo = self.lock();
 
         let stash_count = stash_count(&mut repo);
         let tracking = tracking_info(&repo);
-        let recent_commits = recent_commits(&repo, RECENT_COMMITS_LIMIT).unwrap_or_else(|e| {
+        let recent_commits = recent_commits(&repo, recent_commits_limit).unwrap_or_else(|e| {
             warn!(error = %e, "failed to collect recent commits");
             Vec::new()
         });
@@ -147,9 +150,6 @@ const WORKDIR_LABELS: &[(git2::Status, &str)] = &[
     (git2::Status::WT_RENAMED, "renamed"),
     (git2::Status::WT_TYPECHANGE, "typechange"),
 ];
-
-/// Number of recent commits to show in status.
-const RECENT_COMMITS_LIMIT: usize = 10;
 
 /// Resolve upstream tracking info for the current branch.
 ///

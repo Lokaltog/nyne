@@ -28,9 +28,6 @@ use crate::repo::Repo;
 /// Safety cap on revwalk iterations to prevent unbounded history walks.
 const MAX_REVWALK: usize = 5000;
 
-/// Maximum commits examined when computing contributors for a file.
-const CONTRIBUTORS_LIMIT: usize = 500;
-
 /// Blame hunk with line range and commit metadata.
 ///
 /// Line numbers are 1-based inclusive, matching the template output.
@@ -162,7 +159,9 @@ pub trait HistoryQueries {
     fn blob_at(&self, rel_path: &str, oid: Oid) -> Result<Vec<u8>>;
 
     /// Unique authors sorted by commit count for a given file.
-    fn contributors(&self, rel_path: &str) -> Result<Vec<Contributor>>;
+    ///
+    /// `limit` caps how many commits are examined.
+    fn contributors(&self, rel_path: &str, limit: usize) -> Result<Vec<Contributor>>;
 
     /// Collect git notes from commits that touched `rel_path`.
     fn file_notes(&self, rel_path: &str, limit: usize) -> Result<Vec<NoteEntry>>;
@@ -253,11 +252,10 @@ impl HistoryQueries for Repo {
         Ok(blob.content().to_vec())
     }
 
-    /// Unique authors sorted by commit count for a given file.
-    fn contributors(&self, rel_path: &str) -> Result<Vec<Contributor>> {
+    fn contributors(&self, rel_path: &str, limit: usize) -> Result<Vec<Contributor>> {
         let authors = {
             let repo = self.lock();
-            walk_file_commits(&repo, rel_path, CONTRIBUTORS_LIMIT, |commit, _| {
+            walk_file_commits(&repo, rel_path, limit, |commit, _| {
                 commit.author().name().unwrap_or("unknown").to_owned()
             })?
         };

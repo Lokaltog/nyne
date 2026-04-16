@@ -7,13 +7,10 @@ use nyne::{SliceSpec, parse_spec};
 use nyne_companion::CompanionRequest;
 
 use super::views;
+use crate::plugin::config::Limits;
 use crate::plugin::config::vfs::Vfs;
 use crate::repo::Repo;
 
-/// Default cap on log entries (metadata only, so higher than history).
-pub const LOG_LIMIT: usize = 200;
-/// Default cap on notes entries scanned per file.
-pub const NOTES_LIMIT: usize = 50;
 /// Template handles for git-backed virtual files.
 pub struct Handles {
     pub(crate) blame: TemplateHandle,
@@ -32,7 +29,7 @@ pub struct GitState {
     pub(crate) repo: Arc<Repo>,
     pub(crate) handles: Handles,
     pub(crate) vfs: Vfs,
-    pub(crate) history_limit: usize,
+    pub(crate) limits: Limits,
 }
 /// Build template handles from VFS config.
 ///
