@@ -238,7 +238,7 @@ pub fn register_source_extensions(
                     let Some(sf) = req.source_file() else {
                         return Ok(());
                     };
-                    if s.decomposition.has_fragment(&sf, &to_owned(&segments)) {
+                    if s.decomposition.has_fragment(&sf, &SymbolGitCtx::to_fragment_path(&segments)) {
                         req.nodes.add(NamedNode::dir(&s.state.vfs.dir.git));
                     }
                     Ok(())
@@ -259,7 +259,7 @@ pub fn register_source_extensions(
                         let Some(sf) = req.source_file() else {
                             return Ok(());
                         };
-                        if s.decomposition.has_fragment(&sf, &to_owned(&segments)) {
+                        if s.decomposition.has_fragment(&sf, &SymbolGitCtx::to_fragment_path(&segments)) {
                             req.nodes.add(NamedNode::dir(&s.state.vfs.dir.git));
                         }
                     }
@@ -311,5 +311,3 @@ fn classify<'a>(segments: &'a [&'a str], git_dir: &str, history_dir: &str) -> Gi
     GitScope::SymbolRoot
 }
 
-/// Convert borrowed path segments to owned for [`DecompositionCache::has_fragment`].
-fn to_owned(segments: &[&str]) -> Vec<String> { segments.iter().map(|s| (*s).to_owned()).collect() }

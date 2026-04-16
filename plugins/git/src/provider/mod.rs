@@ -10,7 +10,6 @@
 //!
 //! Symbol-scoped git features (per-symbol blame/history) are registered
 //! into [`SourceExtensions::fragment_path`] via [`symbol_routes`].
-mod rename;
 pub mod state;
 
 use std::sync::Arc;
@@ -18,7 +17,7 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 use nyne::router::{Filesystem, Next, Provider, Request};
 use nyne_companion::{CompanionProvider, CompanionRequest};
-pub use rename::*;
+pub use branches::GitFileRename;
 pub use state::*;
 
 /// Branch browsing and mutation.
