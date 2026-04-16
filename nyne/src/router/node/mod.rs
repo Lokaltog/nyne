@@ -1,10 +1,11 @@
 use std::fs::FileType;
-use std::ops::{BitAndAssign, BitOrAssign, Deref, DerefMut, Not};
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, mem};
 
+use bitflags::bitflags;
 use color_eyre::eyre::Result;
 
 use crate::router::fs::Filesystem;
@@ -67,7 +68,9 @@ pub trait Writable: Send + Sync {
 
 impl<T: Readable + ?Sized> Readable for Arc<T> {
     fn read(&self, ctx: &ReadContext<'_>) -> Result<Vec<u8>> { (**self).read(ctx) }
+
     fn size(&self) -> Option<u64> { (**self).size() }
+
     fn backing_path(&self) -> Option<&Path> { (**self).backing_path() }
 }
 
@@ -276,65 +279,36 @@ node_with_slots! {
     attributable: Attributable,
 }
 
-/// Backend-agnostic permission flags for virtual nodes.
-///
-/// Either explicitly set via [`Node::with_permissions`] or auto-derived from
-/// kind and capabilities. Use [`bits()`](Self::bits) for raw bit access.
-/// Backend-specific translation (e.g., FUSE octal modes) belongs in the
-/// backend crate via an extension trait — the router stays agnostic.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Permissions(u8);
-
-impl Permissions {
-    pub const ALL: Self = Self(0b111);
-    pub const EXECUTE: Self = Self(1 << 2);
-    pub const NONE: Self = Self(0);
-    pub const READ: Self = Self(1 << 0);
-    pub const WRITE: Self = Self(1 << 1);
-
-    /// Raw bit representation.
-    pub const fn bits(self) -> u8 { self.0 }
-
-    /// Whether `self` contains all flags in `other`.
+bitflags! {
+    /// Backend-agnostic permission flags for virtual nodes.
     ///
-    /// Note: `contains(Permissions::NONE)` is always `true` (the empty set is
-    /// a subset of everything). Use [`is_empty()`](Self::is_empty) to check
-    /// for "no permissions".
-    pub const fn contains(self, other: Self) -> bool { self.0 & other.0 == other.0 }
-
-    pub const fn is_empty(self) -> bool { self.0 == 0 }
-
-    /// Construct from raw bits, masking to the valid 3-bit range.
-    pub const fn from_bits(bits: u8) -> Self {
-        debug_assert!(bits <= 0b111, "Permissions::from_bits called with out-of-range value");
-        Self(bits & 0b111)
+    /// Either explicitly set via [`Node::with_permissions`] or auto-derived from
+    /// kind and capabilities. Use [`bits()`](Self::bits) for raw bit access.
+    /// Backend-specific translation (e.g., FUSE octal modes) belongs in the
+    /// backend crate via an extension trait — the router stays agnostic.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    pub struct Permissions: u8 {
+        const NONE = 0;
+        const READ = 1 << 0;
+        const WRITE = 1 << 1;
+        const EXECUTE = 1 << 2;
+        const ALL = Self::READ.bits() | Self::WRITE.bits() | Self::EXECUTE.bits();
     }
 }
 
-// BitOr/BitAnd via macro; assign variants and Not have unique signatures.
-macro_rules! impl_bitop {
-    ($($trait:ident::$fn:ident => $op:tt),+ $(,)?) => { $(
-        impl std::ops::$trait for Permissions {
-            type Output = Self;
-            fn $fn(self, rhs: Self) -> Self { Self(self.0 $op rhs.0) }
-        }
-    )+ };
-}
-impl_bitop!(BitOr::bitor => |, BitAnd::bitand => &);
 
-impl BitOrAssign for Permissions {
-    fn bitor_assign(&mut self, rhs: Self) { self.0 |= rhs.0; }
+impl Permissions {
+    /// Construct from raw bits, masking to the valid 3-bit range.
+    ///
+    /// Panics in debug if `bits` has any bits set outside the valid mask —
+    /// this catches accidental upcasts from larger types. Release builds
+    /// silently mask, matching the safer of the two behaviours.
+    pub const fn from_bits_masked(bits: u8) -> Self {
+        debug_assert!(bits <= 0b111, "Permissions::from_bits called with out-of-range value");
+        Self::from_bits_truncate(bits)
+    }
 }
 
-impl BitAndAssign for Permissions {
-    fn bitand_assign(&mut self, rhs: Self) { self.0 &= rhs.0; }
-}
-
-impl Not for Permissions {
-    type Output = Self;
-
-    fn not(self) -> Self { Self(!self.0 & 0b111) }
-}
 
 impl fmt::Debug for Permissions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "Permissions({self})") }

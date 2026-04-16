@@ -44,12 +44,12 @@ fn all_contains_every_flag() {
 #[test]
 fn from_bits_round_trips() {
     let perms = Permissions::READ | Permissions::EXECUTE;
-    assert_eq!(Permissions::from_bits(perms.bits()), perms);
+    assert_eq!(Permissions::from_bits_masked(perms.bits()), perms);
 }
 
 #[test]
 #[should_panic(expected = "out-of-range")]
-fn from_bits_rejects_out_of_range() { let _ = Permissions::from_bits(0xFF); }
+fn from_bits_rejects_out_of_range() { let _ = Permissions::from_bits_masked(0xFF); }
 
 #[rstest]
 #[case::all("rwx", Permissions::ALL)]

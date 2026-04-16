@@ -45,6 +45,7 @@ console.workspace = true
 smallvec.workspace = true
 thiserror.workspace = true
 anymap2.workspace = true
+bitflags.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

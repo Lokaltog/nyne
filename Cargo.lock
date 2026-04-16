@@ -1517,6 +1517,7 @@ dependencies = [
  "assert_cmd",
  "assert_fs",
  "base64",
+ "bitflags 2.11.0",
  "clap",
  "color-eyre",
  "console",

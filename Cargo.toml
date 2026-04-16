@@ -64,6 +64,7 @@ nyne-visibility = { package = "nyne-plugin-visibility", path = "plugins/visibili
 anymap2 = "0.13.0"
 aho-corasick = { version = "1.1.4", features = ["logging"] }
 base64 = "0.22.1"
+bitflags = "2.11"
 clap = { version = "4", features = ["derive"] }
 color-eyre = "0.6"
 console = "0.16.3"
@@ -89,8 +90,6 @@ palette = { version = "0.7.6", features = ["std"] }
 parking_lot = "0.12.5"
 paste = "1"
 petgraph = "0.8.3"
-proc-macro2 = "1"
-quote = "1"
 rustix = { version = "1.1.4", features = ["net"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -99,7 +98,6 @@ similar = "3.0.0"
 smallvec = "1.15.1"
 slab = "0.4.12"
 strum = { version = "0.28", features = ["derive"] }
-syn = { version = "2", features = ["full", "extra-traits"] }
 thiserror = "2.0.18"
 toml = "1.1"
 tracing = "0.1"
