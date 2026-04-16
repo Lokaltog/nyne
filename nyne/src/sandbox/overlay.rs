@@ -125,7 +125,7 @@ pub fn prepare_project_storage(path: &Path, state_root: &Path, strategy: Storage
 
     // Both strategies use the same merged path as the daemon's working directory.
     let merged = proc.merged().join(&rel);
-    fs::create_dir_all(&merged).wrap_err_with(|| format!("creating merged dir {}", merged.display()))?;
+    dirs(&[&merged])?;
 
     match strategy {
         StorageStrategy::Passthrough => {
