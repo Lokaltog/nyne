@@ -117,6 +117,8 @@ pub struct SyntaxRegistry {
     decomposers: HashMap<&'static str, Arc<dyn Decomposer>>,
     /// Compound decomposers: `outer_ext → inner_ext → decomposer`.
     compound: HashMap<&'static str, HashMap<&'static str, Arc<dyn Decomposer>>>,
+    /// Sorted list of registered extensions, pre-computed at build time.
+    sorted_extensions: Vec<&'static str>,
 }
 
 /// Lookup, construction, and symbol extraction methods for the registry.
@@ -153,7 +155,14 @@ impl SyntaxRegistry {
             compound.insert(outer, injections);
         }
 
-        Self { decomposers, compound }
+        let mut sorted_extensions: Vec<&'static str> = decomposers.keys().copied().collect();
+        sorted_extensions.sort_unstable();
+
+        Self {
+            decomposers,
+            compound,
+            sorted_extensions,
+        }
     }
 
     /// Get the shared global registry instance.
@@ -194,13 +203,12 @@ impl SyntaxRegistry {
         self.get(ext)
     }
 
-    /// Return all registered extensions.
+    /// Return all registered extensions, sorted.
+    ///
+    /// Pre-computed at [`build`](Self::build) time — callers get a static
+    /// slice without a per-call allocation or sort.
     #[must_use]
-    pub fn extensions(&self) -> Vec<&'static str> {
-        let mut exts: Vec<_> = self.decomposers.keys().copied().collect();
-        exts.sort_unstable();
-        exts
-    }
+    pub fn extensions(&self) -> &[&'static str] { &self.sorted_extensions }
 
     /// Extract a symbol body from arbitrary source text by decomposing and
     /// navigating the fragment tree by `fs_name` components.
