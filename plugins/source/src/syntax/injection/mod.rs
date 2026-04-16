@@ -35,13 +35,11 @@ pub(super) struct InjectionDecomposer {
     inner_ext: &'static str,
 }
 
-/// Constructor for `InjectionDecomposer`.
 impl InjectionDecomposer {
     /// Creates a new injection decomposer wrapping the given inner decomposer.
     pub(super) fn new(inner: Arc<dyn Decomposer>, inner_ext: &'static str) -> Self { Self { inner, inner_ext } }
 }
 
-/// [`Decomposer`] implementation for injection-based compound files.
 impl Decomposer for InjectionDecomposer {
     /// Decomposes source by extracting Jinja2 structure then delegating inner content.
     fn decompose(&self, source: &str, max_depth: usize) -> (DecomposedFile, Option<tree_sitter::Tree>) {
@@ -122,6 +120,5 @@ impl Decomposer for InjectionDecomposer {
     }
 }
 
-/// Tests for injection-based compound decomposition.
 #[cfg(test)]
 mod tests;

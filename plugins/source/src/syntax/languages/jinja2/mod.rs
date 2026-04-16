@@ -322,6 +322,5 @@ pub fn symbols_to_fragments(symbols: Vec<Jinja2Symbol>) -> Vec<Fragment> {
         .collect()
 }
 
-/// Tests for Jinja2 template decomposition.
 #[cfg(test)]
 mod tests;

@@ -20,7 +20,6 @@ pub(in crate::provider::syntax) struct BodySplice {
     pub meta: MetaSplice,
 }
 
-/// [`Writable`] implementation for [`BodySplice`].
 impl Writable for BodySplice {
     /// Validate syntax and splice the new body into the source file.
     fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {

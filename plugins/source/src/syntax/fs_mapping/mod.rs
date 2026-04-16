@@ -225,6 +225,5 @@ fn resolve_numbered(conflicts: &[ConflictSet]) -> Vec<Resolution> {
         .collect()
 }
 
-/// Tests for filesystem naming and conflict resolution.
 #[cfg(test)]
 mod tests;

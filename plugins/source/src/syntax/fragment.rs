@@ -33,7 +33,6 @@ pub enum SymbolKind {
     Decorator,
 }
 
-/// Display and classification methods for `SymbolKind`.
 impl SymbolKind {
     /// Filesystem directory name for this symbol kind (lowercased variant form).
     ///
@@ -77,7 +76,6 @@ pub enum FragmentKind {
     Preamble,
 }
 
-/// Query methods for `FragmentKind`.
 impl FragmentKind {
     /// Structural fragments are metadata (docstrings, imports, decorators)
     /// rather than navigable symbols. They should not receive `fs_name` or
@@ -160,7 +158,6 @@ pub struct FragmentSpan {
     pub name_byte_offset: usize,
 }
 
-/// Construction and recomputation methods for [`FragmentSpan`].
 impl FragmentSpan {
     /// Construct a span for a fragment with `children`.
     ///
@@ -246,7 +243,6 @@ pub struct Fragment {
     pub fs_name: Option<String>,
 }
 
-/// Construction and span computation methods for fragments.
 impl Fragment {
     /// Construct a structural fragment (docstring, decorator, imports) from a
     /// byte range. These carry no signature, no visibility, and no children.

@@ -19,7 +19,6 @@ impl RustLanguage {
     const LINE_COMMENT: &str = "line_comment";
 }
 
-/// [`LanguageSpec`] implementation for Rust.
 impl LanguageSpec for RustLanguage {
     /// AST node kind for doc comments.
     const DOC_COMMENT_KIND: Option<&'static str> = Some(Self::LINE_COMMENT);
@@ -108,6 +107,5 @@ fn flatten_type_text(raw: &str) -> String { raw.replace("::", "_").replace(['<',
 
 register_syntax!(RustLanguage);
 
-/// Tests for Rust decomposition.
 #[cfg(test)]
 mod tests;

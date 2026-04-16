@@ -17,7 +17,6 @@ impl TypeScriptLanguage {
     const EXPORT_STATEMENT: &str = "export_statement";
 }
 
-/// [`LanguageSpec`] implementation for TypeScript/JavaScript.
 impl LanguageSpec for TypeScriptLanguage {
     /// File extensions for TypeScript.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
@@ -185,6 +184,5 @@ fn strip_jsdoc(raw: &str) -> String {
 
 register_syntax!(TypeScriptLanguage);
 
-/// Tests for TypeScript decomposition.
 #[cfg(test)]
 mod tests;

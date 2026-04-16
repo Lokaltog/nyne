@@ -29,9 +29,7 @@ pub(super) struct DecompositionContext {
     pub(super) ext: &'static str,
 }
 
-/// Methods for [`DecompositionContext`].
 impl DecompositionContext {
-    /// Look up a fragment by path within the cached decomposition.
     /// Look up a fragment by path within the cached decomposition.
     pub(super) fn find_fragment<'a>(&'a self, path: &[String]) -> Option<&'a Fragment> {
         find_fragment(&self.shared.decomposed, path)

@@ -23,7 +23,6 @@ impl PythonLanguage {
     const STRING: &str = "string";
 }
 
-/// [`LanguageSpec`] implementation for Python.
 impl LanguageSpec for PythonLanguage {
     /// File extensions for Python.
     const EXTENSIONS: &'static [&'static str] = EXTENSIONS;
@@ -268,6 +267,5 @@ fn dedent_docstring(content: &str) -> String {
 
 register_syntax!(PythonLanguage);
 
-/// Tests for Python decomposition.
 #[cfg(test)]
 mod tests;

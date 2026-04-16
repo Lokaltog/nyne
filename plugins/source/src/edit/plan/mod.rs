@@ -33,7 +33,6 @@ pub enum EditOpKind {
     InsertAfter,
     Append,
 }
-/// Name conversion methods for edit operation kinds.
 impl EditOpKind {
     /// Kebab-case name, used as both VFS directory name and staged action label.
     #[must_use]
@@ -93,7 +92,6 @@ pub struct EditPlan {
     pub ops: Vec<(u32, EditOp)>,
 }
 
-/// Methods for inspecting and mutating edit operations.
 impl EditOp {
     /// The content payload, or `""` when absent (`Delete`).
     #[must_use]
@@ -107,7 +105,6 @@ impl EditOp {
     }
 }
 
-/// Methods for resolving, validating, and applying edit plans.
 impl EditPlan {
     /// Resolve all edit ops to concrete byte ranges in the source.
     ///
@@ -301,6 +298,5 @@ fn ensure_trailing_newline(content: &str) -> Cow<'_, str> {
     }
 }
 
-/// Unit tests for edit plan resolution and application.
 #[cfg(test)]
 mod tests;

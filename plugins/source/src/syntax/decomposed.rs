@@ -39,13 +39,9 @@ pub struct DecomposedSource {
     pub tree: Option<tree_sitter::Tree>,
 }
 
-/// Custom `Debug` that omits the raw source text and parse tree.
-///
-/// The full source string can be enormous and the tree-sitter `Tree` type
-/// does not implement `Debug`, so this focuses on the fragment structure
-/// which is what matters when diagnosing decomposition issues.
+/// Custom `Debug` that omits the raw source text and parse tree — tree-sitter's
+/// `Tree` doesn't implement `Debug`, and the source string can be enormous.
 impl fmt::Debug for DecomposedSource {
-    /// Formats the decomposed source for debug output.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DecomposedSource")
             .field("decomposed", &self.decomposed)
@@ -120,7 +116,6 @@ struct DecompositionCacheInner {
     cache: RwLock<HashMap<PathBuf, Arc<DecomposedSource>>>,
 }
 
-/// Cache management: creation, lookup, and invalidation.
 impl DecompositionCache {
     /// Create a new empty cache.
     pub(crate) fn new(fs: Arc<dyn Filesystem>, syntax: Arc<SyntaxRegistry>, max_depth: usize) -> Self {

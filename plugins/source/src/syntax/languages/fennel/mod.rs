@@ -5,7 +5,6 @@ use super::prelude::*;
 /// Fennel language specification for tree-sitter decomposition.
 struct FennelLanguage;
 
-/// [`LanguageSpec`] implementation for Fennel.
 impl LanguageSpec for FennelLanguage {
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
     const DOC_COMMENT_KIND: Option<&'static str> = Some("comment");
@@ -117,6 +116,5 @@ fn is_require_binding(node: TsNode<'_>) -> bool {
 
 register_syntax!(FennelLanguage);
 
-/// Tests for Fennel decomposition.
 #[cfg(test)]
 mod tests;

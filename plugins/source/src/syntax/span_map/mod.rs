@@ -33,7 +33,6 @@ struct Region {
     len: usize,
 }
 
-/// Construction, translation, and remapping methods for `SpanMap`.
 impl SpanMap {
     /// Build a span map and concatenated inner content from the original source
     /// and content region byte ranges.
@@ -181,6 +180,5 @@ impl SpanMap {
     }
 }
 
-/// Tests for span map remapping logic.
 #[cfg(test)]
 mod tests;

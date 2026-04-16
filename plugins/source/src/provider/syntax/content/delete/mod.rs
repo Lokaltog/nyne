@@ -25,7 +25,6 @@ pub(in crate::provider::syntax) struct SymbolDelete {
     pub fragment_path: Vec<String>,
 }
 
-/// [`DiffAction`] implementation for [`SymbolDelete`].
 impl DiffSource for SymbolDelete {
     /// Compute the deletion range and produce file edits.
     fn compute_edits(&self) -> Result<Vec<FileEditResult>> {
@@ -52,6 +51,5 @@ impl DiffSource for SymbolDelete {
     }
 }
 
-/// Unit tests.
 #[cfg(test)]
 mod tests;

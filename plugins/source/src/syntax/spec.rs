@@ -369,7 +369,6 @@ pub struct CodeDecomposer<L: LanguageSpec> {
     _lang: PhantomData<L>,
 }
 
-/// Constructor for `CodeDecomposer`, initializing the tree-sitter parser for the language.
 impl<L: LanguageSpec> CodeDecomposer<L> {
     /// Creates a new decomposer for the given file extension.
     #[must_use]
@@ -383,7 +382,6 @@ impl<L: LanguageSpec> CodeDecomposer<L> {
     }
 }
 
-/// [`Decomposer`] implementation that delegates to [`LanguageSpec`] methods.
 impl<L: LanguageSpec> Decomposer for CodeDecomposer<L> {
     /// Decomposes source code into fragments using tree-sitter.
     fn decompose(&self, source: &str, max_depth: usize) -> (DecomposedFile, Option<tree_sitter::Tree>) {

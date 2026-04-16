@@ -30,7 +30,6 @@ pub struct FragmentResolver {
     source_file: PathBuf,
 }
 
-/// Methods for [`FragmentResolver`].
 impl FragmentResolver {
     /// Create a new resolver for the given source file.
     pub const fn new(cache: DecompositionCache, source_file: PathBuf) -> Self { Self { cache, source_file } }
@@ -56,6 +55,5 @@ impl FragmentResolver {
     }
 }
 
-/// Unit tests.
 #[cfg(test)]
 mod tests;

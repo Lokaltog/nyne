@@ -46,7 +46,6 @@ pub(super) struct Slice {
     pub target: SpliceTarget,
 }
 
-/// [`Readable`] implementation for [`Slice`].
 impl Readable for Slice {
     /// Read the targeted byte range from the source, applying byte-masking if needed.
     fn read(&self, _ctx: &ReadContext<'_>) -> Result<Vec<u8>> {

@@ -32,7 +32,6 @@ use crate::syntax::{self};
 #[derive(Clone, Debug)]
 pub(in crate::provider::syntax) struct FragmentPath(pub Arc<[String]>);
 
-/// Construction for [`FragmentPath`].
 impl FragmentPath {
     /// Create a new `FragmentPath` from a slice of path segments.
     pub fn new(segments: &[String]) -> Self { Self(Arc::from(segments)) }
@@ -81,9 +80,7 @@ pub(in crate::provider::syntax) struct LinesContent {
     pub source_file: PathBuf,
 }
 
-/// [`Readable`] implementation for [`LinesContent`].
 impl Readable for LinesContent {
-    /// Read the full source file content.
     fn read(&self, ctx: &ReadContext<'_>) -> Result<Vec<u8>> { ctx.fs.read_file(&self.source_file) }
 }
 
@@ -98,7 +95,6 @@ pub(in crate::provider::syntax) struct MetaSplice {
     pub target: SpliceTarget,
 }
 
-/// Methods for [`MetaSplice`].
 impl MetaSplice {
     /// Resolve the byte range from the current file state.
     ///
@@ -253,9 +249,7 @@ pub(in crate::provider::syntax) struct LinesWrite {
     pub resolver: FragmentResolver,
 }
 
-/// [`Writable`] implementation for [`LinesWrite`].
 impl Writable for LinesWrite {
-    /// Write full source file content, replacing the existing file.
     fn write(&self, ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {
         let new_content = from_utf8(data)?;
         self.decomposer

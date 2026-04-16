@@ -25,7 +25,6 @@ pub(in crate::provider::syntax) struct OverviewContent {
     pub filename: String,
 }
 
-/// [`TemplateView`] implementation for [`OverviewContent`].
 impl TemplateView for OverviewContent {
     /// Render the companion overview with the full symbol table.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
@@ -47,7 +46,6 @@ pub(in crate::provider::syntax) struct SymbolOverviewContent {
     pub fragment_path: FragmentPath,
 }
 
-/// [`TemplateView`] implementation for [`SymbolOverviewContent`].
 impl TemplateView for SymbolOverviewContent {
     /// Render the per-symbol overview listing child symbols.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {
@@ -71,7 +69,6 @@ pub(in crate::provider::syntax) struct FileOverviewContent {
     pub language: String,
 }
 
-/// [`TemplateView`] implementation for [`FileOverviewContent`].
 impl TemplateView for FileOverviewContent {
     /// Render the file-level overview with doc text and symbol table.
     fn render(&self, engine: &TemplateEngine, template: &str) -> Result<Vec<u8>> {

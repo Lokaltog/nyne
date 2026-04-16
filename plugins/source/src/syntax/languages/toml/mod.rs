@@ -5,7 +5,6 @@ use super::prelude::*;
 /// TOML language specification for tree-sitter decomposition.
 struct TomlLanguage;
 
-/// [`LanguageSpec`] implementation for TOML.
 impl LanguageSpec for TomlLanguage {
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
     /// AST node kind for doc comments.
@@ -99,6 +98,5 @@ fn build_table_fragment(node: TsNode<'_>) -> Fragment {
 
 register_syntax!(TomlLanguage);
 
-/// Tests for TOML decomposition.
 #[cfg(test)]
 mod tests;

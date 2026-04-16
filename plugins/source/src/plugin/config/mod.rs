@@ -47,6 +47,5 @@ impl Default for Config {
 
 impl PluginConfig for Config {}
 
-/// Unit tests for source plugin configuration.
 #[cfg(test)]
 mod tests;

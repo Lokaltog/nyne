@@ -121,7 +121,6 @@ pub struct SyntaxRegistry {
     sorted_extensions: Vec<&'static str>,
 }
 
-/// Lookup, construction, and symbol extraction methods for the registry.
 impl SyntaxRegistry {
     /// Outer template extensions that support injection-based decomposition.
     const INJECTION_OUTERS: &[&'static str] = &["j2"];
@@ -356,6 +355,5 @@ pub fn require_fragment<'a>(fragments: &'a [fragment::Fragment], path: &[String]
     find_fragment(fragments, path).ok_or_else(|| eyre!("fragment not found: {}", path.join("/")))
 }
 
-/// Tests for syntax decomposition.
 #[cfg(test)]
 mod tests;

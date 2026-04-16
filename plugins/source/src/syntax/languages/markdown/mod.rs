@@ -7,7 +7,6 @@ use super::prelude::*;
 /// Markdown language specification for tree-sitter decomposition.
 struct MarkdownLanguage;
 
-/// [`LanguageSpec`] implementation for Markdown.
 impl LanguageSpec for MarkdownLanguage {
     const CONFLICT_STRATEGY: ConflictStrategy = ConflictStrategy::Numbered;
     /// File extensions for Markdown.
@@ -290,6 +289,5 @@ fn build_code_block_fragments(
 
 register_syntax!(MarkdownLanguage);
 
-/// Tests for Markdown decomposition.
 #[cfg(test)]
 mod tests;

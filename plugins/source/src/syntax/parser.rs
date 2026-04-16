@@ -23,7 +23,6 @@ pub struct TsNode<'a> {
     source: &'a [u8],
 }
 
-/// Methods for navigating and extracting data from tree-sitter nodes.
 impl<'a> TsNode<'a> {
     /// Create a new `TsNode` wrapping a raw tree-sitter node and its source bytes.
     pub const fn new(node: tree_sitter::Node<'a>, source: &'a [u8]) -> Self { Self { node, source } }
@@ -337,7 +336,6 @@ pub struct TreeSitterParser {
     parser: Mutex<tree_sitter::Parser>,
 }
 
-/// Core parsing and decomposition methods for `TreeSitterParser`.
 impl TreeSitterParser {
     /// Create a new tree-sitter parser for the given language grammar.
     ///
