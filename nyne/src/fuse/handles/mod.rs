@@ -223,13 +223,45 @@ enum TruncationState {
     Done,
 }
 
-/// File handle table using a slab for O(1) allocation and lookup.
+/// Slab of [`HandleEntry`]s indexed by u64 file handles.
+///
+/// Centralises the u64 ↔ usize conversion and the `contains+remove`
+/// dance that FUSE file handles require. Slab indices are exposed
+/// directly as `fh` values (no offset) — FUSE has no reserved handle
+/// numbers.
+#[derive(Default)]
+pub(super) struct HandleSlab(Slab<HandleEntry>);
+
+impl HandleSlab {
+    /// Look up a handle entry by file handle number.
+    fn get(&self, fh: u64) -> Option<&HandleEntry> { self.0.get(usize::try_from(fh).ok()?) }
+
+    /// Look up a handle entry by file handle number, mutably.
+    fn get_mut(&mut self, fh: u64) -> Option<&mut HandleEntry> { self.0.get_mut(usize::try_from(fh).ok()?) }
+
+    /// Insert a new entry, returning its file handle number.
+    fn insert(&mut self, entry: HandleEntry) -> u64 { self.0.insert(entry) as u64 }
+
+    /// Remove an entry by file handle number, returning it if it existed.
+    fn remove(&mut self, fh: u64) -> Option<HandleEntry> {
+        let idx = usize::try_from(fh).ok()?;
+        self.0.contains(idx).then(|| self.0.remove(idx))
+    }
+
+    /// Iterate entries (file-handle indices are dropped — callers don't need them).
+    fn entries(&self) -> impl Iterator<Item = &HandleEntry> { self.0.iter().map(|(_, e)| e) }
+
+    /// Iterate entries mutably.
+    fn entries_mut(&mut self) -> impl Iterator<Item = &mut HandleEntry> { self.0.iter_mut().map(|(_, e)| e) }
+}
+
+/// File handle table using a [`HandleSlab`] for O(1) allocation and lookup.
 ///
 /// File handle numbers are slab indices directly (no offset needed —
 /// FUSE file handles have no reserved values).
 #[derive(Default)]
 pub(super) struct HandleTable {
-    inner: RwLock<Slab<HandleEntry>>,
+    inner: RwLock<HandleSlab>,
 }
 
 /// File handle operations for the FUSE filesystem.
@@ -237,7 +269,7 @@ impl HandleTable {
     /// Create a new, empty handle table.
     pub const fn new() -> Self {
         Self {
-            inner: RwLock::new(Slab::new()),
+            inner: RwLock::new(HandleSlab(Slab::new())),
         }
     }
 
@@ -253,8 +285,7 @@ impl HandleTable {
         } else {
             ContentBuffer::Shared(content)
         };
-        let mut slab = self.inner.write();
-        let idx = slab.insert(HandleEntry {
+        self.inner.write().insert(HandleEntry {
             inode,
             buffer,
             source: BufferSource::Preloaded,
@@ -265,8 +296,7 @@ impl HandleTable {
                 (true, false) => TruncationState::Done,
                 _ => TruncationState::None,
             },
-        });
-        idx as u64
+        })
     }
 
     /// Open a direct (fd-backed) file handle for a real file.
@@ -276,13 +306,12 @@ impl HandleTable {
     /// lazily on first write, flushed on release).
     pub fn open_direct(&self, inode: u64, file: File, open_flags: i32) -> u64 {
         let mode = OpenMode::parse(open_flags);
-        let mut slab = self.inner.write();
         let source = if mode.truncate {
             BufferSource::Truncated(file)
         } else {
             BufferSource::DirectFd(file)
         };
-        let idx = slab.insert(HandleEntry {
+        self.inner.write().insert(HandleEntry {
             inode,
             buffer: ContentBuffer::Owned(Vec::new()),
             source,
@@ -293,8 +322,7 @@ impl HandleTable {
             } else {
                 TruncationState::None
             },
-        });
-        idx as u64
+        })
     }
 
     /// Read from a file handle at the given offset.
@@ -306,7 +334,7 @@ impl HandleTable {
     /// Returns `Err` on IO failure (propagated to FUSE as `EIO`).
     pub fn read(&self, fh: u64, offset: u64, size: u32) -> io::Result<Vec<u8>> {
         let slab = self.inner.read();
-        let Some(entry) = Self::get_entry(&slab, fh) else {
+        let Some(entry) = slab.get(fh) else {
             return Ok(Vec::new());
         };
 
@@ -344,7 +372,7 @@ impl HandleTable {
     /// Extends the buffer if the write goes past the end. Returns bytes written.
     pub fn write(&self, fh: u64, offset: u64, data: &[u8]) -> Option<WriteOutcome> {
         let mut slab = self.inner.write();
-        let entry = Self::get_entry_mut(&mut slab, fh)?;
+        let entry = slab.get_mut(fh)?;
 
         // Transition Pending → Done: consume the eager flush signal.
         let eager = matches!(entry.truncation, TruncationState::Pending);
@@ -411,8 +439,7 @@ impl HandleTable {
     /// flushed on release. `DirectFd` handles don't need this — the
     /// `Truncated` source state already handles truncation semantics.
     pub fn truncate(&self, fh: u64, size: u64) {
-        let mut slab = self.inner.write();
-        if let Some(entry) = Self::get_entry_mut(&mut slab, fh) {
+        if let Some(entry) = self.inner.write().get_mut(fh) {
             Self::truncate_entry(entry, size);
         }
     }
@@ -422,10 +449,8 @@ impl HandleTable {
     /// Same semantics as [`truncate`](Self::truncate).
     pub fn truncate_by_inode(&self, inode: u64, size: u64) {
         let mut slab = self.inner.write();
-        for (_, entry) in slab.iter_mut() {
-            if entry.inode == inode {
-                Self::truncate_entry(entry, size);
-            }
+        for entry in slab.entries_mut().filter(|e| e.inode == inode) {
+            Self::truncate_entry(entry, size);
         }
     }
 
@@ -461,8 +486,7 @@ impl HandleTable {
     /// locks, error messages) can be cleaned up — cleanup is deferred as
     /// long as at least one handle remains open.
     pub fn has_handles_for_inode(&self, inode: u64) -> bool {
-        let slab = self.inner.read();
-        slab.iter().any(|(_, entry)| entry.inode == inode)
+        self.inner.read().entries().any(|entry| entry.inode == inode)
     }
 
     /// Get a snapshot of dirty buffer contents (for `flush` without releasing the handle).
@@ -472,7 +496,7 @@ impl HandleTable {
     /// concurrent writes.
     pub fn dirty_snapshot(&self, fh: u64) -> Option<DirtySnapshot> {
         let slab = self.inner.read();
-        let entry = Self::get_entry(&slab, fh)?;
+        let entry = slab.get(fh)?;
         (entry.dirty_gen > 0).then(|| DirtySnapshot {
             data: entry.buffer.to_vec(),
             generation: entry.dirty_gen,
@@ -486,8 +510,7 @@ impl HandleTable {
     /// write arrived between `dirty_snapshot` and this call, the generation
     /// will have advanced and the dirty state is preserved, preventing data loss.
     pub fn clear_dirty(&self, fh: u64, snapshot_gen: u64) {
-        let mut slab = self.inner.write();
-        if let Some(entry) = Self::get_entry_mut(&mut slab, fh)
+        if let Some(entry) = self.inner.write().get_mut(fh)
             && entry.dirty_gen == snapshot_gen
         {
             entry.dirty_gen = 0;
@@ -498,9 +521,7 @@ impl HandleTable {
     ///
     /// The caller should flush dirty buffers before or after this call.
     pub fn release(&self, fh: u64) -> Option<HandleEntry> {
-        let idx = usize::try_from(fh).ok()?;
-        let mut slab = self.inner.write();
-        slab.contains(idx).then(|| slab.remove(idx))
+        self.inner.write().remove(fh)
     }
 
     /// Read the full contents of a backing fd into `buffer`.
@@ -517,17 +538,5 @@ impl HandleTable {
         let n = fd.read_at(buffer, 0)?;
         buffer.truncate(n);
         Ok(())
-    }
-
-    /// Looks up a handle entry by file handle number.
-    fn get_entry(slab: &Slab<HandleEntry>, fh: u64) -> Option<&HandleEntry> {
-        let idx = usize::try_from(fh).ok()?;
-        slab.get(idx)
-    }
-
-    /// Looks up a mutable handle entry by file handle number.
-    fn get_entry_mut(slab: &mut Slab<HandleEntry>, fh: u64) -> Option<&mut HandleEntry> {
-        let idx = usize::try_from(fh).ok()?;
-        slab.get_mut(idx)
     }
 }
