@@ -8,12 +8,13 @@
 use std::collections::HashMap;
 use std::mem;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::Result;
 use nyne::router::{AffectedFiles, Writable, WriteContext};
 use nyne_diff::{DiffSource, FileEditResult, ValidationResult};
+use parking_lot::Mutex;
 
 use crate::edit::plan::{EditOp, EditOpKind, EditPlan};
 use crate::syntax::SyntaxRegistry;
@@ -23,22 +24,23 @@ use crate::syntax::decomposed::DecompositionCache;
 ///
 /// Thread-safe: multiple concurrent writes stage independently. The `u32`
 /// sequence number preserves global insertion order for deterministic
-/// conflict reporting and diff output.
-#[derive(Clone)]
+/// conflict reporting and diff output. Cloning bumps a single `Arc`.
+#[derive(Clone, Default)]
 pub struct EditStaging {
-    ops: Arc<Mutex<HashMap<PathBuf, Vec<(u32, EditOp)>>>>,
-    counter: Arc<AtomicU32>,
+    inner: Arc<StagingInner>,
 }
 
-#[expect(clippy::expect_used, reason = "mutex poisoning is unrecoverable")]
+/// Shared state behind `Arc<StagingInner>` — keeps the mutex and counter
+/// in one allocation so [`EditStaging`] clones bump a single refcount.
+#[derive(Default)]
+struct StagingInner {
+    ops: Mutex<HashMap<PathBuf, Vec<(u32, EditOp)>>>,
+    counter: AtomicU32,
+}
+
 impl EditStaging {
     /// Create an empty staging area.
-    pub fn new() -> Self {
-        Self {
-            ops: Arc::new(Mutex::new(HashMap::new())),
-            counter: Arc::new(AtomicU32::new(0)),
-        }
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Stage an edit operation for a source file.
     ///
@@ -50,10 +52,10 @@ impl EditStaging {
         kind: EditOpKind,
         content: Option<String>,
     ) -> u32 {
-        let seq = self.counter.fetch_add(1, Ordering::Relaxed);
-        self.ops
+        let seq = self.inner.counter.fetch_add(1, Ordering::Relaxed);
+        self.inner
+            .ops
             .lock()
-            .expect("staging lock poisoned")
             .entry(source_file)
             .or_default()
             .push((seq, EditOp {
@@ -65,27 +67,19 @@ impl EditStaging {
     }
 
     /// Take all staged operations, leaving the staging area empty.
-    pub fn drain(&self) -> HashMap<PathBuf, Vec<(u32, EditOp)>> {
-        mem::take(&mut *self.ops.lock().expect("staging lock poisoned"))
-    }
+    pub fn drain(&self) -> HashMap<PathBuf, Vec<(u32, EditOp)>> { mem::take(&mut *self.inner.ops.lock()) }
 
     /// Discard all staged operations.
     pub fn clear(&self) {
-        self.ops.lock().expect("staging lock poisoned").clear();
-        self.counter.store(0, Ordering::Relaxed);
+        self.inner.ops.lock().clear();
+        self.inner.counter.store(0, Ordering::Relaxed);
     }
 
     /// Whether there are any staged operations.
-    pub fn is_empty(&self) -> bool { self.ops.lock().expect("staging lock poisoned").is_empty() }
+    pub fn is_empty(&self) -> bool { self.inner.ops.lock().is_empty() }
 
     /// Snapshot current staged operations for diff preview.
-    pub fn snapshot(&self) -> HashMap<PathBuf, Vec<(u32, EditOp)>> {
-        self.ops.lock().expect("staging lock poisoned").clone()
-    }
-}
-
-impl Default for EditStaging {
-    fn default() -> Self { Self::new() }
+    pub fn snapshot(&self) -> HashMap<PathBuf, Vec<(u32, EditOp)>> { self.inner.ops.lock().clone() }
 }
 
 /// [`DiffSource`] that computes edits from the current staging area.
