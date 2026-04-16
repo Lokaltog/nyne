@@ -311,93 +311,14 @@ pub(in crate::provider::syntax) fn build_meta_nodes(
     fragment_path: &[String],
     files: &VfsFiles,
 ) -> Vec<NamedNode> {
-    /// Build a readable+writable meta-file node with newline decorators.
-    fn meta_node(
-        name: impl Into<String>,
-        read_fn: impl for<'a> Fn(&ReadContext<'a>) -> Result<Vec<u8>> + Send + Sync + 'static,
-        resolver: &FragmentResolver,
-        target: SpliceTarget,
-    ) -> NamedNode {
-        lazy_slice_node(name, read_fn, MetaSplice {
-            resolver: resolver.clone(),
-            target,
-        })
-    }
-
     let path = FragmentPath::new(fragment_path);
     let mut nodes = Vec::new();
 
-    // signature.<ext> — only if the fragment has a signature.
-    if frag.signature.is_some() {
-        let r = resolver.clone();
-        let p = path.clone();
-        nodes.push(meta_node(
-            format!("{}.{ext}", files.signature),
-            move |_ctx| {
-                let shared = r.decompose()?;
-                let frag = syntax::require_fragment(&shared.decomposed, &p)?;
-                let sig = frag
-                    .signature
-                    .as_deref()
-                    .ok_or_else(|| eyre::eyre!("no signature on fragment {:?}", p))?;
-                Ok(sig.as_bytes().to_vec())
-            },
-            resolver,
-            SpliceTarget::FragmentSignature(path.clone()),
-        ));
-    }
-
-    // docstring.txt — only for fragments with a docstring child.
-    if frag.child_of_kind(&FragmentKind::Docstring).is_some() {
-        let r = resolver.clone();
-        let p = path.clone();
-        nodes.push(lazy_slice_node(
-            format!("{}.txt", files.docstring),
-            move |_ctx| {
-                let shared = r.decompose()?;
-                let frag = syntax::require_fragment(&shared.decomposed, &p)?;
-                let range = frag
-                    .child_of_kind(&FragmentKind::Docstring)
-                    .map(|c| &c.span.byte_range)
-                    .ok_or_else(|| eyre::eyre!("no doc comment on fragment {:?}", p))?;
-                Ok(shared
-                    .decomposer
-                    .strip_doc_comment(&shared.source[range.clone()])
-                    .into_bytes())
-            },
-            MetaSplice {
-                resolver: resolver.clone(),
-                target: SpliceTarget::FragmentDocComment(path.clone()),
-            },
-        ));
-    }
-
-    // decorators.<ext> — only for fragments with a decorator child.
-    if frag.child_of_kind(&FragmentKind::Decorator).is_some() {
-        let r = resolver.clone();
-        let p = path.clone();
-        nodes.push(lazy_slice_node(
-            format!("{}.{ext}", files.decorators),
-            move |_ctx| {
-                let shared = r.decompose()?;
-                let frag = syntax::require_fragment(&shared.decomposed, &p)?;
-                let range = frag
-                    .child_of_kind(&FragmentKind::Decorator)
-                    .map(|c| &c.span.byte_range)
-                    .ok_or_else(|| eyre::eyre!("no decorator range on fragment {:?}", p))?;
-                let start = line_start_of_rope(&shared.rope, range.start);
-                Ok(shared
-                    .source
-                    .as_bytes()
-                    .get(start..range.end)
-                    .ok_or_else(|| eyre::eyre!("decorator range {start}..{} out of bounds for {:?}", range.end, p))?
-                    .to_vec())
-            },
-            MetaSplice {
-                resolver: resolver.clone(),
-                target: SpliceTarget::FragmentDecorators(path.clone()),
-            },
-        ));
+    for meta in MetaKind::ALL {
+        if !meta.applies_to(frag) {
+            continue;
+        }
+        nodes.push(build_meta_node(*meta, resolver, &path, files, ext));
     }
 
     // OVERVIEW.md — only if the fragment has children.
@@ -409,6 +330,100 @@ pub(in crate::provider::syntax) fn build_meta_nodes(
     }
 
     nodes
+}
+
+/// One of the per-symbol meta-files (signature / docstring / decorators).
+#[derive(Clone, Copy)]
+enum MetaKind {
+    Signature,
+    Docstring,
+    Decorators,
+}
+
+impl MetaKind {
+    const ALL: &[Self] = &[Self::Signature, Self::Docstring, Self::Decorators];
+
+    fn applies_to(self, frag: &Fragment) -> bool {
+        match self {
+            Self::Signature => frag.signature.is_some(),
+            Self::Docstring => frag.child_of_kind(&FragmentKind::Docstring).is_some(),
+            Self::Decorators => frag.child_of_kind(&FragmentKind::Decorator).is_some(),
+        }
+    }
+
+    fn name(self, files: &VfsFiles, ext: &str) -> String {
+        match self {
+            Self::Signature => format!("{}.{ext}", files.signature),
+            Self::Docstring => format!("{}.txt", files.docstring),
+            Self::Decorators => format!("{}.{ext}", files.decorators),
+        }
+    }
+
+    const fn target(self, path: FragmentPath) -> SpliceTarget {
+        match self {
+            Self::Signature => SpliceTarget::FragmentSignature(path),
+            Self::Docstring => SpliceTarget::FragmentDocComment(path),
+            Self::Decorators => SpliceTarget::FragmentDecorators(path),
+        }
+    }
+
+    fn extract(self, shared: &DecomposedSource, frag: &Fragment) -> Result<Vec<u8>> {
+        match self {
+            Self::Signature => Ok(frag
+                .signature
+                .as_deref()
+                .ok_or_else(|| eyre::eyre!("no signature on fragment"))?
+                .as_bytes()
+                .to_vec()),
+            Self::Docstring => {
+                let range = doc_child_range(frag, &FragmentKind::Docstring, "doc comment")?;
+                Ok(shared.decomposer.strip_doc_comment(&shared.source[range]).into_bytes())
+            }
+            Self::Decorators => {
+                let range = doc_child_range(frag, &FragmentKind::Decorator, "decorator")?;
+                let start = line_start_of_rope(&shared.rope, range.start);
+                Ok(shared
+                    .source
+                    .as_bytes()
+                    .get(start..range.end)
+                    .ok_or_else(|| eyre::eyre!("decorator range {start}..{} out of bounds", range.end))?
+                    .to_vec())
+            }
+        }
+    }
+}
+
+/// Build a single meta-file node — resolves the fragment on every read so
+/// content stays fresh after writes.
+fn build_meta_node(
+    kind: MetaKind,
+    resolver: &FragmentResolver,
+    path: &FragmentPath,
+    files: &VfsFiles,
+    ext: &str,
+) -> NamedNode {
+    let r = resolver.clone();
+    let p = path.clone();
+    lazy_slice_node(
+        kind.name(files, ext),
+        move |_ctx| {
+            let shared = r.decompose()?;
+            let frag = syntax::require_fragment(&shared.decomposed, &p)?;
+            kind.extract(&shared, frag)
+        },
+        MetaSplice {
+            resolver: resolver.clone(),
+            target: kind.target(path.clone()),
+        },
+    )
+}
+
+/// Byte range of the first child fragment of `kind`, or an error referencing
+/// the kind by `label`.
+fn doc_child_range(frag: &Fragment, kind: &FragmentKind, label: &str) -> Result<Range<usize>> {
+    frag.child_of_kind(kind)
+        .map(|c| c.span.byte_range.clone())
+        .ok_or_else(|| eyre::eyre!("no {label} range on fragment"))
 }
 
 /// Find the byte range of a signature string within the fragment's byte range.
