@@ -32,46 +32,39 @@ pub fn deep_merge<T: DeepMerge>(base: &mut T, overlay: &T) {
     }
     *base = overlay.clone();
 }
+/// Generate a [`DeepMerge`] impl for a variant-structured value type.
+///
+/// Both `serde_json::Value` and `toml::Value` have a map-like variant,
+/// an array-like variant, and leaf variants. The merge algorithm is
+/// structurally identical in both cases; this macro factors out the
+/// identical body so adding support for another value type would only
+/// require naming its variants.
+macro_rules! impl_deep_merge {
+    ($ty:ty, $map_variant:ident, $array_variant:ident, $empty:expr) => {
+        impl DeepMerge for $ty {
+            fn merge_maps(&mut self, overlay: &Self, recurse: fn(&mut Self, &Self)) -> bool {
+                let (Self::$map_variant(base), Self::$map_variant(over)) = (self, overlay) else {
+                    return false;
+                };
+                for (k, v) in over {
+                    recurse(base.entry(k.clone()).or_insert_with(|| $empty), v);
+                }
+                true
+            }
 
-impl DeepMerge for serde_json::Value {
-    fn merge_maps(&mut self, overlay: &Self, recurse: fn(&mut Self, &Self)) -> bool {
-        let (Self::Object(base_map), Self::Object(overlay_map)) = (self, overlay) else {
-            return false;
-        };
-        for (k, v) in overlay_map {
-            recurse(base_map.entry(k.clone()).or_insert(Self::Null), v);
+            fn extend_arrays(&mut self, overlay: &Self) -> bool {
+                let (Self::$array_variant(base), Self::$array_variant(over)) = (self, overlay) else {
+                    return false;
+                };
+                base.extend(over.iter().cloned());
+                true
+            }
         }
-        true
-    }
-
-    fn extend_arrays(&mut self, overlay: &Self) -> bool {
-        let (Self::Array(base_arr), Self::Array(overlay_arr)) = (self, overlay) else {
-            return false;
-        };
-        base_arr.extend(overlay_arr.iter().cloned());
-        true
-    }
+    };
 }
 
-impl DeepMerge for toml::Value {
-    fn merge_maps(&mut self, overlay: &Self, recurse: fn(&mut Self, &Self)) -> bool {
-        let (Self::Table(base_table), Self::Table(overlay_table)) = (self, overlay) else {
-            return false;
-        };
-        for (k, v) in overlay_table {
-            recurse(base_table.entry(k).or_insert(Self::Table(toml::Table::new())), v);
-        }
-        true
-    }
-
-    fn extend_arrays(&mut self, overlay: &Self) -> bool {
-        let (Self::Array(base_arr), Self::Array(overlay_arr)) = (self, overlay) else {
-            return false;
-        };
-        base_arr.extend(overlay_arr.iter().cloned());
-        true
-    }
-}
+impl_deep_merge!(serde_json::Value, Object, Array, serde_json::Value::Null);
+impl_deep_merge!(toml::Value, Table, Array, toml::Value::Table(toml::Table::new()));
 
 #[cfg(test)]
 mod tests;
