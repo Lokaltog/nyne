@@ -82,6 +82,7 @@ ignore = { version = "0.4.25", features = ["simd-accel"] }
 jiff = { version = "0.2", features = ["serde"] }
 libc = "0.2"
 linkme = "0.3.36"
+lru = "0.17.0"
 lsp-types = "0.97.0"
 minijinja = { version = "2.19.0", features = ["builtins"] }
 notify = "8.2.0"
