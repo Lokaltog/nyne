@@ -8,7 +8,7 @@
 //! distinct lookup signatures — scripts return [`Result`] with a
 //! `not-found` error, control commands return [`Option`].
 //!
-//! This module factors out the HashMap + duplicate-warn bookkeeping so
+//! This module factors out the `HashMap` + duplicate-warn bookkeeping so
 //! both registries emit a consistent `duplicate registry entry` warning
 //! labelled by kind.
 //!
@@ -28,7 +28,7 @@ use tracing::warn;
 /// are not supported after construction. Every collision during
 /// construction is logged at `warn!` level with `kind = <label>` so
 /// downstream callers can filter by registry.
-pub(crate) struct NamedRegistry<K, V> {
+pub struct NamedRegistry<K, V> {
     entries: HashMap<K, V>,
 }
 

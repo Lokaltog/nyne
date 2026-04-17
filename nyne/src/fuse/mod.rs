@@ -11,6 +11,8 @@ mod attrs;
 mod handles;
 /// Bidirectional inode number mapping.
 pub mod inode_map;
+/// Per-inode mutable state (write locks, errors, atime overrides).
+mod inode_state;
 /// Capability → FUSE mode bit translation.
 mod mode;
 /// FUSE mutation operations (create, rename, unlink, mkdir, rmdir).
@@ -19,6 +21,8 @@ mod mutations;
 pub mod notify;
 /// FUSE read-only operations (lookup, getattr, readdir, read, open).
 mod ops;
+/// Bounded PID → process-name cache.
+mod process_name_cache;
 /// Extended attribute handling for FUSE nodes.
 mod xattr;
 
@@ -26,17 +30,18 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock};
-use std::time::{Instant, SystemTime};
+use std::time::Instant;
 
 use color_eyre::eyre::Result;
 use handles::HandleTable;
 use inode_map::InodeMap;
+use inode_state::InodeState;
 use notify::KernelNotifier;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
+use process_name_cache::ProcessNameCache;
 
 use crate::err;
 use crate::path_utils::PathExt;
-use crate::process::procfs::read_comm;
 use crate::router::{
     AffectedFiles, Chain, DirEntry, Filesystem, Metadata, NamedNode, Op, Process, ReadContext, RenameContext, Request,
     UnlinkContext, WriteContext,
@@ -83,23 +88,18 @@ pub struct FuseFilesystem {
     inodes: Arc<InodeMap>,
     /// File handle table for buffered/direct I/O.
     handles: HandleTable,
-    /// Per-inode write locks — prevents concurrent write pipelines.
-    write_locks: RwLock<HashMap<u64, Arc<Mutex<()>>>>,
-    /// Per-inode last write error messages (exposed via `user.error` xattr).
-    write_errors: RwLock<HashMap<u64, String>>,
+    /// Per-inode mutable state (write locks, write errors, atime overrides).
+    pub(super) inode_state: InodeState,
     /// Whether FUSE kernel passthrough is available.
     passthrough_enabled: AtomicBool,
-    /// Per-inode atime overrides for real files.
-    atime_overrides: RwLock<HashMap<u64, SystemTime>>,
     /// Kernel cache invalidation notifier (set after FUSE mount).
     notifier: SharedNotifier,
     /// Paths recently written via the inline FUSE mutation path, used by
     /// the filesystem watcher to suppress its own fsnotify echoes of
     /// inline writes. See [`InlineWrites`] for the full rationale.
     inline_writes: InlineWrites,
-    /// Cached PID → process name. Avoids repeated `/proc/{pid}/comm` reads
-    /// on every FUSE request — a single PID may generate thousands of ops.
-    process_names: RwLock<HashMap<u32, Option<String>>>,
+    /// Bounded PID → comm cache. See [`ProcessNameCache`].
+    process_names: ProcessNameCache,
 }
 
 impl FuseFilesystem {
@@ -109,13 +109,11 @@ impl FuseFilesystem {
             backing_fs,
             inodes: Arc::new(InodeMap::new()),
             handles: HandleTable::new(),
-            write_locks: RwLock::new(HashMap::new()),
-            write_errors: RwLock::new(HashMap::new()),
+            inode_state: InodeState::default(),
             passthrough_enabled: AtomicBool::new(true),
-            atime_overrides: RwLock::new(HashMap::new()),
             notifier: Arc::new(OnceLock::new()),
             inline_writes: Arc::new(Mutex::new(HashMap::new())),
-            process_names: RwLock::new(HashMap::new()),
+            process_names: ProcessNameCache::new(),
         }
     }
 
@@ -132,24 +130,13 @@ impl FuseFilesystem {
     ///
     /// Caches the `/proc/{pid}/comm` read so repeated FUSE requests from
     /// the same PID (e.g., git status issuing thousands of lookups) only
-    /// hit procfs once.
+    /// hit procfs once. See [`ProcessNameCache`] for eviction policy.
     pub(super) fn process_from(&self, fuse_req: &fuser::Request) -> Process {
         let pid = fuse_req.pid();
-        if let Some(name) = self.process_names.read().get(&pid) {
-            return Process {
-                pid,
-                name: name.clone(),
-            };
+        Process {
+            pid,
+            name: self.process_names.get_or_read(pid),
         }
-        let name = read_comm(pid);
-        let mut cache = self.process_names.write();
-        // Evict stale entries when the cache grows too large. PIDs are
-        // recycled by the OS, so old entries for exited processes accumulate.
-        if cache.len() >= 4096 {
-            cache.clear();
-        }
-        cache.insert(pid, name.clone());
-        Process { pid, name }
     }
 
     /// Dispatch a readdir through the chain, returning full `NamedNodes`.

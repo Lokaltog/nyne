@@ -46,7 +46,7 @@ impl FuseFilesystem {
 
         // FUSE-level xattr: last write error.
         if attr_name == XATTR_ERROR {
-            return match self.write_errors.read().get(&ino) {
+            return match self.inode_state.write_error(ino) {
                 Some(msg) => reply_xattr_data(reply, size, msg.as_bytes()),
                 None => reply.error(Errno::ENODATA),
             };
@@ -78,7 +78,7 @@ impl FuseFilesystem {
             .unwrap_or_default();
 
         // Include FUSE-level xattr if a write error exists.
-        if self.write_errors.read().contains_key(&ino) {
+        if self.inode_state.has_write_error(ino) {
             names.push(XATTR_ERROR.to_owned());
         }
 

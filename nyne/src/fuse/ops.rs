@@ -80,14 +80,10 @@ impl FuseFilesystem {
                     meta.size,
                     file_kind_to_fuse(FileKind::from(node.kind())),
                     fs_mode::narrow(meta.permissions, fs_mode::FILE_DEFAULT),
-                    self.atime_overrides
-                        .read()
-                        .get(&ino)
-                        .copied()
-                        .map_or(meta.timestamps, |atime| Timestamps {
-                            atime,
-                            ..meta.timestamps
-                        }),
+                    self.inode_state.atime(ino).map_or(meta.timestamps, |atime| Timestamps {
+                        atime,
+                        ..meta.timestamps
+                    }),
                     req,
                 ),
                 TTL,
@@ -221,23 +217,18 @@ impl FuseFilesystem {
         }
 
         // Per-inode write lock prevents concurrent flushes.
-        // Read lock first (common case: entry exists), write lock only on miss.
-        let lock = if let Some(l) = self.write_locks.read().get(&ino) {
-            Arc::clone(l)
-        } else {
-            Arc::clone(self.write_locks.write().entry(ino).or_default())
-        };
+        let lock = self.inode_state.write_lock(ino);
         let _guard = lock.lock();
 
         match self.flush_content(ino, &snapshot.data) {
             Ok(()) => {
                 self.handles.clear_dirty(fh, snapshot.generation);
-                self.write_errors.write().remove(&ino);
+                self.inode_state.clear_write_error(ino);
                 Ok(())
             }
             Err(e) => {
                 debug!(target: "nyne::fuse", ino, error = %e, "flush failed");
-                self.write_errors.write().insert(ino, format!("{e:#}"));
+                self.inode_state.set_write_error(ino, format!("{e:#}"));
                 Err(e)
             }
         }
@@ -320,11 +311,10 @@ impl Filesystem for FuseFilesystem {
         }
 
         if let Some(t) = atime {
-            let time = match t {
+            self.inode_state.set_atime(ino, match t {
                 TimeOrNow::SpecificTime(t) => t,
                 TimeOrNow::Now => SystemTime::now(),
-            };
-            self.atime_overrides.write().insert(ino, time);
+            });
         }
 
         self.reply_attr(ino, req, reply);
@@ -593,9 +583,7 @@ impl Filesystem for FuseFilesystem {
             }
 
             // Evict per-inode state to prevent unbounded growth.
-            self.write_locks.write().remove(&ino);
-            self.write_errors.write().remove(&ino);
-            self.atime_overrides.write().remove(&ino);
+            self.inode_state.evict(ino);
         }
 
         reply.ok();
