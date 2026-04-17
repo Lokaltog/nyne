@@ -3,33 +3,30 @@
 //! Built once at mount time from pre-collected [`ControlCommand`]s.
 //! The control server dispatches incoming requests whose `type` field does not
 //! match a core command by looking up a handler here.
+//!
+//! Backed by [`NamedRegistry`] — collisions are warned at registration
+//! time and last-registration wins.
 
-use std::collections::HashMap;
-
-use tracing::warn;
-
+use super::named_registry::NamedRegistry;
 use crate::plugin::control::{ControlCommand, ControlContext, ControlHandler};
 
 /// Registry of plugin control commands, keyed by command name.
 ///
 /// Immutable after construction — commands cannot be added at runtime.
-/// Lookup is O(1) via `HashMap`.
+/// Lookup is O(1).
 pub struct ControlRegistry {
-    commands: HashMap<&'static str, ControlHandler>,
+    commands: NamedRegistry<&'static str, ControlHandler>,
 }
 
 impl ControlRegistry {
     /// Build the registry from pre-collected control commands.
-    ///
-    /// Duplicate command names are logged as warnings; last registration wins.
     pub(crate) fn from_commands(commands: Vec<ControlCommand>) -> Self {
-        let mut map = HashMap::new();
-        for cmd in commands {
-            if map.insert(cmd.name, cmd.handler).is_some() {
-                warn!(command = cmd.name, "duplicate control command");
-            }
+        Self {
+            commands: NamedRegistry::from_entries(
+                "control command",
+                commands.into_iter().map(|cmd| (cmd.name, cmd.handler)),
+            ),
         }
-        Self { commands: map }
     }
 
     /// Dispatch a plugin control command by name.

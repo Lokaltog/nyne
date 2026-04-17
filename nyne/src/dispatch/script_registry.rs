@@ -5,14 +5,12 @@
 //! they are indexed by their fully-qualified address (e.g., `provider.source.decompose`)
 //! for O(1) lookup when `nyne exec` is invoked.
 //!
-//! Duplicate addresses are detected at registration time and logged as warnings --
-//! the last registration wins, matching `HashMap` insert semantics.
-
-use std::collections::HashMap;
+//! Backed by [`NamedRegistry`]; duplicate addresses are detected at
+//! registration time and logged as warnings -- the last registration wins.
 
 use color_eyre::eyre::eyre;
-use tracing::warn;
 
+use super::named_registry::NamedRegistry;
 use super::script::{Script, ScriptAddress, ScriptContext};
 use crate::prelude::*;
 
@@ -25,23 +23,16 @@ use crate::prelude::*;
 /// Lookup is O(1) via `HashMap`. The `nyne exec` CLI command resolves an address
 /// through this registry, then calls [`Script::exec`] with binary stdin/stdout.
 pub struct ScriptRegistry {
-    scripts: HashMap<ScriptAddress, Arc<dyn Script>>,
+    scripts: NamedRegistry<ScriptAddress, Arc<dyn Script>>,
 }
 
 /// Script registration and execution.
 impl ScriptRegistry {
     /// Build the registry from pre-collected script entries.
-    ///
-    /// Duplicate addresses are logged as warnings; the last registration wins
-    /// (`HashMap` insert semantics).
     pub(crate) fn from_entries(entries: Vec<(ScriptAddress, Arc<dyn Script>)>) -> Self {
-        let mut scripts = HashMap::new();
-        for (address, script) in entries {
-            if scripts.insert(address.clone(), script).is_some() {
-                warn!(address = %address, "duplicate script address");
-            }
+        Self {
+            scripts: NamedRegistry::from_entries("script address", entries),
         }
-        Self { scripts }
     }
 
     /// Execute a script by its fully-qualified address.

@@ -1,5 +1,6 @@
 pub mod activation;
 pub mod control_registry;
+mod named_registry;
 pub mod script;
 pub mod script_registry;
 
