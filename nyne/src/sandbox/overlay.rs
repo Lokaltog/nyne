@@ -84,7 +84,7 @@ pub(super) fn setup(fuse_path: &Path, bind_mounts: &[BindMount], state_root: &Pa
     mnt::detach(fuse_path)?;
     debug!(path = %fuse_path.display(), "FUSE detached");
 
-    let newroot = paths::ProcState::new(state_root, process::getpid()).newroot();
+    let newroot = paths::ProcState::new(state_root, process::getpid()).newroot;
 
     build_newroot(&newroot, base_dirs.as_ref(), mount_root)?;
 
@@ -124,7 +124,7 @@ pub fn prepare_project_storage(path: &Path, state_root: &Path, strategy: Storage
     let rel = path.relative_to(Path::new("/"));
 
     // Both strategies use the same merged path as the daemon's working directory.
-    let merged = proc.merged().join(&rel);
+    let merged = proc.merged.join(&rel);
     dirs(&[&merged])?;
 
     match strategy {
@@ -138,7 +138,7 @@ pub fn prepare_project_storage(path: &Path, state_root: &Path, strategy: Storage
         }
         strategy @ (StorageStrategy::Snapshot | StorageStrategy::Hardlink) => {
             // Clone project into a stable lower dir for use as overlayfs lowerdir.
-            let lower = proc.lower().join(&rel);
+            let lower = proc.lower.join(&rel);
             PROJECT_CLONERS
                 .first()
                 .map(|f| f())
@@ -152,8 +152,8 @@ pub fn prepare_project_storage(path: &Path, state_root: &Path, strategy: Storage
             mnt::remount(&lower, MountFlags::RDONLY)?;
             debug!(lower = %lower.display(), "clone lowerdir remounted read-only");
 
-            let upper = proc.upper().join(&rel);
-            mount_overlay_layers(&merged, &lower, &upper, &proc.work().join(&rel))?;
+            let upper = proc.upper.join(&rel);
+            mount_overlay_layers(&merged, &lower, &upper, &proc.work.join(&rel))?;
             info!(
                 path = %path.display(),
                 lower = %lower.display(),
