@@ -10,7 +10,7 @@ use fuser::{Errno, FileHandle, FopenFlags, INodeNo, ReplyCreate, ReplyEmpty, Rep
 use tracing::debug;
 
 use super::attrs::GENERATION;
-use super::{FuseFilesystem, ensure_dir_path, fuse_try};
+use super::{FuseFilesystem, ensure_dir_path, fuse_err, fuse_try};
 use crate::err::extract_errno;
 use crate::prelude::Op;
 
@@ -27,8 +27,7 @@ impl FuseFilesystem {
         debug!(target: "nyne::fuse", parent, name = %name, "create");
 
         if !self.is_writable_dir(parent, req) {
-            reply.error(Errno::EACCES);
-            return;
+            fuse_err!(reply, Errno::EACCES, parent, "create: parent not writable");
         }
 
         let path = dir_path.join(name.as_ref());
@@ -58,8 +57,7 @@ impl FuseFilesystem {
         debug!(target: "nyne::fuse", parent, name = %name, "mkdir");
 
         if !self.is_writable_dir(parent, req) {
-            reply.error(Errno::EACCES);
-            return;
+            fuse_err!(reply, Errno::EACCES, parent, "mkdir: parent not writable");
         }
 
         let path = dir_path.join(name.as_ref());
@@ -171,8 +169,7 @@ impl FuseFilesystem {
 
         // Fall back to chain dispatch (real filesystem paths).
         if !self.is_writable_dir(parent, req) {
-            reply.error(Errno::EACCES);
-            return;
+            fuse_err!(reply, Errno::EACCES, parent, "rename: parent not writable");
         }
         fuse_try!(
             reply,

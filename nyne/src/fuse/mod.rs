@@ -361,6 +361,20 @@ macro_rules! fuse_try {
         }
     };
 }
+/// Reply with a statically-known errno, logging at debug level.
+///
+/// Unlike [`fuse_try!`] (which extracts an errno from an error chain),
+/// this is for deterministic validation failures where the errno is
+/// known at the call site. Emits a `debug!` event so all FUSE error
+/// replies show up in the same `nyne::fuse` tracing target.
+macro_rules! fuse_err {
+    ($reply:expr, $errno:expr, $ino:expr, $msg:literal) => {{
+        let errno = $errno;
+        debug!(target: "nyne::fuse", ino = $ino, errno = ?errno, $msg);
+        $reply.error(errno);
+        return;
+    }};
+}
 
 /// Resolve a parent inode to its directory path, or reply ENOENT.
 macro_rules! ensure_dir_path {
@@ -376,6 +390,7 @@ macro_rules! ensure_dir_path {
 }
 
 pub(super) use ensure_dir_path;
+pub(super) use fuse_err;
 pub(super) use fuse_try;
 
 /// Split a path into (`parent_dir`, `file_name`), mapping a malformed path to

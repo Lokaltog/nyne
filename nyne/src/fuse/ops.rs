@@ -27,7 +27,7 @@ use super::attrs::{BLKSIZE, GENERATION, TTL, file_kind_to_fuse, make_attr};
 use super::handles::{OpenMode, WriteOutcome};
 use super::inode_map::{InodeEntry, ROOT_INODE};
 use super::mode::{PermissionsExt, WRITE_BITS};
-use super::{FuseFilesystem, ensure_dir_path, fuse_try};
+use super::{FuseFilesystem, ensure_dir_path, fuse_err, fuse_try};
 use crate::err::extract_errno;
 use crate::router::fs::mode as fs_mode;
 use crate::router::{NamedNode, Permissions, Process};
@@ -485,9 +485,7 @@ impl Filesystem for FuseFilesystem {
             && let Some(ref n) = node
             && n.writable().is_none()
         {
-            debug!(target: "nyne::fuse", ino, "open: write rejected (not writable)");
-            reply.error(Errno::EACCES);
-            return;
+            fuse_err!(reply, Errno::EACCES, ino, "open: write rejected (not writable)");
         }
 
         // Lifecycle open hook.
@@ -624,28 +622,23 @@ impl Filesystem for FuseFilesystem {
         }
 
         let Some(entry) = self.inodes.get(ino) else {
-            reply.error(Errno::ENOENT);
-            return;
+            fuse_err!(reply, Errno::ENOENT, ino, "access: inode not found");
         };
         let Some(node) = self.lookup_node(&entry.dir_path, &entry.name, None).ok().flatten() else {
-            reply.error(Errno::ENOENT);
-            return;
+            fuse_err!(reply, Errno::ENOENT, ino, "access: node not found");
         };
 
         // Check requested access mask against the node's capability flags directly,
         // bypassing the FUSE mode-bit round-trip.
         let perms = node.permissions();
         if mask.contains(AccessFlags::R_OK) && !perms.contains(Permissions::READ) {
-            reply.error(Errno::EACCES);
-            return;
+            fuse_err!(reply, Errno::EACCES, ino, "access: R_OK denied");
         }
         if mask.contains(AccessFlags::W_OK) && !perms.contains(Permissions::WRITE) {
-            reply.error(Errno::EACCES);
-            return;
+            fuse_err!(reply, Errno::EACCES, ino, "access: W_OK denied");
         }
         if mask.contains(AccessFlags::X_OK) && !perms.contains(Permissions::EXECUTE) {
-            reply.error(Errno::EACCES);
-            return;
+            fuse_err!(reply, Errno::EACCES, ino, "access: X_OK denied");
         }
         reply.ok();
     }
@@ -653,8 +646,7 @@ impl Filesystem for FuseFilesystem {
     fn readlink(&self, _req: &Request, ino: INodeNo, reply: ReplyData) {
         let ino = u64::from(ino);
         let Some(entry) = self.inodes.get(ino) else {
-            reply.error(Errno::ENOENT);
-            return;
+            fuse_err!(reply, Errno::ENOENT, ino, "readlink: inode not found");
         };
         match self.lookup_node(&entry.dir_path, &entry.name, None) {
             Ok(Some(node)) => match node.target() {

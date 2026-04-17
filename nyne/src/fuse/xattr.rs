@@ -5,7 +5,7 @@ use std::ffi::OsStr;
 use fuser::{Errno, INodeNo, ReplyEmpty, ReplyXattr};
 use tracing::{debug, trace};
 
-use super::{FuseFilesystem, fuse_try};
+use super::{FuseFilesystem, fuse_err, fuse_try};
 use crate::router::Attributable;
 
 /// Reply with xattr data, respecting the size-query protocol.
@@ -41,8 +41,7 @@ impl FuseFilesystem {
         // kernel queries these on every file access and dispatching through
         // the chain for each one is pure overhead.
         if !attr_name.starts_with("user.") {
-            reply.error(Errno::ENODATA);
-            return;
+            fuse_err!(reply, Errno::ENODATA, ino, "getxattr: non-user namespace");
         }
 
         // FUSE-level xattr: last write error.
@@ -55,12 +54,10 @@ impl FuseFilesystem {
 
         // Delegate to the node's Attributable capability.
         let Some(node) = fuse_try!(reply, self.resolve_node_for_inode(ino), ino, "getxattr lookup failed") else {
-            reply.error(Errno::ENOENT);
-            return;
+            fuse_err!(reply, Errno::ENOENT, ino, "getxattr: node not found");
         };
         let Some(attr) = node.attributable() else {
-            reply.error(Errno::ENODATA);
-            return;
+            fuse_err!(reply, Errno::ENODATA, ino, "getxattr: attributable unsupported");
         };
         match attr.get(&attr_name) {
             Some(data) => reply_xattr_data(reply, size, &data),
@@ -100,12 +97,15 @@ impl FuseFilesystem {
         debug!(target: "nyne::fuse", ino, name = %attr_name, "setxattr");
 
         let Some(node) = fuse_try!(reply, self.resolve_node_for_inode(ino), ino, "setxattr lookup failed") else {
-            reply.error(Errno::ENOENT);
-            return;
+            fuse_err!(reply, Errno::ENOENT, ino, "setxattr: node not found");
         };
         let Some(attr) = node.attributable() else {
-            reply.error(Errno::from_i32(libc::ENOTSUP));
-            return;
+            fuse_err!(
+                reply,
+                Errno::from_i32(libc::ENOTSUP),
+                ino,
+                "setxattr: attributable unsupported"
+            );
         };
         fuse_try!(reply, attr.set(&attr_name, value), ino, "setxattr failed");
         reply.ok();
