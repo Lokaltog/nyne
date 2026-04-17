@@ -5,7 +5,7 @@
 
 use std::fs::FileType;
 
-use crate::router::NodeKind;
+use crate::types::NodeKind;
 
 /// Filesystem entry kind: file, directory, or symlink.
 ///
@@ -14,15 +14,11 @@ use crate::router::NodeKind;
 /// This is intentionally decoupled from `std::fs::FileType` so virtual nodes
 /// can produce it without touching the real filesystem.
 ///
-/// The router layer has its own [`NodeKind`](crate::router::NodeKind) — the
-/// subset of entry types the virtual tree supports. The two enums are
-/// intentionally separate: `FileKind` is the Tier-0 cross-layer discriminant
-/// (and `#[non_exhaustive]` to allow future OS-level types like sockets),
-/// while `NodeKind` is a Tier-1 router concept. Conversion is one-way:
+/// Complements [`NodeKind`](crate::types::NodeKind): `NodeKind` is the
+/// exhaustive router-level subset the virtual tree can produce, while
+/// `FileKind` is `#[non_exhaustive]` so new OS-level types (sockets, FIFOs)
+/// can be added without a semver break. Conversion is one-way:
 /// `From<NodeKind> for FileKind`.
-///
-/// Marked `#[non_exhaustive]` to allow future additions (e.g., sockets,
-/// FIFOs) without a semver break.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileKind {

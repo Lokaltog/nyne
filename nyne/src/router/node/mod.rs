@@ -1,4 +1,3 @@
-use std::fs::FileType;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -9,6 +8,7 @@ use bitflags::bitflags;
 use color_eyre::eyre::Result;
 
 use crate::router::fs::Filesystem;
+pub use crate::types::NodeKind;
 use crate::types::Timestamps;
 
 /// Context passed to [`Readable::read`] when content is requested.
@@ -112,38 +112,6 @@ pub trait Renameable: Send + Sync {
 /// Delete handler for a virtual node.
 pub trait Unlinkable: Send + Sync {
     fn unlink(&self, ctx: &UnlinkContext<'_>) -> Result<AffectedFiles>;
-}
-
-/// The kind of virtual filesystem node.
-///
-/// Intentionally separate from [`FileKind`](crate::types::FileKind), which
-/// lives in the Tier-0 types layer. `NodeKind` is a Tier-1 router concept —
-/// the subset of filesystem entry types that the virtual tree can represent.
-/// `FileKind` is the cross-layer discriminant that the FUSE layer and
-/// filesystem backends consume, and is `#[non_exhaustive]` so new OS-level
-/// types (sockets, FIFOs) can be added without touching the router.
-///
-/// Conversion is one-way: `From<NodeKind> for FileKind`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NodeKind {
-    File,
-    Directory,
-    Symlink,
-}
-
-impl From<FileType> for NodeKind {
-    /// Anything not a directory or symlink is classified as [`NodeKind::File`],
-    /// including special file types like sockets or FIFOs. Mirrors the
-    /// [`From<FileType> for FileKind`](crate::types::FileKind) conversion.
-    fn from(ft: FileType) -> Self {
-        if ft.is_dir() {
-            Self::Directory
-        } else if ft.is_symlink() {
-            Self::Symlink
-        } else {
-            Self::File
-        }
-    }
 }
 
 /// Cache policy for a node's content. Opt-in — nodes without a policy are not cached.

@@ -7,6 +7,9 @@
 
 /// Filesystem entry kind enum (file, directory, symlink).
 pub mod file_kind;
+/// Virtual filesystem node kind (file, directory, symlink).
+pub mod node_kind;
+
 /// Abstraction over real filesystem operations for FUSE passthrough.
 ///
 /// Slice specification parsing for list-like virtual files (`:M`, `:M-N`, `:-N`).
@@ -16,6 +19,7 @@ mod symbol_line_range;
 /// Timestamp triplet for virtual filesystem nodes.
 mod timestamps;
 pub use file_kind::FileKind;
+pub use node_kind::NodeKind;
 pub use symbol_line_range::SymbolLineRange;
 pub use timestamps::Timestamps;
 
