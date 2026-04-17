@@ -333,19 +333,27 @@ const PROJECT_CONFIG_FILENAMES: &[&str] = &[".nyne/config.toml", ".nyne.toml", "
 pub(crate) fn load_project_config(project_root: &Path) -> Result<Option<toml::Value>> {
     for filename in PROJECT_CONFIG_FILENAMES {
         let path = project_root.join(filename);
-        match fs::read_to_string(&path) {
-            Ok(contents) => {
-                tracing::debug!(path = %path.display(), "loading project config");
-                let value: toml::Value =
-                    toml::from_str(&contents).wrap_err_with(|| format!("parsing {}", path.display()))?;
-                return Ok(Some(value));
-            }
-            Err(e) if e.kind() == ErrorKind::NotFound => {}
-
-            Err(e) => return Err(e).wrap_err_with(|| format!("reading {}", path.display())),
+        if let Some(value) = read_toml_if_exists(&path)? {
+            tracing::debug!(path = %path.display(), "loaded project config");
+            return Ok(Some(value));
         }
     }
     Ok(None)
+}
+/// Load and parse a TOML file if it exists, returning `Ok(None)` for missing files.
+///
+/// Shared by `load_user_config` and `load_project_config` — both need the
+/// NotFound-is-skip + `wrap_err_with` semantics, just over different paths.
+fn read_toml_if_exists(path: &Path) -> Result<Option<toml::Value>> {
+    match fs::read_to_string(path) {
+        Ok(contents) => {
+            let value: toml::Value =
+                toml::from_str(&contents).wrap_err_with(|| format!("parsing {}", path.display()))?;
+            Ok(Some(value))
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e).wrap_err_with(|| format!("reading {}", path.display())),
+    }
 }
 /// Load user configuration from the XDG config file.
 ///
@@ -356,21 +364,8 @@ pub(crate) fn load_user_config() -> Result<Option<toml::Value>> {
         tracing::debug!("no XDG config directory found, skipping user config");
         return Ok(None);
     };
-
     tracing::debug!(path = %path.display(), "loading user config");
-
-    match fs::read_to_string(&path) {
-        Ok(contents) => {
-            let value: toml::Value =
-                toml::from_str(&contents).wrap_err_with(|| format!("parsing {}", path.display()))?;
-            Ok(Some(value))
-        }
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            tracing::debug!(path = %path.display(), "config file not found, skipping user config");
-            Ok(None)
-        }
-        Err(e) => Err(e).wrap_err_with(|| format!("reading {}", path.display())),
-    }
+    read_toml_if_exists(&path)
 }
 
 /// Unit tests for configuration deserialization and validation.
