@@ -1,4 +1,4 @@
-use nyne::config::PluginConfig;
+use nyne::plugin::PluginConfig;
 use rstest::rstest;
 
 use super::*;

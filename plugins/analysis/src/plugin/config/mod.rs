@@ -3,7 +3,7 @@
 pub mod vfs;
 use std::collections::HashSet;
 
-use nyne::config::PluginConfig;
+use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for the code analysis engine.

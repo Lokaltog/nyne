@@ -48,7 +48,7 @@ impl Plugin for SourcePlugin {
     /// Inserts `Arc<SyntaxRegistry>` and `DecompositionCache` as separate
     /// `AnyMap` entries so downstream plugins can retrieve them individually.
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
-        let config = Config::from_context(ctx, self.id());
+        let config = ctx.plugin_config::<Config>(self.id());
         let syntax = SyntaxRegistry::global();
         let decomposition = DecompositionCache::new(Arc::clone(ctx.fs()), Arc::clone(&syntax), config.max_depth);
 
@@ -97,7 +97,7 @@ impl Plugin for SourcePlugin {
 
     #[expect(clippy::expect_used, reason = "source plugin activation is a lifecycle invariant")]
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
-        let config = Config::from_context(ctx, self.id());
+        let config = ctx.plugin_config::<Config>(self.id());
         let syntax = ctx.syntax_registry().expect("SyntaxRegistry missing");
         let decomposition = ctx.decomposition_cache().expect("DecompositionCache missing");
         let staging = ctx.edit_staging().expect("EditStaging missing");

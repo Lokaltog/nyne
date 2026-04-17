@@ -23,7 +23,7 @@ impl Plugin for VisibilityPlugin {
     fn id(&self) -> &'static str { "visibility" }
 
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
-        let config = VisibilityConfig::from_context(ctx, self.id());
+        let config = ctx.plugin_config::<VisibilityConfig>(self.id());
 
         // Merge config passthrough names with plugin-contributed names.
         let plugin_procs = ctx

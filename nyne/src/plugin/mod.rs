@@ -27,6 +27,7 @@
 
 use linkme::distributed_slice;
 
+pub use self::config::PluginConfig;
 use crate::config::NyneConfig;
 use crate::dispatch::script::ScriptEntry;
 use crate::prelude::*;
@@ -46,6 +47,7 @@ pub struct PluginContributions {
     pub control_commands: Vec<ControlCommand>,
 }
 
+pub mod config;
 pub mod control;
 pub use control::{AttachedProcess, ControlCommand, ControlContext, ProcessTable};
 
@@ -190,7 +192,7 @@ macro_rules! provider_graph {
 }
 
 /// Implement [`Plugin::default_config`] and [`Plugin::resolved_config`] from a
-/// [`PluginConfig`](crate::config::PluginConfig) type.
+/// [`PluginConfig`](crate::plugin::PluginConfig) type.
 ///
 /// Place alongside [`provider_graph!`] at the top of a `Plugin` impl block.
 ///
@@ -205,11 +207,11 @@ macro_rules! provider_graph {
 macro_rules! plugin_config {
     ($config_ty:ty) => {
         fn default_config(&self) -> Option<toml::Table> {
-            <$config_ty as $crate::config::PluginConfig>::default_table()
+            <$config_ty as $crate::plugin::PluginConfig>::default_table()
         }
 
         fn resolved_config(&self, config: &$crate::config::NyneConfig) -> Option<toml::Value> {
-            <$config_ty as $crate::config::PluginConfig>::from_section(config.plugin.get(self.id())).to_value()
+            <$config_ty as $crate::plugin::PluginConfig>::from_section(config.plugin.get(self.id())).to_value()
         }
     };
 }

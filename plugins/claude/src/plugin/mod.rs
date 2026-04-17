@@ -5,8 +5,7 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use linkme::distributed_slice;
-use nyne::config::PluginConfig;
-use nyne::plugin::{PLUGINS, Plugin, PluginFactory};
+use nyne::plugin::{PLUGINS, Plugin, PluginConfig, PluginFactory};
 use nyne::router::Provider;
 use nyne::{ActivationContext, ScriptEntry};
 use nyne_source::dominant_ext;
@@ -32,7 +31,7 @@ impl Plugin for ClaudePlugin {
 
     /// Register hook scripts based on per-hook toggle configuration.
     fn scripts(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<ScriptEntry>> {
-        Ok(script_entries(&Config::from_context(ctx, self.id())))
+        Ok(script_entries(&ctx.plugin_config::<Config>(self.id())))
     }
 
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
@@ -42,7 +41,7 @@ impl Plugin for ClaudePlugin {
             at_tree: routes::build_at_tree(),
             templates: build_templates(),
             ext: dominant_ext(ctx),
-            config: Config::from_context(ctx, self.id()),
+            config: ctx.plugin_config::<Config>(self.id()),
         })])
     }
 }

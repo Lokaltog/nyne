@@ -2,8 +2,8 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use nyne::config::PluginConfig;
 use nyne::deep_merge;
+use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator as _;
 

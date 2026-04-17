@@ -6,18 +6,15 @@
 //! each plugin deserializes its own section independently.
 
 use std::collections::HashMap;
+use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::{any, fs};
 
 use color_eyre::eyre::{Result, WrapErr};
 use directories::ProjectDirs;
 use garde::Validate;
 use rustix::mount::MountFlags;
 use serde::{Deserialize, Serialize};
-
-use crate::dispatch::activation::ActivationContext;
-use crate::plugin::Plugin;
 
 /// Top-level nyne configuration, deserialized from `~/.config/nyne/config.toml`.
 ///
@@ -55,7 +52,7 @@ pub struct NyneConfig {
     ///
     /// Each key is a plugin ID (e.g., `"source"`, `"git"`). Values are
     /// opaque TOML tables — plugins deserialize their own config via
-    /// [`PluginConfig::from_section`].
+    /// [`PluginConfig::from_section`](crate::plugin::PluginConfig::from_section).
     ///
     /// ```toml
     /// [plugin.source]
@@ -347,7 +344,7 @@ const PROJECT_CONFIG_FILENAMES: &[&str] = &[".nyne/config.toml", ".nyne.toml", "
 /// Searches for config files in priority order (first match wins).
 /// Returns `None` if no project config file exists.
 /// Returns an error if a file exists but cannot be read or parsed.
-fn load_project_config(project_root: &Path) -> Result<Option<toml::Value>> {
+pub(crate) fn load_project_config(project_root: &Path) -> Result<Option<toml::Value>> {
     for filename in PROJECT_CONFIG_FILENAMES {
         let path = project_root.join(filename);
         match fs::read_to_string(&path) {
@@ -368,7 +365,7 @@ fn load_project_config(project_root: &Path) -> Result<Option<toml::Value>> {
 ///
 /// Returns `None` if no XDG directory exists or the config file is missing.
 /// Returns an error if the file exists but cannot be read or parsed.
-fn load_user_config() -> Result<Option<toml::Value>> {
+pub(crate) fn load_user_config() -> Result<Option<toml::Value>> {
     let Some(path) = config_path() else {
         tracing::debug!("no XDG config directory found, skipping user config");
         return Ok(None);
@@ -388,108 +385,6 @@ fn load_user_config() -> Result<Option<toml::Value>> {
         }
         Err(e) => Err(e).wrap_err_with(|| format!("reading {}", path.display())),
     }
-}
-
-impl NyneConfig {
-    /// Load configuration by merging layers in priority order.
-    ///
-    /// The merge strategy uses [`toml_merge::deep_merge`](crate::toml_merge::deep_merge)
-    /// so that each successive layer only needs to specify overrides — unset keys
-    /// inherit from the layer below.
-    ///
-    /// ## Layer order (lowest → highest priority)
-    ///
-    /// 1. **Core defaults** — `NyneConfig::default()` serialized to TOML.
-    /// 2. **Plugin defaults** — each plugin's `default_config()` merged into
-    ///    `plugin.<id>`.
-    /// 3. **User config** — XDG config file (`~/.config/nyne/config.toml`).
-    /// 4. **Project config** — `.nyne.toml` (or similar) in the project root.
-    ///
-    /// After merging, the result is deserialized back into `NyneConfig` and
-    /// validated with `garde`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any config file exists but cannot be read/parsed,
-    /// if the merged result fails deserialization, or if validation fails.
-    pub fn load(plugins: &[Box<dyn Plugin>], project_root: Option<&Path>) -> Result<Self> {
-        use crate::deep_merge::deep_merge;
-
-        // Layer 1: Core defaults.
-        let mut merged = toml::Value::try_from(Self::default()).wrap_err("serializing default config")?;
-
-        // Layer 2: Plugin defaults.
-        for plugin in plugins {
-            let Some(defaults) = plugin.default_config() else {
-                continue;
-            };
-
-            let plugin_section = merged
-                .get_mut("plugin")
-                .and_then(toml::Value::as_table_mut)
-                .ok_or_else(|| color_eyre::eyre::eyre!("default config missing plugin table"))?;
-
-            let plugin_value = toml::Value::Table(defaults);
-
-            let entry = plugin_section
-                .entry(plugin.id())
-                .or_insert(toml::Value::Table(toml::Table::new()));
-
-            deep_merge(entry, &plugin_value);
-        }
-
-        // Layer 3: User config (XDG).
-        if let Some(user_config) = load_user_config()? {
-            deep_merge(&mut merged, &user_config);
-        }
-
-        // Layer 4: Project config.
-        if let Some(root) = project_root
-            && let Some(project_config) = load_project_config(root)?
-        {
-            deep_merge(&mut merged, &project_config);
-        }
-
-        // Deserialize merged result.
-        let config: Self = merged.try_into().wrap_err("deserializing merged config")?;
-        config.validate().wrap_err("config validation failed")?;
-        Ok(config)
-    }
-}
-/// Trait for plugin configuration structs.
-///
-/// Provides a standard deserialization path from the activation context's config.
-/// Implement this trait on your config struct (requires `Default + Serialize + Deserialize`),
-/// then call `Config::from_context(ctx, self.id())` in your plugin's `activate()`.
-///
-/// Use `nyne::plugin_config!(ConfigType)` inside your `Plugin` impl to wire
-/// `default_config()` and `resolved_config()` automatically.
-pub trait PluginConfig: Default + serde::Serialize + for<'de> serde::Deserialize<'de> + Sized {
-    /// Deserialize from an optional TOML section, falling back to defaults on
-    /// missing section or deserialization failure. Logs a `warn!` with the
-    /// type name and error when deserialization fails.
-    fn from_section(section: Option<&toml::Value>) -> Self {
-        let Some(value) = section else {
-            return Self::default();
-        };
-        value.clone().try_into().unwrap_or_else(|err| {
-            tracing::warn!(
-                ?err,
-                std_type = any::type_name::<Self>(),
-                "invalid plugin config, using defaults"
-            );
-            Self::default()
-        })
-    }
-
-    /// Deserialize this config from the activation context using the given plugin id.
-    fn from_context(ctx: &ActivationContext, id: &str) -> Self { Self::from_section(ctx.config().plugin.get(id)) }
-
-    /// Serialize the default config as a TOML table for the merge chain.
-    fn default_table() -> Option<toml::Table> { toml::Table::try_from(Self::default()).ok() }
-
-    /// Serialize a resolved config instance as a TOML value for `nyne config` output.
-    fn to_value(&self) -> Option<toml::Value> { toml::Value::try_from(self).ok() }
 }
 
 /// Unit tests for configuration deserialization and validation.

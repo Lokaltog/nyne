@@ -7,8 +7,7 @@ use std::thread;
 use color_eyre::eyre::Result;
 use linkme::distributed_slice;
 use nyne::ActivationContext;
-use nyne::config::PluginConfig;
-use nyne::plugin::{PLUGINS, Plugin, PluginFactory};
+use nyne::plugin::{PLUGINS, Plugin, PluginConfig, PluginFactory};
 use nyne::router::Provider;
 use nyne_companion::CompanionContextExt;
 use nyne_source::{SourceContextExt, SyntaxRegistry};
@@ -46,7 +45,7 @@ impl Plugin for LspPlugin {
     fn id(&self) -> &'static str { "lsp" }
 
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
-        let lsp_config = Config::from_context(ctx, self.id());
+        let lsp_config = ctx.plugin_config::<Config>(self.id());
         let sandbox_env = ctx.config().sandbox.env.clone();
         let lsp_registry = Registry::build_with_config(&lsp_config);
 

@@ -1,6 +1,6 @@
 pub mod vfs;
 
-use nyne::config::PluginConfig;
+use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// Top-level configuration for the git plugin.

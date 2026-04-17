@@ -7,7 +7,7 @@
 //! first in the overview.
 
 pub mod vfs;
-use nyne::config::PluginConfig;
+use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// TODO/FIXME comment aggregation configuration.

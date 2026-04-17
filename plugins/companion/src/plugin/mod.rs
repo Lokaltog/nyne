@@ -25,7 +25,7 @@ impl Plugin for CompanionPlugin {
 
     #[expect(clippy::expect_used, reason = "companion extension point is a lifecycle invariant")]
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
-        let config = CompanionConfig::from_context(ctx, self.id());
+        let config = ctx.plugin_config::<CompanionConfig>(self.id());
         let ext = ctx.companion_extensions().expect("CompanionExtensions missing");
         Ok(vec![Arc::new(CompanionProvider {
             suffix: config.suffix.into(),

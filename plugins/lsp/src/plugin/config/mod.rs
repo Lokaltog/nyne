@@ -5,7 +5,7 @@ pub mod vfs;
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
-use nyne::config::PluginConfig;
+use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// Maps file extensions to LSP language identifiers.

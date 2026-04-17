@@ -11,10 +11,9 @@ pub use std::sync::Arc;
 
 pub use color_eyre::eyre::Result;
 
-pub use crate::config::PluginConfig;
 pub use crate::dispatch::activation::ActivationContext;
 pub use crate::err::io_err;
-pub use crate::plugin::{PLUGINS, Plugin};
+pub use crate::plugin::{PLUGINS, Plugin, PluginConfig};
 pub use crate::router::{
     AffectedFiles, CachePolicy, LazyReadable, NamedNode, Next, Node, NodeKind, Op, Provider, ProviderId, ProviderMeta,
     ReadContext, Readable, Request, RouteCtx, RouteTree, Writable,

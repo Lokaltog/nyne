@@ -6,8 +6,7 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 use linkme::distributed_slice;
 use nyne::ActivationContext;
-use nyne::config::PluginConfig;
-use nyne::plugin::{PLUGINS, Plugin, PluginFactory};
+use nyne::plugin::{PLUGINS, Plugin, PluginConfig, PluginFactory};
 use nyne::router::{NamedNode, Provider, Request, RouteCtx};
 use nyne::templates::{HandleBuilder, TemplateGlobals, TemplateHandle};
 use nyne_companion::CompanionRequest as _;
@@ -34,7 +33,7 @@ impl Plugin for AnalysisPlugin {
 
     #[allow(clippy::excessive_nesting)]
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
-        let config = Config::from_context(ctx, self.id());
+        let config = ctx.plugin_config::<Config>(self.id());
         let engine = Arc::new(Engine::build_filtered(&config));
 
         info!(

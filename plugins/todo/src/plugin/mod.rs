@@ -4,8 +4,7 @@ pub mod config;
 use std::sync::Arc;
 
 use linkme::distributed_slice;
-use nyne::config::PluginConfig;
-use nyne::plugin::PluginFactory;
+use nyne::plugin::{PluginConfig, PluginFactory};
 use nyne::prelude::*;
 use nyne::router::Provider;
 use nyne::templates::{HandleBuilder, TemplateHandle};
@@ -34,7 +33,7 @@ impl Plugin for TodoPlugin {
 
     #[expect(clippy::expect_used, reason = "source plugin activation is a lifecycle invariant")]
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
-        let config = Config::from_context(ctx, self.id());
+        let config = ctx.plugin_config::<Config>(self.id());
         if !config.enabled {
             return Ok(());
         }

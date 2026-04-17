@@ -1,6 +1,6 @@
 //! Configuration for `[plugin.visibility]`.
 
-use nyne::config::PluginConfig;
+use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// Visibility plugin configuration.

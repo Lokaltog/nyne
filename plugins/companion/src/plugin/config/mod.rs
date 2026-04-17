@@ -1,6 +1,6 @@
 //! Configuration for `[plugin.companion]`.
 
-use nyne::config::PluginConfig;
+use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// Companion plugin configuration.

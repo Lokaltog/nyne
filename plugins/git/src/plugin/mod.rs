@@ -9,8 +9,7 @@ use std::sync::Arc;
 
 use linkme::distributed_slice;
 use nyne::ExtensionCounts;
-use nyne::config::PluginConfig;
-use nyne::plugin::PluginFactory;
+use nyne::plugin::{PluginConfig, PluginFactory};
 use nyne::prelude::*;
 use nyne::router::Provider;
 use nyne_companion::CompanionContextExt;
@@ -54,7 +53,7 @@ impl Plugin for GitPlugin {
             Ok(counts) => ctx.insert(ExtensionCounts::new(counts)),
             Err(e) => warn!(error = %e, "failed to read extension counts from git index"),
         }
-        let config = Config::from_context(ctx, self.id());
+        let config = ctx.plugin_config::<Config>(self.id());
         let state = Arc::new(GitState {
             repo: Arc::clone(&repo),
             handles: provider::build_handles(&config.vfs),

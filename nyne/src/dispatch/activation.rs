@@ -4,8 +4,6 @@
 //! lifetime of a mount session. Plugins insert domain services (git, syntax,
 //! LSP, etc.) into it during the activation phase, and providers clone an
 //! `Arc<ActivationContext>` to access those services at request time.
-//!
-//! This is an **interface module** — it may be imported freely from any tier.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -120,6 +118,15 @@ impl ActivationContext {
     /// and activation order is non-deterministic.
     pub fn get_or_insert_default<T: Send + Sync + Default + 'static>(&mut self) -> &mut T {
         self.extensions.entry::<T>().or_default()
+    }
+
+    /// Materialize a plugin-specific configuration struct from this context.
+    ///
+    /// Looks up the `plugin.<id>` TOML section in [`ActivationContext::config`]
+    /// and deserializes it via [`PluginConfig::from_section`]. Returns the
+    /// type's `Default` on a missing section or deserialization failure.
+    pub fn plugin_config<C: crate::plugin::PluginConfig>(&self, id: &str) -> C {
+        C::from_section(self.config().plugin.get(id))
     }
 
     /// Display root with trailing slash — for stripping absolute paths to relative.
