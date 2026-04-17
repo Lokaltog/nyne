@@ -5,7 +5,7 @@ use std::ffi::OsStr;
 use fuser::{Errno, INodeNo, ReplyEmpty, ReplyXattr};
 use tracing::{debug, trace};
 
-use super::{FuseFilesystem, extract_errno, fuse_try};
+use super::{FuseFilesystem, fuse_try};
 use crate::router::Attributable;
 
 /// Reply with xattr data, respecting the size-query protocol.

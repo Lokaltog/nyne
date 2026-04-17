@@ -4,7 +4,6 @@
 //! Growth-only: entries are never removed to guarantee inode uniqueness.
 
 use std::collections::HashMap;
-use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -12,7 +11,7 @@ use color_eyre::eyre::Result;
 use parking_lot::RwLock;
 use slab::Slab;
 
-use crate::err::io_err;
+use crate::err;
 
 /// Metadata for a single inode — its location in the directory tree.
 #[derive(Clone, Debug)]
@@ -89,8 +88,7 @@ impl InodeMap {
     /// Resolve an inode to its full path, mapping a miss to
     /// [`ErrorKind::NotFound`] so the FUSE layer can surface `ENOENT`.
     pub fn resolve_path(&self, inode: u64) -> Result<PathBuf> {
-        self.full_path(inode)
-            .ok_or_else(|| io_err(ErrorKind::NotFound, format!("inode {inode} not found")))
+        self.full_path(inode).ok_or_else(|| err::inode_not_found(inode))
     }
 
     /// Get the parent inode for an inode, defaulting to [`ROOT_INODE`] if unknown.

@@ -10,7 +10,8 @@ use fuser::{Errno, FileHandle, FopenFlags, INodeNo, ReplyCreate, ReplyEmpty, Rep
 use tracing::debug;
 
 use super::attrs::GENERATION;
-use super::{FuseFilesystem, ensure_dir_path, extract_errno, fuse_try};
+use super::{FuseFilesystem, ensure_dir_path, fuse_try};
+use crate::err::extract_errno;
 use crate::prelude::Op;
 
 impl FuseFilesystem {

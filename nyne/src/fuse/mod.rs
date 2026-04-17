@@ -23,20 +23,18 @@ mod ops;
 mod xattr;
 
 use std::collections::HashMap;
-use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock};
 use std::time::{Instant, SystemTime};
 
-use color_eyre::eyre::{Report, Result};
-use fuser::Errno;
+use color_eyre::eyre::Result;
 use handles::HandleTable;
 use inode_map::InodeMap;
 use notify::KernelNotifier;
 use parking_lot::{Mutex, RwLock};
 
-use crate::err::io_err;
+use crate::err;
 use crate::path_utils::PathExt;
 use crate::procfs::read_comm;
 use crate::router::{
@@ -228,8 +226,7 @@ impl FuseFilesystem {
     /// [`ErrorKind::NotFound`] so the FUSE layer can surface `ENOENT`.
     fn resolve_named(&self, path: &Path) -> Result<NamedNode> {
         let (dir, name) = split_path(path)?;
-        self.lookup_node(dir, name, None)?
-            .ok_or_else(|| io_err(ErrorKind::NotFound, format!("not found: {}", path.display())))
+        self.lookup_node(dir, name, None)?.ok_or_else(|| err::not_found(path))
     }
 
     /// Try to rename via the node's [`Renameable`] capability.
@@ -315,9 +312,9 @@ impl Filesystem for FuseFilesystem {
     }
 
     fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
-        let node = self.resolve_named(path)?;
-        node.readable()
-            .ok_or_else(|| io_err(ErrorKind::PermissionDenied, format!("not readable: {}", path.display())))?
+        self.resolve_named(path)?
+            .readable()
+            .ok_or_else(|| err::not_readable(path))?
             .read(&ReadContext {
                 path,
                 fs: self.backing_fs.as_ref(),
@@ -328,7 +325,7 @@ impl Filesystem for FuseFilesystem {
         let affected = self
             .resolve_named(path)?
             .writable()
-            .ok_or_else(|| io_err(ErrorKind::PermissionDenied, format!("not writable: {}", path.display())))?
+            .ok_or_else(|| err::not_writable(path))?
             .write(
                 &WriteContext {
                     path,
@@ -356,7 +353,7 @@ macro_rules! fuse_try {
         match $expr {
             Ok(val) => val,
             Err(e) => {
-                let errno = extract_errno(&e);
+                let errno = $crate::err::extract_errno(&e);
                 debug!(target: "nyne::fuse", ino = $ino, error = %e, errno = ?errno, $msg);
                 $reply.error(errno);
                 return;
@@ -383,43 +380,4 @@ pub(super) use fuse_try;
 
 /// Split a path into (`parent_dir`, `file_name`), mapping a malformed path to
 /// [`ErrorKind::InvalidInput`] so callers surface `EINVAL` rather than `EIO`.
-fn split_path(path: &Path) -> Result<(&Path, &str)> {
-    path.split_dir_name()
-        .ok_or_else(|| io_err(ErrorKind::InvalidInput, format!("invalid path: {}", path.display())))
-}
-
-/// Extract a FUSE errno from an opaque eyre error chain.
-///
-/// Walks the error chain looking for [`std::io::Error`]. If found, uses
-/// its raw OS errno (for real I/O errors) or maps its [`ErrorKind`] (for
-/// synthetic errors). Falls back to [`Errno::EIO`] if no `io::Error` is
-/// in the chain.
-///
-/// This is the SSOT for converting **dispatch-level errors** (provider
-/// results, chain errors) into FUSE errnos. It exists because those
-/// errors are opaque `Report`s whose errno must be discovered by walking
-/// the cause chain.
-///
-/// Direct `Errno::` constants elsewhere in the FUSE layer (e.g., returning
-/// `ENOENT` when an inode is not in the map, or `ENOTSUP` for an
-/// unsupported xattr operation) are **not** violations of this SSOT —
-/// those are deterministic validation checks where the errno is known
-/// statically at the call site and no error chain exists to inspect.
-fn extract_errno(e: &Report) -> Errno {
-    for cause in e.chain() {
-        if let Some(io_err) = cause.downcast_ref::<Error>() {
-            if let Some(raw) = io_err.raw_os_error() {
-                return Errno::from_i32(raw);
-            }
-            return match io_err.kind() {
-                ErrorKind::NotFound => Errno::ENOENT,
-                ErrorKind::AlreadyExists => Errno::from_i32(libc::EEXIST),
-                ErrorKind::PermissionDenied => Errno::EACCES,
-                ErrorKind::InvalidInput => Errno::EINVAL,
-                ErrorKind::Unsupported => Errno::from_i32(libc::ENOTSUP),
-                _ => Errno::EIO,
-            };
-        }
-    }
-    Errno::EIO
-}
+fn split_path(path: &Path) -> Result<(&Path, &str)> { path.split_dir_name().ok_or_else(|| err::invalid_path(path)) }
