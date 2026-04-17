@@ -29,7 +29,7 @@ use rustix::pipe::{PipeFlags, pipe_with};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, trace, warn};
 
-use super::namespace::Namespace;
+use super::primitives::Namespace;
 use crate::dispatch::script::ScriptContext;
 use crate::dispatch::{ControlRegistry, ScriptRegistry};
 use crate::plugin::control::{AttachedProcess, ControlContext, ProcessTable};

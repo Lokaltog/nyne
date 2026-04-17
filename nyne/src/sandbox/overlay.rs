@@ -39,7 +39,8 @@ use rustix::mount::MountFlags;
 use rustix::process;
 use tracing::{debug, info};
 
-use super::{PROJECT_CLONERS, mnt, namespace, paths};
+use super::primitives::{mnt, namespace};
+use super::{PROJECT_CLONERS, paths};
 use crate::config::{BindMount, StorageStrategy};
 use crate::path_utils::PathExt;
 

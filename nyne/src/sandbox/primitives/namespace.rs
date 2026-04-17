@@ -23,7 +23,7 @@ use rustix::thread::{LinkNameSpaceType, UnshareFlags};
 use rustix::{system, thread};
 use tracing::{debug, trace};
 
-use super::paths;
+use super::super::paths;
 use crate::err::ErrnoExt;
 
 /// Safe wrapper around `unshare_unsafe` for flags that don't affect fd tables.
@@ -61,7 +61,7 @@ impl Namespace {
     /// namespace first grants the necessary capability.
     ///
     /// Consumes `self` — the namespace fds are closed after entry.
-    pub(super) fn enter(self) -> Result<()> {
+    pub fn enter(self) -> Result<()> {
         debug!("entering user namespace");
         syscall_try!(
             thread::move_into_link_name_space(self.user.as_fd(), Some(LinkNameSpaceType::User)),
@@ -100,7 +100,7 @@ fn write_id_maps(uid_map: &str, gid_map: &str) -> Result<()> {
 /// Captures uid/gid before `unshare` (afterwards they become 65534/overflow
 /// until maps are written). Maps the current user to root inside the
 /// namespace, enabling unprivileged `mount()` syscalls.
-pub(super) fn unshare_user_mount() -> Result<()> {
+pub fn unshare_user_mount() -> Result<()> {
     let uid = getuid();
     let gid = getgid();
 
@@ -126,7 +126,7 @@ pub(super) fn unshare_user_mount() -> Result<()> {
 ///
 /// The caller must already have `CAP_SYS_ADMIN` in the current user
 /// namespace (i.e., after `setns` into the daemon's user namespace).
-pub(super) fn unshare_private_mount() -> Result<()> {
+pub fn unshare_private_mount() -> Result<()> {
     debug!("creating private mount namespace");
     unshare(UnshareFlags::NEWNS, "unshare(CLONE_NEWNS)")?;
     super::mnt::private()?;
@@ -143,7 +143,7 @@ pub(super) fn unshare_private_mount() -> Result<()> {
 /// Creates a new user namespace with uid/gid maps:
 ///   `{real_uid} 0 1` — maps `real_uid` in new ns → uid 0 in parent ns → host uid
 ///   `{real_gid} 0 1` — same for gid
-pub(super) fn unshare_user_remap(uid: u32, gid: u32) -> Result<()> {
+pub fn unshare_user_remap(uid: u32, gid: u32) -> Result<()> {
     debug!(uid, gid, "creating user namespace to remap uid/gid");
 
     unshare(UnshareFlags::NEWUSER, "unshare(CLONE_NEWUSER)")?;
@@ -161,7 +161,7 @@ pub(super) fn unshare_user_remap(uid: u32, gid: u32) -> Result<()> {
 /// Isolates the hostname from the host so the shell prompt can display
 /// a distinct identity (e.g., `user@nyne-sandbox`). Cheap operation —
 /// just copies two strings (hostname + domainname).
-pub(super) fn unshare_uts(hostname: &str) -> Result<()> {
+pub fn unshare_uts(hostname: &str) -> Result<()> {
     debug!(hostname, "creating UTS namespace");
 
     unshare(UnshareFlags::NEWUTS, "unshare(CLONE_NEWUTS)")?;
@@ -178,7 +178,7 @@ pub(super) fn unshare_uts(hostname: &str) -> Result<()> {
 /// `fork()` child becomes PID 1 in the new namespace. That child must
 /// remount `/proc` to reflect the new PID namespace before dropping
 /// mount capabilities (i.e., before `unshare_user_remap`).
-pub(super) fn unshare_pid() -> Result<()> {
+pub fn unshare_pid() -> Result<()> {
     debug!("creating PID namespace");
 
     unshare(UnshareFlags::NEWPID, "unshare(CLONE_NEWPID)")?;

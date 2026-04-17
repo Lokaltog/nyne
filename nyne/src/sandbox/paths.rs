@@ -31,6 +31,8 @@ use std::path::{Path, PathBuf};
 use rustix::process::Pid;
 use tracing::{debug, warn};
 
+use crate::process::is_pid_alive;
+
 /// Path to the current process UID mapping file (`/proc/self/uid_map`).
 ///
 /// Written after `unshare(CLONE_NEWUSER)` to establish the uid mapping
@@ -167,5 +169,33 @@ fn ensure_owner_access(path: &Path) {
     };
     for entry in entries.flatten() {
         ensure_owner_access(&entry.path());
+    }
+}
+
+/// Remove per-process state trees belonging to dead processes.
+///
+/// Scans `<state_root>/proc/` for subdirectories named with a PID, and
+/// removes those whose PID is no longer alive. Called on `nyne mount`
+/// startup so each fresh invocation also cleans up anything a crashed
+/// predecessor left behind.
+///
+/// Per-PID cleanup is handled by [`ProcState::reap`]; this function is
+/// the scanner that invokes it across every stale PID directory.
+pub(super) fn reap_stale(state_root: &Path) {
+    let Ok(entries) = fs::read_dir(proc_root(state_root)) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|s| s.parse::<i32>().ok())
+            .and_then(Pid::from_raw)
+        else {
+            continue;
+        };
+        if !is_pid_alive(pid.as_raw_nonzero().get()) {
+            ProcState::new(state_root, pid).reap();
+        }
     }
 }

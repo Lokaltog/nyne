@@ -21,20 +21,12 @@ macro_rules! syscall_try {
     };
 }
 
-/// Reap overlay/pivot scaffolding dirs left behind by terminated processes.
-mod cleanup;
 /// Control socket IPC between daemon and CLI commands.
 pub mod control;
-/// Mount syscall primitives for sandbox construction.
-pub mod mnt;
-/// Linux namespace creation and entry (user, mount, PID, UTS).
-mod namespace;
 /// Project storage and sandbox filesystem isolation via overlay and pivot_root.
 mod overlay;
 /// Well-known path constructors for sandbox operations.
 pub mod paths;
-/// Process primitives: fork, pipe, exec, and child lifecycle management.
-mod process;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -47,8 +39,12 @@ use signal_hook::consts::{SIGINT, SIGTERM};
 use signal_hook::iterator::Signals;
 use tracing::{debug, info, warn};
 
-pub use self::namespace::Namespace;
-use self::process::{ChildGuard, ReadyPipe, fork_or_die, wait_for_exit};
+/// Linux syscall primitives: mount, namespace, process.
+mod primitives;
+
+pub use self::primitives::Namespace;
+use self::primitives::process::{ChildGuard, ReadyPipe, fork_or_die, wait_for_exit};
+use self::primitives::{mnt, namespace, process};
 use crate::config::StorageStrategy;
 use crate::session;
 
@@ -215,7 +211,7 @@ fn teardown(sessions: Vec<MountSession>, state_root: &Path) {
 pub fn run_mounts(mounts: Vec<(PathBuf, session::SessionId, MountFn)>, state_root: &Path) -> Result<()> {
     // Clean up any per-process state trees left behind by crashed
     // predecessors before spawning our own daemons.
-    cleanup::reap_stale(state_root);
+    paths::reap_stale(state_root);
 
     let mut sessions = Vec::with_capacity(mounts.len());
 

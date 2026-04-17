@@ -29,7 +29,7 @@ use crate::err::ErrnoExt;
 /// The `size` parameter is passed directly as the `size=` mount option
 /// (e.g., `"64m"`). The target directory must already exist. Used for
 /// the newroot scaffold and the isolated `/tmp` inside the sandbox.
-pub(super) fn tmpfs(target: &Path, size: &str) -> Result<()> {
+pub fn tmpfs(target: &Path, size: &str) -> Result<()> {
     let data = CString::new(format!("size={size}")).expect("mount data contains no NUL");
     syscall_try!(
         mount("tmpfs", target, "tmpfs", MountFlags::empty(), &*data),
@@ -45,7 +45,7 @@ pub(super) fn tmpfs(target: &Path, size: &str) -> Result<()> {
 /// Mounts a new `procfs` instance. In the sandbox, `/proc` is initially
 /// bind-mounted from the host (for `uid_map` writes), then remounted by
 /// the PID namespace init process to reflect the sandbox's PID namespace.
-pub(super) fn proc(target: &Path) -> Result<()> {
+pub fn proc(target: &Path) -> Result<()> {
     syscall_try!(
         mount("proc", target, "proc", MountFlags::empty(), None),
         "mounting proc at {}",
@@ -63,7 +63,7 @@ pub(super) fn proc(target: &Path) -> Result<()> {
 /// immutable clone), writes are captured in `upper` (persistent across
 /// sessions), and `work` is used internally by the kernel for atomic
 /// copy-up operations. All four directories must already exist.
-pub(super) fn overlay(target: &Path, lower: &Path, upper: &Path, work: &Path) -> Result<()> {
+pub fn overlay(target: &Path, lower: &Path, upper: &Path, work: &Path) -> Result<()> {
     let opts = format!(
         "lowerdir={},upperdir={},workdir={}",
         lower.display(),
@@ -89,7 +89,7 @@ pub(super) fn overlay(target: &Path, lower: &Path, upper: &Path, work: &Path) ->
 /// Uses `MS_BIND | MS_REC` to clone the entire mount tree. To apply
 /// additional flags (e.g. `MS_RDONLY`), call [`remount`] separately —
 /// the initial bind ignores most flags per kernel semantics.
-pub(super) fn bind(source: &Path, target: &Path) -> Result<()> {
+pub fn bind(source: &Path, target: &Path) -> Result<()> {
     syscall_try!(
         mount_bind_recursive(source, target),
         "bind-mounting {} to {}",
@@ -108,7 +108,7 @@ pub(super) fn bind(source: &Path, target: &Path) -> Result<()> {
 /// Mark the entire mount tree as private (no propagation).
 ///
 /// Prevents subsequent mounts from leaking into parent namespaces.
-pub(super) fn private() -> Result<()> {
+pub fn private() -> Result<()> {
     syscall_try!(
         mount_change("/", MountPropagationFlags::REC | MountPropagationFlags::PRIVATE),
         "marking root mount tree private"
@@ -121,7 +121,7 @@ pub(super) fn private() -> Result<()> {
 ///
 /// Only affects the mount at `target` — submounts retain their own flags.
 /// Common usage: `remount(path, MountFlags::RDONLY)` for read-only.
-pub(super) fn remount(target: &Path, flags: MountFlags) -> Result<()> {
+pub fn remount(target: &Path, flags: MountFlags) -> Result<()> {
     // Must include BIND for bind-mount remounts — without it the kernel
     // treats this as a regular remount which requires CAP_SYS_ADMIN on
     // the mount's original filesystem, not just the bind mount.
@@ -139,7 +139,7 @@ pub(super) fn remount(target: &Path, flags: MountFlags) -> Result<()> {
 ///
 /// The mount becomes invisible to new path lookups immediately, but
 /// remains alive for existing fd references until they are closed.
-pub(super) fn detach(target: &Path) -> Result<()> {
+pub fn detach(target: &Path) -> Result<()> {
     syscall_try!(
         unmount(target, UnmountFlags::DETACH),
         "detaching mount at {}",
@@ -153,7 +153,7 @@ pub(super) fn detach(target: &Path) -> Result<()> {
 ///
 /// Uses `open_tree(OPEN_TREE_CLONE)` — the cloned mount is not attached
 /// to any namespace's mount tree. Use [`attach`] to place it.
-pub(super) fn clone_mount(path: &Path) -> Result<OwnedFd> {
+pub fn clone_mount(path: &Path) -> Result<OwnedFd> {
     use rustix::mount::{OpenTreeFlags, open_tree};
 
     let fd = syscall_try!(
@@ -173,7 +173,7 @@ pub(super) fn clone_mount(path: &Path) -> Result<OwnedFd> {
 ///
 /// Uses `move_mount(MOVE_MOUNT_F_EMPTY_PATH)` to place the anonymous
 /// mount tree at the target path.
-pub(super) fn attach(source_fd: &OwnedFd, target: &Path) -> Result<()> {
+pub fn attach(source_fd: &OwnedFd, target: &Path) -> Result<()> {
     use rustix::mount::{MoveMountFlags, move_mount};
 
     syscall_try!(
@@ -190,7 +190,7 @@ pub(super) fn attach(source_fd: &OwnedFd, target: &Path) -> Result<()> {
 /// Changes directory into `new_root`, pivots, then lazily detaches the
 /// old root (which is stacked on top of the new mount point). No
 /// `put_old` directory needed — the old root is unmounted in place.
-pub(super) fn pivot(new_root: &Path) -> Result<()> {
+pub fn pivot(new_root: &Path) -> Result<()> {
     env::set_current_dir(new_root).wrap_err_with(|| format!("chdir to {}", new_root.display()))?;
 
     syscall_try!(process::pivot_root(".", "."), "pivot_root(\".\", \".\")");

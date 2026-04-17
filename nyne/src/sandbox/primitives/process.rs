@@ -35,7 +35,7 @@ use tracing::{debug, trace, warn};
 /// Fork-safe: capture raw fds via [`raw_fds`] before fork, reconstruct
 /// in the child via [`from_raw`]. Call [`into_reader`] in the supervisor
 /// and [`into_writer`] in the daemon child.
-pub(super) struct ReadyPipe {
+pub struct ReadyPipe {
     read_fd: OwnedFd,
     write_fd: OwnedFd,
 }
@@ -43,7 +43,7 @@ pub(super) struct ReadyPipe {
 /// Construction and consumption methods for cross-fork readiness signaling.
 impl ReadyPipe {
     /// Create a pipe for readiness signaling.
-    pub(super) fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let (read_fd, write_fd) = pipe_with(PipeFlags::CLOEXEC).wrap_err("pipe2()")?;
         Ok(Self { read_fd, write_fd })
     }
@@ -53,13 +53,13 @@ impl ReadyPipe {
     /// After `fork()`, both processes hold kernel-level copies of the
     /// same fds. Each side reconstructs a `ReadyPipe` via [`from_raw`]
     /// and then calls the appropriate `into_*` method.
-    pub(super) fn raw_fds(&self) -> (RawFd, RawFd) { (self.read_fd.as_raw_fd(), self.write_fd.as_raw_fd()) }
+    pub fn raw_fds(&self) -> (RawFd, RawFd) { (self.read_fd.as_raw_fd(), self.write_fd.as_raw_fd()) }
 
     /// Reconstruct from raw fd values (used in child after fork).
     ///
     /// The fds must be valid open file descriptors owned by the calling
     /// process (typically after `fork()` duplicated the fd table).
-    pub(super) fn from_raw(read_fd: RawFd, write_fd: RawFd) -> Self {
+    pub fn from_raw(read_fd: RawFd, write_fd: RawFd) -> Self {
         // SAFETY: after fork(), the child has its own fd table with valid
         // copies of the same kernel fds captured via raw_fds().
         Self {
@@ -72,7 +72,7 @@ impl ReadyPipe {
     ///
     /// Closes the read end, writes a one-byte ready signal, then closes
     /// the write end on drop.
-    pub(super) fn into_writer(self) -> Result<()> {
+    pub fn into_writer(self) -> Result<()> {
         drop(self.read_fd);
         rstx_io::write(&self.write_fd, &[1]).wrap_err("writing ready signal")?;
         trace!("ready signal sent");
@@ -83,7 +83,7 @@ impl ReadyPipe {
     ///
     /// Closes the write end, blocks until the ready signal arrives, then
     /// closes the read end on drop.
-    pub(super) fn into_reader(self) -> Result<()> {
+    pub fn into_reader(self) -> Result<()> {
         drop(self.write_fd);
         let mut buf = [0u8; 1];
         let n = rstx_io::read(&self.read_fd, &mut buf).wrap_err("reading ready signal")?;
@@ -100,7 +100,7 @@ impl ReadyPipe {
 /// Returns the child's PID to the parent. The child function should diverge
 /// (call `process::exit` or `exec`). If it returns, the child exits with
 /// code 1.
-pub(super) fn fork_or_die(child_fn: impl FnOnce()) -> Result<Pid> {
+pub fn fork_or_die(child_fn: impl FnOnce()) -> Result<Pid> {
     // SAFETY: libc::fork() is the standard POSIX fork. rustix doesn't wrap
     // fork (only exposes `kernel_fork` behind the `runtime` feature), so we
     // call libc directly. The return value is checked immediately.
@@ -124,7 +124,7 @@ pub(super) fn fork_or_die(child_fn: impl FnOnce()) -> Result<Pid> {
 ///
 /// Uses `CommandExt::exec()` which handles `CString` conversion and
 /// null termination internally — no unsafe needed.
-pub(super) fn exec(command: &[OsString]) -> Result<()> {
+pub fn exec(command: &[OsString]) -> Result<()> {
     use std::os::unix::process::CommandExt;
 
     // exec() only returns if it fails — on success the process image
@@ -147,7 +147,7 @@ pub(super) fn exec(command: &[OsString]) -> Result<()> {
 /// Also handles two transient/edge-case errno values:
 /// - `EINTR`: signal interrupted the syscall — retries automatically.
 /// - `ECHILD`: child already reaped or never existed — returns exit code 1.
-pub(super) fn wait_for_exit(pid: Pid) -> Result<i32> {
+pub fn wait_for_exit(pid: Pid) -> Result<i32> {
     loop {
         match waitpid(Some(pid), WaitOptions::empty()) {
             Ok(Some((_, status))) => {
@@ -175,23 +175,23 @@ pub(super) fn wait_for_exit(pid: Pid) -> Result<i32> {
 ///
 /// Ensures the child is cleaned up even if the parent panics
 /// between forking and reaching explicit cleanup.
-pub(super) struct ChildGuard(Option<Pid>);
+pub struct ChildGuard(Option<Pid>);
 
 /// RAII lifecycle management for a child process.
 impl ChildGuard {
     /// Create a new guard for the given child pid.
-    pub(super) const fn new(pid: Pid) -> Self { Self(Some(pid)) }
+    pub const fn new(pid: Pid) -> Self { Self(Some(pid)) }
 
     /// Disarm the guard without killing the child.
     ///
     /// Use after the child has already been reaped (e.g., via `wait_for_exit`).
-    pub(super) const fn defuse(&mut self) { self.0.take(); }
+    pub const fn defuse(&mut self) { self.0.take(); }
 
     /// Get the child's PID, if the guard is still armed.
-    pub(super) const fn pid(&self) -> Option<Pid> { self.0 }
+    pub const fn pid(&self) -> Option<Pid> { self.0 }
 
     /// Explicitly terminate the child and disarm the guard.
-    pub(super) fn terminate(mut self) {
+    pub fn terminate(mut self) {
         if let Some(pid) = self.0.take() {
             kill_and_reap(pid);
         }
@@ -238,7 +238,7 @@ fn kill_and_reap(pid: Pid) {
 ///
 /// SAFETY: must be called single-threaded (before any threads are
 /// spawned). This is guaranteed in the PID namespace init process.
-pub(super) fn set_env(key: &str, value: &str) {
+pub fn set_env(key: &str, value: &str) {
     debug_assert!(
         {
             let status = fs::read_to_string("/proc/self/status").unwrap_or_default();
@@ -269,7 +269,7 @@ pub(super) fn set_env(key: &str, value: &str) {
 /// Signal forwarding uses `signal_hook::low_level::register` (unsafe)
 /// because `signal_hook`'s safe API installs `SA_RESTART` handlers, which
 /// causes `waitpid` to restart automatically and never return `EINTR`.
-pub(super) fn run_init(command: &[OsString]) -> Result<i32> {
+pub fn run_init(command: &[OsString]) -> Result<i32> {
     let command_pid = fork_or_die(|| {
         if let Err(e) = exec(command) {
             tracing::error!(error = format!("{e:?}"), "exec failed");
