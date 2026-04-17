@@ -81,7 +81,7 @@ humantime-serde = "1"
 ignore = { version = "0.4.25", features = ["simd-accel"] }
 jiff = { version = "0.2", features = ["serde"] }
 libc = "0.2"
-linkme = "0.3.35"
+linkme = "0.3.36"
 lsp-types = "0.97.0"
 minijinja = { version = "2.19.0", features = ["builtins"] }
 notify = "8.2.0"
@@ -94,7 +94,7 @@ rustix = { version = "1.1.4", features = ["net"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 signal-hook = "0.4.4"
-similar = "3.0.0"
+similar = "3.1.0"
 smallvec = "1.15.1"
 slab = "0.4.12"
 strum = { version = "0.28", features = ["derive"] }
