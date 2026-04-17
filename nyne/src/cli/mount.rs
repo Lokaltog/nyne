@@ -224,12 +224,11 @@ pub fn run(args: &MountArgs) -> Result<()> {
 
     let state_root = nyne_config.sandbox.state_root.clone();
 
-    // Build mount entries and launch all daemons.
+    // Build mount entries and launch all daemons. Path validation (absolute +
+    // is_dir) is already enforced above via `canonicalize()` + `ensure!`.
     let entries: Vec<_> = mounts
         .into_iter()
         .map(|(id, path)| {
-            let config = sandbox::DaemonConfig::new(sandbox::MountEntry { path })?;
-
             // Resolve the control socket path in the supervisor's user
             // namespace so that the daemon (in its own fresh user ns)
             // binds at the same location clients look up.
@@ -247,7 +246,7 @@ pub fn run(args: &MountArgs) -> Result<()> {
                 )
             });
 
-            Ok((config, id, mount_fn))
+            Ok((path, id, mount_fn))
         })
         .collect::<Result<_>>()?;
 

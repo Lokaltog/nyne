@@ -40,7 +40,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use color_eyre::eyre::{Result, WrapErr, ensure};
+use color_eyre::eyre::{Result, WrapErr};
 use linkme::distributed_slice;
 use rustix::process::{getgid, getuid};
 use signal_hook::consts::{SIGINT, SIGTERM};
@@ -52,17 +52,6 @@ use self::process::{ChildGuard, ReadyPipe, fork_or_die, wait_for_exit};
 use crate::config::StorageStrategy;
 use crate::session;
 
-/// A mount path entry for FUSE + overlay mounting.
-///
-/// Each entry represents a single project directory that the daemon will
-/// serve via FUSE. Currently one mount per daemon, but the `[MountEntry]`
-/// slice pattern in internal APIs allows future multi-mount expansion
-/// without API changes.
-pub struct MountEntry {
-    /// Absolute path to the directory to mount.
-    pub path: PathBuf,
-}
-
 /// Real host uid/gid captured before namespace creation.
 ///
 /// Passed to the command child so it can remap back to the real user
@@ -71,34 +60,6 @@ pub struct MountEntry {
 struct HostIdentity {
     uid: u32,
     gid: u32,
-}
-
-/// Configuration for mounting a FUSE daemon (no command, no sandbox).
-///
-/// Used by `run_mounts` to fork and start FUSE daemons. The daemon runs
-/// in its own user+mount namespace and serves FUSE until a shutdown signal
-/// arrives. Sandbox isolation (`pivot_root`, bind mounts) is handled
-/// separately by the command child via [`AttachConfig`].
-pub struct DaemonConfig {
-    /// Mount path (single path for now).
-    pub mount: MountEntry,
-}
-
-/// Construction and validation for [`DaemonConfig`].
-impl DaemonConfig {
-    /// Create a new mount configuration.
-    ///
-    /// Validates that the mount path is an absolute directory. Returns an
-    /// error if the path is relative or does not point to an existing directory.
-    pub fn new(mount: MountEntry) -> Result<Self> {
-        ensure!(
-            mount.path.is_absolute(),
-            "path must be absolute: {}",
-            mount.path.display()
-        );
-        ensure!(mount.path.is_dir(), "not a directory: {}", mount.path.display());
-        Ok(Self { mount })
-    }
 }
 
 /// Configuration for attaching to a running nyne daemon's namespace.
@@ -178,17 +139,16 @@ struct MountSession {
 /// Fork a single FUSE daemon, wait for readiness, and write its session file.
 ///
 /// Returns without blocking — the daemon runs in a child process.
-fn start_one(config: DaemonConfig, session_id: &session::SessionId, mount_fn: MountFn) -> Result<MountSession> {
+fn start_one(path: PathBuf, session_id: &session::SessionId, mount_fn: MountFn) -> Result<MountSession> {
     let pipe = ReadyPipe::new().wrap_err("creating readiness pipe")?;
-    let path = config.mount.path.clone();
 
     info!(path = %path.display(), id = %session_id, "launching FUSE daemon");
 
-    let mounts = [config.mount];
     let fds = pipe.raw_fds();
+    let daemon_path = path.clone();
     let daemon_pid = fork_or_die(|| {
         let child_pipe = ReadyPipe::from_raw(fds.0, fds.1);
-        daemon_main(&mounts, child_pipe, mount_fn);
+        daemon_main(&daemon_path, child_pipe, mount_fn);
     })
     .wrap_err("forking FUSE daemon")?;
 
@@ -252,15 +212,15 @@ fn teardown(sessions: Vec<MountSession>, state_root: &Path) {
 /// ready, the supervisor blocks until SIGINT/SIGTERM, then tears down all
 /// sessions. If any mount fails to start, already-running daemons are
 /// cleaned up before the error is propagated.
-pub fn run_mounts(mounts: Vec<(DaemonConfig, session::SessionId, MountFn)>, state_root: &Path) -> Result<()> {
+pub fn run_mounts(mounts: Vec<(PathBuf, session::SessionId, MountFn)>, state_root: &Path) -> Result<()> {
     // Clean up any per-process state trees left behind by crashed
     // predecessors before spawning our own daemons.
     cleanup::reap_stale(state_root);
 
     let mut sessions = Vec::with_capacity(mounts.len());
 
-    for (config, id, mount_fn) in mounts {
-        match start_one(config, &id, mount_fn) {
+    for (path, id, mount_fn) in mounts {
+        match start_one(path, &id, mount_fn) {
             Ok(session) => sessions.push(session),
             Err(e) => {
                 teardown(sessions, state_root);
@@ -356,24 +316,18 @@ fn run_or_exit(label: &str, f: impl FnOnce() -> Result<()>) -> ! {
 }
 /// FUSE daemon entry point (runs in child 1).
 ///
-/// Creates a user+mount namespace, mounts FUSE over each path,
+/// Creates a user+mount namespace, mounts FUSE at `path`,
 /// signals readiness, then blocks for shutdown.
-fn daemon_main(mounts: &[MountEntry], pipe: ReadyPipe, mut mount_fn: MountFn) {
+fn daemon_main(path: &Path, pipe: ReadyPipe, mut mount_fn: MountFn) {
     run_or_exit("daemon", || {
         namespace::unshare_user_mount()?;
 
         mnt::private()?;
         debug!("mount propagation disabled");
 
-        // Mount FUSE over each path.
-        let mut sessions: Vec<Box<dyn Send>> = Vec::with_capacity(mounts.len());
-        for entry in mounts {
-            info!(path = %entry.path.display(), "mounting FUSE");
-            let session =
-                mount_fn(&entry.path).wrap_err_with(|| format!("mounting FUSE at {}", entry.path.display()))?;
-            info!(path = %entry.path.display(), "FUSE mount active");
-            sessions.push(session);
-        }
+        info!(path = %path.display(), "mounting FUSE");
+        let session = mount_fn(path).wrap_err_with(|| format!("mounting FUSE at {}", path.display()))?;
+        info!(path = %path.display(), "FUSE mount active");
 
         // Signal readiness to supervisor (consumes pipe, closes fds).
         pipe.into_writer()?;
@@ -387,12 +341,12 @@ fn daemon_main(mounts: &[MountEntry], pipe: ReadyPipe, mut mount_fn: MountFn) {
             info!(signal = sig, "daemon received shutdown signal");
         }
 
-        // Sessions dropped here — triggers BackgroundSession::drop
-        // which calls umount_and_join on each FUSE mount. Per-PID
+        // Session dropped here — triggers BackgroundSession::drop
+        // which calls umount_and_join on the FUSE mount. Per-PID
         // scaffolding directories are reaped by the supervisor in
         // `teardown` once this process is waitpid-reaped.
-        drop(sessions);
-        debug!("FUSE sessions unmounted, daemon exiting");
+        drop(session);
+        debug!("FUSE session unmounted, daemon exiting");
 
         Ok(())
     });
