@@ -10,11 +10,11 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 use tracing::debug;
 
-use super::NamedNode;
-use super::chain::Next;
-use super::request::Request;
-use super::route::RouteCtx;
-use super::tree::Entry;
+use super::Entry;
+use crate::router::NamedNode;
+use crate::router::pipeline::chain::Next;
+use crate::router::pipeline::request::Request;
+use crate::router::pipeline::route::RouteCtx;
 
 // Provider-agnostic callback signatures. Arc-wrapped so `TreeBuilder::apply`
 // can clone them into typed closures that ignore the `&T` provider reference.
@@ -25,7 +25,7 @@ type HandlerCb = Arc<dyn for<'a> Fn(&RouteCtx, &mut Request, &Next<'a>) -> Resul
 
 /// Provider-agnostic route extension — callbacks mountable into any provider's tree.
 ///
-/// Mirrors the [`TreeBuilder`](super::tree::TreeBuilder) registration API
+/// Mirrors the [`TreeBuilder`](super::TreeBuilder) registration API
 /// (readdir, lookup, content, handler, dir, capture, rest) without a provider
 /// type parameter. When [`TreeBuilder::apply`] is called, each callback is
 /// wrapped in a closure that ignores the `&T` provider reference — extensions
@@ -142,10 +142,7 @@ impl RouteExtension {
     /// Called by [`TreeBuilder::apply`] — prefer that method for chaining.
     /// Generic over `T`: each callback is wrapped in a closure that ignores
     /// the `&T` provider reference.
-    pub(crate) fn apply_to<T: Send + Sync + 'static>(
-        &self,
-        mut d: super::tree::TreeBuilder<T>,
-    ) -> super::tree::TreeBuilder<T> {
+    pub(crate) fn apply_to<T: Send + Sync + 'static>(&self, mut d: super::TreeBuilder<T>) -> super::TreeBuilder<T> {
         for cb in &self.on_readdir {
             let cb = Arc::clone(cb);
             d = d.on_readdir(move |_p, ctx, req| cb(ctx, req));

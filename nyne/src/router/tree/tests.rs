@@ -5,9 +5,8 @@ use color_eyre::eyre::Result;
 use rstest::rstest;
 
 use super::*;
-use crate::router::chain::Chain;
 use crate::router::test_support::{StubReadable, test_read_ctx};
-use crate::router::{NamedNode, Next, Node, Op, Provider, Request};
+use crate::router::{Chain, NamedNode, Next, Node, Op, Provider, Request};
 
 struct TestProvider;
 
@@ -231,7 +230,7 @@ fn auto_emit_by_op(#[case] op: Op, #[case] expected_names: &[&str]) {
 
     tree.dispatch(&provider, &mut req, &next).unwrap();
 
-    let mut names: Vec<&str> = req.nodes.iter().map(super::super::node::NamedNode::name).collect();
+    let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     let mut expected: Vec<&str> = expected_names.to_vec();
     expected.sort_unstable();
@@ -257,7 +256,7 @@ fn dispatch_at_depth(#[case] path: &str, #[case] expected_names: &[&str]) {
 
     tree.dispatch(&provider, &mut req, &next).unwrap();
 
-    let mut names: Vec<&str> = req.nodes.iter().map(super::super::node::NamedNode::name).collect();
+    let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     let mut expected: Vec<&str> = expected_names.to_vec();
     expected.sort_unstable();
@@ -742,7 +741,7 @@ fn content_always_emits_like_content(#[case] op: Op, #[case] expected_names: &[&
 
     tree.dispatch(&provider, &mut req, &next).unwrap();
 
-    let mut names: Vec<&str> = req.nodes.iter().map(super::super::node::NamedNode::name).collect();
+    let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     let mut expected: Vec<&str> = expected_names.to_vec();
     expected.sort_unstable();
@@ -781,7 +780,7 @@ fn rest_subtree_dispatches_callbacks(#[case] path: &str, #[case] op: Op, #[case]
 
     tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
 
-    let mut names: Vec<&str> = req.nodes.iter().map(super::super::node::NamedNode::name).collect();
+    let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     let mut expected: Vec<&str> = expected_names.to_vec();
     expected.sort_unstable();
@@ -811,7 +810,7 @@ fn same_named_dirs_merge_on_build() {
     // readdir inside shared: both content producers fire
     let mut req = readdir_req("shared");
     tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
-    let mut names: Vec<&str> = req.nodes.iter().map(super::super::node::NamedNode::name).collect();
+    let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     assert_eq!(names, &["a.txt", "b.txt"]);
 }
@@ -832,7 +831,7 @@ fn nested_same_named_dirs_merge_recursively() {
 
     let mut req = readdir_req("level1/level2");
     tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
-    let mut names: Vec<&str> = req.nodes.iter().map(super::super::node::NamedNode::name).collect();
+    let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     assert_eq!(names, &["a.txt", "b.txt"]);
 }
@@ -859,7 +858,7 @@ fn dir_merge_combines_callbacks() {
 
     let mut req = readdir_req("merged");
     tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
-    let mut names: Vec<&str> = req.nodes.iter().map(super::super::node::NamedNode::name).collect();
+    let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     assert_eq!(names, &["from-a", "from-b"]);
 }
@@ -895,7 +894,7 @@ fn rest_subtree_callbacks_fire_on_parent_lookup(#[case] path: &str, #[case] op: 
     let mut req = Request::new(PathBuf::from(path), op);
     tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
 
-    let mut names: Vec<&str> = req.nodes.iter().map(super::super::node::NamedNode::name).collect();
+    let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     let mut expected: Vec<&str> = expected_names.to_vec();
     expected.sort_unstable();

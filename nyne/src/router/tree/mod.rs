@@ -1,11 +1,13 @@
 use std::mem;
 
 use color_eyre::eyre::Result;
+use extension::RouteExtension;
 
 use crate::path_utils::PathExt;
-use crate::router::extension::RouteExtension;
-use crate::router::route::{HandlerFn, LookupFn, OpGuard, ReaddirFn, RouteCtx};
+use crate::router::pipeline::route::{HandlerFn, LookupFn, OpGuard, ReaddirFn, RouteCtx};
 use crate::router::{NamedNode, Next, Op, Request};
+
+pub mod extension;
 
 /// Boxed content factory that optionally produces a [`NamedNode`].
 ///
@@ -27,7 +29,7 @@ pub struct RouteTree<T> {
 }
 
 /// Structural entry in a route tree — shared between provider-typed
-/// [`RouteTree`] and provider-agnostic [`RouteExtension`](super::extension::RouteExtension).
+/// [`RouteTree`] and provider-agnostic [`RouteExtension`](extension::RouteExtension).
 ///
 /// - `C`: content callback type (`ContentFn<T>` or `ContentCb`)
 /// - `S`: subtree type (`RouteTree<T>` or `RouteExtension`)

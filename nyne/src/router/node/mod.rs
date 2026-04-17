@@ -11,6 +11,8 @@ use crate::router::fs::Filesystem;
 pub use crate::types::NodeKind;
 use crate::types::Timestamps;
 
+pub mod decorators;
+
 /// Context passed to [`Readable::read`] when content is requested.
 pub struct ReadContext<'a> {
     /// The virtual path being read.

@@ -1,7 +1,7 @@
 use color_eyre::eyre::Result;
 
-use crate::router::chain::Next;
-use crate::router::request::{Op, Request};
+use super::chain::Next;
+use super::request::{Op, Request};
 
 /// Captured route parameters from pattern matching.
 #[derive(Clone, Debug)]

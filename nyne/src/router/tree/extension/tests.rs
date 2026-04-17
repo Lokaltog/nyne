@@ -4,18 +4,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use rstest::rstest;
 
-use crate::router::chain::Next;
-use crate::router::extension::RouteExtension;
 use crate::router::test_support::StubReadable;
 use crate::router::tree::RouteTree;
-use crate::router::{NamedNode, Node, Op, Request};
+use crate::router::{NamedNode, Next, Node, Op, Request, RouteExtension};
 
 struct P;
 
 fn readdir_req(path: &str) -> Request { Request::new(PathBuf::from(path), Op::Readdir) }
 
 fn names(req: &Request) -> Vec<&str> {
-    let mut v: Vec<&str> = req.nodes.iter().map(super::super::node::NamedNode::name).collect();
+    let mut v: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     v.sort_unstable();
     v
 }

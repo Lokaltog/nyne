@@ -7,6 +7,8 @@ use parking_lot::RwLock;
 
 use crate::router::GenerationMap;
 
+pub mod generation;
+
 /// Generation-tagged cache entry.
 struct CacheEntry<V> {
     generation: u64,
