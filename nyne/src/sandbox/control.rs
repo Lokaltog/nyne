@@ -37,22 +37,6 @@ use crate::prelude::*;
 use crate::process;
 use crate::router::Chain;
 
-/// Environment variable set inside the sandbox pointing to the control socket.
-///
-/// Injected by `command_main` so that `nyne exec` (and other CLI commands
-/// running inside the sandbox) can locate the daemon's Unix domain socket
-/// for IPC without path discovery.
-pub const NYNE_CONTROL_SOCKET_ENV: &str = "NYNE_CONTROL_SOCKET";
-
-/// Environment variable set inside the sandbox pointing to the session
-/// directory where nested sessions live.
-///
-/// Injected by `command_main` alongside [`NYNE_CONTROL_SOCKET_ENV`] so
-/// that `nyne mount`/`nyne list`/`nyne attach` invocations inside the
-/// sandbox share a consistent session directory scoped to the parent
-/// daemon, rather than each attach landing in its own namespace bucket.
-pub const NYNE_SESSION_DIR_ENV: &str = "NYNE_SESSION_DIR";
-
 /// Core control request types handled directly by the control server.
 ///
 /// Plugin-provided commands are dispatched separately via the

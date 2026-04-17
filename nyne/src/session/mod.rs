@@ -7,17 +7,19 @@
 //! - Control socket paths
 //! - Active session discovery (registry scan)
 
+/// Environment variables bridging daemon and attached processes.
+pub mod env;
 /// Session identifier generation and validation.
 mod id;
 use std::path::{Path, PathBuf};
-use std::{env, fs, io};
+use std::{fs, io};
 
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
+use self::env::NYNE_SESSION_DIR_ENV;
 pub use self::id::SessionId;
-use crate::sandbox::control::NYNE_SESSION_DIR_ENV;
 
 /// Persisted daemon metadata for session discovery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,7 +46,7 @@ pub struct SessionInfo {
 /// 2. **`$XDG_RUNTIME_DIR/nyne/`** — host default.
 /// 3. **`$XDG_CACHE_HOME/nyne/`** — fallback when no runtime dir exists.
 fn session_dir() -> Result<PathBuf> {
-    if let Some(override_path) = env::var_os(NYNE_SESSION_DIR_ENV) {
+    if let Some(override_path) = std::env::var_os(NYNE_SESSION_DIR_ENV) {
         return Ok(PathBuf::from(override_path));
     }
     directories::BaseDirs::new()
