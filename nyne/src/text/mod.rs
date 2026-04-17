@@ -66,3 +66,46 @@ pub fn unified_diff(old: &str, new: &str, path: &str) -> String {
 /// Unit tests.
 #[cfg(test)]
 mod tests;
+
+/// Estimate tokens from a byte count and format in compact form.
+///
+/// Converts bytes → tokens (`bytes / 4`) then formats (e.g. `~2.1k` for
+/// 8400 bytes, `~850` for 3400 bytes). Registered as the `tokens`
+/// minijinja filter by [`crate::templates::TemplateEngine`].
+pub fn format_tokens(bytes: usize) -> String {
+    let n = bytes / 4;
+    if n >= 1000 {
+        let whole = n / 1000;
+        let frac = (n % 1000) / 100;
+        format!("~{whole}.{frac}k")
+    } else {
+        format!("~{n}")
+    }
+}
+
+/// Extract the first non-empty trimmed line from a string.
+///
+/// Registered as the `first_line` minijinja filter by
+/// [`crate::templates::TemplateEngine`].
+///
+/// Returns `String` because minijinja's `Function` trait requires `Rv: FunctionResult`
+/// with no input lifetime threading (`Args: for<'a> FunctionArgs<'a>`), so the return
+/// type cannot borrow from the input `&str`. `Cow<str>` would still allocate here.
+pub fn first_line(s: &str) -> String {
+    s.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("")
+        .to_owned()
+}
+
+/// Strip a prefix from a string, returning the original if no match.
+///
+/// Registered as the `strip_prefix` minijinja filter by
+/// [`crate::templates::TemplateEngine`].
+pub fn strip_prefix(mut v: String, prefix: &str) -> String {
+    if v.starts_with(prefix) {
+        v.replace_range(..prefix.len(), "");
+    }
+    v
+}

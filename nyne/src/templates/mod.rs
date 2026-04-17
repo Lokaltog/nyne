@@ -47,9 +47,9 @@ impl TemplateEngine {
         env.set_lstrip_blocks(true);
         env.add_filter("ljust", |v: String, w: usize| format!("{v:<w$}"));
         env.add_filter("rjust", |v: String, w: usize| format!("{v:>w$}"));
-        env.add_filter("tokens", format_tokens);
-        env.add_filter("first_line", first_line);
-        env.add_filter("strip_prefix", strip_prefix);
+        env.add_filter("tokens", crate::text::format_tokens);
+        env.add_filter("first_line", crate::text::first_line);
+        env.add_filter("strip_prefix", crate::text::strip_prefix);
         Self { env }
     }
 
@@ -275,47 +275,6 @@ impl TemplateContent {
 }
 impl Readable for TemplateContent {
     fn read(&self, _ctx: &ReadContext<'_>) -> eyre::Result<Vec<u8>> { self.view.render(&self.engine, self.template) }
-}
-
-/// Estimate tokens from a byte count and format in compact form.
-///
-/// Converts bytes → tokens (`bytes / 4`) then formats (e.g. `~2.1k` for
-/// 8400 bytes, `~850` for 3400 bytes). Registered as the `tokens`
-/// minijinja filter — all callers pass raw byte counts.
-fn format_tokens(bytes: usize) -> String {
-    let n = bytes / 4;
-    if n >= 1000 {
-        let whole = n / 1000;
-        let frac = (n % 1000) / 100;
-        format!("~{whole}.{frac}k")
-    } else {
-        format!("~{n}")
-    }
-}
-
-/// Extract the first non-empty trimmed line from a string.
-///
-/// Registered as a minijinja filter (`first_line`).
-///
-/// Returns `String` because minijinja's `Function` trait requires `Rv: FunctionResult`
-/// with no input lifetime threading (`Args: for<'a> FunctionArgs<'a>`), so the return
-/// type cannot borrow from the input `&str`. `Cow<str>` would still allocate here.
-fn first_line(s: &str) -> String {
-    s.lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .unwrap_or("")
-        .to_owned()
-}
-
-/// Strip a prefix from a string, returning the original if no match.
-///
-/// Registered as a minijinja filter (`strip_prefix`).
-fn strip_prefix(mut v: String, prefix: &str) -> String {
-    if v.starts_with(prefix) {
-        v.replace_range(..prefix.len(), "");
-    }
-    v
 }
 
 pub use self::handle::{HandleBuilder, TemplateHandle};
