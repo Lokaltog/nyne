@@ -281,7 +281,11 @@ fn capture_binds_param(#[case] path: &str, #[case] param: &str, #[case] expected
     tree.dispatch(&provider, &mut req, &next).unwrap();
 
     let body_node = req.nodes.find("body.rs").expect("should have body.rs");
-    let content = body_node.readable().unwrap().read(&test_read_ctx()).unwrap();
+    let content = body_node
+        .readable()
+        .expect("body.rs must be readable")
+        .read(&test_read_ctx())
+        .expect("read must succeed");
     let text = std::str::from_utf8(&content).unwrap();
     assert!(
         text.contains(expected),

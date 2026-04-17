@@ -125,9 +125,8 @@ impl RouteExtension {
     pub fn scoped(&mut self, scope: impl Into<String>, f: impl FnOnce(&mut Self)) {
         let mut inner = Self::new();
         f(&mut inner);
-        let scope = scope.into();
         debug!(
-            scope,
+            scope = scope.into(),
             entries = inner.entries.len(),
             on_readdir = inner.on_readdir.len(),
             on_lookup = inner.on_lookup.len(),
@@ -143,23 +142,22 @@ impl RouteExtension {
     /// Generic over `T`: each callback is wrapped in a closure that ignores
     /// the `&T` provider reference.
     pub(crate) fn apply_to<T: Send + Sync + 'static>(&self, mut d: super::TreeBuilder<T>) -> super::TreeBuilder<T> {
-        for cb in &self.on_readdir {
-            let cb = Arc::clone(cb);
+        for cb in self.on_readdir.iter().cloned() {
             d = d.on_readdir(move |_p, ctx, req| cb(ctx, req));
         }
-        for cb in &self.on_lookup {
-            let cb = Arc::clone(cb);
+        for cb in self.on_lookup.iter().cloned() {
             d = d.on_lookup(move |_p, ctx, req, name| cb(ctx, req, name));
         }
-        if let Some(cb) = &self.handler {
-            let cb = Arc::clone(cb);
+        if let Some(cb) = self.handler.clone() {
             d = d.handler(move |_p, ctx, req, next| cb(ctx, req, next));
         }
         for entry in &self.entries {
             match entry {
                 Entry::Content { content_fn } => {
-                    let cb = Arc::clone(content_fn);
-                    d = d.content(move |_p, ctx, req| cb(ctx, req));
+                    // Clone-then-move is required to capture the Arc into a 'static closure;
+                    // the match pattern gives a &Arc<_> so we must own a clone before moving.
+                    let content_fn = Arc::clone(content_fn);
+                    d = d.content(move |_p, ctx, req| content_fn(ctx, req));
                 }
                 Entry::Dir { name, tree } => {
                     d = d.dir(name.clone(), |d| tree.apply_to(d));
