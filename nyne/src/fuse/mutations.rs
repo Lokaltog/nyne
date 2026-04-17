@@ -10,7 +10,7 @@ use fuser::{Errno, FileHandle, FopenFlags, INodeNo, ReplyCreate, ReplyEmpty, Rep
 use tracing::debug;
 
 use super::attrs::GENERATION;
-use super::{FuseFilesystem, ensure_dir_path, fuse_err, fuse_try};
+use super::{FuseFilesystem, ensure_dir_path, fuse_err, fuse_try, prepare_mutation};
 use crate::err::extract_errno;
 use crate::prelude::Op;
 
@@ -20,17 +20,13 @@ impl FuseFilesystem {
     /// Dispatches `Op::Create` through the chain, then opens the new file
     /// and returns a handle with `FOPEN_DIRECT_IO`.
     pub(super) fn do_create(&self, req: &Request, parent: INodeNo, name: &OsStr, flags: i32, reply: ReplyCreate) {
-        let parent = u64::from(parent);
-        let dir_path = ensure_dir_path!(self, parent, reply);
-        let name = name.to_string_lossy();
+        let (parent, dir_path, name, path) = prepare_mutation!(self, parent, name, reply, "create");
         let process = self.process_from(req);
-        debug!(target: "nyne::fuse", parent, name = %name, "create");
 
         if !self.is_writable_dir(parent, req) {
             fuse_err!(reply, Errno::EACCES, parent, "create: parent not writable");
         }
 
-        let path = dir_path.join(name.as_ref());
         fuse_try!(
             reply,
             self.dispatch_path_op(&path, |name| Op::Create { name }, Some(process.clone())),
@@ -44,23 +40,20 @@ impl FuseFilesystem {
                 let (attr, ttl) = self.node_attr(ino, &node, req);
                 reply.created(&ttl, &attr, GENERATION, FileHandle(fh), FopenFlags::FOPEN_DIRECT_IO);
             }
-            Ok(None) | Err(_) => reply.error(Errno::EIO),
+            Ok(None) => reply.error(Errno::ENOENT),
+            Err(e) => reply.error(extract_errno(&e)),
         }
     }
 
     /// Handle directory creation in a parent directory.
     pub(super) fn do_mkdir(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
-        let parent = u64::from(parent);
-        let dir_path = ensure_dir_path!(self, parent, reply);
-        let name = name.to_string_lossy();
+        let (parent, dir_path, name, path) = prepare_mutation!(self, parent, name, reply, "mkdir");
         let process = self.process_from(req);
-        debug!(target: "nyne::fuse", parent, name = %name, "mkdir");
 
         if !self.is_writable_dir(parent, req) {
             fuse_err!(reply, Errno::EACCES, parent, "mkdir: parent not writable");
         }
 
-        let path = dir_path.join(name.as_ref());
         fuse_try!(
             reply,
             self.dispatch_path_op(&path, |name| Op::Mkdir { name }, Some(process.clone())),
@@ -84,12 +77,7 @@ impl FuseFilesystem {
     /// chain dispatch so middleware providers (e.g. the diff plugin) can
     /// handle remove operations for virtual nodes.
     pub(super) fn do_remove(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
-        let parent = u64::from(parent);
-        let dir_path = ensure_dir_path!(self, parent, reply);
-        let name = name.to_string_lossy();
-        debug!(target: "nyne::fuse", parent, name = %name, "remove");
-
-        let path = dir_path.join(name.as_ref());
+        let (parent, _dir_path, _name, path) = prepare_mutation!(self, parent, name, reply, "remove");
 
         // Try node capability first (e.g. rmdir on a symbol directory).
         match self.remove_node(&path) {
