@@ -7,12 +7,16 @@
 
 /// FUSE file attribute helpers.
 mod attrs;
+/// `router::Filesystem` bridge implementation (chain-dispatch side).
+mod filesystem_impl;
 /// File handle table for open files.
 mod handles;
 /// Bidirectional inode number mapping.
 pub mod inode_map;
 /// Per-inode mutable state (write locks, errors, atime overrides).
 mod inode_state;
+/// FUSE protocol macros (fuse_try!, fuse_err!, ensure_dir_path!, prepare_mutation!).
+mod macros;
 /// Capability → FUSE mode bit translation.
 mod mode;
 /// FUSE mutation operations (create, rename, unlink, mkdir, rmdir).
@@ -36,16 +40,14 @@ use color_eyre::eyre::Result;
 use handles::HandleTable;
 use inode_map::InodeMap;
 use inode_state::InodeState;
+pub(super) use macros::{ensure_dir_path, fuse_err, fuse_try, prepare_mutation};
 use notify::KernelNotifier;
 use parking_lot::Mutex;
 use process_name_cache::ProcessNameCache;
 
 use crate::err;
 use crate::path_utils::PathExt;
-use crate::router::{
-    AffectedFiles, Chain, DirEntry, Filesystem, Metadata, NamedNode, Op, Process, ReadContext, RenameContext, Request,
-    UnlinkContext, WriteContext,
-};
+use crate::router::{AffectedFiles, Chain, Filesystem, NamedNode, Op, Process, RenameContext, Request, UnlinkContext};
 
 /// Shared notifier slot — populated after FUSE mount, read by the watcher.
 pub type SharedNotifier = Arc<OnceLock<Box<dyn KernelNotifier + Send + Sync>>>;
@@ -83,7 +85,7 @@ pub struct FuseFilesystem {
     chain: Arc<Chain>,
     /// Backend filesystem for provider I/O (passed to ReadContext/WriteContext)
     /// and passthrough fd resolution (via `source_dir()` + `backing_path()`).
-    backing_fs: Arc<dyn Filesystem>,
+    pub(super) backing_fs: Arc<dyn Filesystem>,
     /// Bidirectional inode ↔ path mapping.
     inodes: Arc<InodeMap>,
     /// File handle table for buffered/direct I/O.
@@ -168,14 +170,19 @@ impl FuseFilesystem {
     fn inode_path(&self, ino: u64) -> Result<PathBuf> { self.inodes.resolve_path(ino) }
 
     /// Dispatch a single-path mutation (create, remove, mkdir) through the chain.
-    fn dispatch_path_op(&self, path: &Path, op_fn: impl FnOnce(String) -> Op, process: Option<Process>) -> Result<()> {
+    pub(super) fn dispatch_path_op(
+        &self,
+        path: &Path,
+        op_fn: impl FnOnce(String) -> Op,
+        process: Option<Process>,
+    ) -> Result<()> {
         let (dir, name) = split_path(path)?;
         self.chain
             .dispatch(&mut Request::new(dir.to_path_buf(), op_fn(name.to_owned())).with_opt_process(process))
     }
 
     /// Dispatch a rename operation through the chain.
-    fn dispatch_rename_op(&self, from: &Path, to: &Path, process: Option<Process>) -> Result<()> {
+    pub(super) fn dispatch_rename_op(&self, from: &Path, to: &Path, process: Option<Process>) -> Result<()> {
         let (src_dir, src_name) = split_path(from)?;
         let (dst_dir, dst_name) = split_path(to)?;
         self.chain.dispatch(
@@ -211,7 +218,7 @@ impl FuseFilesystem {
 
     /// Resolve `path` to a [`NamedNode`], mapping missing entries to
     /// [`ErrorKind::NotFound`] so the FUSE layer can surface `ENOENT`.
-    fn resolve_named(&self, path: &Path) -> Result<NamedNode> {
+    pub(super) fn resolve_named(&self, path: &Path) -> Result<NamedNode> {
         let (dir, name) = split_path(path)?;
         self.lookup_node(dir, name, None)?.ok_or_else(|| err::not_found(path))
     }
@@ -256,7 +263,7 @@ impl FuseFilesystem {
     ///
     /// Delegates to [`notify::propagate_source_changes`] — the single source
     /// of truth for change propagation, shared with the filesystem watcher.
-    fn notify_change(&self, affected: &AffectedFiles) {
+    pub(super) fn notify_change(&self, affected: &AffectedFiles) {
         if affected.is_empty() {
             return;
         }
@@ -272,133 +279,6 @@ impl FuseFilesystem {
         }
     }
 }
-
-impl Filesystem for FuseFilesystem {
-    fn source_dir(&self) -> &Path { self.backing_fs.source_dir() }
-
-    fn metadata(&self, path: &Path) -> Result<Metadata> { self.backing_fs.metadata(path) }
-
-    fn symlink_target(&self, path: &Path) -> Result<PathBuf> { self.backing_fs.symlink_target(path) }
-
-    fn read_dir(&self, path: &Path) -> Result<Vec<DirEntry>> {
-        Ok(self
-            .read_dir_nodes(path, None)?
-            .into_iter()
-            .map(|n| DirEntry {
-                name: n.name().to_owned(),
-                kind: n.kind(),
-            })
-            .collect())
-    }
-
-    fn stat(&self, dir: &Path, name: &str) -> Result<Option<DirEntry>> {
-        Ok(self.lookup_node(dir, name, None)?.map(|n| DirEntry {
-            name: n.name().to_owned(),
-            kind: n.kind(),
-        }))
-    }
-
-    fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
-        self.resolve_named(path)?
-            .readable()
-            .ok_or_else(|| err::not_readable(path))?
-            .read(&ReadContext {
-                path,
-                fs: self.backing_fs.as_ref(),
-            })
-    }
-
-    fn write_file(&self, path: &Path, content: &[u8]) -> Result<AffectedFiles> {
-        let affected = self
-            .resolve_named(path)?
-            .writable()
-            .ok_or_else(|| err::not_writable(path))?
-            .write(
-                &WriteContext {
-                    path,
-                    fs: self.backing_fs.as_ref(),
-                },
-                content,
-            )?;
-
-        self.notify_change(&affected);
-        Ok(affected)
-    }
-
-    fn rename(&self, from: &Path, to: &Path) -> Result<()> { self.dispatch_rename_op(from, to, None) }
-
-    fn remove(&self, path: &Path) -> Result<()> { self.dispatch_path_op(path, |name| Op::Remove { name }, None) }
-
-    fn create_file(&self, path: &Path) -> Result<()> { self.dispatch_path_op(path, |name| Op::Create { name }, None) }
-
-    fn mkdir(&self, path: &Path) -> Result<()> { self.dispatch_path_op(path, |name| Op::Mkdir { name }, None) }
-}
-
-/// Evaluate a fallible expression; on error, log + reply with the mapped errno.
-macro_rules! fuse_try {
-    ($reply:expr, $expr:expr, $ino:expr, $msg:literal) => {
-        match $expr {
-            Ok(val) => val,
-            Err(e) => {
-                let errno = $crate::err::extract_errno(&e);
-                debug!(target: "nyne::fuse", ino = $ino, error = %e, errno = ?errno, $msg);
-                $reply.error(errno);
-                return;
-            }
-        }
-    };
-}
-/// Reply with a statically-known errno, logging at debug level.
-///
-/// Unlike [`fuse_try!`] (which extracts an errno from an error chain),
-/// this is for deterministic validation failures where the errno is
-/// known at the call site. Emits a `debug!` event so all FUSE error
-/// replies show up in the same `nyne::fuse` tracing target.
-macro_rules! fuse_err {
-    ($reply:expr, $errno:expr, $ino:expr, $msg:literal) => {{
-        let errno = $errno;
-        debug!(target: "nyne::fuse", ino = $ino, errno = ?errno, $msg);
-        $reply.error(errno);
-        return;
-    }};
-}
-
-/// Resolve a parent inode to its directory path, or reply ENOENT.
-macro_rules! ensure_dir_path {
-    ($self:expr, $parent:expr, $reply:expr) => {
-        match $self.inodes.dir_path_for($parent) {
-            Some(path) => path,
-            None => {
-                $reply.error(Errno::ENOENT);
-                return;
-            }
-        }
-    };
-}
-
-/// Resolve the (parent, name) addressing for a mutation and emit its debug log.
-///
-/// Used by `do_create`, `do_mkdir`, `do_remove`, and `do_rename` to factor
-/// out the repeated `u64::from(parent)` + `ensure_dir_path!` +
-/// `to_string_lossy` + `debug!` + path-join sequence. Returns the four
-/// values every mutation needs: the numeric parent inode, the parent's
-/// directory path, the entry name as a `Cow<'_, str>`, and the full
-/// `dir_path.join(name)` path.
-macro_rules! prepare_mutation {
-    ($self:expr, $parent:expr, $name:expr, $reply:expr, $op:literal) => {{
-        let parent = u64::from($parent);
-        let dir_path = ensure_dir_path!($self, parent, $reply);
-        let name = $name.to_string_lossy();
-        debug!(target: "nyne::fuse", parent, name = %name, $op);
-        let path = dir_path.join(name.as_ref());
-        (parent, dir_path, name, path)
-    }};
-}
-
-pub(super) use ensure_dir_path;
-pub(super) use fuse_err;
-pub(super) use fuse_try;
-pub(super) use prepare_mutation;
 
 /// Split a path into (`parent_dir`, `file_name`), mapping a malformed path to
 /// [`ErrorKind::InvalidInput`] so callers surface `EINVAL` rather than `EIO`.
