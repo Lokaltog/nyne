@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 /// Plugin configs are stored as opaque `toml::Value` tables keyed by plugin ID.
 /// Each plugin deserializes its own section during activation, which keeps the
 /// core config type free of plugin-specific knowledge.
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct NyneConfig {
     /// Mount configuration (optional -- omit if not using FUSE mount).
@@ -61,20 +61,6 @@ pub struct NyneConfig {
     #[serde(default)]
     #[garde(skip)]
     pub plugin: HashMap<String, toml::Value>,
-}
-
-/// Default implementation for `NyneConfig`.
-impl Default for NyneConfig {
-    /// Return a config with no mount, default repository/sandbox/agent settings, and no plugins.
-    fn default() -> Self {
-        Self {
-            mount: None,
-            repository: RepositoryConfig::default(),
-            sandbox: SandboxConfig::default(),
-            agent_files: AgentFilesConfig::default(),
-            plugin: HashMap::default(),
-        }
-    }
 }
 
 /// Repository configuration -- controls how the project is exposed to the daemon.
