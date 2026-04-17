@@ -65,6 +65,7 @@ pub fn truncate_comm(name: &str) -> Cow<'_, str> {
         Cow::Borrowed(name)
     }
 }
+
 /// Open `/proc/self/ns/<name>` as an owned file descriptor.
 ///
 /// Used to grab the current process's own namespace fds (e.g. `user`,
@@ -73,8 +74,9 @@ pub fn truncate_comm(name: &str) -> Cow<'_, str> {
 /// The caller then passes the fd directly to `setns(2)`.
 pub fn self_ns_fd(name: &str) -> Result<OwnedFd> {
     let path = format!("/proc/self/ns/{name}");
-    let file = fs::File::open(&path).wrap_err_with(|| format!("opening {path}"))?;
-    Ok(file.into())
+    Ok(fs::File::open(&path)
+        .wrap_err_with(|| format!("opening {path}"))?
+        .into())
 }
 
 #[cfg(test)]

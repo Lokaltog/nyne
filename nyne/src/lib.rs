@@ -47,8 +47,6 @@ pub mod plugin;
 pub mod prelude;
 /// Process spawning utilities for subprocess lifecycle management.
 pub mod process;
-/// Per-process metadata helpers over procfs (`/proc/{pid}/…`, `/proc/self/…`).
-pub mod procfs;
 /// Linux namespace sandbox for isolating daemon subprocesses.
 pub(crate) mod sandbox;
 /// Session management: mount lifecycle and control socket handling.

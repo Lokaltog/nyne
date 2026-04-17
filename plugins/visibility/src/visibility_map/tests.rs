@@ -1,4 +1,4 @@
-use nyne::procfs::{COMM_MAX_LEN, read_ppid};
+use nyne::process::procfs::{COMM_MAX_LEN, read_ppid};
 
 use super::*;
 

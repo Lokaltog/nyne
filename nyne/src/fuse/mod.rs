@@ -36,7 +36,7 @@ use parking_lot::{Mutex, RwLock};
 
 use crate::err;
 use crate::path_utils::PathExt;
-use crate::procfs::read_comm;
+use crate::process::procfs::read_comm;
 use crate::router::{
     AffectedFiles, Chain, DirEntry, Filesystem, Metadata, NamedNode, Op, Process, ReadContext, RenameContext, Request,
     UnlinkContext, WriteContext,

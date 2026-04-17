@@ -16,7 +16,7 @@
 
 use std::collections::HashMap;
 
-use nyne::procfs::{read_comm, read_ppid, truncate_comm};
+use nyne::process::procfs::{read_comm, read_ppid, truncate_comm};
 use parking_lot::RwLock;
 use tracing::debug;
 

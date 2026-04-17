@@ -24,12 +24,12 @@ use crate::dispatch::{ControlRegistry, ScriptRegistry};
 use crate::fuse::FuseFilesystem;
 use crate::fuse::notify::{AsyncNotifier, FuseNotifier};
 use crate::path_filter::PathFilter;
-use crate::process::Spawner;
+use crate::process::{Spawner, procfs};
 use crate::router::fs::os::OsFilesystem;
 use crate::router::{Chain, Filesystem};
 use crate::session::{self, SessionId, SessionRegistry};
 use crate::watcher::{FsWatcher, WatcherBackend};
-use crate::{plugin, procfs, sandbox};
+use crate::{plugin, sandbox};
 
 /// Number of FUSE handler threads per mount.
 ///

@@ -6,7 +6,7 @@ Core library — all plugin crates depend on this. Module structure is discovera
 
 Modules may only import from their own tier or lower.
 
-- **Tier 0 — Foundation**: `types/`, `text/`, `config/`, `session/`, `process/`, `procfs/`, `deep_merge/`, `path_utils`, `path_filter/`
+- **Tier 0 — Foundation**: `types/`, `text/`, `config/`, `session/`, `process/` (inc. `process::procfs`), `deep_merge/`, `path_utils`, `path_filter/`
 - **Tier 1 — Infrastructure**: `router/`
 - **Tier 2 — Domain**: `err/`
 - **Tier 3 — Contracts** (imports lower tiers): `plugin/`, `prelude/`, `templates/`

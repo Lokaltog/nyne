@@ -11,6 +11,8 @@ use std::process::{Child, Command, Stdio};
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use parking_lot::Mutex;
 use tracing::{debug, info};
+
+pub mod procfs;
 #[cfg(test)]
 mod tests;
 
