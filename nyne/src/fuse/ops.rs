@@ -33,16 +33,6 @@ use crate::router::fs::mode as fs_mode;
 use crate::router::{NamedNode, Permissions, Process};
 use crate::types::Timestamps;
 use crate::types::file_kind::FileKind;
-/// Outcome of a flush attempt via [`FuseFilesystem::do_flush`].
-enum FlushOutcome {
-    /// Handle was not dirty, or dirty data was deferred (`O_TRUNC` guard).
-    Clean,
-    /// Flushed successfully.
-    Flushed,
-    /// Flush failed — contains the error for errno mapping.
-    Failed(eyre::Error),
-}
-
 /// Controls whether [`FuseFilesystem::do_flush`] defers empty truncations.
 #[derive(Debug, Clone, Copy)]
 enum FlushMode {
@@ -201,13 +191,18 @@ impl FuseFilesystem {
     /// writes through the chain, and updates both the handle's dirty
     /// generation and the inode error map atomically.
     ///
+    /// Returns `Ok(())` whether the handle was already clean, the dirty
+    /// buffer was deferred (`O_TRUNC` guard in [`FlushMode::Eager`]),
+    /// or the flush succeeded — callers don't distinguish these cases.
+    /// `Err(e)` carries the flush failure for errno mapping.
+    ///
     /// The `O_TRUNC` deferral guard is only applied in [`FlushMode::Eager`]
     /// (from the `flush` callback). [`FlushMode::Final`] (from `release`)
     /// always flushes, even if the buffer is empty from truncation.
-    fn do_flush(&self, ino: u64, fh: u64, mode: FlushMode) -> FlushOutcome {
+    fn do_flush(&self, ino: u64, fh: u64, mode: FlushMode) -> Result<(), eyre::Error> {
         let Some(snapshot) = self.handles.dirty_snapshot(fh) else {
             debug!(target: "nyne::fuse", ino, fh, ?mode, "do_flush: not dirty");
-            return FlushOutcome::Clean;
+            return Ok(());
         };
         debug!(target: "nyne::fuse", ino, fh, ?mode, data_len = snapshot.data.len(), truncated = snapshot.truncated, gen = snapshot.generation, "do_flush: dirty snapshot");
 
@@ -222,7 +217,7 @@ impl FuseFilesystem {
         // (: > file), release flushes the empty truncation.
         if matches!(mode, FlushMode::Eager) && snapshot.data.is_empty() && snapshot.truncated {
             trace!(target: "nyne::fuse", ino, fh, "flush: deferring empty truncation to release");
-            return FlushOutcome::Clean;
+            return Ok(());
         }
 
         // Per-inode write lock prevents concurrent flushes.
@@ -238,12 +233,12 @@ impl FuseFilesystem {
             Ok(()) => {
                 self.handles.clear_dirty(fh, snapshot.generation);
                 self.write_errors.write().remove(&ino);
-                FlushOutcome::Flushed
+                Ok(())
             }
             Err(e) => {
                 debug!(target: "nyne::fuse", ino, error = %e, "flush failed");
                 self.write_errors.write().insert(ino, format!("{e:#}"));
-                FlushOutcome::Failed(e)
+                Err(e)
             }
         }
     }
@@ -550,8 +545,8 @@ impl Filesystem for FuseFilesystem {
                 // validation errors on the write() syscall itself, rather
                 // than deferring to close() where shells discard the error.
                 match self.do_flush(ino, fh, FlushMode::Final) {
-                    FlushOutcome::Failed(e) => reply.error(extract_errno(&e)),
-                    _ => reply.written(n),
+                    Err(e) => reply.error(extract_errno(&e)),
+                    Ok(()) => reply.written(n),
                 }
             }
             None => {
@@ -563,8 +558,8 @@ impl Filesystem for FuseFilesystem {
 
     fn flush(&self, _req: &Request, ino: INodeNo, fh: FileHandle, _lock_owner: LockOwner, reply: ReplyEmpty) {
         match self.do_flush(u64::from(ino), u64::from(fh), FlushMode::Eager) {
-            FlushOutcome::Clean | FlushOutcome::Flushed => reply.ok(),
-            FlushOutcome::Failed(e) => reply.error(extract_errno(&e)),
+            Ok(()) => reply.ok(),
+            Err(e) => reply.error(extract_errno(&e)),
         }
     }
 
@@ -582,7 +577,9 @@ impl Filesystem for FuseFilesystem {
         let fh = u64::from(fh);
 
         // Flush remaining dirty data (Final = never defer truncations).
-        self.do_flush(ino, fh, FlushMode::Final);
+        // Errors are recorded in write_errors (surfaced via user.error xattr)
+        // and discarded here — release cannot report errors to userspace.
+        let _ = self.do_flush(ino, fh, FlushMode::Final);
 
         self.handles.release(fh);
 
