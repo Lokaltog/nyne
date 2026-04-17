@@ -22,6 +22,7 @@ use fuser::{INodeNo, Notifier};
 use tracing::{trace, warn};
 
 use crate::fuse::inode_map::InodeMap;
+use crate::path_utils::PathExt;
 use crate::router::Chain;
 
 /// [`KernelNotifier`] backed by a `fuser::Notifier`.
@@ -151,17 +152,15 @@ pub trait KernelNotifier: Send + Sync {
 /// cached page data and its parent directory entry. Best-effort — silently
 /// skips paths that have no allocated inode.
 pub fn invalidate_inode_at(path: &Path, notifier: &dyn KernelNotifier, inodes: &InodeMap) {
-    let dir = path.parent().unwrap_or_else(|| Path::new(""));
-    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+    let Some((dir, name)) = path.split_dir_name() else {
         return;
     };
     if let Some(ino) = inodes.find_inode(dir, name) {
         notifier.inval_inode(ino);
     }
-    if let Some(parent_ino) = inodes.find_inode(
-        dir.parent().unwrap_or_else(|| Path::new("")),
-        &dir.file_name().map(|n| n.to_string_lossy()).unwrap_or_default(),
-    ) {
+    if let Some((grandparent, dir_name)) = dir.split_dir_name()
+        && let Some(parent_ino) = inodes.find_inode(grandparent, dir_name)
+    {
         notifier.inval_entry(parent_ino, name);
     }
 }
