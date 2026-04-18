@@ -15,9 +15,7 @@ use lsp_types::SymbolInformation;
 use nyne::path_utils::PathExt;
 use nyne::router::{CachePolicy, NamedNode, Node};
 use nyne_companion::Companion;
-use nyne_source::{
-    DecomposedSource, DecompositionCache, Fragment, SourcePaths, SyntaxRegistry, find_fragment_at_line,
-};
+use nyne_source::{DecomposedSource, DecompositionCache, Fragment, SourcePaths, SyntaxRegistry, find_fragment_at_line};
 
 use crate::provider::content::Target;
 use crate::session::handle::Handle;

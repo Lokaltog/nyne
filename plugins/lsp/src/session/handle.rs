@@ -115,10 +115,23 @@ impl Handle {
 
     /// Create a whole-file [`LspQuery`].
     ///
-    /// Builds a [`Range`] covering the entire source — used for file-wide
-    /// LSP operations (file-level code actions, file-wide inlay hints).
-    pub(crate) fn whole_file(self: &Arc<Self>, source: &str) -> LspQuery {
-        self.over(source, 0..source.len())
+    /// Builds a maximal [`Range`] (`0:0..MAX:MAX`) — the standard LSP
+    /// "whole document" idiom that servers clamp to the file's actual
+    /// bounds. Doesn't require source text, so file-level operations
+    /// (file-level code actions, file-wide diagnostics) work even for
+    /// files without a tree-sitter decomposer.
+    pub(crate) fn whole_file(self: &Arc<Self>) -> LspQuery {
+        LspQuery {
+            handle: Arc::clone(self),
+            position: Position { line: 0, character: 0 },
+            range: Range {
+                start: Position { line: 0, character: 0 },
+                end: Position {
+                    line: u32::MAX,
+                    character: u32::MAX,
+                },
+            },
+        }
     }
 
     /// Create an [`LspQuery`] spanning full lines (0-based, exclusive end).

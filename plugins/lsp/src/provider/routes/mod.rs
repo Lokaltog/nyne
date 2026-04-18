@@ -10,17 +10,19 @@ use std::time::Duration;
 
 use nyne::router::{CachePolicy, NamedNode, Request, RouteCtx};
 use nyne_companion::{CompanionExtensions, CompanionRequest};
+use nyne_diff::DiffRequest;
 use nyne_source::SourceExtensions;
 use strum::IntoEnumIterator;
 
 use super::{LspState, lsp_links};
-use crate::provider::content::{Feature, build_diagnostics_node};
+use crate::provider::content::{Feature, actions, build_diagnostics_node};
 use crate::session::handle::Handle;
 
 /// Register per-file LSP contributions into the companion file extension point.
 ///
 /// - `DIAGNOSTICS.md` — file-level diagnostics (per source file).
 /// - `rename/{target}.diff` — file-level rename preview/apply.
+/// - `actions/NN-*.diff` — file-wide code actions (preview/apply).
 pub fn register_companion_extensions(exts: &mut CompanionExtensions, state: &Arc<LspState>) {
     exts.file.scoped("lsp", |ext| {
         // DIAGNOSTICS.md at companion root.
@@ -36,6 +38,45 @@ pub fn register_companion_extensions(exts: &mut CompanionExtensions, state: &Arc
         ext.dir(state.vfs.dir.rename.clone(), |d| {
             d.capture("target", |d| {
                 d.handler(move |ctx, req, next| s.file_rename_handler(ctx, req, next));
+            });
+        });
+
+        // actions/ at companion root — emit the dir entry when the LSP
+        // server advertises code-action support.
+        let s = Arc::clone(state);
+        let actions_dir = state.vfs.dir.actions.clone();
+        ext.content(move |_ctx, req| {
+            let sf = req.source_file()?;
+            let handle = Handle::for_file(&s.lsp, &sf)?;
+            handle.capabilities().code_action_provider.as_ref()?;
+            let (_, node) = NamedNode::dir(&actions_dir).into_parts();
+            Some(
+                node.with_cache_policy(CachePolicy::with_ttl(Duration::ZERO))
+                    .named(&actions_dir),
+            )
+        });
+
+        // actions/NN-*.diff — children of the file-wide actions dir.
+        let s = Arc::clone(state);
+        ext.dir(state.vfs.dir.actions.clone(), |d| {
+            let readdir_state = Arc::clone(&s);
+            d.on_readdir(move |_ctx, req| {
+                if let Some(sf) = req.source_file()
+                    && let Some((resolved, _query)) = readdir_state.resolve_file_actions_dir(&sf)
+                {
+                    req.nodes.extend(actions::build_action_nodes(&resolved));
+                }
+                Ok(())
+            });
+            let lookup_state = Arc::clone(&s);
+            d.on_lookup(move |_ctx, req, name| {
+                if let Some(sf) = req.source_file()
+                    && let Some((resolved, query)) = lookup_state.resolve_file_actions_dir(&sf)
+                    && let Some(diff) = actions::find_action_diff(&resolved, name, &query)
+                {
+                    req.set_diff_source(diff, Arc::clone(&lookup_state.fs));
+                }
+                Ok(())
             });
         });
     });

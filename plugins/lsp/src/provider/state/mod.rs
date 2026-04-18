@@ -409,6 +409,7 @@ impl LspState {
             });
         }
     }
+
     /// Resolve a fragment's LSP context — decomposition, fragment, and LSP handle.
     ///
     /// Shared preamble for sub-route handlers that need to query LSP on a
@@ -459,7 +460,8 @@ impl LspState {
         }
 
         let source_ctx = self.source_ctx();
-        let base = lsp_links::build_symlink_base(companion, source_file, fragment_path, lsp_dir, source_ctx.symbols_dir);
+        let base =
+            lsp_links::build_symlink_base(companion, source_file, fragment_path, lsp_dir, source_ctx.symbols_dir);
         let nodes = lsp_links::build_target_nodes(companion, &source_ctx, &targets, &base);
         Ok(Some(nodes))
     }
@@ -483,6 +485,22 @@ impl LspState {
         Ok(Some((resolved, query)))
     }
 
+    /// Resolve file-wide code actions and build bare file nodes.
+    ///
+    /// Queries the LSP server for actions over the entire file. Returns
+    /// `None` if the file has no LSP server or the server doesn't
+    /// advertise code-action support. Unlike [`Self::resolve_actions_dir`],
+    /// does not require tree-sitter decomposition.
+    pub(crate) fn resolve_file_actions_dir(
+        &self,
+        source_file: &Path,
+    ) -> Option<(Vec<actions::ResolvedAction>, LspQuery)> {
+        let handle = Handle::for_file(&self.lsp, source_file)?;
+        handle.capabilities().code_action_provider.as_ref()?;
+        let query = handle.whole_file();
+        let resolved = actions::resolve_code_actions(&query);
+        Some((resolved, query))
+    }
 }
 
 /// Split off a sub-route from the fragment path.
