@@ -24,23 +24,18 @@ pub mod rename;
 /// View types for rendering LSP query results.
 mod views;
 
-use std::ops::Range as StdRange;
 use std::sync::Arc;
+use std::time::Duration;
 
 use color_eyre::eyre::{Result, eyre};
 pub use feature::{Feature, Handles, Target};
-use nyne::router::NamedNode;
+use nyne::router::{CachePolicy, NamedNode};
 
 use crate::session::diagnostic_view::diagnostics_to_rows;
+use crate::session::handle::{Handle, LspQuery};
 
 /// Error message when the LSP client has become unavailable since resolve time.
 pub const LSP_UNAVAILABLE: &str = "LSP server no longer available";
-
-use std::time::Duration;
-
-use nyne::router::CachePolicy;
-
-use crate::session::handle::Handle;
 
 /// Build the file-level DIAGNOSTICS.md node.
 ///
@@ -67,19 +62,9 @@ pub fn build_diagnostics_node(name: &str, handle: &Arc<Handle>, lsp_handles: &Ha
 ///
 /// Looks up the feature by directory name and delegates to
 /// `Feature::query()` → `QueryResult::into_targets()`.
-pub fn query_lsp_targets(
-    handle: &Arc<Handle>,
-    source: &str,
-    name_byte_offset: usize,
-    lsp_dir: &str,
-    line_range: &StdRange<usize>,
-) -> Result<Vec<Target>> {
+pub fn query_lsp_targets(query: &LspQuery, lsp_dir: &str) -> Result<Vec<Target>> {
     let Some(feature) = Feature::from_dir_name(lsp_dir) else {
         return Ok(Vec::new());
     };
-    let sym = handle.at(source, name_byte_offset);
-    let fq = sym.file_query().ok_or_else(|| eyre!(LSP_UNAVAILABLE))?;
-    Ok(feature
-        .query(&fq, sym.position(), line_range)?
-        .into_targets(handle.path_resolver()))
+    Ok(feature.query(query)?.into_targets(query.path_resolver()))
 }

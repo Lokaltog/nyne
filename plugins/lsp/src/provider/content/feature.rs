@@ -4,19 +4,16 @@
 //! Adding a new feature requires only a new variant with a `meta!("slug")` arm,
 //! an `is_supported` capability check, a `query` arm, and a Jinja template file.
 
-use std::ops::Range as StdRange;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use color_eyre::eyre::Result;
 use convert_case::{Case, Casing};
-use lsp_types::Position;
 use nyne::templates::{TemplateEngine, TemplateHandle};
 use strum::{EnumCount, IntoEnumIterator};
 
 use super::views::{QueryResult, hierarchy_item};
-use crate::session::query::FileQuery;
-use crate::session::uri::line_range_to_lsp_range;
+use crate::session::handle::LspQuery;
 
 /// Internal metadata for a single LSP feature variant.
 ///
@@ -162,29 +159,35 @@ impl Feature {
     /// Execute the LSP query for this feature and return results as
     /// an `QueryResult`. This is the **single dispatch point** —
     /// both markdown views and symlink directory population use it.
-    pub(crate) fn query(self, fq: &FileQuery<'_>, pos: Position, line_range: &StdRange<usize>) -> Result<QueryResult> {
+    ///
+    /// Positional features (hover, references, callers, etc.) read
+    /// `query.position()`; range-based features (inlay hints) read
+    /// `query.range()`.
+    pub(crate) fn query(self, query: &LspQuery) -> Result<QueryResult> {
+        let fq = query
+            .file_query()
+            .ok_or_else(|| color_eyre::eyre::eyre!(super::LSP_UNAVAILABLE))?;
+        let pos = query.position();
         Ok(match self {
             Self::Definition => QueryResult::Locations(fq.definition(pos.line, pos.character)?),
             Self::Declaration => QueryResult::Locations(fq.declaration(pos.line, pos.character)?),
             Self::TypeDefinition => QueryResult::Locations(fq.type_definition(pos.line, pos.character)?),
             Self::References => QueryResult::Locations(fq.references(pos.line, pos.character)?),
             Self::Implementation => QueryResult::Locations(fq.implementations(pos.line, pos.character)?),
-            Self::Callers => {
-                let calls = fq.incoming_calls(pos.line, pos.character)?;
-                QueryResult::HierarchyItems(calls.into_iter().map(|c| hierarchy_item(c.from)).collect())
-            }
-            Self::Deps => {
-                let calls = fq.outgoing_calls(pos.line, pos.character)?;
-                QueryResult::HierarchyItems(calls.into_iter().map(|c| hierarchy_item(c.to)).collect())
-            }
-            Self::Doc => {
-                let hover = fq.hover(pos.line, pos.character)?;
-                QueryResult::Hover(hover)
-            }
-            Self::Hints => {
-                let range = line_range_to_lsp_range(line_range);
-                QueryResult::InlayHints(fq.inlay_hints(range)?)
-            }
+            Self::Callers => QueryResult::HierarchyItems(
+                fq.incoming_calls(pos.line, pos.character)?
+                    .into_iter()
+                    .map(|c| hierarchy_item(c.from))
+                    .collect(),
+            ),
+            Self::Deps => QueryResult::HierarchyItems(
+                fq.outgoing_calls(pos.line, pos.character)?
+                    .into_iter()
+                    .map(|c| hierarchy_item(c.to))
+                    .collect(),
+            ),
+            Self::Doc => QueryResult::Hover(fq.hover(pos.line, pos.character)?),
+            Self::Hints => QueryResult::InlayHints(fq.inlay_hints(query.range())?),
         })
     }
 }

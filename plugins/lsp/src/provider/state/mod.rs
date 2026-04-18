@@ -117,24 +117,24 @@ impl LspState {
         if !feature.is_supported(lsp_handle.capabilities()) {
             return None;
         }
-        let query = lsp_handle.at(&shared.source, frag.span.name_byte_offset);
         let resolver = FragmentResolver::new(self.decomposition.clone(), sf);
         let fragment_path: Arc<[String]> = Arc::from(segments);
+        let source = shared.source.clone();
+        let name_byte_offset = frag.span.name_byte_offset;
         Some(
             self.handles
                 .features
                 .get(feature.handle_index())?
                 .lazy_node(feature.file_name(), move |engine, tmpl| {
-                    let fq = query
-                        .file_query()
-                        .ok_or_else(|| eyre!(super::content::LSP_UNAVAILABLE))?;
-                    let path_resolver = query.path_resolver();
                     let slr = resolver
                         .line_range(&fragment_path)?
                         .ok_or_else(|| eyre!("symbol no longer exists in source"))?;
                     let line_range = (slr.start - 1)..slr.end;
-                    let result = feature.query(&fq, query.position(), &line_range)?;
-                    Ok(result.render_view(engine, tmpl, path_resolver))
+                    let query = lsp_handle
+                        .over_lines(line_range)
+                        .with_position(&source, name_byte_offset);
+                    let result = feature.query(&query)?;
+                    Ok(result.render_view(engine, tmpl, query.path_resolver()))
                 }),
         )
     }

@@ -142,13 +142,10 @@ pub fn resolve_lsp_symlink_dir(
         return Ok(None);
     };
 
-    let targets = query_lsp_targets(
-        &lsp_handle,
-        &shared.source,
-        frag.span.name_byte_offset,
-        lsp_dir,
-        &frag.line_range(&shared.rope),
-    )?;
+    let query = lsp_handle
+        .over_lines(frag.line_range(&shared.rope))
+        .with_position(&shared.source, frag.span.name_byte_offset);
+    let targets = query_lsp_targets(&query, lsp_dir)?;
 
     if targets.is_empty() {
         return Ok(Some(Vec::new()));
@@ -201,9 +198,11 @@ pub fn resolve_actions_dir(
         return Ok(None);
     };
 
-    let sym = lsp_handle.at(&shared.source, frag.span.name_byte_offset);
-    let resolved = actions::resolve_code_actions(&sym, &frag.line_range(&shared.rope));
-    Ok(Some((resolved, sym)))
+    let query = lsp_handle
+        .over_lines(frag.line_range(&shared.rope))
+        .with_position(&shared.source, frag.span.name_byte_offset);
+    let resolved = actions::resolve_code_actions(&query);
+    Ok(Some((resolved, query)))
 }
 
 /// Convert LSP workspace symbol results into VFS symlinks.

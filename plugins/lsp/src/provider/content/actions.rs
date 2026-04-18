@@ -3,7 +3,6 @@
 //! Each code action is exposed as a virtual diff file under `symbols/Foo@/actions/`.
 //! Reading the file previews the edit; deleting it applies the action via the diff middleware.
 
-use std::ops::Range as StdRange;
 use std::sync::OnceLock;
 
 use color_eyre::eyre::{Result, eyre};
@@ -14,7 +13,6 @@ use nyne_diff::{DiffSource, FileEditResult};
 
 use crate::session::edit::resolve_workspace_edit;
 use crate::session::handle::LspQuery;
-use crate::session::uri::line_range_to_lsp_range;
 
 /// Maximum length for the kebab-case slug derived from a code action title.
 const ACTION_SLUG_MAX_LEN: usize = 60;
@@ -25,16 +23,18 @@ pub struct ResolvedAction {
     pub file_name: String,
 }
 
-/// Query code actions for a symbol and return them as resolved entries.
+/// Query code actions for a scope and return them as resolved entries.
 ///
 /// Called at resolve time (readdir of `actions/`) to eagerly fetch
-/// the list of available actions from the LSP server.
-pub fn resolve_code_actions(query: &LspQuery, line_range: &StdRange<usize>) -> Vec<ResolvedAction> {
+/// the list of available actions from the LSP server. Uses the query's
+/// stored range — zero-width for point-scoped actions, line-aligned for
+/// symbol-scoped, whole-file for file-scoped.
+pub fn resolve_code_actions(query: &LspQuery) -> Vec<ResolvedAction> {
     let Some(fq) = query.file_query() else {
         return Vec::new();
     };
 
-    let actions = match fq.code_actions(line_range_to_lsp_range(line_range)) {
+    let actions = match fq.code_actions(query.range()) {
         Ok(actions) => actions,
         Err(err) => {
             tracing::debug!(?err, "code action query failed");
