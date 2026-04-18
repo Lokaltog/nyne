@@ -236,10 +236,8 @@ impl SyntaxProvider {
                 // `staged.diff` is contributed here, scoped to this file so
                 // the preview shows only edits staged against `sf`.
                 if self.decomposition.has_fragment(&sf, parent) {
-                    req.nodes.add(
-                        self.staging
-                            .staged_diff_node(Some(sf), &self.vfs.file.staged_diff),
-                    );
+                    req.nodes
+                        .add(self.staging.staged_diff_node(Some(sf), &self.vfs.file.staged_diff));
                 }
             }
             FragmentSubRoute::Fragment =>
@@ -288,12 +286,12 @@ impl SyntaxProvider {
                     return Ok(());
                 }
                 if name == self.vfs.file.staged_diff && self.decomposition.has_fragment(&sf, parent) {
-                    BatchEditAction {
-                        staging: self.staging.clone(),
-                        decomposition: self.decomposition.clone(),
-                        registry: Arc::clone(&self.registry),
-                        scope: Some(sf),
-                    }
+                    BatchEditAction::new(
+                        self.staging.clone(),
+                        self.decomposition.clone(),
+                        Arc::clone(&self.registry),
+                        Some(sf),
+                    )
                     .attach_to(req, &self.fs, name);
                 }
             }

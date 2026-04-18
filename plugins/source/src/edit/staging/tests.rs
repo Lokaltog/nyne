@@ -92,6 +92,42 @@ fn staged_diff_node_attaches_writable(#[case] scope: Option<PathBuf>) {
     assert!(node.writable().is_some(), "staged.diff node must carry a Writable");
 }
 
+#[rstest]
+#[case::scoped_a(Some(PathBuf::from("a.rs")), &["a.rs"])]
+#[case::scoped_b(Some(PathBuf::from("b.rs")), &["b.rs"])]
+#[case::scoped_missing(Some(PathBuf::from("nonexistent.rs")), &[])]
+#[case::mount_wide(None, &["a.rs", "b.rs"])]
+fn scoped_snapshot_filters_by_scope(#[case] scope: Option<PathBuf>, #[case] expected_files: &[&str]) {
+    use std::sync::Arc;
+
+    use nyne::router::MemFs;
+
+    use crate::syntax::SyntaxRegistry;
+    use crate::syntax::decomposed::DecompositionCache;
+
+    let staging = EditStaging::new();
+    staging.stage(PathBuf::from("a.rs"), vec!["Foo".into()], EditOpKind::Delete, None);
+    staging.stage(
+        PathBuf::from("b.rs"),
+        vec!["Bar".into()],
+        EditOpKind::Replace,
+        Some("x".into()),
+    );
+
+    let registry = Arc::new(SyntaxRegistry::build());
+    let decomposition = DecompositionCache::new(Arc::new(MemFs::default()), Arc::clone(&registry), 8);
+    let action = BatchEditAction::new(staging, decomposition, registry, scope);
+
+    let mut visible: Vec<String> = action
+        .scoped_snapshot()
+        .keys()
+        .map(|p| p.display().to_string())
+        .collect();
+    visible.sort();
+    let expected: Vec<String> = expected_files.iter().map(|s| (*s).into()).collect();
+    assert_eq!(visible, expected);
+}
+
 #[test]
 fn clear_discards_all_ops() {
     let staging = EditStaging::new();

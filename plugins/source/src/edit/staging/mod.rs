@@ -130,6 +130,26 @@ pub struct BatchEditAction {
 }
 
 impl BatchEditAction {
+    /// Build a new action.
+    ///
+    /// `scope = None` aggregates mount-wide; `scope = Some(path)` restricts
+    /// to a single source file. Single source of truth for the field list —
+    /// both the mount-root registration and per-file fragment route go
+    /// through here.
+    pub fn new(
+        staging: EditStaging,
+        decomposition: DecompositionCache,
+        registry: Arc<SyntaxRegistry>,
+        scope: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            staging,
+            decomposition,
+            registry,
+            scope,
+        }
+    }
+
     /// Snapshot staged operations visible to this action.
     ///
     /// Single source of truth for the scope filter: mount-wide actions

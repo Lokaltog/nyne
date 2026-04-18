@@ -170,12 +170,7 @@ fn register_staged_diff(
                 Some(content_staging.staged_diff_node(None, &content_name))
             });
 
-            let action = BatchEditAction {
-                staging,
-                decomposition,
-                registry,
-                scope: None,
-            };
+            let action = BatchEditAction::new(staging, decomposition, registry, None);
             d.on_lookup(move |_ctx: &RouteCtx, req: &mut Request, name: &str| {
                 if name != file_staged.as_str() {
                     return Ok(());

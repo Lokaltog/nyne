@@ -70,4 +70,6 @@ Extension points allow downstream plugins to contribute VFS nodes into upstream 
 2. **Downstream plugins** call `ctx.<ext>_mut()` during `activate()`, register callbacks via `scoped()`.
 3. **Owning plugin** calls `builder.apply(&ext)` in `providers()`.
 
-Callback types: `on_readdir`, `on_lookup`, `content`, `content_always` (additive); `handler` (singular); `dir`, `capture`, `rest` (structural). Extensions carry state via captured `Arc`s. Registration in `activate()`, application in `providers()`. Use `scoped("plugin-name", cb)` for provenance.
+Callback types: `on_readdir`, `on_lookup`, `on_create`, `content`, `content_always` (additive); `handler` (singular); `dir`, `capture`, `rest` (structural). Extensions carry state via captured `Arc`s. Registration in `activate()`, application in `providers()`. Use `scoped("plugin-name", cb)` for provenance.
+
+`on_create` callbacks materialize write-only ephemeral nodes: attach a `NamedNode` (with `Writable`) to `req.nodes` and the FUSE bridge binds it to a fresh inode for the `create → write → release` cycle, then evicts it so subsequent lookups return `ENOENT`. Use this for endpoints whose presence should remain hidden (e.g. batch-edit staging).
