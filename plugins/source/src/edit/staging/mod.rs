@@ -136,7 +136,7 @@ impl BatchEditAction {
     /// to a single source file. Single source of truth for the field list —
     /// both the mount-root registration and per-file fragment route go
     /// through here.
-    pub fn new(
+    pub const fn new(
         staging: EditStaging,
         decomposition: DecompositionCache,
         registry: Arc<SyntaxRegistry>,
