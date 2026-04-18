@@ -64,20 +64,18 @@ macro_rules! ensure_dir_path {
 
 /// Resolve the (parent, name) addressing for a mutation and emit its debug log.
 ///
-/// Used by `do_create`, `do_mkdir`, `do_remove`, and `do_rename` to factor
-/// out the repeated `u64::from(parent)` + `ensure_dir_path!` +
-/// `to_string_lossy` + `debug!` + path-join sequence. Returns the four
-/// values every mutation needs: the numeric parent inode, the parent's
-/// directory path, the entry name as a `Cow<'_, str>`, and the full
-/// `dir_path.join(name)` path.
+/// Used by `do_create`, `do_mkdir`, and `do_remove` to factor out the
+/// repeated `u64::from(parent)` + `ensure_dir_path!` + `to_string_lossy` +
+/// `debug!` sequence. Returns the numeric parent inode, the parent's
+/// directory path, and the entry name as a `Cow<'_, str>`. Callers that
+/// also need the full child path compute it via `dir_path.join(name)`.
 macro_rules! prepare_mutation {
     ($self:expr, $parent:expr, $name:expr, $reply:expr, $op:literal) => {{
         let parent = u64::from($parent);
         let dir_path = ensure_dir_path!($self, parent, $reply);
         let name = $name.to_string_lossy();
         debug!(target: "nyne::fuse", parent, name = %name, $op);
-        let path = dir_path.join(name.as_ref());
-        (parent, dir_path, name, path)
+        (parent, dir_path, name)
     }};
 }
 

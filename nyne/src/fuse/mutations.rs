@@ -21,7 +21,7 @@ impl FuseFilesystem {
     /// Dispatches `Op::Create` through the chain, then opens the new file
     /// and returns a handle with `FOPEN_DIRECT_IO`.
     pub(super) fn do_create(&self, req: &Request, parent: INodeNo, name: &OsStr, flags: i32, reply: ReplyCreate) {
-        let (parent, dir_path, name, _path) = prepare_mutation!(self, parent, name, reply, "create");
+        let (parent, dir_path, name) = prepare_mutation!(self, parent, name, reply, "create");
         match self.dispatch_and_resolve_path_op(req, parent, &dir_path, &name, |name| Op::Create { name }) {
             Ok(Some((ino, node))) => {
                 let fh = self.handles.open(ino, Arc::from([]), flags);
@@ -35,7 +35,7 @@ impl FuseFilesystem {
 
     /// Handle directory creation in a parent directory.
     pub(super) fn do_mkdir(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEntry) {
-        let (parent, dir_path, name, _path) = prepare_mutation!(self, parent, name, reply, "mkdir");
+        let (parent, dir_path, name) = prepare_mutation!(self, parent, name, reply, "mkdir");
         match self.dispatch_and_resolve_path_op(req, parent, &dir_path, &name, |name| Op::Mkdir { name }) {
             Ok(Some((ino, node))) => {
                 let (attr, ttl) = self.node_attr(ino, &node, req);
@@ -52,7 +52,8 @@ impl FuseFilesystem {
     /// chain dispatch so middleware providers (e.g. the diff plugin) can
     /// handle remove operations for virtual nodes.
     pub(super) fn do_remove(&self, req: &Request, parent: INodeNo, name: &OsStr, reply: ReplyEmpty) {
-        let (parent, _dir_path, _name, path) = prepare_mutation!(self, parent, name, reply, "remove");
+        let (parent, dir_path, name) = prepare_mutation!(self, parent, name, reply, "remove");
+        let path = dir_path.join(name.as_ref());
         fuse_try!(
             reply,
             Self::try_node_then_chain(
