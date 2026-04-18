@@ -6,14 +6,13 @@ use linkme::distributed_slice;
 use nyne::ActivationContext;
 use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
-use nyne::router::{Filesystem, NamedNode, Node, NodeKind, Provider, Request, RouteCtx};
+use nyne::router::{Filesystem, NodeKind, Provider, Request, RouteCtx};
 use nyne::templates::{HandleBuilder, TemplateHandle};
 use nyne_companion::{CompanionContextExt, CompanionExtensions, CompanionRequest};
-use nyne_diff::DiffRequest;
 use tracing::info;
 
 use crate::context::SourceContextExt;
-use crate::edit::staging::{BatchEditAction, ClearWritable, EditStaging};
+use crate::edit::staging::{BatchEditAction, EditStaging};
 use crate::paths::SourcePaths;
 use crate::plugin::config::Config;
 use crate::plugin::config::vfs::Vfs;
@@ -153,19 +152,11 @@ fn register_staged_diff(
     registry: Arc<SyntaxRegistry>,
     fs: Arc<dyn Filesystem>,
 ) {
-    // Bare file node carrying `ClearWritable` so that `> staged.diff`
-    // drains the staging area. Used on both the readdir and lookup paths
-    // so the looked-up node ends up with `DiffPreview` (readable, added
-    // by the diff middleware) and `ClearWritable` (writable, added here)
-    // merged together by `NodeAccumulator::add` (first-writer-wins).
-    fn staged_node(staging: &EditStaging, name: &str) -> NamedNode {
-        Node::file()
-            .with_writable(ClearWritable {
-                staging: staging.clone(),
-            })
-            .named(name)
-    }
-
+    // `EditStaging::staged_diff_node` is the SSOT for the node shape —
+    // both the readdir and lookup paths emit identical
+    // `ClearWritable`-bearing nodes. The lookup path additionally
+    // sets `DiffCapable` so the diff middleware contributes the
+    // `DiffPreview` readable side on top.
     let dir_edit = vfs.dir.edit.clone();
     let file_staged = vfs.file.staged_diff.clone();
 
@@ -175,22 +166,21 @@ fn register_staged_diff(
             let content_name = file_staged.clone();
 
             // Readdir: contribute the staged.diff entry.
-            d.content(move |_ctx: &RouteCtx, _req: &Request| Some(staged_node(&content_staging, &content_name)));
+            d.content(move |_ctx: &RouteCtx, _req: &Request| {
+                Some(content_staging.staged_diff_node(None, &content_name))
+            });
 
-            // Lookup: set DiffCapable for the diff middleware AND add the
-            // `ClearWritable` node. Without this the lookup path produced
-            // a readable-only node and `> staged.diff` never drained.
             let action = BatchEditAction {
                 staging,
                 decomposition,
                 registry,
+                scope: None,
             };
             d.on_lookup(move |_ctx: &RouteCtx, req: &mut Request, name: &str| {
                 if name != file_staged.as_str() {
                     return Ok(());
                 }
-                req.set_diff_source(action.clone(), Arc::clone(&fs));
-                req.nodes.add(staged_node(&action.staging, name));
+                action.attach_to(req, &fs, name);
                 Ok(())
             });
         });

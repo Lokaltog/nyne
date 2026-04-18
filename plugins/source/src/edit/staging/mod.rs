@@ -69,6 +69,15 @@ impl EditStaging {
     /// Take all staged operations, leaving the staging area empty.
     pub fn drain(&self) -> HashMap<PathBuf, Vec<(u32, EditOp)>> { mem::take(&mut *self.inner.ops.lock()) }
 
+    /// Drain only the operations staged against `source_file`, leaving
+    /// other files' operations intact. Returns the removed entries.
+    ///
+    /// Used by scoped [`BatchEditAction`] and [`ClearWritable`] for the
+    /// per-symbol `<file>@/symbols/Foo@/edit/staged.diff` endpoint.
+    pub fn drain_file(&self, source_file: &Path) -> Vec<(u32, EditOp)> {
+        self.inner.ops.lock().remove(source_file).unwrap_or_default()
+    }
+
     /// Discard all staged operations.
     pub fn clear(&self) {
         self.inner.ops.lock().clear();
@@ -80,6 +89,21 @@ impl EditStaging {
 
     /// Snapshot current staged operations for diff preview.
     pub fn snapshot(&self) -> HashMap<PathBuf, Vec<(u32, EditOp)>> { self.inner.ops.lock().clone() }
+
+    /// Build a `staged.diff` node with [`ClearWritable`] attached, scoped
+    /// either to a single source file or to the mount root.
+    ///
+    /// SSOT for "what the `staged.diff` node looks like" — consumed by
+    /// both the mount-root extension registration (`scope = None`) and
+    /// the per-file fragment route (`scope = Some(source_file)`).
+    pub fn staged_diff_node(&self, scope: Option<PathBuf>, name: &str) -> nyne::router::NamedNode {
+        nyne::router::Node::file()
+            .with_writable(ClearWritable {
+                staging: self.clone(),
+                scope,
+            })
+            .named(name)
+    }
 }
 
 /// [`DiffSource`] that computes edits from the current staging area.
@@ -87,12 +111,50 @@ impl EditStaging {
 /// The diff middleware renders a preview on read and applies on
 /// `rm staged.diff` via [`DiffCapable`] request state.
 ///
+/// When `scope` is `Some`, the action operates on a single source file
+/// — used for the per-symbol `<file>@/symbols/Foo@/edit/staged.diff`
+/// endpoint, which only surfaces edits staged against that specific
+/// file. When `scope` is `None`, the action operates mount-wide — used
+/// for the root `@/edit/staged.diff` endpoint, which aggregates edits
+/// across every file.
+///
 /// [`DiffCapable`]: nyne_diff::DiffCapable
 #[derive(Clone)]
 pub struct BatchEditAction {
     pub(crate) staging: EditStaging,
     pub(crate) decomposition: DecompositionCache,
     pub(crate) registry: Arc<SyntaxRegistry>,
+    /// Restrict the diff/apply/clear to a single source file. `None`
+    /// means mount-wide (the root-level aggregation).
+    pub(crate) scope: Option<PathBuf>,
+}
+
+impl BatchEditAction {
+    /// Snapshot staged operations visible to this action.
+    ///
+    /// Single source of truth for the scope filter: mount-wide actions
+    /// see the full staging area, scoped actions see only ops whose
+    /// `source_file` matches `self.scope`.
+    fn scoped_snapshot(&self) -> HashMap<PathBuf, Vec<(u32, EditOp)>> {
+        let mut snapshot = self.staging.snapshot();
+        if let Some(scope) = &self.scope {
+            snapshot.retain(|path, _| path == scope);
+        }
+        snapshot
+    }
+
+    /// Wire this action into `req`: set the diff capability (preview
+    /// on read, apply on `rm`) and attach the `staged.diff` node with
+    /// [`ClearWritable`] (`> staged.diff` drains the scoped area).
+    ///
+    /// Single source of truth for surfacing the diff capability — used
+    /// by both the mount-root registration and the per-file fragment
+    /// route.
+    pub fn attach_to(&self, req: &mut nyne::router::Request, fs: &Arc<dyn nyne::router::Filesystem>, name: &str) {
+        use nyne_diff::DiffRequest;
+        req.set_diff_source(self.clone(), Arc::clone(fs));
+        req.nodes.add(self.staging.staged_diff_node(self.scope.clone(), name));
+    }
 }
 
 /// Build the per-file validation closure used by [`BatchEditAction::compute_edits`].
@@ -115,7 +177,7 @@ fn validator_for<'a>(
 
 impl DiffSource for BatchEditAction {
     fn compute_edits(&self) -> Result<Vec<FileEditResult>> {
-        let snapshot = self.staging.snapshot();
+        let snapshot = self.scoped_snapshot();
         if snapshot.is_empty() {
             return Ok(Vec::new());
         }
@@ -135,16 +197,23 @@ impl DiffSource for BatchEditAction {
     }
 
     fn header_lines(&self) -> Vec<String> {
-        let snapshot = self.staging.snapshot();
+        let snapshot = self.scoped_snapshot();
         let op_count: usize = snapshot.values().map(Vec::len).sum();
-        vec![format!(
-            "Batch edit: {op_count} operation(s) across {} file(s)",
-            snapshot.len()
-        )]
+        match &self.scope {
+            Some(scope) =>
+                vec![format!("Batch edit: {op_count} operation(s) in {}", scope.display())],
+            None =>
+                vec![format!("Batch edit: {op_count} operation(s) across {} file(s)", snapshot.len())],
+        }
     }
 
     fn on_applied(&self) -> Result<()> {
-        self.staging.clear();
+        match &self.scope {
+            Some(scope) => {
+                self.staging.drain_file(scope);
+            }
+            None => self.staging.clear(),
+        }
         Ok(())
     }
 }
@@ -174,19 +243,31 @@ impl Writable for StageWritable {
     }
 }
 
-/// [`Writable`] that clears all staged edits on truncating write.
+/// [`Writable`] that clears staged edits on truncating write.
 ///
-/// Attached to `staged.diff` so `> @/edit/staged.diff` discards all edits.
+/// Attached to `staged.diff` so `> staged.diff` discards staged edits.
+///
+/// When `scope` is `Some(path)`, only operations staged against `path`
+/// are drained — used for per-file `staged.diff` at
+/// `<file>@/symbols/Foo@/edit/staged.diff`. When `scope` is `None`, the
+/// full staging area is drained — used for the root `@/edit/staged.diff`.
 #[derive(Clone)]
 pub struct ClearWritable {
     pub staging: EditStaging,
+    pub scope: Option<PathBuf>,
 }
 
 impl Writable for ClearWritable {
     fn write(&self, _ctx: &WriteContext<'_>, _data: &[u8]) -> Result<AffectedFiles> {
         // Drain instead of clear — return source file paths so cache
         // generations bump and staged.diff content is evicted.
-        Ok(self.staging.drain().into_keys().collect())
+        match &self.scope {
+            Some(scope) => {
+                self.staging.drain_file(scope);
+                Ok(vec![scope.clone()])
+            }
+            None => Ok(self.staging.drain().into_keys().collect()),
+        }
     }
 }
 

@@ -11,7 +11,7 @@ use nyne_diff::DiffUnlinkable;
 use super::SyntaxProvider;
 use super::content::{FileOverviewContent, LinesContent, LinesWrite, Slice, SpliceTarget, delete, file_docstring_node};
 use crate::edit::plan::EditOpKind;
-use crate::edit::staging::StageWritable;
+use crate::edit::staging::{BatchEditAction, StageWritable};
 use crate::extensions::SourceExtensions;
 use crate::plugin::config::vfs::Vfs;
 use crate::syntax::find_fragment;
@@ -230,11 +230,15 @@ impl SyntaxProvider {
                 if let Some(nodes) = self.resolve_code_block_dir(&sf, parent)? {
                     req.nodes.extend(nodes);
                 },
-            FragmentSubRoute::Edit { .. } => {
+            FragmentSubRoute::Edit { parent } => {
                 // Endpoints (`insert-after`, `insert-before`, …) are hidden:
                 // writes create them via `on_create`; reads never resolve.
-                // `staged.diff` is contributed by the mount/source extension
-                // points registered in the source plugin.
+                // `staged.diff` is contributed here, scoped to this file so
+                // the preview shows only edits staged against `sf`.
+                if self.decomposition.has_fragment(&sf, parent) {
+                    req.nodes
+                        .add(self.staging.staged_diff_node(Some(sf.clone()), &self.vfs.file.staged_diff));
+                }
             }
             FragmentSubRoute::Fragment =>
                 if let Some(nodes) = self.resolve_fragment_dir(&companion, &sf, &segments)? {
@@ -265,13 +269,31 @@ impl SyntaxProvider {
                     req.nodes.add(node);
                 }
             }
-            FragmentSubRoute::Edit { .. } => {
+            FragmentSubRoute::Edit { parent } => {
                 // Staging endpoints (`insert-after`, `append`, …) are write-only
                 // and intentionally absent from lookup — `cat edit/insert-after`
                 // returns `ENOENT`. The node (with [`StageWritable`]) is
                 // materialized on create by the `on_create` callback in
-                // [`build_tree`](super::routes::build_tree). The `staged.diff`
-                // preview is contributed by a companion extension point.
+                // [`build_tree`](super::routes::build_tree).
+                //
+                // `staged.diff` is scoped to this source file: set
+                // `DiffCapable` so the diff middleware renders only edits
+                // staged against `sf`, and attach the
+                // `ClearWritable`-bearing node so `> staged.diff` drains
+                // only this file's ops.
+                if name == self.vfs.file.delete_diff {
+                    // `delete.diff` intentionally does not live under `edit/`.
+                    return Ok(());
+                }
+                if name == self.vfs.file.staged_diff && self.decomposition.has_fragment(&sf, parent) {
+                    BatchEditAction {
+                        staging: self.staging.clone(),
+                        decomposition: self.decomposition.clone(),
+                        registry: Arc::clone(&self.registry),
+                        scope: Some(sf),
+                    }
+                    .attach_to(req, &self.fs, name);
+                }
             }
             FragmentSubRoute::Fragment => {
                 // delete.diff — handled by the diff middleware.
