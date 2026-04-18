@@ -104,13 +104,9 @@ impl InodeMap {
         let Some(slot) = inner.slab.get_mut(idx) else {
             return;
         };
-        let expires_at = match node.cache_policy() {
-            CachePolicy::Ttl(d) => Some(Instant::now() + d),
-            CachePolicy::Default | CachePolicy::NoCache => None,
-        };
         *slot = Arc::new(InodeEntry {
+            expires_at: expires_at_from_policy(node.cache_policy()),
             node: Some(node),
-            expires_at,
             ..(**slot).clone()
         });
     }
@@ -153,11 +149,15 @@ impl InodeMap {
         let Some(slot) = inner.slab.get_mut(idx) else {
             return;
         };
-        let Some(CachePolicy::Ttl(d)) = slot.node.as_ref().map(|n| n.cache_policy()) else {
+        let Some(expires_at) = slot
+            .node
+            .as_ref()
+            .and_then(|n| expires_at_from_policy(n.cache_policy()))
+        else {
             return;
         };
         *slot = Arc::new(InodeEntry {
-            expires_at: Some(Instant::now() + d),
+            expires_at: Some(expires_at),
             ..(**slot).clone()
         });
     }
@@ -228,6 +228,18 @@ impl InodeMap {
             .by_path
             .get(&(dir_path.to_path_buf(), name.to_owned()))
             .copied()
+    }
+}
+/// Translate a [`CachePolicy`] into an absolute expiry timestamp.
+///
+/// `CachePolicy::Ttl(d)` → `Some(now + d)`; other variants → `None`
+/// (no expiry — bound for the inode's full lifetime / unbound).
+/// Single source of truth for the policy → `expires_at` mapping used
+/// by [`InodeMap::bind_node`] and [`InodeMap::touch`].
+fn expires_at_from_policy(policy: CachePolicy) -> Option<Instant> {
+    match policy {
+        CachePolicy::Ttl(d) => Some(Instant::now() + d),
+        CachePolicy::Default | CachePolicy::NoCache => None,
     }
 }
 

@@ -189,8 +189,9 @@ impl FuseFilesystem {
     /// Invoke a node's [`Writable`] capability and notify change propagation.
     ///
     /// Single source of truth for the "extract writable → write → notify"
-    /// sequence — consumed by both the ephemeral flush path and the
-    /// standard [`Filesystem::write_file`] path.
+    /// sequence — consumed by [`Filesystem::write_file`] for both
+    /// chain-resolved nodes and bound `on_create` nodes (both reach the
+    /// node via `lookup_node`'s bound-node fast path).
     pub(super) fn write_via_node(&self, path: &Path, node: &NamedNode, data: &[u8]) -> Result<AffectedFiles> {
         let affected = node.writable().ok_or_else(|| err::not_writable(path))?.write(
             &WriteContext {
@@ -209,8 +210,8 @@ impl FuseFilesystem {
     /// Dispatch a single-path mutation (create, remove, mkdir) through the chain.
     ///
     /// Returns the dispatched [`Request`] so callers can inspect nodes
-    /// produced by op-specific callbacks (e.g. `on_create` attaching an
-    /// ephemeral node) or state set by middleware.
+    /// produced by op-specific callbacks (e.g. `on_create` attaching a
+    /// node to bind to the new inode) or state set by middleware.
     pub(super) fn dispatch_path_op(
         &self,
         path: &Path,

@@ -313,13 +313,15 @@ impl SyntaxProvider {
     }
 
     /// Create callback for `symbols/{..path}` — materializes a write-only
-    /// ephemeral node for batch-edit staging endpoints (`insert-before`,
+    /// sink node for batch-edit staging endpoints (`insert-before`,
     /// `insert-after`, `append`, `delete`, `replace`).
     ///
-    /// The node carries [`StageWritable`] as its [`Writable`] capability;
-    /// the FUSE bridge binds it to the new file handle for the duration of
-    /// the `create → write → release` cycle, then evicts the inode so a
-    /// subsequent lookup returns `ENOENT`.
+    /// The node carries [`StageWritable`] as its [`Writable`] capability
+    /// and `CachePolicy::Ttl(STAGE_ENDPOINT_TTL)` declaring its visibility
+    /// window. The FUSE bridge binds the node to the new inode via
+    /// `InodeMap::bind_node`; subsequent `lookup_node` calls return it
+    /// for the TTL window (refreshed on each open/close), then lazy-clear
+    /// — restoring sink semantics (`ENOENT`).
     ///
     /// Only the `edit/` sub-route accepts creates; other sub-routes fall
     /// through to the chain so downstream plugins (e.g. the `fs` plugin)

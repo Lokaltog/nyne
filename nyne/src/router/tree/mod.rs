@@ -160,11 +160,18 @@ impl<T> TreeBuilder<T> {
     /// Multiple callbacks are allowed.
     ///
     /// When the callback attaches a [`NamedNode`] (with [`Writable`]) to
-    /// `req.nodes`, the FUSE bridge treats the create as an ephemeral
-    /// write-only session: the node's writable receives buffered writes on
-    /// flush, and no entry persists in the inode map after release. This
-    /// is the canonical way to expose write-only virtual endpoints whose
-    /// presence should remain hidden from readdir/lookup.
+    /// `req.nodes`, the FUSE bridge **binds** the node to the new inode
+    /// via `InodeMap::bind_node`. The node's writable receives buffered
+    /// writes on flush. Subsequent lookups/stats resolve to the bound
+    /// node for the lifetime of its [`CachePolicy::Ttl`] (refreshed on
+    /// each open/close), then lazily clear — restoring sink semantics
+    /// (`ENOENT` on lookup) once handle activity has settled past the
+    /// TTL window. This is the canonical way to expose write-only
+    /// virtual endpoints whose presence should remain hidden from
+    /// readdir except during a brief post-write window for stat-based
+    /// verification (e.g. Claude Code's Write tool).
+    ///
+    /// [`CachePolicy::Ttl`]: crate::router::node::CachePolicy::Ttl
     ///
     /// [`NamedNode`]: crate::router::node::NamedNode
     /// [`Writable`]: crate::router::node::Writable
@@ -393,10 +400,11 @@ impl<T> RouteTree<T> {
     ///
     /// `on_create` is the exception to rule 3: when a callback attaches a
     /// matching node for the to-be-created name, it has materialized a
-    /// write-only ephemeral endpoint and **owns** the create — `next.run()`
+    /// write-only sink endpoint and **owns** the create — `next.run()`
     /// is skipped so downstream providers (notably the terminal `fs`
     /// provider, which rejects mutations inside companion namespaces) do
-    /// not re-process the claimed create.
+    /// not re-process the claimed create. The FUSE bridge then binds
+    /// the attached node to the new inode (see [`TreeBuilder::on_create`]).
     ///
     /// After the handler/callbacks return, static entries (content producers
     /// and dirs) are auto-emitted for `Readdir`/`Lookup` ops. Mutation ops
@@ -553,8 +561,9 @@ impl<T> RouteTree<T> {
 /// When true, [`handle_here`](RouteTree::handle_here) skips `next.run` so
 /// downstream providers (notably the terminal `fs` provider) do not
 /// re-process a create that the callback already owns. See
-/// [`TreeBuilder::on_create`] for the write-only ephemeral endpoint
-/// contract.
+/// [`TreeBuilder::on_create`] for the write-only sink endpoint contract
+/// (the FUSE bridge binds the attached node to the new inode for the
+/// node's `CachePolicy::Ttl` window).
 fn on_create_claimed(req: &Request) -> bool {
     matches!(req.op(), Op::Create { name } if req.nodes.find(name).is_some())
 }

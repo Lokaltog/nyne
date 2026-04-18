@@ -21,20 +21,25 @@ use crate::edit::plan::{EditOp, EditOpKind, EditPlan};
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::decomposed::DecompositionCache;
 
-/// Kernel `entry_valid` / `attr_valid` TTL applied to the ephemeral
-/// `edit/{op}` staging endpoints created by the syntax provider's
-/// `fragment_create` callback.
+/// TTL applied to `edit/{op}` staging endpoint nodes via
+/// `CachePolicy::Ttl`, controlling **both** kernel `entry_valid` /
+/// `attr_valid` AND the `InodeMap::bind_node` binding lifetime.
 ///
-/// The endpoint vanishes after `release` (sink semantics — subsequent
-/// lookups return `ENOENT`), but Claude Code performs a `statx` after
-/// every write. With a `Duration::ZERO` TTL the kernel re-issues
-/// `LOOKUP` for that `statx` and gets `ENOENT`, breaking the write
-/// pipeline. A small non-zero TTL lets the kernel serve the post-write
-/// `statx` from its dentry+attr cache without round-tripping; after
-/// the TTL expires the lookup correctly returns `ENOENT`.
+/// Sink semantics: the endpoint is invisible by default (no
+/// `fragment_lookup` entry). On CREATE, `fragment_create` attaches the
+/// `StageWritable` node; the FUSE bridge binds it to the new inode and
+/// `lookup_node` returns it for the TTL window — refreshed by each
+/// open/close (passive `stat`/`lookup` does not extend). After the TTL
+/// elapses with no further handle activity, the binding lazy-clears on
+/// the next access and the path returns `ENOENT` again.
 ///
-/// 2 s comfortably outlives Claude Code's verification window without
-/// holding onto stale entries long enough to confuse re-creates.
+/// Why non-zero matters: Claude Code performs `statx` after every Write.
+/// `Duration::ZERO` would force the kernel to re-LOOKUP for that statx,
+/// which would return `ENOENT` (the chain doesn't surface sinks once
+/// the binding clears). A 2 s window comfortably outlives CC's
+/// verification round-trip while staying short enough that subsequent
+/// writes (separated by reasoning latency) see a fresh `ENOENT` and
+/// trigger a fresh CREATE rather than re-using stale dentries.
 pub const STAGE_ENDPOINT_TTL: Duration = Duration::from_secs(2);
 
 /// Per-mount staging area for batch edits.

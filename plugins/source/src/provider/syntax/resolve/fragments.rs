@@ -92,9 +92,10 @@ impl SyntaxProvider {
         // lets `create(2)` through — the staging endpoints (`insert-before`,
         // `insert-after`, `append`, `delete`, `replace`) are materialized
         // by the `on_create` callback in [`build_tree`](super::super::routes::build_tree)
-        // as write-only ephemeral nodes. The directory itself has no
-        // `Writable` / `Unlinkable` capability, so permissions must be set
-        // explicitly.
+        // as write-only sink nodes (bound to their inode for a short
+        // `CachePolicy::Ttl` window, then lazily cleared). The directory
+        // itself has no `Writable` / `Unlinkable` capability, so permissions
+        // must be set explicitly.
         nodes.push(Node::dir().with_permissions(Permissions::ALL).named(&self.vfs.dir.edit));
 
         Ok(Some(nodes))

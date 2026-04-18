@@ -43,10 +43,12 @@ pub type LookupFn<T> = Box<dyn Fn(&T, &RouteCtx, &mut Request, &str) -> Result<(
 
 /// Boxed callback for `Create` — receives the to-be-created name, contributes
 /// a node (with `Writable`) without managing `next`. When the callback attaches
-/// a node to `req.nodes`, the FUSE bridge treats the create as an ephemeral
-/// write-only session: the node carries the [`Writable`](crate::router::node::Writable)
-/// that receives the buffered write on flush, and no entry persists in the inode
-/// map after release.
+/// a node to `req.nodes`, the FUSE bridge **binds** the node to the new inode
+/// via `InodeMap::bind_node`. The node's [`Writable`](crate::router::node::Writable)
+/// receives buffered writes on flush; subsequent lookups resolve to the bound
+/// node for the duration of its `CachePolicy::Ttl` (refreshed on open/close),
+/// then lazily clear — restoring sink semantics (`ENOENT`) once activity has
+/// settled past the TTL window.
 pub type CreateFn<T> = Box<dyn Fn(&T, &RouteCtx, &mut Request, &str) -> Result<()> + Send + Sync>;
 
 /// Predicate for op-guarded dispatch — tests whether the current [`Op`]
