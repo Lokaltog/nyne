@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::router::{NamedNode, Node, NodeKind, Request, RouteCtx, RouteTree, slice_node};
+use nyne::router::{Node, NodeKind, Request, RouteCtx, RouteTree, slice_node};
 use nyne_companion::{Companion, CompanionRequest};
 use nyne_diff::DiffUnlinkable;
 
@@ -167,6 +167,7 @@ pub fn build_tree(vfs: &Vfs, ext: &SourceExtensions) -> RouteTree<SyntaxProvider
                     // {..path} — fragment directory traversal + downstream extensions
                     d.on_readdir(SyntaxProvider::fragment_readdir)
                         .on_lookup(SyntaxProvider::fragment_lookup)
+                        .on_create(SyntaxProvider::fragment_create)
                         .apply(&ext.fragment_path)
                 })
         })
@@ -202,7 +203,19 @@ impl SyntaxProvider {
     /// Readdir callback for `symbols/{..path}` — fragment directories (Foo@/, Foo@/Bar@/).
     ///
     /// Lists fragment children (body, meta-files, child symbols, code/) or
-    /// dispatches to `code/` / `edit/` sub-routes when the path ends with one.
+    /// dispatches to the `code/` sub-route when the path ends in one.
+    ///
+    /// The `edit/` subdirectory is deliberately omitted from both the parent
+    /// fragment readdir and its own readdir:
+    ///
+    /// - `edit/` itself is hidden from parent readdir so `ls Foo@/` does not
+    ///   expose it. It remains reachable via direct lookup (`ls Foo@/edit/`)
+    ///   through [`classify_fragment_path`](Self::classify_fragment_path).
+    /// - The staging endpoints (`insert-before`, `insert-after`, `append`,
+    ///   `delete`, `replace`) are never listed — they are write-only virtual
+    ///   files materialized on-demand by the
+    ///   [`on_create`](crate::router::tree::TreeBuilder::on_create) callback.
+    ///   `ls Foo@/edit/` therefore shows only the `staged.diff` preview.
     pub(super) fn fragment_readdir(&self, ctx: &RouteCtx, req: &mut Request) -> Result<()> {
         let Some((companion, sf)) = req.companion_context() else {
             return Ok(());
@@ -217,15 +230,16 @@ impl SyntaxProvider {
                 if let Some(nodes) = self.resolve_code_block_dir(&sf, parent)? {
                     req.nodes.extend(nodes);
                 },
-            FragmentSubRoute::Edit { parent } =>
-                if self.decomposition.has_fragment(&sf, parent) {
-                    for kind in <EditOpKind as strum::IntoEnumIterator>::iter() {
-                        req.nodes.add(NamedNode::file(kind.name()));
-                    }
-                },
+            FragmentSubRoute::Edit { .. } => {
+                // Endpoints (`insert-after`, `insert-before`, …) are hidden:
+                // writes create them via `on_create`; reads never resolve.
+                // `staged.diff` is contributed by the mount/source extension
+                // points registered in the source plugin.
+            }
             FragmentSubRoute::Fragment =>
                 if let Some(nodes) = self.resolve_fragment_dir(&companion, &sf, &segments)? {
-                    req.nodes.extend(nodes);
+                    req.nodes
+                        .extend(nodes.into_iter().filter(|n| n.name() != self.vfs.dir.edit));
                 },
         }
         Ok(())
@@ -251,21 +265,13 @@ impl SyntaxProvider {
                     req.nodes.add(node);
                 }
             }
-            FragmentSubRoute::Edit { parent } => {
-                if let Ok(kind) = name.parse::<EditOpKind>()
-                    && self.decomposition.has_fragment(&sf, parent)
-                {
-                    req.nodes.add(
-                        Node::file()
-                            .with_writable(StageWritable {
-                                staging: self.staging.clone(),
-                                source_file: sf,
-                                fragment_path: parent.to_vec(),
-                                kind,
-                            })
-                            .named(name),
-                    );
-                }
+            FragmentSubRoute::Edit { .. } => {
+                // Staging endpoints (`insert-after`, `append`, …) are write-only
+                // and intentionally absent from lookup — `cat edit/insert-after`
+                // returns `ENOENT`. The node (with [`StageWritable`]) is
+                // materialized on create by the `on_create` callback in
+                // [`build_tree`](super::routes::build_tree). The `staged.diff`
+                // preview is contributed by a companion extension point.
             }
             FragmentSubRoute::Fragment => {
                 // delete.diff — handled by the diff middleware.
@@ -281,6 +287,51 @@ impl SyntaxProvider {
                 self.attach_unlinkables(req, &companion, &sf, &segments);
             }
         }
+        Ok(())
+    }
+
+    /// Create callback for `symbols/{..path}` — materializes a write-only
+    /// ephemeral node for batch-edit staging endpoints (`insert-before`,
+    /// `insert-after`, `append`, `delete`, `replace`).
+    ///
+    /// The node carries [`StageWritable`] as its [`Writable`] capability;
+    /// the FUSE bridge binds it to the new file handle for the duration of
+    /// the `create → write → release` cycle, then evicts the inode so a
+    /// subsequent lookup returns `ENOENT`.
+    ///
+    /// Only the `edit/` sub-route accepts creates; other sub-routes fall
+    /// through to the chain so downstream plugins (e.g. the `fs` plugin)
+    /// can handle real file creates if they choose.
+    pub(super) fn fragment_create(&self, ctx: &RouteCtx, req: &mut Request, name: &str) -> Result<()> {
+        let Some(sf) = req.source_file() else {
+            return Ok(());
+        };
+        let Some(path_param) = ctx.param("path") else {
+            return Ok(());
+        };
+        let segments: Vec<String> = path_param.split('/').map(String::from).collect();
+
+        let FragmentSubRoute::Edit { parent } = self.classify_fragment_path(&segments) else {
+            return Ok(());
+        };
+
+        let Ok(kind) = name.parse::<EditOpKind>() else {
+            return Ok(());
+        };
+        if !self.decomposition.has_fragment(&sf, parent) {
+            return Ok(());
+        }
+
+        req.nodes.add(
+            Node::file()
+                .with_writable(StageWritable {
+                    staging: self.staging.clone(),
+                    source_file: sf,
+                    fragment_path: parent.to_vec(),
+                    kind,
+                })
+                .named(name),
+        );
         Ok(())
     }
 
