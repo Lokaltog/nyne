@@ -39,11 +39,24 @@ impl Readable for DiffContent {
                 let old = self.repo.head_blob(&self.rel_path)?;
                 let new = ctx.fs.read_file(real_file)?;
                 match (from_utf8(&old), from_utf8(&new)) {
-                    (Ok(old_str), Ok(new_str)) => unified_diff(old_str, new_str, &self.rel_path).into_bytes(),
+                    (Ok(old_str), Ok(new_str)) => diff_or_sentinel(unified_diff(old_str, new_str, &self.rel_path)),
                     _ => "Binary file differs\n".into(),
                 }
             }
-            DiffTarget::Ref(refspec) => self.repo.diff_ref(&self.rel_path, refspec)?.into_bytes(),
+            DiffTarget::Ref(refspec) => diff_or_sentinel(self.repo.diff_ref(&self.rel_path, refspec)?),
         })
+    }
+}
+
+/// Convert diff text to bytes, substituting a sentinel when there are no changes.
+///
+/// Both `unified_diff` and `Repo::diff_ref` return an empty string when the
+/// inputs are identical; render an explicit `"No changes\n"` placeholder so
+/// readers see actionable output instead of a zero-byte file.
+fn diff_or_sentinel(diff: String) -> Vec<u8> {
+    if diff.is_empty() {
+        b"No changes\n".to_vec()
+    } else {
+        diff.into_bytes()
     }
 }
