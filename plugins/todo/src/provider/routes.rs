@@ -50,16 +50,23 @@ pub fn register_companion_extensions(exts: &mut CompanionExtensions, state: &Arc
             });
 
             // todo/{tag}.md — entries for one tag, grouped by file.
-            let s = Arc::clone(state);
-            d.content(move |ctx: &RouteCtx, _req: &Request| {
-                let tag = ctx.param("tag")?;
-                s.ensure_index();
-                let index_guard = s.index.read();
-                let index = index_guard.as_ref()?;
-                let tag_entries = index.entries_by_tag.get(tag).filter(|e| !e.is_empty())?;
-                let view = build_tag_view(tag, tag_entries);
-                Some(s.tag_tmpl.named_node(format!("{tag}.md"), serialize_view(&view)))
-            });
+            //
+            // Registered per-tag (one content callback each) because the route
+            // DSL has no `{tag}.md` capture at this scope — `ctx.param("tag")`
+            // is only bound inside the sibling `capture("tag", ...)` subtree.
+            // Auto-emit filters by name on lookup and emits all on readdir.
+            for tag in &state.tags {
+                let s = Arc::clone(state);
+                let tag = tag.clone();
+                d.content(move |_ctx: &RouteCtx, _req: &Request| {
+                    s.ensure_index();
+                    let index_guard = s.index.read();
+                    let index = index_guard.as_ref()?;
+                    let tag_entries = index.entries_by_tag.get(tag.as_str()).filter(|e| !e.is_empty())?;
+                    let view = build_tag_view(&tag, tag_entries);
+                    Some(s.tag_tmpl.named_node(format!("{tag}.md"), serialize_view(&view)))
+                });
+            }
 
             // todo/{tag}/ — capture for per-tag views and symlinks.
             let s = Arc::clone(state);
