@@ -487,6 +487,58 @@ fn on_lookup_does_not_fire_on_readdir() {
 }
 
 #[test]
+fn on_create_fires_with_name() {
+    struct P;
+    impl P {
+        fn resolve(_: &Self, _ctx: &RouteCtx, req: &mut Request, name: &str) -> Result<()> {
+            if name == "new-file" {
+                req.nodes.add(Node::file().named("new-file"));
+            }
+            Ok(())
+        }
+    }
+
+    let tree = RouteTree::builder().on_create(P::resolve).build();
+
+    let mut req = Request::new(PathBuf::new(), Op::Create {
+        name: "new-file".into(),
+    });
+    tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
+
+    assert!(
+        req.nodes.find("new-file").is_some(),
+        "on_create should materialize the node for the to-be-created name"
+    );
+}
+
+#[test]
+fn on_create_does_not_fire_on_lookup_or_readdir() {
+    struct P;
+    impl P {
+        fn resolve(_: &Self, _ctx: &RouteCtx, req: &mut Request, _name: &str) -> Result<()> {
+            req.nodes.add(Node::file().named("leaked"));
+            Ok(())
+        }
+    }
+
+    let tree = RouteTree::builder().on_create(P::resolve).build();
+
+    let mut lookup_req = Request::new(PathBuf::new(), Op::Lookup { name: "x".into() });
+    tree.dispatch(&P, &mut lookup_req, &Next::empty()).unwrap();
+    assert!(
+        lookup_req.nodes.find("leaked").is_none(),
+        "on_create should not fire for Lookup"
+    );
+
+    let mut readdir_req = readdir_req("");
+    tree.dispatch(&P, &mut readdir_req, &Next::empty()).unwrap();
+    assert!(
+        readdir_req.nodes.find("leaked").is_none(),
+        "on_create should not fire for Readdir"
+    );
+}
+
+#[test]
 fn handler_takes_priority_over_op_callbacks() {
     struct P;
     impl P {

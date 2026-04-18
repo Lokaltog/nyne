@@ -52,6 +52,51 @@ fn drain_empties_staging() {
 }
 
 #[test]
+fn drain_file_removes_only_scoped_entries() {
+    let staging = EditStaging::new();
+    staging.stage(PathBuf::from("a.rs"), vec!["Foo".into()], EditOpKind::Delete, None);
+    staging.stage(
+        PathBuf::from("b.rs"),
+        vec!["Bar".into()],
+        EditOpKind::Replace,
+        Some("x".into()),
+    );
+
+    let drained = staging.drain_file(&PathBuf::from("a.rs"));
+    assert_eq!(drained.len(), 1);
+    assert_eq!(drained[0].1.kind, EditOpKind::Delete);
+
+    let remaining = staging.snapshot();
+    assert_eq!(remaining.len(), 1);
+    assert!(remaining.contains_key(&PathBuf::from("b.rs")));
+}
+
+#[test]
+fn drain_file_missing_is_noop() {
+    let staging = EditStaging::new();
+    staging.stage(PathBuf::from("a.rs"), vec!["Foo".into()], EditOpKind::Delete, None);
+
+    let drained = staging.drain_file(&PathBuf::from("nonexistent.rs"));
+    assert!(drained.is_empty());
+    assert_eq!(staging.snapshot().len(), 1);
+}
+
+#[test]
+fn staged_diff_node_carries_scope() {
+    let staging = EditStaging::new();
+    let scope = PathBuf::from("a.rs");
+
+    let scoped = staging.staged_diff_node(Some(scope.clone()), "staged.diff");
+    assert_eq!(scoped.name(), "staged.diff");
+
+    let unscoped = staging.staged_diff_node(None, "staged.diff");
+    assert_eq!(unscoped.name(), "staged.diff");
+    // Writable is attached in both cases — inspectable via the node's capability.
+    assert!(scoped.writable().is_some());
+    assert!(unscoped.writable().is_some());
+}
+
+#[test]
 fn clear_discards_all_ops() {
     let staging = EditStaging::new();
     staging.stage(PathBuf::from("a.rs"), vec!["Foo".into()], EditOpKind::Delete, None);
