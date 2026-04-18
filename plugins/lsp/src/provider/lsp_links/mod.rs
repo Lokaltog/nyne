@@ -8,7 +8,6 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use lsp_types::SymbolInformation;
 use nyne::path_utils::PathExt;
@@ -166,10 +165,7 @@ pub fn build_search_symlinks(
         // Deduplicate by link name — first occurrence wins.
         if seen.insert(link_name.clone()) {
             let (_, node) = Node::symlink(target.relative_to(base)).named(&link_name).into_parts();
-            nodes.push(
-                node.with_cache_policy(CachePolicy::with_ttl(Duration::ZERO))
-                    .named(link_name),
-            );
+            nodes.push(node.with_cache_policy(CachePolicy::NoCache).named(link_name));
         }
     }
 

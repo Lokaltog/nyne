@@ -116,19 +116,30 @@ pub trait Unlinkable: Send + Sync {
     fn unlink(&self, ctx: &UnlinkContext<'_>) -> Result<AffectedFiles>;
 }
 
-/// Cache policy for a node's content. Opt-in — nodes without a policy are not cached.
-#[derive(Debug, Clone)]
-pub struct CachePolicy {
-    /// Optional time-to-live. `None` means cache indefinitely (until generation changes).
-    pub ttl: Option<Duration>,
-}
-
-impl CachePolicy {
-    /// Cache indefinitely (until generation-based invalidation).
-    pub const fn persistent() -> Self { Self { ttl: None } }
-
-    /// Cache with a time-to-live.
-    pub const fn with_ttl(ttl: Duration) -> Self { Self { ttl: Some(ttl) } }
+/// Cache policy for a node — controls **both** the nyne content cache
+/// (`CachedReadable` wrapping in the cache plugin) **and** the kernel's
+/// dentry/attr cache TTL (FUSE `entry_valid` / `attr_valid`).
+///
+/// The two layers move in lockstep: opting out of content caching also
+/// forces the kernel to re-resolve on every access; setting an explicit
+/// TTL applies the same duration to both layers.
+///
+/// | Variant | Content cache | Kernel attr/entry cache |
+/// |-|-|-|
+/// | `Default` | Persistent (generation-invalidated) | Per-file-type heuristic (1s real, 0 virtual) |
+/// | `NoCache` | Not wrapped — every read hits inner | `Duration::ZERO` — kernel re-resolves every access |
+/// | `Ttl(d)` | Cached for `d`, then re-read | `d` returned to FUSE |
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CachePolicy {
+    /// Fall back to per-layer defaults.
+    #[default]
+    Default,
+    /// Don't cache at either layer. Equivalent to `Ttl(Duration::ZERO)`
+    /// but more legible at call sites.
+    NoCache,
+    /// Cache for `Duration` at both layers. `Duration::ZERO` is the
+    /// same as [`CachePolicy::NoCache`].
+    Ttl(Duration),
 }
 
 /// Lifecycle hooks for nodes that need to track open/close state.
@@ -167,7 +178,7 @@ macro_rules! node_with_slots {
             target: Option<PathBuf>,
             permissions: Option<Permissions>,
             timestamps: Option<Timestamps>,
-            cache_policy: Option<CachePolicy>,
+            cache_policy: CachePolicy,
             $($field: Option<Arc<dyn $Trait>>,)+
         }
 
@@ -199,7 +210,7 @@ macro_rules! node_with_slots {
                     target: None,
                     permissions: None,
                     timestamps: None,
-                    cache_policy: None,
+                    cache_policy: CachePolicy::default(),
                     $($field: None,)+
                 }
             }
@@ -373,14 +384,15 @@ impl Node {
         }
     }
 
-    /// Get the cache policy, if explicitly set.
-    /// `None` means "do not cache" (cache is opt-in).
-    pub const fn cache_policy(&self) -> Option<&CachePolicy> { self.cache_policy.as_ref() }
+    /// Get the cache policy. Defaults to [`CachePolicy::Default`] if never
+    /// explicitly set — see [`CachePolicy`] for layer-by-layer semantics.
+    pub const fn cache_policy(&self) -> CachePolicy { self.cache_policy }
 
-    /// Set explicit cache policy for this node's content.
+    /// Set the cache policy for this node — controls both content and
+    /// kernel attr/entry caching. See [`CachePolicy`] for variant semantics.
     #[must_use]
     pub const fn with_cache_policy(mut self, policy: CachePolicy) -> Self {
-        self.cache_policy = Some(policy);
+        self.cache_policy = policy;
         self
     }
 
@@ -414,8 +426,10 @@ impl Node {
         if self.timestamps.is_none() {
             self.timestamps = other.timestamps;
         }
-        if self.cache_policy.is_none() {
-            self.cache_policy = other.cache_policy.take();
+        // First-writer-wins: a `Default` slot defers to the other side,
+        // anything else (NoCache, Ttl) is treated as an explicit choice.
+        if matches!(self.cache_policy, CachePolicy::Default) {
+            self.cache_policy = other.cache_policy;
         }
     }
 }

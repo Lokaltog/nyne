@@ -3,18 +3,19 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use color_eyre::eyre::Result;
-use nyne::router::{NamedNode, ReadContext, Readable, Request, StateSnapshot};
+use nyne::router::{CachePolicy, NamedNode, ReadContext, Readable, Request, StateSnapshot};
 use nyne_companion::CompanionRequest;
 
 /// Content-caching wrapper for [`Readable`].
 ///
 /// Caches content according to the node's [`CachePolicy`]:
-/// - **No TTL** (`persistent`): caches on first read via `OnceLock`, never
-///   expires (generation-based invalidation evicts the whole entry).
-/// - **TTL > 0**: caches with a timestamp, re-reads from inner when expired.
+/// - **`Default`**: caches on first read via `OnceLock`, never expires
+///   (generation-based invalidation evicts the whole entry).
+/// - **`Ttl(d)`** with `d > 0`: caches with a timestamp, re-reads from
+///   inner when expired.
 ///
-/// Nodes with `CachePolicy::with_ttl(Duration::ZERO)` opt out of caching
-/// entirely and are never wrapped — see [`wrap_readable`].
+/// Nodes with `CachePolicy::NoCache` (or `Ttl(Duration::ZERO)`) opt out
+/// of caching entirely and are never wrapped — see [`wrap_readable`].
 ///
 /// Shared via `Arc` across cache clones — all lookups of the same node see
 /// the same cached content.
@@ -68,23 +69,21 @@ impl Readable for CachedReadable {
 /// Wrap a node's `Readable` with [`CachedReadable`] for content caching.
 ///
 /// Respects the node's [`CachePolicy`]:
-/// - **No policy** → persistent cache (generation-based invalidation only).
-/// - **`persistent()`** (ttl = None) → same as no policy.
-/// - **`with_ttl(d)`** where `d > 0` → content cached for `d`, then re-read.
-/// - **`with_ttl(Duration::ZERO)`** → opt out of caching; node is **not** wrapped.
+/// - [`CachePolicy::Default`] → persistent cache (generation-based invalidation only).
+/// - [`CachePolicy::NoCache`] → opt out of caching; node is **not** wrapped.
+/// - [`CachePolicy::Ttl`] with `d > 0` → content cached for `d`, then re-read.
+/// - [`CachePolicy::Ttl`] with `Duration::ZERO` → same as `NoCache` (not wrapped).
 ///
 /// Skipped when the node has a `backing_path` (FUSE reads from the real file).
 pub(super) fn wrap_readable(node: &mut NamedNode) {
     if node.readable().is_some_and(|r| r.backing_path().is_some()) {
         return;
     }
-    // Three states, distinguished by `Option<Duration>`:
-    //   `Some(d)` where `d.is_zero()` → caller opted out; never wrap.
-    //   `Some(d)` where `d > 0`       → timed cache with TTL `d`.
-    //   `None`                         → persistent cache (no policy / `persistent()`).
-    let ttl: Option<Duration> = match node.cache_policy().and_then(|p| p.ttl) {
-        Some(d) if d.is_zero() => return,
-        explicit => explicit,
+    let ttl: Option<Duration> = match node.cache_policy() {
+        CachePolicy::NoCache => return,
+        CachePolicy::Ttl(d) if d.is_zero() => return,
+        CachePolicy::Ttl(d) => Some(d),
+        CachePolicy::Default => None,
     };
     if let Some(inner) = node.take_readable() {
         node.set_readable(CachedReadable {

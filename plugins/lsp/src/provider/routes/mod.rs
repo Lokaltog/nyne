@@ -5,7 +5,6 @@
 //! directories, symbol rename) during plugin activation.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use nyne::router::{CachePolicy, NamedNode, Request, RouteCtx};
 use nyne_companion::{CompanionExtensions, CompanionRequest};
@@ -50,10 +49,7 @@ pub fn register_companion_extensions(exts: &mut CompanionExtensions, state: &Arc
             let handle = Handle::for_file(&s.lsp, &sf)?;
             handle.capabilities().code_action_provider.as_ref()?;
             let (_, node) = NamedNode::dir(&actions_dir).into_parts();
-            Some(
-                node.with_cache_policy(CachePolicy::with_ttl(Duration::ZERO))
-                    .named(&actions_dir),
-            )
+            Some(node.with_cache_policy(CachePolicy::NoCache).named(&actions_dir))
         });
 
         // actions/NN-*.diff — children of the file-wide actions dir.
@@ -97,10 +93,7 @@ pub fn register_mount_extensions(exts: &mut CompanionExtensions, state: &Arc<Lsp
                 d.on_lookup(move |_ctx: &RouteCtx, req: &mut Request, name: &str| {
                     if !s2.lsp.workspace_symbols(name).is_empty() {
                         let (_, node) = NamedNode::dir(name).into_parts();
-                        req.nodes.add(
-                            node.with_cache_policy(CachePolicy::with_ttl(Duration::ZERO))
-                                .named(name),
-                        );
+                        req.nodes.add(node.with_cache_policy(CachePolicy::NoCache).named(name));
                     }
                     Ok(())
                 });

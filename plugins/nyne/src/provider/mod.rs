@@ -37,7 +37,7 @@ impl Provider for NyneProvider {
                 })
                 .into_parts();
             req.nodes.add(
-                node.with_cache_policy(CachePolicy::with_ttl(Duration::from_secs(1)))
+                node.with_cache_policy(CachePolicy::Ttl(Duration::from_secs(1)))
                     .named(FILE_NAME),
             );
             return Ok(());

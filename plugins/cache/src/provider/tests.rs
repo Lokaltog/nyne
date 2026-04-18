@@ -3,7 +3,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use color_eyre::eyre::Result;
-use nyne::router::{NamedNode, ReadContext, Readable};
+use nyne::router::{CachePolicy, NamedNode, ReadContext, Readable};
+use rstest::rstest;
 
 use super::cached::{CachedReadable, wrap_readable};
 
@@ -49,7 +50,7 @@ fn cached_readable_returns_correct_size_after_read() {
         inner: inner.clone(),
         persistent: std::sync::OnceLock::new(),
         timed: std::sync::Mutex::new(None),
-        // None → persistent mode (matches no-policy / `CachePolicy::persistent()`).
+        // None → persistent mode (matches `CachePolicy::Default` outcome in `wrap_readable`).
         ttl: None,
     };
 
@@ -191,13 +192,11 @@ fn on_change_bumps_parent_generation() {
     );
 }
 
-#[test]
-fn wrap_readable_skips_zero_ttl_opt_out() {
-    use std::time::Duration;
-
-    use nyne::router::CachePolicy;
-
-    // CachePolicy::with_ttl(Duration::ZERO) is the explicit opt-out signal:
+#[rstest]
+#[case::no_cache(CachePolicy::NoCache)]
+#[case::ttl_zero(CachePolicy::Ttl(std::time::Duration::ZERO))]
+fn wrap_readable_skips_opt_out_policies(#[case] policy: CachePolicy) {
+    // Both `NoCache` and `Ttl(Duration::ZERO)` are explicit opt-out signals:
     // the readable must NOT be wrapped, so consecutive reads see the live
     // inner state. Regression for the bug where a frozen "No changes." was
     // returned from staged.diff after the first read.
@@ -207,7 +206,7 @@ fn wrap_readable_skips_zero_ttl_opt_out() {
         "test",
         nyne::router::Node::file()
             .with_readable(counting)
-            .with_cache_policy(CachePolicy::with_ttl(Duration::ZERO)),
+            .with_cache_policy(policy),
     );
 
     wrap_readable(&mut node);
@@ -222,6 +221,6 @@ fn wrap_readable_skips_zero_ttl_opt_out() {
     assert_eq!(
         calls.load(Ordering::Relaxed),
         3,
-        "zero-TTL CachePolicy must opt out of caching — every read must hit the inner readable",
+        "opt-out CachePolicy ({policy:?}) must not wrap — every read must hit the inner readable",
     );
 }

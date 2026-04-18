@@ -25,7 +25,6 @@ pub mod rename;
 mod views;
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use color_eyre::eyre::eyre;
 pub use feature::{Feature, Handles, Target};
@@ -54,6 +53,5 @@ pub fn build_diagnostics_node(name: &str, handle: &Arc<Handle>, lsp_handles: &Ha
             Ok(engine.render_bytes(tmpl, &views::DiagnosticsView { items: &items }))
         })
         .into_parts();
-    node.with_cache_policy(CachePolicy::with_ttl(Duration::ZERO))
-        .named(name)
+    node.with_cache_policy(CachePolicy::NoCache).named(name)
 }

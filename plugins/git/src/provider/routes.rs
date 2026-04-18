@@ -2,7 +2,6 @@
 
 use std::str::from_utf8;
 use std::sync::Arc;
-use std::time::Duration;
 
 use color_eyre::eyre::{Result, WrapErr};
 use nyne::router::{CachePolicy, Filesystem, NamedNode, Next, Node, Op, Request, RouteCtx};
@@ -177,10 +176,7 @@ pub fn register_mount_extensions(ext: &mut CompanionExtensions, state: &Arc<GitS
                         limits: s2.limits,
                     })
                     .into_parts();
-                Some(
-                    node.with_cache_policy(CachePolicy::with_ttl(Duration::ZERO))
-                        .named(name),
-                )
+                Some(node.with_cache_policy(CachePolicy::NoCache).named(name))
             });
 
             // git/branches/

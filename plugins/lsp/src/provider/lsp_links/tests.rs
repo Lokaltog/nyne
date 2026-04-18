@@ -104,9 +104,9 @@ fn same_name_different_files() {
     assert_eq!(nodes[1].name(), "b.rs::process");
 }
 
-/// Tests that workspace symbol symlinks have a zero-TTL cache policy.
+/// Tests that workspace symbol symlinks opt out of caching.
 #[test]
-fn symlinks_have_cache_policy() {
+fn symlinks_have_no_cache_policy() {
     let nodes = build_search_symlinks(
         &[sym_info("Config", "src/config.rs", 5)],
         Path::new("/source"),
@@ -114,7 +114,11 @@ fn symlinks_have_cache_policy() {
         &SourcePaths::default(),
     );
     assert_eq!(nodes.len(), 1);
-    assert!(nodes[0].cache_policy().is_some(), "should have a cache policy");
+    assert_eq!(
+        nodes[0].cache_policy(),
+        nyne::router::CachePolicy::NoCache,
+        "search symlinks must opt out so kernel re-resolves on every access",
+    );
 }
 
 /// Verifies that symlink targets use the configured source paths, not hardcoded

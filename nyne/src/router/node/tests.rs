@@ -105,44 +105,43 @@ fn merge_permissions(#[case] mut target: Node, #[case] source: Node, #[case] exp
     assert_eq!(target.permissions(), expected);
 }
 
-#[rstest]
-#[case::persistent_no_ttl(CachePolicy::persistent(), None)]
-#[case::with_ttl(CachePolicy::with_ttl(Duration::from_secs(60)), Some(Duration::from_secs(60)))]
-fn cache_policy_constructors(#[case] policy: CachePolicy, #[case] expected_ttl: Option<Duration>) {
-    assert_eq!(policy.ttl, expected_ttl);
+#[test]
+fn cache_policy_default_variant() {
+    assert_eq!(CachePolicy::default(), CachePolicy::Default);
 }
 
 #[test]
-fn node_cache_policy_default_is_none() {
-    assert!(Node::file().cache_policy().is_none());
-}
-
-#[test]
-fn node_with_cache_policy_round_trips() {
-    assert!(
-        Node::file()
-            .with_cache_policy(CachePolicy::persistent())
-            .cache_policy()
-            .unwrap()
-            .ttl
-            .is_none()
-    );
+fn node_cache_policy_defaults_to_default_variant() {
+    assert_eq!(Node::file().cache_policy(), CachePolicy::Default);
 }
 
 #[rstest]
-#[case::first_writer_wins(
-    Node::file().with_cache_policy(CachePolicy::persistent()),
-    Node::file().with_cache_policy(CachePolicy::with_ttl(Duration::from_secs(30))),
-    None,
+#[case::no_cache(CachePolicy::NoCache)]
+#[case::ttl(CachePolicy::Ttl(Duration::from_secs(60)))]
+#[case::default(CachePolicy::Default)]
+fn node_with_cache_policy_round_trips(#[case] policy: CachePolicy) {
+    assert_eq!(Node::file().with_cache_policy(policy).cache_policy(), policy);
+}
+
+#[rstest]
+#[case::first_writer_wins_no_cache_over_ttl(
+    Node::file().with_cache_policy(CachePolicy::NoCache),
+    Node::file().with_cache_policy(CachePolicy::Ttl(Duration::from_secs(30))),
+    CachePolicy::NoCache,
 )]
-#[case::takes_other_when_self_has_none(
+#[case::default_target_takes_other(
     Node::file(),
-    Node::file().with_cache_policy(CachePolicy::with_ttl(Duration::from_secs(30))),
-    Some(Duration::from_secs(30)),
+    Node::file().with_cache_policy(CachePolicy::Ttl(Duration::from_secs(30))),
+    CachePolicy::Ttl(Duration::from_secs(30)),
 )]
-fn merge_cache_policy(#[case] mut target: Node, #[case] source: Node, #[case] expected: Option<Duration>) {
+#[case::default_source_leaves_target_default(
+    Node::file().with_cache_policy(CachePolicy::Ttl(Duration::from_secs(5))),
+    Node::file(),
+    CachePolicy::Ttl(Duration::from_secs(5)),
+)]
+fn merge_cache_policy(#[case] mut target: Node, #[case] source: Node, #[case] expected: CachePolicy) {
     target.merge_capabilities_from(source);
-    assert_eq!(target.cache_policy().and_then(|p| p.ttl), expected);
+    assert_eq!(target.cache_policy(), expected);
 }
 
 #[test]

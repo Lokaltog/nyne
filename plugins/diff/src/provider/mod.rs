@@ -7,7 +7,6 @@
 pub mod state;
 use std::iter;
 use std::sync::Arc;
-use std::time::Duration;
 
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use nyne::router::{
@@ -46,7 +45,7 @@ impl Provider for DiffProvider {
                             source: Arc::clone(&diff.source),
                             root_prefix: self.root_prefix.clone(),
                         })
-                        .with_cache_policy(CachePolicy::with_ttl(Duration::ZERO))
+                        .with_cache_policy(CachePolicy::NoCache)
                         .named(name),
                 );
                 Ok(())
