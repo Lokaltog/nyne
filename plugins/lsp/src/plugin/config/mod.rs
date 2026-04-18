@@ -66,6 +66,17 @@ pub struct ServerEntry {
     /// Whether this server is enabled. Set to `false` to disable a
     /// built-in server.
     pub enabled: bool,
+
+    /// Quiescence window applied by the indexing-progress gate before
+    /// transitioning to `Ready`. Absorbs the gap between sequential
+    /// `$/progress` cycles emitted by some servers (e.g. rust-analyzer
+    /// emits `Fetching` then `Indexing`); without a debounce window,
+    /// the gate would release between the two and reads would land
+    /// before semantic indexing actually starts.
+    ///
+    /// `None` falls back to [`default_server_index_debounce`] (1 s).
+    #[serde(default, with = "humantime_serde", skip_serializing_if = "Option::is_none")]
+    pub index_debounce: Option<Duration>,
 }
 
 impl Default for ServerEntry {
@@ -77,6 +88,7 @@ impl Default for ServerEntry {
             language_ids: None,
             root_markers: None,
             enabled: true,
+            index_debounce: None,
         }
     }
 }
@@ -171,6 +183,16 @@ const fn default_response_timeout() -> Duration { Duration::from_secs(10) }
 /// seconds to ~60 s; 120 s gives generous headroom while still failing
 /// fast enough that a hung server does not stall reads indefinitely.
 const fn default_index_timeout() -> Duration { Duration::from_mins(2) }
+/// Default debounce window applied by the indexing-progress gate
+/// before transitioning to `Ready` (1 second).
+///
+/// Calibrated for rust-analyzer, which emits `rustAnalyzer/Fetching`
+/// (cargo metadata) and `rustAnalyzer/Indexing` (semantic analysis)
+/// as separate `$/progress` cycles with a sub-second gap. 1 s is long
+/// enough to bridge that gap on warm caches and short enough that
+/// servers emitting only one cycle pay it as one-time first-read
+/// latency, not on every read.
+pub const fn default_server_index_debounce() -> Duration { Duration::from_secs(1) }
 
 /// Default maximum number of results for workspace symbol search.
 const fn default_workspace_symbol_limit() -> usize { 20 }

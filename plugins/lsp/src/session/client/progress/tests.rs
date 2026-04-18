@@ -6,6 +6,18 @@ use rstest::rstest;
 
 use super::*;
 
+/// Test debounce window — short enough to keep tests fast, long enough
+/// to be observable across thread scheduling jitter.
+const TEST_DEBOUNCE: Duration = Duration::from_millis(30);
+
+/// Wait timeout used by `Op::Settle` to flush the debounce window.
+/// Generous multiple of `TEST_DEBOUNCE` so settling is deterministic
+/// even under load.
+const SETTLE_TIMEOUT: Duration = Duration::from_millis(200);
+
+/// Construct a tracker with the standard test debounce.
+fn tracker() -> ProgressTracker { ProgressTracker::new("test", TEST_DEBOUNCE) }
+
 fn token(s: &str) -> NumberOrString { NumberOrString::String(s.to_owned()) }
 
 /// Result of a wall-clock-measured call. Returned by [`measure`].
@@ -49,12 +61,17 @@ fn assert_blocks_until(t: &ProgressTracker, timeout: Duration) {
 }
 
 /// Operations applied to a tracker in declarative test scripts.
+///
+/// `Settle` drives `wait_ready` with a timeout that exceeds the test
+/// debounce, so any Indexing-with-empty-open state completes its
+/// debounce window and transitions to `Ready` deterministically.
 #[derive(Debug, Clone, Copy)]
 enum Op {
     Arm,
     Begin(&'static str),
     End(&'static str),
     Shutdown,
+    Settle,
 }
 
 fn apply(t: &ProgressTracker, ops: &[Op]) {
@@ -64,6 +81,9 @@ fn apply(t: &ProgressTracker, ops: &[Op]) {
             Op::Begin(s) => t.note_begin(token(s)),
             Op::End(s) => t.note_end(&token(s)),
             Op::Shutdown => t.shutdown(),
+            Op::Settle => {
+                let _ = t.wait_ready(SETTLE_TIMEOUT);
+            }
         }
     }
 }
@@ -85,16 +105,25 @@ impl Expect {
 
 /// State-machine transitions: declarative `(operations -> expected status)`.
 ///
-/// `Expect::Ready` means `is_ready` returns true. `Expect::Pending` is
-/// any other state -- this also pins down that `Shutdown` is distinct
-/// from `Ready`.
+/// `Expect::Ready` means `is_ready` returns true after the script
+/// runs. `Expect::Pending` is any other state -- this also pins down
+/// that `Shutdown` is distinct from `Ready`.
+///
+/// The `Indexing -> Ready` transition is performed by `wait_ready`
+/// once the open progress set has been continuously empty for the
+/// debounce window, so cases that expect `Ready` end with `Op::Settle`
+/// to drive the tracker through that transition deterministically.
 #[rstest]
-#[case::begin_then_end_transitions_to_ready(
-    &[Op::Arm, Op::Begin("a"), Op::End("a")],
+#[case::begin_then_end_settles_to_ready(
+    &[Op::Arm, Op::Begin("a"), Op::End("a"), Op::Settle],
     Expect::Ready,
 )]
 #[case::early_begin_carried_across_arm(
-    &[Op::Begin("early"), Op::Arm, Op::End("early")],
+    &[Op::Begin("early"), Op::Arm, Op::End("early"), Op::Settle],
+    Expect::Ready,
+)]
+#[case::no_progress_at_all_settles_to_ready_via_debounce(
+    &[Op::Arm, Op::Settle],
     Expect::Ready,
 )]
 #[case::partial_quiescence_blocks(
@@ -102,19 +131,25 @@ impl Expect {
     Expect::Pending,
 )]
 #[case::full_quiescence_ready(
-    &[Op::Arm, Op::Begin("a"), Op::Begin("b"), Op::End("a"), Op::End("b")],
+    &[Op::Arm, Op::Begin("a"), Op::Begin("b"), Op::End("a"), Op::End("b"), Op::Settle],
     Expect::Ready,
 )]
 #[case::end_in_ready_does_not_regress(
-    &[Op::Arm, Op::Begin("a"), Op::End("a"), Op::Begin("b"), Op::End("b")],
+    &[Op::Arm, Op::Begin("a"), Op::End("a"), Op::Settle, Op::Begin("b"), Op::End("b")],
     Expect::Ready,
 )]
 #[case::begin_in_ready_does_not_regress(
-    &[Op::Arm, Op::Begin("a"), Op::End("a"), Op::Begin("b")],
+    &[Op::Arm, Op::Begin("a"), Op::End("a"), Op::Settle, Op::Begin("b")],
     Expect::Ready,
 )]
-#[case::end_for_unknown_token_is_no_op(&[Op::Arm, Op::End("ghost")], Expect::Pending)]
-#[case::end_during_uninitialized_then_arm(&[Op::End("ghost"), Op::Arm], Expect::Pending)]
+#[case::end_for_unknown_token_with_real_token_pending(
+    &[Op::Arm, Op::Begin("a"), Op::End("ghost")],
+    Expect::Pending,
+)]
+#[case::end_during_uninitialized_for_unknown_token_then_arm_blocks(
+    &[Op::Begin("a"), Op::End("ghost"), Op::Arm],
+    Expect::Pending,
+)]
 #[case::arm_is_idempotent_preserves_tokens(
     &[Op::Arm, Op::Begin("a"), Op::Arm],
     Expect::Pending,
@@ -125,7 +160,7 @@ impl Expect {
 )]
 #[case::shutdown_idempotent(&[Op::Shutdown, Op::Shutdown], Expect::Pending)]
 fn state_transitions(#[case] ops: &[Op], #[case] expected: Expect) {
-    let t = ProgressTracker::new("test");
+    let t = tracker();
     apply(&t, ops);
     assert!(
         expected.matches(&t),
@@ -136,26 +171,37 @@ fn state_transitions(#[case] ops: &[Op], #[case] expected: Expect) {
 
 /// `wait_ready` returns immediately (no condvar park) in every state
 /// except `Indexing`. The 50 ms ceiling catches any accidental block.
+///
+/// `Settle` is woven into the `Ready` and `shutdown_from_ready` cases
+/// to drive the debounce-to-Ready transition before the under-test
+/// `wait_ready` call -- otherwise that second call would itself spend
+/// the debounce window before returning.
 #[rstest]
 #[case::uninitialized(&[])]
-#[case::ready(&[Op::Arm, Op::Begin("a"), Op::End("a")])]
+#[case::ready(&[Op::Arm, Op::Begin("a"), Op::End("a"), Op::Settle])]
 #[case::shutdown_from_fresh(&[Op::Shutdown])]
 #[case::shutdown_from_indexing(&[Op::Arm, Op::Begin("a"), Op::Shutdown])]
-#[case::shutdown_from_ready(&[Op::Arm, Op::Begin("a"), Op::End("a"), Op::Shutdown])]
+#[case::shutdown_from_ready(&[Op::Arm, Op::Begin("a"), Op::End("a"), Op::Settle, Op::Shutdown])]
 fn wait_ready_passes_through_in_non_blocking_states(#[case] before: &[Op]) {
-    let t = ProgressTracker::new("test");
+    let t = tracker();
     apply(&t, before);
     assert_returns_within(&t, Duration::from_secs(1), Duration::from_millis(50));
 }
 
-/// Inline grace-timer behavior: when the tracker is armed but no
-/// progress arrives (or never closes), `wait_ready` blocks until the
-/// configured timeout, then forces the transition to `Ready` so
-/// subsequent callers proceed without re-paying the cost.
+/// Inline grace-timer behavior: when the tracker has an open progress
+/// token that never closes, `wait_ready` blocks until the configured
+/// timeout, then forces the transition to `Ready` so subsequent
+/// callers proceed without re-paying the cost.
+///
+/// Note: `arm` with no in-flight tokens starts the debounce clock
+/// immediately, so a no-progress server reaches `Ready` via the
+/// debounce path -- the grace timeout only fires when a `Begin` has
+/// no matching `End`.
 #[test]
-fn arm_with_no_tokens_blocks_until_grace_timeout_then_forces_ready() {
-    let t = ProgressTracker::new("test");
+fn stuck_open_token_blocks_until_grace_timeout_then_forces_ready() {
+    let t = tracker();
     t.arm();
+    t.note_begin(token("stuck"));
     assert_blocks_until(&t, Duration::from_millis(80));
     assert!(t.is_ready(), "grace-period expiry must force Ready");
     assert_returns_within(&t, Duration::from_secs(1), Duration::from_millis(50));
@@ -166,7 +212,7 @@ fn arm_with_no_tokens_blocks_until_grace_timeout_then_forces_ready() {
 /// request itself never deadlocks against the gate).
 #[test]
 fn shutdown_releases_parked_waiters() {
-    let t = ProgressTracker::new("test");
+    let t = tracker();
     t.arm();
     t.note_begin(token("a"));
 
@@ -186,7 +232,7 @@ fn shutdown_releases_parked_waiters() {
 /// fan-out and that no waiter starves.
 #[test]
 fn concurrent_waiters_all_wake_on_quiescence() {
-    let t = ProgressTracker::new("test");
+    let t = tracker();
     t.arm();
     t.note_begin(token("a"));
 
@@ -213,7 +259,7 @@ fn concurrent_waiters_all_wake_on_quiescence() {
 ///    expiry under the lock).
 #[test]
 fn concurrent_grace_timeout_resolves_consistently() {
-    let t = ProgressTracker::new("test");
+    let t = tracker();
     t.arm();
     t.note_begin(token("a"));
 
@@ -233,4 +279,49 @@ fn concurrent_grace_timeout_resolves_consistently() {
         "at least one waiter must observe the grace expiry, got {}",
         timed_out.load(std::sync::atomic::Ordering::Relaxed),
     );
+}
+/// Begin arriving inside the debounce window resets the quiescence
+/// clock. Models the rust-analyzer `Fetching` -> `Indexing` sequence:
+/// the first cycle ends but a second begins immediately, and the gate
+/// must keep the read parked through the second cycle as well.
+///
+/// Without the reset, `wait_ready` would return after one debounce
+/// window (~30 ms here). With the reset, it must keep parking and
+/// only release after the SECOND cycle ends and a fresh debounce
+/// window elapses.
+#[test]
+fn begin_within_debounce_window_keeps_gate_parked() {
+    let t = tracker();
+    t.arm();
+    t.note_begin(token("fetch"));
+
+    thread::scope(|s| {
+        // Driver: replay the rust-analyzer pattern -- Fetch end, then
+        // Index begin/end inside the debounce window.
+        s.spawn(|| {
+            thread::sleep(TEST_DEBOUNCE / 2);
+            t.note_end(&token("fetch"));
+            // Inside the debounce window: a new Begin resets the clock.
+            thread::sleep(TEST_DEBOUNCE / 2);
+            t.note_begin(token("index"));
+            thread::sleep(TEST_DEBOUNCE * 2);
+            t.note_end(&token("index"));
+        });
+
+        let Measured { elapsed, result: ok } = measure(|| t.wait_ready(Duration::from_secs(1)));
+        // Must outlast both cycles + one final debounce window.
+        let floor = TEST_DEBOUNCE * 3;
+        assert!(
+            ok,
+            "wait_ready returned ok=false (grace timeout) — debounce reset path is broken",
+        );
+        assert!(
+            elapsed >= floor,
+            "expected wait_ready to span both progress cycles (>= {floor:?}) but elapsed={elapsed:?}",
+        );
+        assert!(
+            t.is_ready(),
+            "post-condition: tracker is Ready after both cycles settle"
+        );
+    });
 }

@@ -112,9 +112,6 @@ fn t_403_sequential_reads_stay_ready(mount: NyneMount) {
         ("REFERENCES.md", FILE, SYMBOL),
         ("IMPLEMENTATION.md", FILE, SYMBOL),
     ] {
-        assert_contains(
-            &mount.read(&format!("{file}@/symbols/{symbol}@/{node}")),
-            "plugins/",
-        );
+        assert_contains(&mount.read(&format!("{file}@/symbols/{symbol}@/{node}")), "plugins/");
     }
 }

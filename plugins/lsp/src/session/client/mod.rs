@@ -208,7 +208,7 @@ impl Client {
         // Start reader thread — owns stdout.
         let pending: Arc<PendingResponses> = Arc::new(Mutex::new(HashMap::new()));
         let diagnostic_store = Arc::new(DiagnosticStore::new());
-        let progress = Arc::new(progress::ProgressTracker::new(name));
+        let progress = Arc::new(progress::ProgressTracker::new(name, server.index_debounce()));
         let stdout_reader = TimeoutReader::from_owned_fd(fds.stdout, response_timeout);
         {
             let server_name = name.to_owned();

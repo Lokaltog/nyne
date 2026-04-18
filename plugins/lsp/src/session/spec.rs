@@ -7,8 +7,9 @@
 //! (spawn logic).
 
 use std::path::Path;
+use std::time::Duration;
 
-use crate::plugin::config::ServerEntry;
+use crate::plugin::config::{ServerEntry, default_server_index_debounce};
 
 /// Runtime definition of an LSP server.
 ///
@@ -24,6 +25,10 @@ pub struct ServerDef {
     /// Project marker files — server applicable if any exist in root.
     /// Empty = always applicable.
     root_markers: Vec<String>,
+    /// Quiescence window applied by the indexing-progress gate before
+    /// transitioning to `Ready`. Resolved from config (or the default)
+    /// at registry-construction time so spawn paths don't re-resolve.
+    index_debounce: Duration,
 }
 
 /// Construction, accessors, and project-root applicability checks.
@@ -35,6 +40,7 @@ impl ServerDef {
             name: name.to_owned(),
             args: entry.args.clone().unwrap_or_default(),
             root_markers: entry.root_markers.clone().unwrap_or_default(),
+            index_debounce: entry.index_debounce.unwrap_or_else(default_server_index_debounce),
         }
     }
 
@@ -46,6 +52,10 @@ impl ServerDef {
 
     /// Command-line arguments passed to the server on spawn.
     pub(crate) fn args_slice(&self) -> &[String] { &self.args }
+
+    /// Quiescence window applied by the indexing-progress gate before
+    /// transitioning to `Ready` for clients spawned from this def.
+    pub(crate) const fn index_debounce(&self) -> Duration { self.index_debounce }
 
     /// Check whether this server is applicable for the given project root.
     pub(crate) fn is_applicable(&self, root: &Path) -> bool {

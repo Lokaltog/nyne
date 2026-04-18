@@ -28,23 +28,35 @@ Both paths gate on the server's `code_action_provider` capability.
 
 Cold-start LSP queries park on a per-`Client` `ProgressTracker`
 (`session/client/progress.rs`) until the server reports initial
-indexing complete via `$/progress` Begin/End notifications. Without
-this gate, queries against rust-analyzer return empty results during
-the first ~10-60 s after spawn.
+indexing complete via `$/progress` Begin/End notifications and the
+open set has been continuously empty for a configurable debounce
+window. Without this gate, queries against rust-analyzer return
+empty results during the first ~10-60 s after spawn.
 
 **State machine, not a boolean** -- four states, condvar-signaled:
 
 - `Uninitialized { open }` -- pre-`arm`. Tokens accumulate (handles the
   race between `initialize` returning and `Client::spawn` calling
   `arm`); `wait_ready` returns immediately.
-- `Indexing { open }` -- armed. `wait_ready` blocks until the open
-  set transitions non-empty -> empty, or until `index_timeout`
-  elapses.
+- `Indexing { open, idle_since }` -- armed. `wait_ready` blocks until
+  `open` has been empty since `idle_since` for at least
+  `index_debounce`, or until `index_timeout` elapses. Any new `Begin`
+  arriving while `idle_since` is set clears it (debounce reset), so
+  back-to-back progress cycles -- like rust-analyzer's
+  `Fetching` then `Indexing` -- keep the gate parked through both.
 - `Ready` -- queryable. Background re-analysis after edits stays in
   `Ready` (no regression).
 - `Shutdown` -- terminal, distinct from `Ready`. `Drop_for_Client`
   triggers it before issuing the LSP shutdown request so the request
   itself does not block on the gate.
+
+**Why a debounce, not an immediate transition:** rust-analyzer emits
+`rustAnalyzer/Fetching` (cargo metadata) and `rustAnalyzer/Indexing`
+(semantic analysis) as separate `$/progress` cycles separated by a
+sub-second gap. An immediate `note_end`-to-empty -> `Ready`
+transition releases the gate between the two, and reads return empty
+because semantic indexing has not started. The debounce window
+absorbs the gap.
 
 **Inline grace timer:** if `wait_ready` times out while still in
 `Indexing`, the calling thread forces the transition to `Ready` so
@@ -55,9 +67,10 @@ servers) only sends indexing `$/progress` if the client advertised
 `window.work_done_progress: true` -- set in `client_capabilities()`.
 
 **Config:** `[lsp].index_timeout` (humantime, default 120 s) bounds
-the cold-start wait. `[lsp].response_timeout` (default 10 s) is
-disjoint -- it bounds individual request-response cycles after the
-gate releases.
+the cold-start wait. `[lsp].response_timeout` (default 10 s) bounds
+individual request-response cycles after the gate releases. Per-server
+`[plugin.lsp.servers.<name>].index_debounce` (humantime, default 1 s)
+sets the quiescence window before `Ready`.
 
 ## LspState operations
 
