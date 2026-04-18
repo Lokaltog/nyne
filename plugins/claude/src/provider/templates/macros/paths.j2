@@ -96,9 +96,17 @@
 {{ file }}@/symbols/{{ name }}@/edit/{{ kind }}
 {%- endmacro -%}
 
-{#-- Cross-file atomic staged diff. Rooted at the mount, not per-symbol or
-     per-file. The `<mount-root>` placeholder signals "substitute the mount
-     root here" — same grammar as `<file>` / `<Symbol>` / `<line>`. --#}
+{#-- Cross-file atomic staged diff. Rooted at the mount — aggregates every
+     staged edit across every file. The `<mount-root>` placeholder signals
+     "substitute the mount root here" — same grammar as `<file>` / `<Symbol>`
+     / `<line>`. --#}
 {%- macro edit_staged_diff() -%}
 <mount-root>/@/edit/staged.diff
+{%- endmacro -%}
+
+{#-- Per-file staged diff. Surfaces only the edits staged against this
+     source file. `rm` applies only the scoped edits; `>` clears only the
+     scoped edits. --#}
+{%- macro edit_staged_diff_for(file="<file>") -%}
+{{ file }}@/edit/staged.diff
 {%- endmacro -%}
