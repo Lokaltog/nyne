@@ -11,7 +11,8 @@ use lsp_types::{
     CodeActionClientCapabilities, CodeActionKind, CodeActionKindLiteralSupport, CodeActionLiteralSupport,
     DiagnosticClientCapabilities, GotoCapability, InlayHintClientCapabilities, PublishDiagnosticsClientCapabilities,
     ReferenceClientCapabilities, RenameClientCapabilities, TextDocumentClientCapabilities,
-    TextDocumentSyncClientCapabilities, TypeHierarchyClientCapabilities, WorkspaceSymbolClientCapabilities,
+    TextDocumentSyncClientCapabilities, TypeHierarchyClientCapabilities, WindowClientCapabilities,
+    WorkspaceSymbolClientCapabilities,
 };
 
 /// Environment variables propagated from the parent process into LSP server
@@ -130,6 +131,16 @@ pub(super) fn client_capabilities() -> ClientCapabilities {
                 dynamic_registration: Some(false),
                 ..Default::default()
             }),
+            ..Default::default()
+        }),
+        window: Some(WindowClientCapabilities {
+            // Required for server-initiated `$/progress` notifications.
+            // rust-analyzer (and other progress-emitting servers) gates
+            // its `Indexing` / `Roots Scanned` lifecycle progress on
+            // this capability -- without it, our `ProgressTracker` would
+            // never observe the cold-start cycle and `wait_ready` would
+            // always fall back to the grace-timer path.
+            work_done_progress: Some(true),
             ..Default::default()
         }),
         ..Default::default()

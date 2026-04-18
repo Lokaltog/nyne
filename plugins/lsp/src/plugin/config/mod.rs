@@ -114,6 +114,17 @@ pub struct Config {
     #[serde(with = "humantime_serde")]
     pub(crate) response_timeout: Duration,
 
+    /// Maximum time `send_request` will wait for the server's initial
+    /// indexing to complete (`$/progress` `Begin`/`End` cycle) before
+    /// proceeding without indexed results.
+    ///
+    /// On expiry the per-server progress tracker is force-readied so
+    /// subsequent requests do not re-pay the cost. Applies to the first
+    /// request after a cold mount only -- once the workspace is
+    /// indexed, this timeout is not consulted again.
+    #[serde(with = "humantime_serde")]
+    pub(crate) index_timeout: Duration,
+
     /// LSP server definitions, keyed by server name.
     ///
     /// Built-in defaults come from [`default_servers`]. User and project
@@ -135,6 +146,7 @@ impl Default for Config {
             cache_ttl: default_lsp_cache_ttl(),
             diagnostics_timeout: default_diagnostics_timeout(),
             response_timeout: default_response_timeout(),
+            index_timeout: default_index_timeout(),
             servers: default_servers(),
             workspace_symbol_limit: default_workspace_symbol_limit(),
             vfs: vfs::Vfs::default(),
@@ -152,6 +164,13 @@ const fn default_diagnostics_timeout() -> Duration { Duration::from_secs(2) }
 
 /// Default timeout for individual LSP request-response cycles (10 seconds).
 const fn default_response_timeout() -> Duration { Duration::from_secs(10) }
+
+/// Default timeout for waiting on initial LSP server indexing (2 minutes).
+///
+/// rust-analyzer cold-start on a medium workspace ranges from a few
+/// seconds to ~60 s; 120 s gives generous headroom while still failing
+/// fast enough that a hung server does not stall reads indefinitely.
+const fn default_index_timeout() -> Duration { Duration::from_mins(2) }
 
 /// Default maximum number of results for workspace symbol search.
 const fn default_workspace_symbol_limit() -> usize { 20 }

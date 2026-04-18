@@ -16,13 +16,14 @@ use std::io::{self, BufWriter};
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use lsp_types::PublishDiagnosticsParams;
 use lsp_types::notification::{self as lsp_notif, Notification as _};
+use lsp_types::{ProgressParams, ProgressParamsValue, PublishDiagnosticsParams, WorkDoneProgress};
 use parking_lot::Mutex;
 use serde_json::json;
 use tracing::{debug, trace, warn};
 
 use super::io::TimeoutReader;
+use super::progress::ProgressTracker;
 use super::transport;
 use crate::session::diagnostic_store::DiagnosticStore;
 use crate::session::uri::uri_to_file_path;
@@ -75,6 +76,7 @@ pub(super) fn reader_loop(
     write_tx: &crossbeam_channel::Sender<serde_json::Value>,
     pending: &Arc<PendingResponses>,
     diagnostic_store: &Arc<DiagnosticStore>,
+    progress: &Arc<ProgressTracker>,
     server_name: &str,
 ) {
     loop {
@@ -97,7 +99,7 @@ pub(super) fn reader_loop(
 
         // Notifications: no id field (or id: null per some implementations).
         let Some(id) = msg.get("id").filter(|v| !v.is_null()) else {
-            handle_notification(&msg, diagnostic_store, server_name);
+            handle_notification(&msg, diagnostic_store, progress, server_name);
             continue;
         };
 
@@ -154,11 +156,21 @@ pub(super) fn reader_loop(
 
 /// Dispatch a server-initiated notification.
 ///
-/// Only `textDocument/publishDiagnostics` is actionable -- its diagnostics
-/// are parsed and stored in the [`DiagnosticStore`], which wakes any FUSE
-/// threads blocked in [`DiagnosticStore::get_or_wait`]. All other
-/// notifications are logged at `trace` level and discarded.
-fn handle_notification(msg: &serde_json::Value, store: &DiagnosticStore, server_name: &str) {
+/// Two notification kinds are actionable:
+/// - `textDocument/publishDiagnostics`: parsed and stored in the
+///   [`DiagnosticStore`], waking any FUSE threads blocked in
+///   [`DiagnosticStore::get_or_wait`].
+/// - `$/progress`: parsed and dispatched to the [`ProgressTracker`],
+///   which uses the `Begin`/`End` lifecycle to gate query requests
+///   behind initial workspace indexing. `Report` is ignored.
+///
+/// All other notifications are logged at `trace` level and discarded.
+fn handle_notification(
+    msg: &serde_json::Value,
+    store: &DiagnosticStore,
+    progress: &ProgressTracker,
+    server_name: &str,
+) {
     let method = msg.get("method").and_then(|m| m.as_str()).unwrap_or("?");
 
     if method == lsp_notif::PublishDiagnostics::METHOD {
@@ -181,6 +193,34 @@ fn handle_notification(msg: &serde_json::Value, store: &DiagnosticStore, server_
                     server = %server_name,
                     error = %e,
                     "failed to parse publishDiagnostics params",
+                );
+            }
+        }
+        return;
+    }
+
+    if method == "$/progress" {
+        let Some(params) = msg.get("params") else { return };
+        match serde_json::from_value::<ProgressParams>(params.clone()) {
+            Ok(pp) => match pp.value {
+                ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(_)) => {
+                    progress.note_begin(pp.token);
+                }
+                ProgressParamsValue::WorkDone(WorkDoneProgress::End(_)) => {
+                    progress.note_end(&pp.token);
+                }
+                ProgressParamsValue::WorkDone(WorkDoneProgress::Report(_)) => {
+                    // Reports carry incremental %/message updates -- not
+                    // lifecycle transitions. The gate only cares about
+                    // Begin/End edges.
+                }
+            },
+            Err(e) => {
+                debug!(
+                    target: "nyne::lsp",
+                    server = %server_name,
+                    error = %e,
+                    "failed to parse $/progress params",
                 );
             }
         }

@@ -524,6 +524,7 @@ impl Manager {
             self.path_resolver.source_root(),
             &self.spawner,
             self.config.response_timeout,
+            self.config.index_timeout,
             &self.sandbox_env,
         ) {
             Ok(client) => {

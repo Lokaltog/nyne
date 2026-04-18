@@ -19,6 +19,9 @@ mod queries;
 /// Background threads for reading LSP server output.
 mod threads;
 
+/// Indexing-progress tracker that gates LSP requests behind cold-start indexing.
+mod progress;
+
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
@@ -110,6 +113,14 @@ pub struct Client {
     /// Overall timeout for a complete request-response cycle.
     /// Used as the deadline for `recv_deadline` on the response channel.
     response_timeout: Duration,
+    /// Maximum time `send_request` will park on the indexing gate before
+    /// forcing the tracker to `Ready` and proceeding. Doubles as the
+    /// inline grace-timer deadline (see `progress::ProgressTracker`).
+    index_timeout: Duration,
+    /// Indexing-progress tracker. Shared with the reader thread (which
+    /// populates it from `$/progress` notifications) and consulted by
+    /// `send_request` before each request goes on the wire.
+    progress: Arc<progress::ProgressTracker>,
     /// Push diagnostics received via `textDocument/publishDiagnostics`.
     /// Shared with the reader thread which populates it.
     diagnostic_store: Arc<DiagnosticStore>,
@@ -130,6 +141,7 @@ impl Client {
         root_dir: &Path,
         spawner: &Spawner,
         response_timeout: Duration,
+        index_timeout: Duration,
         extra_env: &HashMap<String, String>,
     ) -> Result<Self> {
         let name = server.name();
@@ -142,6 +154,7 @@ impl Client {
             ?args,
             root = %root_dir.display(),
             ?response_timeout,
+            ?index_timeout,
             "spawning language server",
         );
 
@@ -195,15 +208,26 @@ impl Client {
         // Start reader thread — owns stdout.
         let pending: Arc<PendingResponses> = Arc::new(Mutex::new(HashMap::new()));
         let diagnostic_store = Arc::new(DiagnosticStore::new());
+        let progress = Arc::new(progress::ProgressTracker::new(name));
         let stdout_reader = TimeoutReader::from_owned_fd(fds.stdout, response_timeout);
         {
             let server_name = name.to_owned();
             let pending = Arc::clone(&pending);
             let diagnostic_store = Arc::clone(&diagnostic_store);
+            let progress = Arc::clone(&progress);
             let write_tx = write_tx.clone();
             Builder::new()
                 .name(format!("lsp-reader-{name}"))
-                .spawn(move || reader_loop(stdout_reader, &write_tx, &pending, &diagnostic_store, &server_name))
+                .spawn(move || {
+                    reader_loop(
+                        stdout_reader,
+                        &write_tx,
+                        &pending,
+                        &diagnostic_store,
+                        &progress,
+                        &server_name,
+                    );
+                })
                 .wrap_err("failed to spawn LSP reader thread")?;
         }
 
@@ -215,10 +239,17 @@ impl Client {
             root_uri,
             capabilities: ServerCapabilities::default(),
             response_timeout,
+            index_timeout,
+            progress,
             diagnostic_store,
         };
 
         client.initialize()?;
+        // Arm the indexing tracker only after `initialize` returns: per
+        // LSP spec the server cannot send `$/progress` before then, but
+        // `arm` carries any in-flight tokens from `Uninitialized` into
+        // `Indexing`, so the order is safe even if the server is racy.
+        client.progress.arm();
         Ok(client)
     }
 
@@ -272,6 +303,11 @@ impl Client {
     fn shutdown(&self) -> Result<()> {
         info!(target: "nyne::lsp", server = %self.name, "shutting down LSP server");
 
+        // Release any waiters parked on the indexing gate before issuing
+        // the LSP shutdown request, so the request itself flows through
+        // `send_request` -> `wait_ready` without blocking.
+        self.progress.shutdown();
+
         let _: Option<()> = self
             .send_request(Shutdown::METHOD, ())
             .wrap_err("LSP shutdown request failed")?;
@@ -290,6 +326,15 @@ impl Client {
     /// is held during the wait — multiple FUSE threads can have requests
     /// in flight concurrently.
     fn send_request<P: serde::Serialize, R: DeserializeOwned>(&self, method: &str, params: P) -> Result<R> {
+        // Gate on the indexing tracker. In `Uninitialized` (during the
+        // `initialize` handshake before `arm`), `Ready`, and `Shutdown`,
+        // this returns immediately. In `Indexing`, this parks the caller
+        // until the workspace quiesces or `index_timeout` elapses (after
+        // which the tracker is force-readied so subsequent callers do
+        // not re-pay the cost). Notifications bypass naturally:
+        // `send_notification` does not call this method.
+        self.progress.wait_ready(self.index_timeout);
+
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
 
         debug!(target: "nyne::lsp", server = %self.name, method, id, "sending request");
