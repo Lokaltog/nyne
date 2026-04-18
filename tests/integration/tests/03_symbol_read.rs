@@ -66,6 +66,9 @@ fn t_206_nested_child_body(mount: NyneMount) {
 }
 
 /// T-207: `ls symbols/Foo@/` — directory lists standard companion entries.
+///
+/// `edit/` is intentionally hidden from `ls` (write-only staging surface,
+/// reachable only via direct path access) and is not asserted here.
 #[rstest]
 fn t_207_symbol_directory_listing(mount: NyneMount) {
     let out = mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/"));
@@ -76,7 +79,6 @@ fn t_207_symbol_directory_listing(mount: NyneMount) {
         "docstring.txt",
         "CALLERS.md",
         "REFERENCES.md",
-        "edit",
         "actions",
     ] {
         assert_contains(&out.stdout, entry);
