@@ -216,6 +216,41 @@ impl FuseFilesystem {
         Ok(true)
     }
 
+    /// Try a node capability; on `Ok(false)`, fall back to a chain dispatch.
+    ///
+    /// Encapsulates the "VFS node capability first, real-FS chain second"
+    /// pattern shared by [`Self::do_remove`](super::mutations) and
+    /// [`Self::do_rename`](super::mutations).
+    fn try_node_then_chain(
+        node_attempt: impl FnOnce() -> Result<bool>,
+        chain_fallback: impl FnOnce() -> Result<()>,
+    ) -> Result<()> {
+        if node_attempt()? { Ok(()) } else { chain_fallback() }
+    }
+
+    /// Writable-check + chain-dispatch + resolve the freshly created entry.
+    ///
+    /// Shared prelude for [`Self::do_create`](super::mutations) and
+    /// [`Self::do_mkdir`](super::mutations) — both reject in non-writable
+    /// parents (`EACCES`), dispatch the op through the chain, then resolve
+    /// the new entry to `(inode, node)` for the FUSE reply.
+    pub(super) fn dispatch_and_resolve_path_op(
+        &self,
+        req: &fuser::Request,
+        parent: u64,
+        dir_path: &Path,
+        name: &str,
+        op_fn: impl FnOnce(String) -> Op,
+    ) -> Result<Option<(u64, NamedNode)>> {
+        let path = dir_path.join(name);
+        if !self.is_writable_dir(parent, req) {
+            return Err(err::not_writable(&path));
+        }
+        let process = self.process_from(req);
+        self.dispatch_path_op(&path, op_fn, Some(process.clone()))?;
+        self.resolve_inode(dir_path, name, parent, Some(process))
+    }
+
     /// Resolve `path` to a [`NamedNode`], mapping missing entries to
     /// [`ErrorKind::NotFound`] so the FUSE layer can surface `ENOENT`.
     pub(super) fn resolve_named(&self, path: &Path) -> Result<NamedNode> {
