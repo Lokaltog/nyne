@@ -95,11 +95,7 @@ impl SyntaxProvider {
         // as write-only ephemeral nodes. The directory itself has no
         // `Writable` / `Unlinkable` capability, so permissions must be set
         // explicitly.
-        nodes.push(
-            Node::dir()
-                .with_permissions(Permissions::ALL)
-                .named(&self.vfs.dir.edit),
-        );
+        nodes.push(Node::dir().with_permissions(Permissions::ALL).named(&self.vfs.dir.edit));
 
         Ok(Some(nodes))
     }

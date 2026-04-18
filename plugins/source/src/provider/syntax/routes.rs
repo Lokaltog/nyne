@@ -4,14 +4,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::router::{Node, NodeKind, Request, RouteCtx, RouteTree, slice_node};
+use nyne::router::{CachePolicy, Node, NodeKind, Request, RouteCtx, RouteTree, slice_node};
 use nyne_companion::{Companion, CompanionRequest};
 use nyne_diff::DiffUnlinkable;
 
 use super::SyntaxProvider;
 use super::content::{FileOverviewContent, LinesContent, LinesWrite, Slice, SpliceTarget, delete, file_docstring_node};
 use crate::edit::plan::EditOpKind;
-use crate::edit::staging::{BatchEditAction, StageWritable};
+use crate::edit::staging::{BatchEditAction, STAGE_ENDPOINT_TTL, StageWritable};
 use crate::extensions::SourceExtensions;
 use crate::plugin::config::vfs::Vfs;
 use crate::syntax::find_fragment;
@@ -352,6 +352,10 @@ impl SyntaxProvider {
                     fragment_path: parent.to_vec(),
                     kind,
                 })
+                // Hold the kernel's dentry+attr cache across CC's
+                // post-write `statx` so the sink endpoint doesn't
+                // disappear out from under it. See [`STAGE_ENDPOINT_TTL`].
+                .with_cache_policy(CachePolicy::Ttl(STAGE_ENDPOINT_TTL))
                 .named(name),
         );
         Ok(())

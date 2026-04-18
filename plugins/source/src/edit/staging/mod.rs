@@ -10,6 +10,7 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
 use color_eyre::eyre::Result;
 use nyne::router::{AffectedFiles, Writable, WriteContext};
@@ -19,6 +20,22 @@ use parking_lot::Mutex;
 use crate::edit::plan::{EditOp, EditOpKind, EditPlan};
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::decomposed::DecompositionCache;
+
+/// Kernel `entry_valid` / `attr_valid` TTL applied to the ephemeral
+/// `edit/{op}` staging endpoints created by the syntax provider's
+/// `fragment_create` callback.
+///
+/// The endpoint vanishes after `release` (sink semantics — subsequent
+/// lookups return `ENOENT`), but Claude Code performs a `statx` after
+/// every write. With a `Duration::ZERO` TTL the kernel re-issues
+/// `LOOKUP` for that `statx` and gets `ENOENT`, breaking the write
+/// pipeline. A small non-zero TTL lets the kernel serve the post-write
+/// `statx` from its dentry+attr cache without round-tripping; after
+/// the TTL expires the lookup correctly returns `ENOENT`.
+///
+/// 2 s comfortably outlives Claude Code's verification window without
+/// holding onto stale entries long enough to confuse re-creates.
+pub const STAGE_ENDPOINT_TTL: Duration = Duration::from_secs(2);
 
 /// Per-mount staging area for batch edits.
 ///

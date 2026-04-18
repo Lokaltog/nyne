@@ -108,3 +108,36 @@ fn t_011_edit_insert_after_stages(mount: NyneMount) {
     // `> staged.diff` write clears only this file's ops.
     assert_ok(&mount.sh(&format!("> {edit_dir}/staged.diff")));
 }
+/// T-012: `statx` on an `edit/insert-after` staging endpoint succeeds
+/// inside the [`STAGE_ENDPOINT_TTL`] window after the write.
+///
+/// Regression guard for the Claude Code post-write `statx` failure: CC
+/// issues `creat()` → `write()` → `statx(AT_STATX_SYNC_AS_STAT)` and
+/// the third call must succeed even though the sink endpoint is hidden
+/// from `LOOKUP`. The fix relies on `CachePolicy::Ttl` being honored
+/// in the kernel `entry_valid`/`attr_valid` window of the CREATE reply.
+///
+/// Implementation note: GNU coreutils `stat` calls `statx` with
+/// `AT_STATX_SYNC_AS_STAT` (the same flags CC uses), so a single
+/// shell invocation reproduces the bug exactly.
+#[rstest]
+#[serial_test::serial]
+fn t_012_edit_insert_after_statx_after_write(mount: NyneMount) {
+    let _guard = mount.cleanup_guard();
+
+    let edit_dir = format!("{}@/symbols/{}@/edit", targets::rust::FILE, targets::rust::SYMBOL);
+    let endpoint = format!("{edit_dir}/insert-after");
+
+    // GNU coreutils `stat` calls `statx(AT_STATX_SYNC_AS_STAT)` —
+    // the same flags Claude Code's post-write verification uses.
+    // The bug surfaces if the kernel re-issues LOOKUP for the
+    // post-RELEASE statx (sink endpoints return ENOENT on lookup).
+    let out = mount.sh(&format!(
+        "printf 'fn __t012() {{}}\\n' > {endpoint} && stat -c '%n %s' {endpoint}"
+    ));
+    assert_ok(&out);
+    assert_contains(&out.stdout, "insert-after");
+
+    // Clear staged ops so the source file is untouched.
+    assert_ok(&mount.sh(&format!("> {edit_dir}/staged.diff")));
+}
