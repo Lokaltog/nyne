@@ -245,7 +245,7 @@ impl SyntaxProvider {
 
         match self.classify_fragment_path(&segments) {
             FragmentSubRoute::CodeBlocks { parent } => {
-                if let Ok(Some(nodes)) = self.resolve_code_block_dir(&sf, parent)
+                if let Some(nodes) = self.resolve_code_block_dir(&sf, parent)?
                     && let Some(node) = nodes.into_iter().find(|n| n.name() == name)
                 {
                     req.nodes.add(node);
@@ -273,7 +273,7 @@ impl SyntaxProvider {
                     self.set_delete_diff_source(req, &sf, &segments);
                     return Ok(());
                 }
-                if let Ok(Some(nodes)) = self.resolve_fragment_dir(&companion, &sf, &segments)
+                if let Some(nodes) = self.resolve_fragment_dir(&companion, &sf, &segments)?
                     && let Some(node) = nodes.into_iter().find(|n| n.name() == name)
                 {
                     req.nodes.add(node);
