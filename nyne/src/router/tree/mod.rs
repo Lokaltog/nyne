@@ -391,6 +391,13 @@ impl<T> RouteTree<T> {
     /// 3. `on_readdir` / `on_lookup` callbacks — contribute nodes, then
     ///    `next.run()` is called automatically.
     ///
+    /// `on_create` is the exception to rule 3: when a callback attaches a
+    /// matching node for the to-be-created name, it has materialized a
+    /// write-only ephemeral endpoint and **owns** the create — `next.run()`
+    /// is skipped so downstream providers (notably the terminal `fs`
+    /// provider, which rejects mutations inside companion namespaces) do
+    /// not re-process the claimed create.
+    ///
     /// After the handler/callbacks return, static entries (content producers
     /// and dirs) are auto-emitted for `Readdir`/`Lookup` ops. Mutation ops
     /// skip auto-emit entirely — see [`auto_emit`](Self::auto_emit).
@@ -404,7 +411,9 @@ impl<T> RouteTree<T> {
         } else {
             // 3. Op-specific callbacks — contribute nodes, don't manage chain.
             self.run_op_callbacks(provider, ctx, req)?;
-            next.run(req)?;
+            if !on_create_claimed(req) {
+                next.run(req)?;
+            }
         }
 
         // 4. Fire Rest subtree callbacks for resolution ops so dynamic
@@ -536,6 +545,18 @@ impl<T> RouteTree<T> {
             })
             .collect()
     }
+}
+
+/// Returns `true` if an `on_create` callback has already materialized the
+/// to-be-created node in `req.nodes`.
+///
+/// When true, [`handle_here`](RouteTree::handle_here) skips `next.run` so
+/// downstream providers (notably the terminal `fs` provider) do not
+/// re-process a create that the callback already owns. See
+/// [`TreeBuilder::on_create`] for the write-only ephemeral endpoint
+/// contract.
+fn on_create_claimed(req: &Request) -> bool {
+    matches!(req.op(), Op::Create { name } if req.nodes.find(name).is_some())
 }
 
 #[cfg(test)]

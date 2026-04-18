@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use color_eyre::eyre::Result;
-use nyne::router::{NamedNode, slice_node};
+use nyne::router::{NamedNode, Node, Permissions, slice_node};
 use nyne_companion::Companion;
 
 use super::{build_fragment_nodes, code_block_extension};
@@ -65,15 +65,14 @@ impl SyntaxProvider {
         ));
 
         // Child section fragments (excluding code blocks — those go in code/).
-        let section_children: Vec<_> = parent_frag
-            .children
-            .iter()
-            .filter(|c| !matches!(c.kind, FragmentKind::CodeBlock { .. }))
-            .collect();
         nodes.extend(build_fragment_nodes(
             self,
             companion,
-            &section_children,
+            &parent_frag
+                .children
+                .iter()
+                .filter(|c| !matches!(c.kind, FragmentKind::CodeBlock { .. }))
+                .collect::<Vec<_>>(),
             source_file,
             fragment_path,
         ));
@@ -88,7 +87,19 @@ impl SyntaxProvider {
         }
 
         // edit/ directory for batch edit staging operations.
-        nodes.push(NamedNode::dir(&self.vfs.dir.edit));
+        //
+        // Marked writable so the FUSE bridge's `is_writable_dir` pre-check
+        // lets `create(2)` through — the staging endpoints (`insert-before`,
+        // `insert-after`, `append`, `delete`, `replace`) are materialized
+        // by the `on_create` callback in [`build_tree`](super::super::routes::build_tree)
+        // as write-only ephemeral nodes. The directory itself has no
+        // `Writable` / `Unlinkable` capability, so permissions must be set
+        // explicitly.
+        nodes.push(
+            Node::dir()
+                .with_permissions(Permissions::ALL)
+                .named(&self.vfs.dir.edit),
+        );
 
         Ok(Some(nodes))
     }
