@@ -37,11 +37,25 @@ use crate::prelude::*;
 use crate::process;
 use crate::router::Chain;
 
+/// Wire-format `type` field for the namespace-fds request.
+///
+/// This request bypasses the typed [`Request`] enum because the response
+/// travels as `SCM_RIGHTS` ancillary data on the same `recvmsg` call,
+/// not through the JSON [`Response`] path. The string is the SSOT for
+/// both the sender ([`recv_namespace_fds`]) and the receiver
+/// ([`handle_connection`]).
+const GET_NAMESPACE_FDS: &str = "GetNamespaceFds";
+
 /// Core control request types handled directly by the control server.
 ///
 /// Plugin-provided commands are dispatched separately via the
 /// [`ControlRegistry`](crate::dispatch::ControlRegistry) — any request
 /// whose `type` field does not match a core variant is looked up there.
+///
+/// `GetNamespaceFds` is intentionally not a variant: it bypasses the
+/// `Response` round-trip entirely (fds travel as `SCM_RIGHTS` ancillary
+/// data) and is intercepted by `type` field in [`handle_connection`].
+/// See [`GET_NAMESPACE_FDS`].
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Request {
@@ -54,15 +68,6 @@ pub enum Request {
     Unregister { pid: i32 },
     /// Query all attached processes (used by `nyne list`).
     ListProcesses,
-    /// Request the daemon's user and mount namespace fds for attach.
-    ///
-    /// The response carries the two fds as `SCM_RIGHTS` ancillary data
-    /// (user first, mnt second) alongside a [`Response::NamespaceFds`]
-    /// tag. This replaces resolving the daemon's PID via `SO_PEERCRED`
-    /// and opening `/proc/<pid>/ns/*` — fd passing works cross-PID-ns,
-    /// PID translation does not (sibling PID namespaces can't see each
-    /// other).
-    GetNamespaceFds,
 }
 
 /// Outbound message types from the control socket.
@@ -268,39 +273,38 @@ fn write_response(stream: &UnixStream, response: &Response) -> Result<()> {
 
 /// Read a single JSON request from a stream, dispatch it, and write the response.
 ///
-/// Single-pass deserialization: parse as `Value` once, then try core
-/// [`Request`] variants before falling back to plugin commands via the
-/// [`ControlRegistry`].
+/// Routing order:
+/// 1. [`GET_NAMESPACE_FDS`] — bypasses [`Response`]; fds travel as
+///    `SCM_RIGHTS` ancillary on the same `recvmsg`.
+/// 2. Typed [`Request`] variants — core daemon commands.
+/// 3. Plugin commands via [`ControlRegistry`].
 fn handle_connection(stream: &UnixStream, handlers: &Handlers) -> Result<()> {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     reader.read_line(&mut line).wrap_err("reading request")?;
 
     let raw: serde_json::Value = serde_json::from_str(&line).map_err(|e| eyre!("{e:#}"))?;
+    let command_type = raw.get("type").and_then(|t| t.as_str()).map(str::to_owned);
 
-    // Phase 1: try core request variants.
+    if command_type.as_deref() == Some(GET_NAMESPACE_FDS) {
+        return send_namespace_fds(stream, &handlers.ns);
+    }
+
     if let Ok(req) = serde_json::from_value::<Request>(raw.clone()) {
-        // `GetNamespaceFds` needs direct stream access to send fds via
-        // SCM_RIGHTS ancillary, so it bypasses the `Response` return path.
-        if matches!(req, Request::GetNamespaceFds) {
-            return send_namespace_fds(stream, &handlers.ns);
-        }
         return write_response(stream, &dispatch(req, handlers));
     }
 
-    // Phase 2: extract `type` field and dispatch to plugin handlers.
-    let Some(command_type) = raw.get("type").and_then(|t| t.as_str()).map(str::to_owned) else {
+    let Some(command_type) = command_type else {
         return write_response(stream, &Response::Error {
             message: "missing \"type\" field".into(),
         });
     };
-    let ctx = ControlContext {
-        activation: &handlers.activation,
-        processes: &handlers.processes,
-    };
     write_response(
         stream,
-        &match handlers.control_commands.dispatch(&command_type, raw, &ctx) {
+        &match handlers.control_commands.dispatch(&command_type, raw, &ControlContext {
+            activation: &handlers.activation,
+            processes: &handlers.processes,
+        }) {
             Some(payload) => Response::Plugin { payload },
             None => Response::Error {
                 message: format!("unknown command: {command_type}"),
@@ -322,7 +326,6 @@ fn dispatch(req: Request, handlers: &Handlers) -> Response {
         Request::Register { pid, command } => handle_register(pid, command, &handlers.processes),
         Request::Unregister { pid } => handle_unregister(pid, &handlers.processes),
         Request::ListProcesses => handle_list(&handlers.processes),
-        Request::GetNamespaceFds => unreachable!("GetNamespaceFds is intercepted in handle_connection"),
     }
 }
 
@@ -453,13 +456,13 @@ pub fn send_request(socket_path: &Path, req: &impl Serialize) -> Result<Response
 ///
 /// The daemon opens `/proc/self/ns/{user,mnt}` at startup and holds
 /// the fds for the lifetime of the server. This function connects to
-/// the control socket, sends [`Request::GetNamespaceFds`], and pulls
+/// the control socket, sends a [`GET_NAMESPACE_FDS`] request, and pulls
 /// the two fds out of the ancillary buffer on the response.
 ///
 /// The caller can `setns` directly from the returned [`Namespace`]
 /// without needing to resolve the daemon's PID.
 pub fn recv_namespace_fds(socket_path: &Path) -> Result<Namespace> {
-    let stream = connect_and_send(socket_path, &Request::GetNamespaceFds)?;
+    let stream = connect_and_send(socket_path, &serde_json::json!({ "type": GET_NAMESPACE_FDS }))?;
 
     let mut iov_buf = [0u8; 256];
     let mut iov = [IoSliceMut::new(&mut iov_buf)];
