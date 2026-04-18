@@ -4,7 +4,6 @@
 //! file rename) and [`SourceExtensions`] (per-feature content, fragment-level
 //! directories, symbol rename) during plugin activation.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,8 +13,8 @@ use nyne_diff::DiffRequest;
 use nyne_source::SourceExtensions;
 use strum::IntoEnumIterator;
 
-use super::{LspState, lsp_links};
-use crate::provider::content::{Feature, actions, build_diagnostics_node};
+use super::LspState;
+use crate::provider::content::{Feature, actions};
 use crate::session::handle::Handle;
 
 /// Register per-file LSP contributions into the companion file extension point.
@@ -23,6 +22,7 @@ use crate::session::handle::Handle;
 /// - `DIAGNOSTICS.md` — file-level diagnostics (per source file).
 /// - `rename/{target}.diff` — file-level rename preview/apply.
 /// - `actions/NN-*.diff` — file-wide code actions (preview/apply).
+#[allow(clippy::excessive_nesting)]
 pub fn register_companion_extensions(exts: &mut CompanionExtensions, state: &Arc<LspState>) {
     exts.file.scoped("lsp", |ext| {
         // DIAGNOSTICS.md at companion root.
@@ -30,7 +30,7 @@ pub fn register_companion_extensions(exts: &mut CompanionExtensions, state: &Arc
         ext.content(move |_ctx, req| {
             let sf = req.source_file()?;
             let handle = Handle::for_file(&s.lsp, &sf)?;
-            Some(build_diagnostics_node(&s.vfs.file.diagnostics, &handle, &s.handles))
+            Some(s.diagnostics_node(&handle))
         });
 
         // rename/{target}.diff — file-level rename preview/apply.
@@ -114,14 +114,7 @@ pub fn register_mount_extensions(exts: &mut CompanionExtensions, state: &Arc<Lsp
                         let Some(query) = ctx.param("query") else {
                             return Ok(());
                         };
-                        let symbols = s.lsp.workspace_symbols(query);
-                        let base = PathBuf::from(format!("@/{}/symbols/{query}", s.vfs.dir.search));
-                        for node in lsp_links::build_search_symlinks(
-                            &symbols,
-                            s.lsp.path_resolver().source_root(),
-                            &base,
-                            &s.source_paths,
-                        ) {
+                        for node in s.search_nodes(query) {
                             req.nodes.add(node);
                         }
                         Ok(())

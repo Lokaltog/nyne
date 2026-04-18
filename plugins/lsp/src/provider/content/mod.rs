@@ -27,12 +27,12 @@ mod views;
 use std::sync::Arc;
 use std::time::Duration;
 
-use color_eyre::eyre::{Result, eyre};
+use color_eyre::eyre::eyre;
 pub use feature::{Feature, Handles, Target};
 use nyne::router::{CachePolicy, NamedNode};
 
 use crate::session::diagnostic_view::diagnostics_to_rows;
-use crate::session::handle::{Handle, LspQuery};
+use crate::session::handle::Handle;
 
 /// Error message when the LSP client has become unavailable since resolve time.
 pub const LSP_UNAVAILABLE: &str = "LSP server no longer available";
@@ -56,15 +56,4 @@ pub fn build_diagnostics_node(name: &str, handle: &Arc<Handle>, lsp_handles: &Ha
         .into_parts();
     node.with_cache_policy(CachePolicy::with_ttl(Duration::ZERO))
         .named(name)
-}
-
-/// Query the LSP for symlink directory targets.
-///
-/// Looks up the feature by directory name and delegates to
-/// `Feature::query()` → `QueryResult::into_targets()`.
-pub fn query_lsp_targets(query: &LspQuery, lsp_dir: &str) -> Result<Vec<Target>> {
-    let Some(feature) = Feature::from_dir_name(lsp_dir) else {
-        return Ok(Vec::new());
-    };
-    Ok(feature.query(query)?.into_targets(query.path_resolver()))
 }

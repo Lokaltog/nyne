@@ -23,3 +23,17 @@ Exposed at two scopes, reusing the same `CodeActionDiff` `DiffSource`:
 - **File-level** — `file.rs@/actions/NN-*.diff` (wired in `register_companion_extensions`, built via `LspState::resolve_file_actions_dir`).
 
 Both paths gate on the server's `code_action_provider` capability.
+
+## LspState operations
+
+All stateful LSP orchestrations live as methods on `LspState` (not free functions). Shared helpers:
+
+- `fragment_query` — build an `LspQuery` anchored at a symbol's name token, scoped to its line extent.
+- `resolve_fragment_context` (inlined into `fragment_query`)
+- `resolve_symlink_dir` — feature-dir contents (callers/, refs/, ...).
+- `resolve_actions_dir` / `resolve_file_actions_dir` — symbol-scoped / file-scoped code actions.
+- `query_targets` — `Feature::from_dir_name` + `Feature::query` dispatch.
+- `search_nodes` — workspace symbol search results.
+- `diagnostics_node` — `DIAGNOSTICS.md` template node.
+
+Pure compute helpers stay in `lsp_links/` as module-private free functions (no `SourceCtx` indirection — take explicit `&SyntaxRegistry` / `&DecompositionCache` / `symbols_dir` params).

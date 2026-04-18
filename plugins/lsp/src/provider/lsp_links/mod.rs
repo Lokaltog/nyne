@@ -19,29 +19,25 @@ use nyne_source::{DecompositionCache, SourcePaths, SyntaxRegistry, find_fragment
 use crate::provider::content::Target;
 use crate::session::uri::uri_to_file_path;
 
-/// Shared source services needed by LSP symlink resolution.
-pub struct SourceCtx<'a> {
-    pub(crate) syntax: &'a SyntaxRegistry,
-    pub(crate) decomposition: &'a DecompositionCache,
-    pub(crate) symbols_dir: &'a str,
-}
-
 /// Build a companion path to a specific symbol in a decomposed target file.
 ///
 /// Returns `None` if the target can't be decomposed or the fragment isn't found,
 /// in which case the caller should fall back to a line-slice link.
+#[allow(clippy::too_many_arguments)]
 fn resolve_symbol_link(
     companion: &Companion,
-    ctx: &SourceCtx<'_>,
+    syntax: &SyntaxRegistry,
+    decomposition: &DecompositionCache,
+    symbols_dir: &str,
     target_path: &Path,
     rel_path: &str,
     target_line: u32,
     base: &Path,
 ) -> Option<PathBuf> {
-    ctx.syntax.decomposer_for(target_path)?;
-    let target_shared = ctx.decomposition.get(target_path).ok()?;
+    syntax.decomposer_for(target_path)?;
+    let target_shared = decomposition.get(target_path).ok()?;
     let frag_path = find_fragment_at_line(&target_shared.decomposed, target_line as usize, &target_shared.rope)?;
-    let mut target = PathBuf::from(format!("{}/{}", companion.companion_name(rel_path), ctx.symbols_dir));
+    let mut target = PathBuf::from(format!("{}/{}", companion.companion_name(rel_path), symbols_dir));
     for name in &frag_path {
         target.push(companion.companion_name(name));
     }
@@ -98,7 +94,9 @@ fn target_link_name(target: &Target) -> String {
 /// Falls back to line-slice links when decomposition is unavailable.
 pub fn build_target_nodes(
     companion: &Companion,
-    ctx: &SourceCtx<'_>,
+    syntax: &SyntaxRegistry,
+    decomposition: &DecompositionCache,
+    symbols_dir: &str,
     targets: &[Target],
     base: &Path,
 ) -> Vec<NamedNode> {
@@ -111,8 +109,17 @@ pub fn build_target_nodes(
         };
         let target_path = &target.rel_path;
 
-        let symlink_target = resolve_symbol_link(companion, ctx, target_path, rel_path, target.line, base)
-            .unwrap_or_else(|| fallback_line_link(companion, rel_path, target.line, base));
+        let symlink_target = resolve_symbol_link(
+            companion,
+            syntax,
+            decomposition,
+            symbols_dir,
+            target_path,
+            rel_path,
+            target.line,
+            base,
+        )
+        .unwrap_or_else(|| fallback_line_link(companion, rel_path, target.line, base));
 
         let link_name = target_link_name(target);
         if seen.insert(link_name.clone()) {

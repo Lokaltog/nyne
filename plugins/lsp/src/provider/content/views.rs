@@ -194,7 +194,7 @@ impl QueryResult {
     /// Paths are relativized by stripping the source root — the same
     /// approach used by template views in [`render_view`]. Targets whose
     /// paths fall outside the source root (external files) are dropped.
-    pub(super) fn into_targets(self, resolver: &PathResolver) -> Vec<Target> {
+    pub(crate) fn into_targets(self, resolver: &PathResolver) -> Vec<Target> {
         let source_root = resolver.source_root();
         match self {
             Self::Locations(locs) => locs

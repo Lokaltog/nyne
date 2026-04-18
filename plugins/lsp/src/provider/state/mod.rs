@@ -13,7 +13,7 @@ use strum::IntoEnumIterator;
 use super::lsp_links;
 use crate::plugin::config::vfs::Vfs;
 use crate::provider::content::rename::{FileRenameDiff, RenameDiff, SymbolRename};
-use crate::provider::content::{Feature, Handles, actions, query_lsp_targets};
+use crate::provider::content::{Feature, Handles, Target, actions, build_diagnostics_node};
 use crate::session::handle::{Handle, LspQuery};
 use crate::session::manager::Manager;
 
@@ -31,16 +31,7 @@ pub struct LspState {
     pub(crate) vfs: Vfs,
     pub(crate) source_paths: Arc<SourcePaths>,
 }
-impl LspState {
-    /// Build a [`SourceCtx`] from shared services.
-    fn source_ctx(&self) -> lsp_links::SourceCtx<'_> {
-        lsp_links::SourceCtx {
-            syntax: &self.syntax,
-            decomposition: &self.decomposition,
-            symbols_dir: self.source_paths.symbols_dir(),
-        }
-    }
-}
+
 /// Build all template handles for LSP features and diagnostics.
 ///
 /// Registers LSP-specific template globals from the VFS config (replacing
@@ -453,16 +444,17 @@ impl LspState {
         let Some(query) = self.fragment_query(source_file, fragment_path)? else {
             return Ok(None);
         };
-        let targets = query_lsp_targets(&query, lsp_dir)?;
+        let targets = self.query_targets(&query, lsp_dir)?;
         if targets.is_empty() {
             return Ok(Some(Vec::new()));
         }
-        let source_ctx = self.source_ctx();
-        let base =
-            lsp_links::build_symlink_base(companion, source_file, fragment_path, lsp_dir, source_ctx.symbols_dir);
+        let symbols_dir = self.source_paths.symbols_dir();
+        let base = lsp_links::build_symlink_base(companion, source_file, fragment_path, lsp_dir, symbols_dir);
         Ok(Some(lsp_links::build_target_nodes(
             companion,
-            &source_ctx,
+            &self.syntax,
+            &self.decomposition,
+            symbols_dir,
             &targets,
             &base,
         )))
@@ -499,6 +491,44 @@ impl LspState {
         let query = handle.whole_file();
         let resolved = actions::resolve_code_actions(&query);
         Some((resolved, query))
+    }
+
+    /// Query LSP targets for a feature directory (callers/, deps/, refs/, etc.).
+    ///
+    /// Dispatches via [`Feature::from_dir_name`] + [`Feature::query`]. Returns
+    /// an empty vec if the directory name doesn't match a known feature.
+    #[allow(
+        clippy::unused_self,
+        reason = "groups feature dispatch with other LspState operations"
+    )]
+    pub(crate) fn query_targets(&self, query: &LspQuery, lsp_dir: &str) -> Result<Vec<Target>> {
+        let Some(feature) = Feature::from_dir_name(lsp_dir) else {
+            return Ok(Vec::new());
+        };
+        Ok(feature.query(query)?.into_targets(query.path_resolver()))
+    }
+
+    /// Build `search/symbols/{query}/` symlinks for a workspace symbol query.
+    ///
+    /// Thin wrapper around [`lsp_links::build_search_symlinks`] that supplies
+    /// the source root, base path, and [`SourcePaths`] from `self`.
+    pub(crate) fn search_nodes(&self, query: &str) -> Vec<NamedNode> {
+        let symbols = self.lsp.workspace_symbols(query);
+        let base = PathBuf::from(format!("@/{}/symbols/{query}", self.vfs.dir.search));
+        lsp_links::build_search_symlinks(
+            &symbols,
+            self.lsp.path_resolver().source_root(),
+            &base,
+            &self.source_paths,
+        )
+    }
+
+    /// Build the file-level `DIAGNOSTICS.md` node for the given handle.
+    ///
+    /// Uses `self.vfs.file.diagnostics` for the configured filename and
+    /// `self.handles.diagnostics` as the template handle.
+    pub(crate) fn diagnostics_node(&self, handle: &Arc<Handle>) -> NamedNode {
+        build_diagnostics_node(&self.vfs.file.diagnostics, handle, &self.handles)
     }
 }
 
