@@ -21,7 +21,7 @@ use nyne_source::{
 };
 
 use crate::provider::content::{Target, actions, query_lsp_targets};
-use crate::session::handle::{Handle, SymbolQuery};
+use crate::session::handle::{Handle, LspQuery};
 use crate::session::manager::Manager;
 use crate::session::uri::uri_to_file_path;
 
@@ -196,7 +196,7 @@ pub fn resolve_actions_dir(
     lsp: &Arc<Manager>,
     source_file: &Path,
     fragment_path: &[String],
-) -> Result<Option<(Vec<actions::ResolvedAction>, SymbolQuery)>> {
+) -> Result<Option<(Vec<actions::ResolvedAction>, LspQuery)>> {
     let Some((shared, frag, lsp_handle)) = resolve_fragment_handle(ctx, lsp, source_file, fragment_path)? else {
         return Ok(None);
     };

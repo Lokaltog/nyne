@@ -13,7 +13,7 @@ use nyne::text;
 use nyne_diff::{DiffSource, FileEditResult};
 
 use crate::session::edit::resolve_workspace_edit;
-use crate::session::handle::SymbolQuery;
+use crate::session::handle::LspQuery;
 use crate::session::uri::line_range_to_lsp_range;
 
 /// Maximum length for the kebab-case slug derived from a code action title.
@@ -29,7 +29,7 @@ pub struct ResolvedAction {
 ///
 /// Called at resolve time (readdir of `actions/`) to eagerly fetch
 /// the list of available actions from the LSP server.
-pub fn resolve_code_actions(query: &SymbolQuery, line_range: &StdRange<usize>) -> Vec<ResolvedAction> {
+pub fn resolve_code_actions(query: &LspQuery, line_range: &StdRange<usize>) -> Vec<ResolvedAction> {
     let Some(fq) = query.file_query() else {
         return Vec::new();
     };
@@ -67,7 +67,7 @@ pub fn build_action_nodes(resolved: &[ResolvedAction]) -> Vec<NamedNode> {
 ///
 /// Returns `Some` if `name` matches one of the resolved action filenames.
 /// The caller sets this as [`DiffCapable`] on the request for the diff middleware.
-pub fn find_action_diff(resolved: &[ResolvedAction], name: &str, query: &SymbolQuery) -> Option<CodeActionDiff> {
+pub fn find_action_diff(resolved: &[ResolvedAction], name: &str, query: &LspQuery) -> Option<CodeActionDiff> {
     resolved
         .iter()
         .find(|e| e.file_name == name)
@@ -84,7 +84,7 @@ pub fn find_action_diff(resolved: &[ResolvedAction], name: &str, query: &SymbolQ
 /// Resolves the code action (via `codeAction/resolve` if needed), converts
 /// the workspace edit to [`FileEditResult`]s via [`resolve_workspace_edit`].
 pub struct CodeActionDiff {
-    query: SymbolQuery,
+    query: LspQuery,
     action: CodeAction,
     /// Cached result of `codeAction/resolve` to avoid duplicate LSP round-trips.
     resolved: OnceLock<Option<CodeAction>>,

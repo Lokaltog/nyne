@@ -13,7 +13,7 @@ use nyne_diff::{DiffSource, FileEditResult, apply_file_edits};
 use nyne_source::split_disambiguator;
 
 use crate::session::edit::resolve_workspace_edit;
-use crate::session::handle::{Handle, SymbolQuery};
+use crate::session::handle::{Handle, LspQuery};
 use crate::session::uri;
 
 /// Shared rename computation — implements [`DiffSource`] for preview.
@@ -22,7 +22,7 @@ use crate::session::uri;
 /// and the apply path (`mv old@/ new@/` via [`SymbolRename`]).
 #[derive(Clone)]
 pub struct RenameDiff {
-    pub query: SymbolQuery,
+    pub query: LspQuery,
     pub new_name: String,
 }
 
@@ -54,7 +54,7 @@ impl DiffSource for RenameDiff {
 /// The dispatch layer merges this capability onto `SyntaxProvider`'s directory
 /// node via the generalized capability merge.
 pub struct SymbolRename {
-    pub query: SymbolQuery,
+    pub query: LspQuery,
     pub fs: Arc<dyn Filesystem>,
 }
 
