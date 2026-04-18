@@ -36,6 +36,7 @@ mod tests;
 /// Single source of truth for interpreting `O_TRUNC`, `O_APPEND`, and
 /// write-intent from raw POSIX flags. All call sites use this instead
 /// of inline bit checks.
+#[derive(Clone, Copy)]
 pub(super) struct OpenMode {
     pub truncate: bool,
     pub append: bool,
@@ -172,8 +173,53 @@ pub(super) struct HandleEntry {
     truncation: TruncationState,
 }
 
-/// Methods for querying handle entry state.
 impl HandleEntry {
+    /// Build a buffered handle: content is preloaded, all reads/writes
+    /// go through the buffer. `O_TRUNC` on non-empty content marks the
+    /// handle dirty so the empty buffer is flushed on release even
+    /// without a subsequent write.
+    fn new_buffered(inode: u64, content: Arc<[u8]>, mode: OpenMode) -> Self {
+        let content_was_nonempty = !content.is_empty();
+        Self {
+            inode,
+            buffer: if mode.truncate {
+                ContentBuffer::Owned(Vec::new())
+            } else {
+                ContentBuffer::Shared(content)
+            },
+            source: BufferSource::Preloaded,
+            dirty_gen: u64::from(mode.truncate && content_was_nonempty),
+            append: mode.append,
+            truncation: match (mode.truncate, content_was_nonempty) {
+                (true, true) => TruncationState::Pending,
+                (true, false) => TruncationState::Done,
+                _ => TruncationState::None,
+            },
+        }
+    }
+
+    /// Build a direct (fd-backed) handle: reads via `pread()` on the
+    /// backing fd; the buffer is empty until the first write populates
+    /// (or, if truncated, replaces) it.
+    const fn new_direct(inode: u64, file: File, mode: OpenMode) -> Self {
+        Self {
+            inode,
+            buffer: ContentBuffer::Owned(Vec::new()),
+            source: if mode.truncate {
+                BufferSource::Truncated(file)
+            } else {
+                BufferSource::DirectFd(file)
+            },
+            dirty_gen: 0,
+            append: mode.append,
+            truncation: if mode.truncate {
+                TruncationState::Pending
+            } else {
+                TruncationState::None
+            },
+        }
+    }
+
     /// Returns whether the handle has uncommitted writes.
     #[cfg(test)]
     pub const fn is_dirty(&self) -> bool { self.dirty_gen > 0 }
@@ -275,28 +321,9 @@ impl HandleTable {
 
     /// Open a buffered file: store initial content and open flags, return the file handle number.
     pub fn open(&self, inode: u64, content: Arc<[u8]>, open_flags: i32) -> u64 {
-        let mode = OpenMode::parse(open_flags);
-        // Truncating non-empty content is a mutation: mark dirty so the
-        // empty buffer is flushed on release even without a subsequent write.
-        // This makes standalone `: > virtualfile` actually clear the content.
-        let content_was_nonempty = !content.is_empty();
-        let buffer = if mode.truncate {
-            ContentBuffer::Owned(Vec::new())
-        } else {
-            ContentBuffer::Shared(content)
-        };
-        self.inner.write().insert(HandleEntry {
-            inode,
-            buffer,
-            source: BufferSource::Preloaded,
-            dirty_gen: u64::from(mode.truncate && content_was_nonempty),
-            append: mode.append,
-            truncation: match (mode.truncate, content_was_nonempty) {
-                (true, true) => TruncationState::Pending,
-                (true, false) => TruncationState::Done,
-                _ => TruncationState::None,
-            },
-        })
+        self.inner
+            .write()
+            .insert(HandleEntry::new_buffered(inode, content, OpenMode::parse(open_flags)))
     }
 
     /// Open a direct (fd-backed) file handle for a real file.
@@ -305,24 +332,9 @@ impl HandleTable {
     /// loaded into memory. Writes still use the buffer path (populated
     /// lazily on first write, flushed on release).
     pub fn open_direct(&self, inode: u64, file: File, open_flags: i32) -> u64 {
-        let mode = OpenMode::parse(open_flags);
-        let source = if mode.truncate {
-            BufferSource::Truncated(file)
-        } else {
-            BufferSource::DirectFd(file)
-        };
-        self.inner.write().insert(HandleEntry {
-            inode,
-            buffer: ContentBuffer::Owned(Vec::new()),
-            source,
-            dirty_gen: 0,
-            append: mode.append,
-            truncation: if mode.truncate {
-                TruncationState::Pending
-            } else {
-                TruncationState::None
-            },
-        })
+        self.inner
+            .write()
+            .insert(HandleEntry::new_direct(inode, file, OpenMode::parse(open_flags)))
     }
 
     /// Read from a file handle at the given offset.
