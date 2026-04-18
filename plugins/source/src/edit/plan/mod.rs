@@ -7,9 +7,11 @@
 
 use std::cmp::Ordering;
 use std::ops::Range;
+use std::path::PathBuf;
 
 use color_eyre::eyre::Result;
 
+use crate::syntax::decomposed::DecomposedSource;
 use crate::syntax::fragment::Fragment;
 
 /// Fieldless discriminant for [`EditOp`] — the single source of truth for
@@ -244,20 +246,18 @@ impl EditPlan {
     /// validator closure.
     pub fn run(
         &self,
-        parsed: &crate::syntax::decomposed::DecomposedSource,
-        source_file: std::path::PathBuf,
+        parsed: &DecomposedSource,
+        source_file: PathBuf,
         validate: impl FnOnce(&str) -> nyne_diff::ValidationResult,
     ) -> Result<nyne_diff::FileEditResult> {
-        let resolved = self.resolve(&parsed.decomposed, &parsed.source)?;
-        let modified = Self::apply(&parsed.source, &resolved);
-        let validation = validate(&modified);
+        let modified = Self::apply(&parsed.source, &self.resolve(&parsed.decomposed, &parsed.source)?);
         Ok(nyne_diff::FileEditResult {
             display_path: source_file.display().to_string(),
             source_file,
             original: parsed.source.clone(),
+            validation: validate(&modified),
             modified,
             outcome: nyne_diff::EditOutcome::Modify,
-            validation,
         })
     }
 }

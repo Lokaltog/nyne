@@ -213,22 +213,20 @@ impl SyntaxProvider {
         let segments: Vec<String> = path_param.split('/').map(String::from).collect();
 
         match self.classify_fragment_path(&segments) {
-            FragmentSubRoute::CodeBlocks { parent } => {
-                if let Ok(Some(nodes)) = self.resolve_code_block_dir(&sf, parent) {
+            FragmentSubRoute::CodeBlocks { parent } =>
+                if let Some(nodes) = self.resolve_code_block_dir(&sf, parent)? {
                     req.nodes.extend(nodes);
-                }
-            }
+                },
             FragmentSubRoute::Edit { parent } =>
                 if self.decomposition.has_fragment(&sf, parent) {
                     for kind in <EditOpKind as strum::IntoEnumIterator>::iter() {
                         req.nodes.add(NamedNode::file(kind.name()));
                     }
                 },
-            FragmentSubRoute::Fragment => {
-                if let Ok(Some(nodes)) = self.resolve_fragment_dir(&companion, &sf, &segments) {
+            FragmentSubRoute::Fragment =>
+                if let Some(nodes) = self.resolve_fragment_dir(&companion, &sf, &segments)? {
                     req.nodes.extend(nodes);
-                }
-            }
+                },
         }
         Ok(())
     }

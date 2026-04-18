@@ -135,13 +135,13 @@ struct MountSession {
 /// Fork a single FUSE daemon, wait for readiness, and write its session file.
 ///
 /// Returns without blocking — the daemon runs in a child process.
-fn start_one(path: PathBuf, session_id: &session::SessionId, mount_fn: MountFn) -> Result<MountSession> {
+fn start_one(path: &Path, session_id: &session::SessionId, mount_fn: MountFn) -> Result<MountSession> {
     let pipe = ReadyPipe::new().wrap_err("creating readiness pipe")?;
 
     info!(path = %path.display(), id = %session_id, "launching FUSE daemon");
 
     let fds = pipe.raw_fds();
-    let daemon_path = path.clone();
+    let daemon_path = path.to_path_buf();
     let daemon_pid = fork_or_die(|| {
         let child_pipe = ReadyPipe::from_raw(fds.0, fds.1);
         daemon_main(&daemon_path, child_pipe, mount_fn);
@@ -157,7 +157,7 @@ fn start_one(path: PathBuf, session_id: &session::SessionId, mount_fn: MountFn) 
     info!("FUSE daemon ready, mount active");
 
     // Write session file so `attach` can discover this daemon.
-    let session_path = session::write(session_id, &path, daemon_pid.as_raw_pid()).wrap_err("writing session file")?;
+    let session_path = session::write(session_id, path, daemon_pid.as_raw_pid()).wrap_err("writing session file")?;
 
     Ok(MountSession {
         daemon,
@@ -216,7 +216,7 @@ pub fn run_mounts(mounts: Vec<(PathBuf, session::SessionId, MountFn)>, state_roo
     let mut sessions = Vec::with_capacity(mounts.len());
 
     for (path, id, mount_fn) in mounts {
-        match start_one(path, &id, mount_fn) {
+        match start_one(&path, &id, mount_fn) {
             Ok(session) => sessions.push(session),
             Err(e) => {
                 teardown(sessions, state_root);

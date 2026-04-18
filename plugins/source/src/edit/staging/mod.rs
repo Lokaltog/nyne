@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::mem;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -102,7 +102,7 @@ pub struct BatchEditAction {
 /// [`Fail`](ValidationResult::Fail) carrying the parse error otherwise.
 fn validator_for<'a>(
     registry: &'a SyntaxRegistry,
-    source_file: &'a std::path::Path,
+    source_file: &'a Path,
 ) -> impl FnOnce(&str) -> ValidationResult + 'a {
     move |modified| match registry.decomposer_for(source_file) {
         Some(decomposer) => match decomposer.validate(modified) {

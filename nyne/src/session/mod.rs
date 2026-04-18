@@ -11,10 +11,12 @@
 pub mod env;
 /// Session identifier generation and validation.
 mod id;
+use std::env::var_os;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use color_eyre::eyre::{Result, WrapErr, eyre};
+use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -46,10 +48,10 @@ pub struct SessionInfo {
 /// 2. **`$XDG_RUNTIME_DIR/nyne/`** — host default.
 /// 3. **`$XDG_CACHE_HOME/nyne/`** — fallback when no runtime dir exists.
 fn session_dir() -> Result<PathBuf> {
-    if let Some(override_path) = std::env::var_os(NYNE_SESSION_DIR_ENV) {
+    if let Some(override_path) = var_os(NYNE_SESSION_DIR_ENV) {
         return Ok(PathBuf::from(override_path));
     }
-    directories::BaseDirs::new()
+    BaseDirs::new()
         .map(|dirs| dirs.runtime_dir().unwrap_or_else(|| dirs.cache_dir()).join("nyne"))
         .ok_or_else(|| eyre!("cannot determine session directory (no home dir)"))
 }

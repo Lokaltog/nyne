@@ -11,6 +11,7 @@ use std::sync::Arc;
 use anymap2::SendSyncAnyMap;
 
 use crate::config::NyneConfig;
+use crate::plugin::PluginConfig;
 use crate::process::Spawner;
 use crate::router::Filesystem;
 
@@ -125,9 +126,7 @@ impl ActivationContext {
     /// Looks up the `plugin.<id>` TOML section in [`ActivationContext::config`]
     /// and deserializes it via [`PluginConfig::from_section`]. Returns the
     /// type's `Default` on a missing section or deserialization failure.
-    pub fn plugin_config<C: crate::plugin::PluginConfig>(&self, id: &str) -> C {
-        C::from_section(self.config().plugin.get(id))
-    }
+    pub fn plugin_config<C: PluginConfig>(&self, id: &str) -> C { C::from_section(self.config().plugin.get(id)) }
 
     /// Display root with trailing slash — for stripping absolute paths to relative.
     pub fn root_prefix(&self) -> &str { &self.root_prefix }

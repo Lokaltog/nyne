@@ -21,6 +21,7 @@ use serde::Serialize;
 
 use crate::prelude::*;
 use crate::router::{ReadContext, Readable, Writable, WriteContext};
+use crate::text::{first_line, format_tokens, strip_prefix};
 
 /// Template engine wrapping a `minijinja::Environment`.
 ///
@@ -47,9 +48,9 @@ impl TemplateEngine {
         env.set_lstrip_blocks(true);
         env.add_filter("ljust", |v: String, w: usize| format!("{v:<w$}"));
         env.add_filter("rjust", |v: String, w: usize| format!("{v:>w$}"));
-        env.add_filter("tokens", crate::text::format_tokens);
-        env.add_filter("first_line", crate::text::first_line);
-        env.add_filter("strip_prefix", crate::text::strip_prefix);
+        env.add_filter("tokens", format_tokens);
+        env.add_filter("first_line", first_line);
+        env.add_filter("strip_prefix", strip_prefix);
         Self { env }
     }
 

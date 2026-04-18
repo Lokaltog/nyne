@@ -110,36 +110,44 @@ impl EventLoop {
         let mut pending: HashSet<PathBuf> = HashSet::new();
         let mut batch_deadline: Option<Instant> = None;
 
-        loop {
-            if pending.is_empty() {
-                let Ok(event) = self.rx.recv() else { break };
-                self.process_raw_event(&event, &mut pending);
-                if !pending.is_empty() {
-                    batch_deadline = Some(Instant::now() + MAX_BATCH_DELAY);
-                }
-                continue;
+        while self.step(&mut pending, &mut batch_deadline) {}
+    }
+
+    /// Single iteration of the event loop. Returns `false` to stop the loop.
+    fn step(&self, pending: &mut HashSet<PathBuf>, batch_deadline: &mut Option<Instant>) -> bool {
+        if pending.is_empty() {
+            let Ok(event) = self.rx.recv() else { return false };
+            self.process_raw_event(&event, pending);
+            if !pending.is_empty() {
+                *batch_deadline = Some(Instant::now() + MAX_BATCH_DELAY);
             }
+            return true;
+        }
 
-            let timeout = batch_deadline.map_or(DEBOUNCE_TIMEOUT, |d| {
-                d.saturating_duration_since(Instant::now()).min(DEBOUNCE_TIMEOUT)
-            });
+        let timeout = batch_deadline.map_or(DEBOUNCE_TIMEOUT, |d| {
+            d.saturating_duration_since(Instant::now()).min(DEBOUNCE_TIMEOUT)
+        });
 
-            if !timeout.is_zero() {
-                match self.rx.recv_timeout(timeout) {
-                    Ok(event) => {
-                        self.process_raw_event(&event, &mut pending);
-                        continue;
-                    }
-                    Err(RecvTimeoutError::Disconnected) => {
-                        self.flush(&mut pending);
-                        break;
-                    }
-                    Err(RecvTimeoutError::Timeout) => {}
-                }
+        if timeout.is_zero() {
+            self.flush(pending);
+            *batch_deadline = None;
+            return true;
+        }
+
+        match self.rx.recv_timeout(timeout) {
+            Ok(event) => {
+                self.process_raw_event(&event, pending);
+                true
             }
-
-            self.flush(&mut pending);
-            batch_deadline = None;
+            Err(RecvTimeoutError::Disconnected) => {
+                self.flush(pending);
+                false
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                self.flush(pending);
+                *batch_deadline = None;
+                true
+            }
         }
     }
 
