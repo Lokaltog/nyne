@@ -81,19 +81,15 @@ fn drain_file_missing_is_noop() {
     assert_eq!(staging.snapshot().len(), 1);
 }
 
-#[test]
-fn staged_diff_node_carries_scope() {
+#[rstest]
+#[case::scoped(Some(PathBuf::from("a.rs")))]
+#[case::mount_wide(None)]
+fn staged_diff_node_attaches_writable(#[case] scope: Option<PathBuf>) {
     let staging = EditStaging::new();
-    let scope = PathBuf::from("a.rs");
-
-    let scoped = staging.staged_diff_node(Some(scope.clone()), "staged.diff");
-    assert_eq!(scoped.name(), "staged.diff");
-
-    let unscoped = staging.staged_diff_node(None, "staged.diff");
-    assert_eq!(unscoped.name(), "staged.diff");
-    // Writable is attached in both cases — inspectable via the node's capability.
-    assert!(scoped.writable().is_some());
-    assert!(unscoped.writable().is_some());
+    let node = staging.staged_diff_node(scope, "staged.diff");
+    assert_eq!(node.name(), "staged.diff");
+    // Writable is attached in both scopes — inspectable via the node's capability.
+    assert!(node.writable().is_some(), "staged.diff node must carry a Writable");
 }
 
 #[test]

@@ -236,8 +236,10 @@ impl SyntaxProvider {
                 // `staged.diff` is contributed here, scoped to this file so
                 // the preview shows only edits staged against `sf`.
                 if self.decomposition.has_fragment(&sf, parent) {
-                    req.nodes
-                        .add(self.staging.staged_diff_node(Some(sf.clone()), &self.vfs.file.staged_diff));
+                    req.nodes.add(
+                        self.staging
+                            .staged_diff_node(Some(sf), &self.vfs.file.staged_diff),
+                    );
                 }
             }
             FragmentSubRoute::Fragment =>

@@ -200,10 +200,11 @@ impl DiffSource for BatchEditAction {
         let snapshot = self.scoped_snapshot();
         let op_count: usize = snapshot.values().map(Vec::len).sum();
         match &self.scope {
-            Some(scope) =>
-                vec![format!("Batch edit: {op_count} operation(s) in {}", scope.display())],
-            None =>
-                vec![format!("Batch edit: {op_count} operation(s) across {} file(s)", snapshot.len())],
+            Some(scope) => vec![format!("Batch edit: {op_count} operation(s) in {}", scope.display())],
+            None => vec![format!(
+                "Batch edit: {op_count} operation(s) across {} file(s)",
+                snapshot.len()
+            )],
         }
     }
 

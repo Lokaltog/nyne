@@ -83,33 +83,9 @@ fn handler_runs_before_auto_emit() {
     assert!(req.nodes.find("a.txt").is_some(), "auto-emit should add a.txt");
 }
 
-#[test]
-fn content_always_emits_on_readdir() {
-    let tree = RouteTree::builder().content_always(TestProvider::file_always).build();
-
-    let mut req = readdir_req("");
-    tree.dispatch(&TestProvider, &mut req, &Next::empty()).unwrap();
-
-    assert!(
-        req.nodes.find("always.txt").is_some(),
-        "content_always should emit on readdir"
-    );
-}
-
-#[test]
-fn content_always_emits_on_lookup() {
-    let tree = RouteTree::builder().content_always(TestProvider::file_always).build();
-
-    let mut req = Request::new(PathBuf::new(), Op::Lookup {
-        name: "always.txt".into(),
-    });
-    tree.dispatch(&TestProvider, &mut req, &Next::empty()).unwrap();
-
-    assert!(
-        req.nodes.find("always.txt").is_some(),
-        "content_always should emit on lookup"
-    );
-}
+// `content_always` standalone coverage is subsumed by
+// `content_always_emits_like_content` below (which exercises both the
+// Readdir and Lookup paths together with a sibling `content` producer).
 
 #[test]
 fn no_handler_defaults_to_next() {
@@ -368,32 +344,11 @@ fn dispatch_when_dispatches_with_state() {
         "tree should dispatch when state is present"
     );
 }
-#[test]
-fn on_readdir_fires_on_readdir_op() {
-    struct P;
-    impl P {
-        fn add_items(_: &Self, _ctx: &RouteCtx, req: &mut Request) -> Result<()> {
-            req.nodes.add(NamedNode::dir("from-callback"));
-            Ok(())
-        }
-
-        fn file_a(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> { Some(Node::file().named("a.txt")) }
-    }
-
-    let tree = RouteTree::builder().on_readdir(P::add_items).content(P::file_a).build();
-
-    let mut req = readdir_req("");
-    tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
-
-    assert!(
-        req.nodes.find("from-callback").is_some(),
-        "on_readdir callback should fire"
-    );
-    assert!(req.nodes.find("a.txt").is_some(), "auto-emit should still run");
-}
-
-#[test]
-fn on_readdir_does_not_fire_on_lookup() {
+#[rstest]
+#[case::readdir(Op::Readdir, &["from-callback"])]
+#[case::lookup(Op::Lookup { name: "foo".into() }, &[])]
+#[case::create(Op::Create { name: "foo".into() }, &[])]
+fn on_readdir_fires_only_for_readdir(#[case] op: Op, #[case] expected: &[&str]) {
     struct P;
     impl P {
         fn add_items(_: &Self, _ctx: &RouteCtx, req: &mut Request) -> Result<()> {
@@ -404,17 +359,22 @@ fn on_readdir_does_not_fire_on_lookup() {
 
     let tree = RouteTree::builder().on_readdir(P::add_items).build();
 
-    let mut req = Request::new(PathBuf::new(), Op::Lookup { name: "foo".into() });
+    let mut req = Request::new(PathBuf::new(), op);
     tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
 
-    assert!(
-        req.nodes.find("from-callback").is_none(),
-        "on_readdir should not fire for Lookup"
-    );
+    // Lookup has a readdir-fallback branch (see `on_readdir_fallback_resolves_lookup`)
+    // which filters by name — "from-callback" doesn't match "foo", so it's dropped.
+    let names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
+    assert_eq!(names, expected);
 }
 
-#[test]
-fn on_lookup_fires_with_name() {
+#[rstest]
+#[case::lookup_hit(Op::Lookup { name: "target.txt".into() }, &["target.txt"])]
+#[case::lookup_miss(Op::Lookup { name: "other".into() }, &[])]
+#[case::remove_hit(Op::Remove { name: "target.txt".into() }, &["target.txt"])]
+#[case::readdir_no_fire(Op::Readdir, &[])]
+#[case::create_no_fire(Op::Create { name: "target.txt".into() }, &[])]
+fn on_lookup_fires_with_name_for_lookup_and_remove(#[case] op: Op, #[case] expected: &[&str]) {
     struct P;
     impl P {
         fn resolve(_: &Self, _ctx: &RouteCtx, req: &mut Request, name: &str) -> Result<()> {
@@ -427,15 +387,11 @@ fn on_lookup_fires_with_name() {
 
     let tree = RouteTree::builder().on_lookup(P::resolve).build();
 
-    let mut req = Request::new(PathBuf::new(), Op::Lookup {
-        name: "target.txt".into(),
-    });
+    let mut req = Request::new(PathBuf::new(), op);
     tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
 
-    assert!(
-        req.nodes.find("target.txt").is_some(),
-        "on_lookup should resolve the name"
-    );
+    let names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
+    assert_eq!(names, expected);
 }
 
 #[test]
@@ -465,29 +421,17 @@ fn on_readdir_fallback_resolves_lookup() {
     );
 }
 
-#[test]
-fn on_lookup_does_not_fire_on_readdir() {
-    struct P;
-    impl P {
-        fn resolve(_: &Self, _ctx: &RouteCtx, req: &mut Request, _name: &str) -> Result<()> {
-            req.nodes.add(Node::file().named("leaked"));
-            Ok(())
-        }
-    }
+// `on_lookup_does_not_fire_on_readdir` is subsumed by the
+// `readdir_no_fire` / `create_no_fire` cases of
+// `on_lookup_fires_with_name_for_lookup_and_remove` above.
 
-    let tree = RouteTree::builder().on_lookup(P::resolve).build();
-
-    let mut req = readdir_req("");
-    tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
-
-    assert!(
-        req.nodes.find("leaked").is_none(),
-        "on_lookup should not fire for Readdir"
-    );
-}
-
-#[test]
-fn on_create_fires_with_name() {
+#[rstest]
+#[case::create_hit(Op::Create { name: "new-file".into() }, &["new-file"])]
+#[case::create_miss(Op::Create { name: "other".into() }, &[])]
+#[case::lookup_no_fire(Op::Lookup { name: "new-file".into() }, &[])]
+#[case::readdir_no_fire(Op::Readdir, &[])]
+#[case::remove_no_fire(Op::Remove { name: "new-file".into() }, &[])]
+fn on_create_fires_only_for_create(#[case] op: Op, #[case] expected: &[&str]) {
     struct P;
     impl P {
         fn resolve(_: &Self, _ctx: &RouteCtx, req: &mut Request, name: &str) -> Result<()> {
@@ -500,42 +444,11 @@ fn on_create_fires_with_name() {
 
     let tree = RouteTree::builder().on_create(P::resolve).build();
 
-    let mut req = Request::new(PathBuf::new(), Op::Create {
-        name: "new-file".into(),
-    });
+    let mut req = Request::new(PathBuf::new(), op);
     tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
 
-    assert!(
-        req.nodes.find("new-file").is_some(),
-        "on_create should materialize the node for the to-be-created name"
-    );
-}
-
-#[test]
-fn on_create_does_not_fire_on_lookup_or_readdir() {
-    struct P;
-    impl P {
-        fn resolve(_: &Self, _ctx: &RouteCtx, req: &mut Request, _name: &str) -> Result<()> {
-            req.nodes.add(Node::file().named("leaked"));
-            Ok(())
-        }
-    }
-
-    let tree = RouteTree::builder().on_create(P::resolve).build();
-
-    let mut lookup_req = Request::new(PathBuf::new(), Op::Lookup { name: "x".into() });
-    tree.dispatch(&P, &mut lookup_req, &Next::empty()).unwrap();
-    assert!(
-        lookup_req.nodes.find("leaked").is_none(),
-        "on_create should not fire for Lookup"
-    );
-
-    let mut readdir_req = readdir_req("");
-    tree.dispatch(&P, &mut readdir_req, &Next::empty()).unwrap();
-    assert!(
-        readdir_req.nodes.find("leaked").is_none(),
-        "on_create should not fire for Readdir"
-    );
+    let names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
+    assert_eq!(names, expected);
 }
 
 #[test]
