@@ -47,7 +47,9 @@ use process_name_cache::ProcessNameCache;
 
 use crate::err;
 use crate::path_utils::PathExt;
-use crate::router::{AffectedFiles, Chain, Filesystem, NamedNode, Op, Process, RenameContext, Request, UnlinkContext};
+use crate::router::{
+    AffectedFiles, Chain, Filesystem, NamedNode, Op, Process, RenameContext, Request, UnlinkContext, WriteContext,
+};
 
 /// Shared notifier slot — populated after FUSE mount, read by the watcher.
 pub type SharedNotifier = Arc<OnceLock<Box<dyn KernelNotifier + Send + Sync>>>;
@@ -160,25 +162,60 @@ impl FuseFilesystem {
         Ok(Arc::from(Filesystem::read_file(self, &self.inode_path(ino)?)?))
     }
 
-    /// Flush written content for an inode via the [`Filesystem`] trait.
+    /// Flush written content for an inode.
+    ///
+    /// Ephemeral inodes (created by a router `on_create` callback) carry
+    /// their [`Writable`](crate::router::node::Writable) directly on the
+    /// stored [`NamedNode`]; we drive it without going back through the
+    /// chain, since the path is intentionally hidden from lookup.
+    ///
+    /// Regular inodes flow through the [`Filesystem`] trait, which
+    /// resolves the target node via the chain.
     pub(super) fn flush_content(&self, ino: u64, data: &[u8]) -> Result<()> {
-        Filesystem::write_file(self, &self.inode_path(ino)?, data)?;
+        let path = self.inode_path(ino)?;
+        if let Some(node) = self.inode_state.ephemeral_node(ino) {
+            self.write_via_node(&path, &node, data)?;
+            return Ok(());
+        }
+        Filesystem::write_file(self, &path, data)?;
         Ok(())
+    }
+
+    /// Invoke a node's [`Writable`] capability and notify change propagation.
+    ///
+    /// Single source of truth for the "extract writable → write → notify"
+    /// sequence — consumed by both the ephemeral flush path and the
+    /// standard [`Filesystem::write_file`] path.
+    pub(super) fn write_via_node(&self, path: &Path, node: &NamedNode, data: &[u8]) -> Result<AffectedFiles> {
+        let affected = node.writable().ok_or_else(|| err::not_writable(path))?.write(
+            &WriteContext {
+                path,
+                fs: self.backing_fs.as_ref(),
+            },
+            data,
+        )?;
+        self.notify_change(&affected);
+        Ok(affected)
     }
 
     /// Resolve an inode to its full path, or error if unknown.
     fn inode_path(&self, ino: u64) -> Result<PathBuf> { self.inodes.resolve_path(ino) }
 
     /// Dispatch a single-path mutation (create, remove, mkdir) through the chain.
+    ///
+    /// Returns the dispatched [`Request`] so callers can inspect nodes
+    /// produced by op-specific callbacks (e.g. `on_create` attaching an
+    /// ephemeral node) or state set by middleware.
     pub(super) fn dispatch_path_op(
         &self,
         path: &Path,
         op_fn: impl FnOnce(String) -> Op,
         process: Option<Process>,
-    ) -> Result<()> {
+    ) -> Result<Request> {
         let (dir, name) = split_path(path)?;
-        self.chain
-            .dispatch(&mut Request::new(dir.to_path_buf(), op_fn(name.to_owned())).with_opt_process(process))
+        let mut req = Request::new(dir.to_path_buf(), op_fn(name.to_owned())).with_opt_process(process);
+        self.chain.dispatch(&mut req)?;
+        Ok(req)
     }
 
     /// Dispatch a rename operation through the chain.
@@ -234,6 +271,14 @@ impl FuseFilesystem {
     /// [`Self::do_mkdir`](super::mutations) — both reject in non-writable
     /// parents (`EACCES`), dispatch the op through the chain, then resolve
     /// the new entry to `(inode, node)` for the FUSE reply.
+    ///
+    /// If a router `on_create` callback attached a node to `req.nodes` for
+    /// the to-be-created name, the node is registered as **ephemeral** —
+    /// bound to a fresh inode for the lifetime of the
+    /// `create → write → release` cycle, then evicted from the inode map
+    /// on release so subsequent lookups return `ENOENT`. Provider-backed
+    /// real-file creates (e.g. the `fs` plugin) fall through to
+    /// [`resolve_inode`](Self::resolve_inode) as before.
     pub(super) fn dispatch_and_resolve_path_op(
         &self,
         req: &fuser::Request,
@@ -247,7 +292,18 @@ impl FuseFilesystem {
             return Err(err::not_writable(&path));
         }
         let process = self.process_from(req);
-        self.dispatch_path_op(&path, op_fn, Some(process.clone()))?;
+        let dispatched = self.dispatch_path_op(&path, op_fn, Some(process.clone()))?;
+
+        // Ephemeral path: an `on_create` callback contributed a node for
+        // `name`. Bind it to a fresh inode and register the node in the
+        // per-inode state so `flush` / `getattr` can reach its
+        // capabilities without going back through the chain.
+        if let Some(node) = dispatched.nodes.find(name).cloned() {
+            let ino = self.ensure_inode(dir_path, name, parent);
+            self.inode_state.set_ephemeral_node(ino, node.clone());
+            return Ok(Some((ino, node)));
+        }
+
         self.resolve_inode(dir_path, name, parent, Some(process))
     }
 
@@ -277,7 +333,15 @@ impl FuseFilesystem {
     ///
     /// Combines the inode map lookup and chain dispatch into a single call.
     /// Returns `Ok(None)` if the inode is unknown or the node no longer exists.
+    ///
+    /// Ephemeral inodes short-circuit: their node is held in
+    /// [`InodeState`](super::inode_state::InodeState) and the chain lookup
+    /// is deliberately hidden (so stat/ls don't see the endpoint), so we
+    /// return the stashed node directly.
     pub(super) fn resolve_node_for_inode(&self, ino: u64) -> Result<Option<NamedNode>> {
+        if let Some(node) = self.inode_state.ephemeral_node(ino) {
+            return Ok(Some(node));
+        }
         let Some(entry) = self.inodes.get(ino) else {
             return Ok(None);
         };

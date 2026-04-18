@@ -4,7 +4,7 @@ use color_eyre::eyre::Result;
 use extension::RouteExtension;
 
 use crate::path_utils::PathExt;
-use crate::router::pipeline::route::{HandlerFn, LookupFn, OpGuard, ReaddirFn, RouteCtx};
+use crate::router::pipeline::route::{CreateFn, HandlerFn, LookupFn, OpGuard, ReaddirFn, RouteCtx};
 use crate::router::{NamedNode, Next, Op, Request};
 
 pub mod extension;
@@ -25,6 +25,7 @@ pub struct RouteTree<T> {
     handler: Option<HandlerFn<T>>,
     on_readdir: Vec<ReaddirFn<T>>,
     on_lookup: Vec<LookupFn<T>>,
+    on_create: Vec<CreateFn<T>>,
     on_op: Vec<(OpGuard, HandlerFn<T>)>,
 }
 
@@ -50,6 +51,7 @@ pub struct TreeBuilder<T> {
     handler: Option<HandlerFn<T>>,
     on_readdir: Vec<ReaddirFn<T>>,
     on_lookup: Vec<LookupFn<T>>,
+    on_create: Vec<CreateFn<T>>,
     on_op: Vec<(OpGuard, HandlerFn<T>)>,
 }
 
@@ -60,6 +62,7 @@ impl<T> TreeBuilder<T> {
             handler: None,
             on_readdir: Vec::new(),
             on_lookup: Vec::new(),
+            on_create: Vec::new(),
             on_op: Vec::new(),
         }
     }
@@ -152,6 +155,28 @@ impl<T> TreeBuilder<T> {
         self
     }
 
+    /// Add an op-specific callback for `Create`. Receives the to-be-created
+    /// name as `&str`. Runs before `next`, does not manage the chain.
+    /// Multiple callbacks are allowed.
+    ///
+    /// When the callback attaches a [`NamedNode`] (with [`Writable`]) to
+    /// `req.nodes`, the FUSE bridge treats the create as an ephemeral
+    /// write-only session: the node's writable receives buffered writes on
+    /// flush, and no entry persists in the inode map after release. This
+    /// is the canonical way to expose write-only virtual endpoints whose
+    /// presence should remain hidden from readdir/lookup.
+    ///
+    /// [`NamedNode`]: crate::router::node::NamedNode
+    /// [`Writable`]: crate::router::node::Writable
+    #[must_use]
+    pub fn on_create(
+        mut self,
+        f: impl Fn(&T, &RouteCtx, &mut Request, &str) -> Result<()> + Send + Sync + 'static,
+    ) -> Self {
+        self.on_create.push(Box::new(f));
+        self
+    }
+
     /// Add an op-guarded handler. When the tree dispatches to this level
     /// and `guard(req.op())` returns `true`, the handler runs with full
     /// chain control (it receives `next` and decides whether to continue).
@@ -209,6 +234,7 @@ impl<T> TreeBuilder<T> {
             handler: self.handler,
             on_readdir: self.on_readdir,
             on_lookup: self.on_lookup,
+            on_create: self.on_create,
             on_op: self.on_op,
         };
         tree.dedup_dirs();
@@ -260,6 +286,7 @@ impl<T> RouteTree<T> {
         self.entries.extend(other.entries);
         self.on_readdir.extend(other.on_readdir);
         self.on_lookup.extend(other.on_lookup);
+        self.on_create.extend(other.on_create);
         self.on_op.extend(other.on_op);
         if other.handler.is_some() {
             self.handler = other.handler;
@@ -448,6 +475,12 @@ impl<T> RouteTree<T> {
                     f(provider, ctx, req)?;
                 }
                 req.nodes.retain(|n| n.name() == name);
+            }
+            Op::Create { name } if !self.on_create.is_empty() => {
+                let name = name.clone();
+                for f in &self.on_create {
+                    f(provider, ctx, req, &name)?;
+                }
             }
             _ => {}
         }

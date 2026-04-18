@@ -41,6 +41,14 @@ pub type ReaddirFn<T> = Box<dyn Fn(&T, &RouteCtx, &mut Request) -> Result<()> + 
 /// nodes without managing `next`.
 pub type LookupFn<T> = Box<dyn Fn(&T, &RouteCtx, &mut Request, &str) -> Result<()> + Send + Sync>;
 
+/// Boxed callback for `Create` — receives the to-be-created name, contributes
+/// a node (with `Writable`) without managing `next`. When the callback attaches
+/// a node to `req.nodes`, the FUSE bridge treats the create as an ephemeral
+/// write-only session: the node carries the [`Writable`](crate::router::node::Writable)
+/// that receives the buffered write on flush, and no entry persists in the inode
+/// map after release.
+pub type CreateFn<T> = Box<dyn Fn(&T, &RouteCtx, &mut Request, &str) -> Result<()> + Send + Sync>;
+
 /// Predicate for op-guarded dispatch — tests whether the current [`Op`]
 /// should be handled by the associated handler.
 ///

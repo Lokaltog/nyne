@@ -18,7 +18,7 @@ use color_eyre::eyre::Result;
 
 use super::FuseFilesystem;
 use crate::err;
-use crate::router::{AffectedFiles, DirEntry, Filesystem, Metadata, Op, ReadContext, WriteContext};
+use crate::router::{AffectedFiles, DirEntry, Filesystem, Metadata, Op, ReadContext};
 
 impl Filesystem for FuseFilesystem {
     fn source_dir(&self) -> &Path { self.backing_fs.source_dir() }
@@ -56,27 +56,20 @@ impl Filesystem for FuseFilesystem {
     }
 
     fn write_file(&self, path: &Path, content: &[u8]) -> Result<AffectedFiles> {
-        let affected = self
-            .resolve_named(path)?
-            .writable()
-            .ok_or_else(|| err::not_writable(path))?
-            .write(
-                &WriteContext {
-                    path,
-                    fs: self.backing_fs.as_ref(),
-                },
-                content,
-            )?;
-
-        self.notify_change(&affected);
-        Ok(affected)
+        self.write_via_node(path, &self.resolve_named(path)?, content)
     }
 
     fn rename(&self, from: &Path, to: &Path) -> Result<()> { self.dispatch_rename_op(from, to, None) }
 
-    fn remove(&self, path: &Path) -> Result<()> { self.dispatch_path_op(path, |name| Op::Remove { name }, None) }
+    fn remove(&self, path: &Path) -> Result<()> {
+        self.dispatch_path_op(path, |name| Op::Remove { name }, None).map(|_| ())
+    }
 
-    fn create_file(&self, path: &Path) -> Result<()> { self.dispatch_path_op(path, |name| Op::Create { name }, None) }
+    fn create_file(&self, path: &Path) -> Result<()> {
+        self.dispatch_path_op(path, |name| Op::Create { name }, None).map(|_| ())
+    }
 
-    fn mkdir(&self, path: &Path) -> Result<()> { self.dispatch_path_op(path, |name| Op::Mkdir { name }, None) }
+    fn mkdir(&self, path: &Path) -> Result<()> {
+        self.dispatch_path_op(path, |name| Op::Mkdir { name }, None).map(|_| ())
+    }
 }
