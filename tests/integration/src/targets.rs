@@ -26,7 +26,7 @@ pub mod rust {
 /// LSP target with broad call-graph coverage.
 pub mod lsp {
     /// Path to the target Rust file (relative to mount root).
-    pub const FILE: &str = "nyne/src/router/provider.rs";
+    pub const FILE: &str = "nyne/src/router/pipeline/provider.rs";
     /// Widely-implemented trait referenced from every plugin crate.
     pub const SYMBOL: &str = "Provider";
 }
