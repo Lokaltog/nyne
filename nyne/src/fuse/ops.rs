@@ -23,7 +23,7 @@ use fuser::{
 use rustix::fs::statvfs;
 use tracing::{debug, info, trace, warn};
 
-use super::attrs::{BLKSIZE, GENERATION, TTL, file_kind_to_fuse, make_attr};
+use super::attrs::{BLKSIZE, GENERATION, TTL, file_kind_to_fuse, make_attr, resolve_attr_ttl};
 use super::handles::{OpenMode, WriteOutcome};
 use super::inode_map::{InodeEntry, ROOT_INODE};
 use super::mode::{PermissionsExt, WRITE_BITS};
@@ -69,6 +69,12 @@ impl FuseFilesystem {
     /// [`BLKSIZE`] for readable virtual files with unknown size. Write-only
     /// nodes (no `Readable`) report size 0. Used by `readdirplus` where
     /// reading content for every entry is too expensive.
+    ///
+    /// **TTL** is sourced from the node's [`CachePolicy`] when set
+    /// (`NoCache` → `Duration::ZERO`, `Ttl(d)` → `d`); otherwise
+    /// (`Default`) it falls back to a per-file-type heuristic: real
+    /// files get [`TTL`] (1s), virtual nodes get `Duration::ZERO` to
+    /// force kernel re-validation on every access.
     pub(super) fn node_attr(&self, ino: u64, node: &NamedNode, req: &Request) -> (fuser::FileAttr, Duration) {
         // Real files: use backing filesystem metadata for accurate size/mtime.
         if let Some(backing) = node.readable().and_then(|r| r.backing_path())
@@ -86,7 +92,7 @@ impl FuseFilesystem {
                     }),
                     req,
                 ),
-                TTL,
+                resolve_attr_ttl(node.cache_policy(), TTL),
             );
         }
 
@@ -97,8 +103,6 @@ impl FuseFilesystem {
         // would otherwise gate writes on a prior read. This is what makes
         // batch edit action files under `edit/{op}` writable without a
         // preceding read.
-        // TTL=0 forces the kernel to re-validate on every access, ensuring
-        // resolve_attr can provide accurate just-in-time data.
         let kind = FileKind::from(node.kind());
         (
             make_attr(
@@ -112,7 +116,7 @@ impl FuseFilesystem {
                 node.timestamps(),
                 req,
             ),
-            Duration::ZERO,
+            resolve_attr_ttl(node.cache_policy(), Duration::ZERO),
         )
     }
 

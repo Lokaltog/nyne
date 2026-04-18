@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use fuser::{FileType, Generation, INodeNo, Request};
 
+use crate::router::CachePolicy;
 use crate::types::Timestamps;
 use crate::types::file_kind::FileKind;
 
@@ -67,3 +68,23 @@ pub(super) fn make_attr(
         flags: 0,
     }
 }
+
+/// Translate a node's [`CachePolicy`] into the kernel `entry_valid` /
+/// `attr_valid` TTL for FUSE replies.
+///
+/// SSOT for "policy → kernel TTL". Used by all attr-producing FUSE
+/// paths (lookup, getattr, readdirplus, create, mkdir).
+///
+/// - [`CachePolicy::Default`] → `default` (caller-supplied per-file-type fallback).
+/// - [`CachePolicy::NoCache`] → [`Duration::ZERO`] (kernel re-validates every access).
+/// - [`CachePolicy::Ttl`] → the policy duration (kernel caches for that long).
+pub(super) const fn resolve_attr_ttl(policy: CachePolicy, default: Duration) -> Duration {
+    match policy {
+        CachePolicy::Default => default,
+        CachePolicy::NoCache => Duration::ZERO,
+        CachePolicy::Ttl(d) => d,
+    }
+}
+
+#[cfg(test)]
+mod tests;
