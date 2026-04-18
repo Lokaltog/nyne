@@ -15,7 +15,7 @@
 //! crate -- a non-trivial cross-reference graph that requires real
 //! rust-analyzer indexing to populate.
 
-use nyne_integration_tests::targets::lsp::{FILE, SYMBOL};
+use nyne_integration_tests::targets::lsp::{FILE, METHOD_FILE, METHOD_SYMBOL, SYMBOL};
 use nyne_integration_tests::{NyneMount, assert_contains, assert_ok, mount};
 use rstest::rstest;
 
@@ -26,13 +26,24 @@ use rstest::rstest;
 /// `#[once]`). Nothing in the harness pre-warms the LSP server -- if
 /// the gate is not parking the read on `wait_ready`, content arrives
 /// empty and the `assert_contains("plugins/")` fails.
+///
+/// `CALLERS.md` and `DEPS.md` anchor on a concrete `Provider::accept`
+/// impl ([`METHOD_FILE`] / [`METHOD_SYMBOL`]) — a trait declaration
+/// itself has no callers and no dependencies, so those nodes target a
+/// method instead. `REFERENCES.md` and `IMPLEMENTATION.md` stay on the
+/// trait, which is referenced and implemented across every plugin.
 #[rstest]
-#[case::callers_md("CALLERS.md")]
-#[case::deps_md("DEPS.md")]
-#[case::references_md("REFERENCES.md")]
-#[case::implementation_md("IMPLEMENTATION.md")]
-fn t_400_cold_md_contains_indexed_content(mount: NyneMount, #[case] node: &str) {
-    let content = mount.read(&format!("{FILE}@/symbols/{SYMBOL}@/{node}"));
+#[case::callers_md("CALLERS.md", METHOD_FILE, METHOD_SYMBOL)]
+#[case::deps_md("DEPS.md", METHOD_FILE, METHOD_SYMBOL)]
+#[case::references_md("REFERENCES.md", FILE, SYMBOL)]
+#[case::implementation_md("IMPLEMENTATION.md", FILE, SYMBOL)]
+fn t_400_cold_md_contains_indexed_content(
+    mount: NyneMount,
+    #[case] node: &str,
+    #[case] file: &str,
+    #[case] symbol: &str,
+) {
+    let content = mount.read(&format!("{file}@/symbols/{symbol}@/{node}"));
     assert_contains(&content, "plugins/");
     assert_contains(&content, ".rs");
 }
@@ -89,9 +100,21 @@ fn t_402_concurrent_cold_reads_all_indexed(mount: NyneMount) {
 /// background progress between reads would re-park `wait_ready` and
 /// the subsequent assertions would either time out or surface empty
 /// content.
+///
+/// `CALLERS.md` / `DEPS.md` target the concrete `Provider::accept`
+/// impl (a trait declaration has no callers/deps); `REFERENCES.md` /
+/// `IMPLEMENTATION.md` target the `Provider` trait itself.
 #[rstest]
 fn t_403_sequential_reads_stay_ready(mount: NyneMount) {
-    for node in ["CALLERS.md", "REFERENCES.md", "IMPLEMENTATION.md", "DEPS.md"] {
-        assert_contains(&mount.read(&format!("{FILE}@/symbols/{SYMBOL}@/{node}")), "plugins/");
+    for (node, file, symbol) in [
+        ("CALLERS.md", METHOD_FILE, METHOD_SYMBOL),
+        ("DEPS.md", METHOD_FILE, METHOD_SYMBOL),
+        ("REFERENCES.md", FILE, SYMBOL),
+        ("IMPLEMENTATION.md", FILE, SYMBOL),
+    ] {
+        assert_contains(
+            &mount.read(&format!("{file}@/symbols/{symbol}@/{node}")),
+            "plugins/",
+        );
     }
 }

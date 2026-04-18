@@ -24,9 +24,27 @@ pub mod rust {
 }
 
 /// LSP target with broad call-graph coverage.
+///
+/// Two anchor points:
+///
+/// - [`SYMBOL`] — `Provider` trait declaration. Has many `references` and
+///   `implementation` entries across `plugins/`, but as a trait declaration
+///   it has **no callers and no dependencies** (only its methods do). Use
+///   this for `REFERENCES.md` / `IMPLEMENTATION.md` / `DECLARATION.md` /
+///   `DEFINITION.md` / `DOC.md` / rename / actions.
+/// - [`METHOD_FILE`] + [`METHOD_SYMBOL`] — a concrete `Provider::accept`
+///   impl with both incoming callers and outgoing deps that include
+///   `plugins/` paths. Use this for `CALLERS.md` / `DEPS.md`.
 pub mod lsp {
     /// Path to the target Rust file (relative to mount root).
     pub const FILE: &str = "nyne/src/router/pipeline/provider.rs";
     /// Widely-implemented trait referenced from every plugin crate.
     pub const SYMBOL: &str = "Provider";
+
+    /// Path to the file containing [`METHOD_SYMBOL`].
+    pub const METHOD_FILE: &str = "plugins/cache/src/provider/mod.rs";
+    /// Concrete `Provider::accept` impl with both callers and dependencies
+    /// that span `plugins/` — usable for both `CALLERS.md` and `DEPS.md`
+    /// gating assertions.
+    pub const METHOD_SYMBOL: &str = "Provider_for_CacheProvider@/accept";
 }
