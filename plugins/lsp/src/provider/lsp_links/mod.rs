@@ -11,22 +11,20 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use color_eyre::eyre::Result;
 use lsp_types::SymbolInformation;
 use nyne::path_utils::PathExt;
 use nyne::router::{CachePolicy, NamedNode, Node};
 use nyne_companion::Companion;
 use nyne_source::{
-    DecomposedSource, DecompositionCache, Fragment, SourcePaths, SyntaxRegistry, find_fragment, find_fragment_at_line,
+    DecomposedSource, DecompositionCache, Fragment, SourcePaths, SyntaxRegistry, find_fragment_at_line,
 };
 
-use crate::provider::content::{Target, actions, query_lsp_targets};
-use crate::session::handle::{Handle, LspQuery};
-use crate::session::manager::Manager;
+use crate::provider::content::Target;
+use crate::session::handle::Handle;
 use crate::session::uri::uri_to_file_path;
 
 /// Resolved fragment context: shared decomposition, the fragment, and its LSP handle.
-type FragmentContext = (Arc<DecomposedSource>, Fragment, Arc<Handle>);
+pub type FragmentContext = (Arc<DecomposedSource>, Fragment, Arc<Handle>);
 
 /// Shared source services needed by LSP symlink resolution.
 pub struct SourceCtx<'a> {
@@ -67,7 +65,7 @@ fn fallback_line_link(companion: &Companion, rel_path: &str, target_line: u32, b
 /// Build the base path for the symlink directory.
 ///
 /// Layout: `<source_file>@/symbols/<frag1>@/.../<fragN>@/<lsp_dir>`
-fn build_symlink_base(
+pub fn build_symlink_base(
     companion: &Companion,
     source_file: &Path,
     fragment_path: &[String],
@@ -99,70 +97,18 @@ fn target_link_name(target: &Target) -> String {
     }
 }
 
-/// Resolve a fragment and its LSP handle from a symbol path.
-///
-/// Shared preamble for LSP directory resolvers: validates the file has a
-/// decomposer, retrieves the decomposition, finds the fragment, and obtains
-/// the LSP handle.
-fn resolve_fragment_handle(
-    ctx: &SourceCtx<'_>,
-    lsp: &Arc<Manager>,
-    source_file: &Path,
-    fragment_path: &[String],
-) -> Result<Option<FragmentContext>> {
-    let Some(_decomposer) = ctx.syntax.decomposer_for(source_file) else {
-        return Ok(None);
-    };
-    let shared = ctx.decomposition.get(source_file)?;
-    let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
-        return Ok(None);
-    };
-    let frag = frag.clone();
-
-    let Some(lsp_handle) = Handle::for_file(lsp, source_file) else {
-        return Ok(None);
-    };
-
-    Ok(Some((shared, frag, lsp_handle)))
-}
-/// Resolve an LSP symlink directory for a symbol.
-///
-/// Called for paths like `file.rs@/symbols/Foo@/callers/`.
-/// Queries LSP, then reverse-maps each result to a symbol in the
-/// target file via tree-sitter decomposition.
-pub fn resolve_lsp_symlink_dir(
-    companion: &Companion,
-    ctx: &SourceCtx<'_>,
-    lsp: &Arc<Manager>,
-    source_file: &Path,
-    fragment_path: &[String],
-    lsp_dir: &str,
-) -> Result<Option<Vec<NamedNode>>> {
-    let Some((shared, frag, lsp_handle)) = resolve_fragment_handle(ctx, lsp, source_file, fragment_path)? else {
-        return Ok(None);
-    };
-
-    let query = lsp_handle
-        .over_lines(frag.line_range(&shared.rope))
-        .with_position(&shared.source, frag.span.name_byte_offset);
-    let targets = query_lsp_targets(&query, lsp_dir)?;
-
-    if targets.is_empty() {
-        return Ok(Some(Vec::new()));
-    }
-
-    let base = build_symlink_base(companion, source_file, fragment_path, lsp_dir, ctx.symbols_dir);
-    let nodes = build_target_nodes(companion, ctx, &targets, &base);
-    Ok(Some(nodes))
-}
-
 /// Convert LSP targets into deduplicated symlink nodes.
 ///
 /// Targets carry project-relative paths (overlay root already stripped by
 /// [`QueryResult::into_targets`]). Each target is reverse-mapped to a symbol
 /// in the target file via tree-sitter decomposition, producing symlinks.
 /// Falls back to line-slice links when decomposition is unavailable.
-fn build_target_nodes(companion: &Companion, ctx: &SourceCtx<'_>, targets: &[Target], base: &Path) -> Vec<NamedNode> {
+pub fn build_target_nodes(
+    companion: &Companion,
+    ctx: &SourceCtx<'_>,
+    targets: &[Target],
+    base: &Path,
+) -> Vec<NamedNode> {
     let mut nodes = Vec::new();
     let mut seen = HashSet::new();
 
@@ -182,27 +128,6 @@ fn build_target_nodes(companion: &Companion, ctx: &SourceCtx<'_>, targets: &[Tar
     }
 
     nodes
-}
-
-/// Resolve code actions for a symbol and build bare file nodes.
-///
-/// Returns the resolved actions alongside the bare `.diff` nodes so
-/// callers can use [`actions::find_action_diff`] on lookup/remove.
-pub fn resolve_actions_dir(
-    ctx: &SourceCtx<'_>,
-    lsp: &Arc<Manager>,
-    source_file: &Path,
-    fragment_path: &[String],
-) -> Result<Option<(Vec<actions::ResolvedAction>, LspQuery)>> {
-    let Some((shared, frag, lsp_handle)) = resolve_fragment_handle(ctx, lsp, source_file, fragment_path)? else {
-        return Ok(None);
-    };
-
-    let query = lsp_handle
-        .over_lines(frag.line_range(&shared.rope))
-        .with_position(&shared.source, frag.span.name_byte_offset);
-    let resolved = actions::resolve_code_actions(&query);
-    Ok(Some((resolved, query)))
 }
 
 /// Convert LSP workspace symbol results into VFS symlinks.

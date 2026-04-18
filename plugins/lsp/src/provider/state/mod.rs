@@ -5,7 +5,7 @@ use std::sync::Arc;
 use color_eyre::eyre::{Result, eyre};
 use nyne::router::{Filesystem, NamedNode, Next, NodeKind, Request, RouteCtx};
 use nyne::templates::{HandleBuilder, TemplateGlobals, TemplateHandle};
-use nyne_companion::CompanionRequest;
+use nyne_companion::{Companion, CompanionRequest};
 use nyne_diff::{DiffCapable, DiffRequest};
 use nyne_source::{DecompositionCache, FragmentResolver, SourcePaths, SyntaxRegistry, find_fragment};
 use strum::IntoEnumIterator;
@@ -13,8 +13,8 @@ use strum::IntoEnumIterator;
 use super::lsp_links;
 use crate::plugin::config::vfs::Vfs;
 use crate::provider::content::rename::{FileRenameDiff, RenameDiff, SymbolRename};
-use crate::provider::content::{Feature, Handles, actions};
-use crate::session::handle::Handle;
+use crate::provider::content::{Feature, Handles, actions, query_lsp_targets};
+use crate::session::handle::{Handle, LspQuery};
 use crate::session::manager::Manager;
 
 /// Shared state for LSP extension callbacks and the provider.
@@ -33,7 +33,7 @@ pub struct LspState {
 }
 impl LspState {
     /// Build a [`SourceCtx`] from shared services.
-    pub(crate) fn source_ctx(&self) -> lsp_links::SourceCtx<'_> {
+    fn source_ctx(&self) -> lsp_links::SourceCtx<'_> {
         lsp_links::SourceCtx {
             syntax: &self.syntax,
             decomposition: &self.decomposition,
@@ -182,13 +182,14 @@ impl LspState {
     /// Fragment readdir callback — contributes LSP directories and handles sub-routes.
     ///
     /// Registered as an `on_readdir` callback on [`SourceExtensions::fragment_path`].
-    #[allow(clippy::unnecessary_wraps, clippy::excessive_nesting)]
+    ///
     /// Fires after source's own readdir callback, so source-contributed directory
     /// nodes are already present in `req.nodes` (used by [`attach_renameables`]).
     ///
     /// Sub-routes: if the last path segment is a known LSP directory (actions/,
     /// callers/, etc.), dispatches to the appropriate sub-route handler instead
     /// of contributing fragment-level children.
+    #[allow(clippy::unnecessary_wraps, clippy::excessive_nesting)]
     pub(crate) fn fragment_readdir(&self, ctx: &RouteCtx, req: &mut Request) -> Result<()> {
         let Some(path_param) = ctx.param("path") else {
             return Ok(());
@@ -198,26 +199,17 @@ impl LspState {
             return Ok(());
         };
 
-        let source_ctx = self.source_ctx();
-
         if let Some(lsp_dir) = resolved.sub_route {
             let nodes = if lsp_dir == self.vfs.dir.actions {
-                lsp_links::resolve_actions_dir(&source_ctx, &self.lsp, &resolved.source_file, resolved.frag_segments)
+                self.resolve_actions_dir(&resolved.source_file, resolved.frag_segments)
                     .ok()
                     .flatten()
                     .map(|(resolved_actions, _query)| actions::build_action_nodes(&resolved_actions))
             } else {
                 req.companion().cloned().and_then(|c| {
-                    lsp_links::resolve_lsp_symlink_dir(
-                        &c,
-                        &source_ctx,
-                        &self.lsp,
-                        &resolved.source_file,
-                        resolved.frag_segments,
-                        lsp_dir,
-                    )
-                    .ok()
-                    .flatten()
+                    self.resolve_symlink_dir(&c, &resolved.source_file, resolved.frag_segments, lsp_dir)
+                        .ok()
+                        .flatten()
                 })
             };
             if let Some(nodes) = nodes {
@@ -243,17 +235,12 @@ impl LspState {
             return Ok(());
         };
 
-        let source_ctx = self.source_ctx();
-
         match resolved.sub_route {
             // Sub-route: actions/ lookup/remove — set DiffCapable for the diff middleware.
             Some(actions_dir) if actions_dir == self.vfs.dir.actions => {
-                if let Ok(Some((resolved_actions, query))) = lsp_links::resolve_actions_dir(
-                    &source_ctx,
-                    &self.lsp,
-                    &resolved.source_file,
-                    resolved.frag_segments,
-                ) && let Some(diff) = actions::find_action_diff(&resolved_actions, name, &query)
+                if let Ok(Some((resolved_actions, query))) =
+                    self.resolve_actions_dir(&resolved.source_file, resolved.frag_segments)
+                    && let Some(diff) = actions::find_action_diff(&resolved_actions, name, &query)
                 {
                     req.set_diff_source(diff, Arc::clone(&self.fs));
                 }
@@ -267,14 +254,8 @@ impl LspState {
             // Sub-route: {lsp_dir}/ lookup — resolve symlink by name.
             Some(lsp_dir) =>
                 if let Some(companion) = req.companion().cloned()
-                    && let Ok(Some(nodes)) = lsp_links::resolve_lsp_symlink_dir(
-                        &companion,
-                        &source_ctx,
-                        &self.lsp,
-                        &resolved.source_file,
-                        resolved.frag_segments,
-                        lsp_dir,
-                    )
+                    && let Ok(Some(nodes)) =
+                        self.resolve_symlink_dir(&companion, &resolved.source_file, resolved.frag_segments, lsp_dir)
                     && let Some(node) = nodes.into_iter().find(|n| n.name() == name)
                 {
                     req.nodes.add(node);
@@ -428,6 +409,80 @@ impl LspState {
             });
         }
     }
+    /// Resolve a fragment's LSP context — decomposition, fragment, and LSP handle.
+    ///
+    /// Shared preamble for sub-route handlers that need to query LSP on a
+    /// specific fragment (actions/, callers/, refs/, etc.).
+    fn resolve_fragment_context(
+        &self,
+        source_file: &Path,
+        fragment_path: &[String],
+    ) -> Result<Option<lsp_links::FragmentContext>> {
+        if self.syntax.decomposer_for(source_file).is_none() {
+            return Ok(None);
+        }
+        let shared = self.decomposition.get(source_file)?;
+        let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
+            return Ok(None);
+        };
+        let frag = frag.clone();
+        let Some(handle) = Handle::for_file(&self.lsp, source_file) else {
+            return Ok(None);
+        };
+        Ok(Some((shared, frag, handle)))
+    }
+
+    /// Resolve an LSP symlink directory for a symbol (callers/, refs/, etc.).
+    ///
+    /// Queries LSP, then reverse-maps each result to a symbol in the
+    /// target file via tree-sitter decomposition. Returns `None` if the
+    /// file has no decomposer, the fragment doesn't exist, or the LSP
+    /// server is unavailable.
+    pub(crate) fn resolve_symlink_dir(
+        &self,
+        companion: &Companion,
+        source_file: &Path,
+        fragment_path: &[String],
+        lsp_dir: &str,
+    ) -> Result<Option<Vec<NamedNode>>> {
+        let Some((shared, frag, lsp_handle)) = self.resolve_fragment_context(source_file, fragment_path)? else {
+            return Ok(None);
+        };
+
+        let query = lsp_handle
+            .over_lines(frag.line_range(&shared.rope))
+            .with_position(&shared.source, frag.span.name_byte_offset);
+        let targets = query_lsp_targets(&query, lsp_dir)?;
+
+        if targets.is_empty() {
+            return Ok(Some(Vec::new()));
+        }
+
+        let source_ctx = self.source_ctx();
+        let base = lsp_links::build_symlink_base(companion, source_file, fragment_path, lsp_dir, source_ctx.symbols_dir);
+        let nodes = lsp_links::build_target_nodes(companion, &source_ctx, &targets, &base);
+        Ok(Some(nodes))
+    }
+
+    /// Resolve code actions for a symbol and build bare file nodes.
+    ///
+    /// Returns the resolved actions alongside the [`LspQuery`] so callers
+    /// can use [`actions::find_action_diff`] on lookup/remove.
+    pub(crate) fn resolve_actions_dir(
+        &self,
+        source_file: &Path,
+        fragment_path: &[String],
+    ) -> Result<Option<(Vec<actions::ResolvedAction>, LspQuery)>> {
+        let Some((shared, frag, lsp_handle)) = self.resolve_fragment_context(source_file, fragment_path)? else {
+            return Ok(None);
+        };
+        let query = lsp_handle
+            .over_lines(frag.line_range(&shared.rope))
+            .with_position(&shared.source, frag.span.name_byte_offset);
+        let resolved = actions::resolve_code_actions(&query);
+        Ok(Some((resolved, query)))
+    }
+
 }
 
 /// Split off a sub-route from the fragment path.

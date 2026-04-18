@@ -16,7 +16,7 @@
 //!
 //! These handles are lightweight and clone-friendly — multiple node
 //! readables for the same scope share cloned `LspQuery` instances.
-use std::ops::Deref;
+use std::ops::{Deref, Range as ByteRange};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -90,7 +90,7 @@ impl Handle {
     /// Position-based LSP ops (hover, references, rename, etc.) read
     /// `range.start` via [`LspQuery::position`].
     ///
-    /// Convenience shortcut for [`Self::over`]`(source, offset..offset)`.
+    /// Convenience shortcut for [`Self::over`] with `offset..offset`.
     pub(crate) fn at(self: &Arc<Self>, source: &str, byte_offset: usize) -> LspQuery {
         self.over(source, byte_offset..byte_offset)
     }
@@ -100,7 +100,7 @@ impl Handle {
     /// Converts the byte range to an LSP `Range` via the supplied source.
     /// Position defaults to `range.start` — override with
     /// [`LspQuery::with_position`] for symbol-name anchors.
-    pub(crate) fn over(self: &Arc<Self>, source: &str, byte_range: std::ops::Range<usize>) -> LspQuery {
+    pub(crate) fn over(self: &Arc<Self>, source: &str, byte_range: ByteRange<usize>) -> LspQuery {
         let rope = Rope::from(source);
         let range = Range {
             start: byte_offset_to_position(&rope, byte_range.start),
@@ -131,7 +131,7 @@ impl Handle {
     /// Position defaults to `range.start`. Override with
     /// [`LspQuery::with_position`] when a symbol-name anchor is needed for
     /// positional LSP operations reached via the same query.
-    pub(crate) fn over_lines(self: &Arc<Self>, line_range: std::ops::Range<usize>) -> LspQuery {
+    pub(crate) fn over_lines(self: &Arc<Self>, line_range: ByteRange<usize>) -> LspQuery {
         let range = Range {
             start: Position {
                 line: u32::try_from(line_range.start).unwrap_or(u32::MAX),
