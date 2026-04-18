@@ -88,14 +88,26 @@ impl InodeState {
         self.ephemeral_nodes.read().get(&ino).cloned()
     }
 
-    /// Drop all per-inode state for `ino`.
+    /// Drop handle-scoped per-inode state for `ino`.
     ///
-    /// Called from `release()` when the last handle for `ino` closes,
-    /// ensuring long-running daemons don't accumulate stale entries.
+    /// Called from `release()` when the last handle for `ino` closes —
+    /// drops state that's only meaningful while a handle is open
+    /// (write locks, deferred write errors, atime override).
+    ///
+    /// **Does not** drop the ephemeral-node entry: that survives until
+    /// the kernel sends `FORGET`, so post-close stat/statx (e.g. Claude
+    /// Code's `creat → write → close → statx` pattern) still resolves
+    /// the path while the kernel holds the dentry.
     pub(super) fn evict(&self, ino: u64) {
         self.write_locks.write().remove(&ino);
         self.write_errors.write().remove(&ino);
         self.atime_overrides.write().remove(&ino);
-        self.ephemeral_nodes.write().remove(&ino);
     }
+
+    /// Drop the ephemeral node entry for `ino`.
+    ///
+    /// Called from `forget()` when the kernel drops the inode from its
+    /// dentry/attr cache — the entry is no longer reachable via path
+    /// lookup, so it's safe to free.
+    pub(super) fn evict_ephemeral(&self, ino: u64) { self.ephemeral_nodes.write().remove(&ino); }
 }

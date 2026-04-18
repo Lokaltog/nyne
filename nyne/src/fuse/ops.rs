@@ -714,7 +714,16 @@ impl Filesystem for FuseFilesystem {
         info!(target: "nyne::fuse", "FUSE session destroyed");
     }
 
-    fn forget(&self, _req: &Request, _ino: INodeNo, _nlookup: u64) {}
+    /// Drop ephemeral-node state when the kernel evicts the dentry.
+    ///
+    /// `on_create`-attached nodes (e.g. batch-edit `edit/{op}` sinks) live
+    /// in [`super::inode_state::InodeState::ephemeral_nodes`] for as long
+    /// as the kernel holds the dentry. Once the kernel drops the inode
+    /// from its cache it sends FORGET, at which point the entry is no
+    /// longer reachable via path lookup and is safe to free. This keeps
+    /// post-close `statx` working (release happens before the kernel
+    /// drops the dentry) while still preventing unbounded growth.
+    fn forget(&self, _req: &Request, ino: INodeNo, _nlookup: u64) { self.inode_state.evict_ephemeral(u64::from(ino)); }
 
     #[expect(clippy::cast_possible_truncation, reason = "fuser API requires u32")]
     fn statfs(&self, _req: &Request, _ino: INodeNo, reply: ReplyStatfs) {

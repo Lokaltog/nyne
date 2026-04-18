@@ -151,7 +151,20 @@ impl FuseFilesystem {
     }
 
     /// Dispatch a lookup through the chain, returning the full `NamedNode`.
+    ///
+    /// Ephemeral fast-path: an `on_create`-attached node (e.g. batch-edit
+    /// `edit/{op}` sinks) stays addressable via LOOKUP for the lifetime of
+    /// its inode, even though the chain would otherwise return nothing.
+    /// This keeps the post-write `statx` succeeding when an intervening
+    /// `notify_change` invalidates an ancestor dentry (e.g. the companion
+    /// namespace cascade) and forces the kernel to re-walk the path.
+    /// `release()` evicts the ephemeral entry, restoring sink semantics.
     pub(super) fn lookup_node(&self, dir: &Path, name: &str, process: Option<Process>) -> Result<Option<NamedNode>> {
+        if let Some(ino) = self.inodes.find_inode(dir, name)
+            && let Some(node) = self.inode_state.ephemeral_node(ino)
+        {
+            return Ok(Some(node));
+        }
         let mut req = Request::new(dir.to_path_buf(), Op::Lookup { name: name.to_owned() }).with_opt_process(process);
         self.chain.dispatch(&mut req)?;
         Ok(req.nodes.drain().into_iter().next())

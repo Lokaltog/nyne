@@ -275,9 +275,16 @@ impl Writable for StageWritable {
         };
         self.staging
             .stage(self.source_file.clone(), self.fragment_path.clone(), self.kind, content);
-        // Return the source file so the cache generation bumps and
-        // staged.diff's CachedReadable is evicted on next read.
-        Ok(vec![self.source_file.clone()])
+        // Empty: the source file isn't actually mutated by staging — the
+        // mutation happens at apply time (via `rm staged.diff`). Returning
+        // the source path here would trip `notify_change` into invalidating
+        // the file's companion namespace dentry mid-write, cascading the
+        // kernel into dropping the freshly-created sink endpoint dentry
+        // and failing the post-write `statx` Claude Code performs after
+        // every Write tool call. `staged.diff` itself uses
+        // `CachePolicy::NoCache` so it always re-renders from the live
+        // staging snapshot — no cache invalidation needed.
+        Ok(vec![])
     }
 }
 
