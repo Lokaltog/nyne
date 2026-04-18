@@ -62,11 +62,13 @@ impl Filesystem for FuseFilesystem {
     fn rename(&self, from: &Path, to: &Path) -> Result<()> { self.dispatch_rename_op(from, to, None) }
 
     fn remove(&self, path: &Path) -> Result<()> {
-        self.dispatch_path_op(path, |name| Op::Remove { name }, None).map(|_| ())
+        self.dispatch_path_op(path, |name| Op::Remove { name }, None)
+            .map(|_| ())
     }
 
     fn create_file(&self, path: &Path) -> Result<()> {
-        self.dispatch_path_op(path, |name| Op::Create { name }, None).map(|_| ())
+        self.dispatch_path_op(path, |name| Op::Create { name }, None)
+            .map(|_| ())
     }
 
     fn mkdir(&self, path: &Path) -> Result<()> {

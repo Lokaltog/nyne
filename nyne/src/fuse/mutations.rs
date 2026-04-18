@@ -58,7 +58,9 @@ impl FuseFilesystem {
             reply,
             Self::try_node_then_chain(
                 || self.remove_node(&path),
-                || self.dispatch_path_op(&path, |name| Op::Remove { name }, Some(self.process_from(req))).map(|_| ()),
+                || self
+                    .dispatch_path_op(&path, |name| Op::Remove { name }, Some(self.process_from(req)))
+                    .map(|_| ()),
             ),
             parent,
             "remove failed"
