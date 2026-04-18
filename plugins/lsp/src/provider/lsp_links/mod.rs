@@ -8,21 +8,16 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Duration;
 
 use lsp_types::SymbolInformation;
 use nyne::path_utils::PathExt;
 use nyne::router::{CachePolicy, NamedNode, Node};
 use nyne_companion::Companion;
-use nyne_source::{DecomposedSource, DecompositionCache, Fragment, SourcePaths, SyntaxRegistry, find_fragment_at_line};
+use nyne_source::{DecompositionCache, SourcePaths, SyntaxRegistry, find_fragment_at_line};
 
 use crate::provider::content::Target;
-use crate::session::handle::Handle;
 use crate::session::uri::uri_to_file_path;
-
-/// Resolved fragment context: shared decomposition, the fragment, and its LSP handle.
-pub type FragmentContext = (Arc<DecomposedSource>, Fragment, Arc<Handle>);
 
 /// Shared source services needed by LSP symlink resolution.
 pub struct SourceCtx<'a> {

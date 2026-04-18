@@ -410,15 +410,16 @@ impl LspState {
         }
     }
 
-    /// Resolve a fragment's LSP context — decomposition, fragment, and LSP handle.
+    /// Build an [`LspQuery`] scoped to a fragment.
     ///
-    /// Shared preamble for sub-route handlers that need to query LSP on a
-    /// specific fragment (actions/, callers/, refs/, etc.).
-    fn resolve_fragment_context(
-        &self,
-        source_file: &Path,
-        fragment_path: &[String],
-    ) -> Result<Option<lsp_links::FragmentContext>> {
+    /// Shared preamble for sub-route handlers that query LSP on a specific
+    /// fragment (actions/, callers/, refs/, etc.). The returned query's
+    /// range spans the fragment's line extent; its position is anchored at
+    /// the fragment's name token.
+    ///
+    /// Returns `None` if the file has no decomposer, the fragment doesn't
+    /// exist, or the LSP server is unavailable.
+    fn fragment_query(&self, source_file: &Path, fragment_path: &[String]) -> Result<Option<LspQuery>> {
         if self.syntax.decomposer_for(source_file).is_none() {
             return Ok(None);
         }
@@ -426,11 +427,14 @@ impl LspState {
         let Some(frag) = find_fragment(&shared.decomposed, fragment_path) else {
             return Ok(None);
         };
-        let frag = frag.clone();
         let Some(handle) = Handle::for_file(&self.lsp, source_file) else {
             return Ok(None);
         };
-        Ok(Some((shared, frag, handle)))
+        Ok(Some(
+            handle
+                .over_lines(frag.line_range(&shared.rope))
+                .with_position(&shared.source, frag.span.name_byte_offset),
+        ))
     }
 
     /// Resolve an LSP symlink directory for a symbol (callers/, refs/, etc.).
@@ -446,24 +450,22 @@ impl LspState {
         fragment_path: &[String],
         lsp_dir: &str,
     ) -> Result<Option<Vec<NamedNode>>> {
-        let Some((shared, frag, lsp_handle)) = self.resolve_fragment_context(source_file, fragment_path)? else {
+        let Some(query) = self.fragment_query(source_file, fragment_path)? else {
             return Ok(None);
         };
-
-        let query = lsp_handle
-            .over_lines(frag.line_range(&shared.rope))
-            .with_position(&shared.source, frag.span.name_byte_offset);
         let targets = query_lsp_targets(&query, lsp_dir)?;
-
         if targets.is_empty() {
             return Ok(Some(Vec::new()));
         }
-
         let source_ctx = self.source_ctx();
         let base =
             lsp_links::build_symlink_base(companion, source_file, fragment_path, lsp_dir, source_ctx.symbols_dir);
-        let nodes = lsp_links::build_target_nodes(companion, &source_ctx, &targets, &base);
-        Ok(Some(nodes))
+        Ok(Some(lsp_links::build_target_nodes(
+            companion,
+            &source_ctx,
+            &targets,
+            &base,
+        )))
     }
 
     /// Resolve code actions for a symbol and build bare file nodes.
@@ -475,12 +477,9 @@ impl LspState {
         source_file: &Path,
         fragment_path: &[String],
     ) -> Result<Option<(Vec<actions::ResolvedAction>, LspQuery)>> {
-        let Some((shared, frag, lsp_handle)) = self.resolve_fragment_context(source_file, fragment_path)? else {
+        let Some(query) = self.fragment_query(source_file, fragment_path)? else {
             return Ok(None);
         };
-        let query = lsp_handle
-            .over_lines(frag.line_range(&shared.rope))
-            .with_position(&shared.source, frag.span.name_byte_offset);
         let resolved = actions::resolve_code_actions(&query);
         Ok(Some((resolved, query)))
     }
