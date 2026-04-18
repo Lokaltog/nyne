@@ -152,16 +152,16 @@ impl FuseFilesystem {
 
     /// Dispatch a lookup through the chain, returning the full `NamedNode`.
     ///
-    /// Ephemeral fast-path: an `on_create`-attached node (e.g. batch-edit
-    /// `edit/{op}` sinks) stays addressable via LOOKUP for the lifetime of
-    /// its inode, even though the chain would otherwise return nothing.
-    /// This keeps the post-write `statx` succeeding when an intervening
-    /// `notify_change` invalidates an ancestor dentry (e.g. the companion
-    /// namespace cascade) and forces the kernel to re-walk the path.
-    /// `release()` evicts the ephemeral entry, restoring sink semantics.
+    /// Bound-node fast path: any inode that was given a node at allocation
+    /// time (via [`InodeMap::bind_node`] — currently only `on_create`
+    /// sinks like batch-edit `edit/{op}`) keeps that node addressable
+    /// for the binding's TTL, after which the binding lazily clears and
+    /// the chain dispatch decides. This makes `on_create`-materialized
+    /// sinks survive `notify_change` cascades long enough for the post-
+    /// write `statx` (and subsequent writes within the TTL window).
     pub(super) fn lookup_node(&self, dir: &Path, name: &str, process: Option<Process>) -> Result<Option<NamedNode>> {
         if let Some(ino) = self.inodes.find_inode(dir, name)
-            && let Some(node) = self.inode_state.ephemeral_node(ino)
+            && let Some(node) = self.inodes.bound_node(ino)
         {
             return Ok(Some(node));
         }
@@ -177,20 +177,12 @@ impl FuseFilesystem {
 
     /// Flush written content for an inode.
     ///
-    /// Ephemeral inodes (created by a router `on_create` callback) carry
-    /// their [`Writable`](crate::router::node::Writable) directly on the
-    /// stored [`NamedNode`]; we drive it without going back through the
-    /// chain, since the path is intentionally hidden from lookup.
-    ///
-    /// Regular inodes flow through the [`Filesystem`] trait, which
-    /// resolves the target node via the chain.
+    /// Resolves the target node via [`Filesystem::write_file`] → the
+    /// usual `lookup_node` path. Bound `on_create` nodes are surfaced by
+    /// `lookup_node`'s bound-node fast path, so a single codepath covers
+    /// both regular and `on_create`-materialized writables.
     pub(super) fn flush_content(&self, ino: u64, data: &[u8]) -> Result<()> {
-        let path = self.inode_path(ino)?;
-        if let Some(node) = self.inode_state.ephemeral_node(ino) {
-            self.write_via_node(&path, &node, data)?;
-            return Ok(());
-        }
-        Filesystem::write_file(self, &path, data)?;
+        Filesystem::write_file(self, &self.inode_path(ino)?, data)?;
         Ok(())
     }
 
@@ -286,12 +278,14 @@ impl FuseFilesystem {
     /// the new entry to `(inode, node)` for the FUSE reply.
     ///
     /// If a router `on_create` callback attached a node to `req.nodes` for
-    /// the to-be-created name, the node is registered as **ephemeral** —
-    /// bound to a fresh inode for the lifetime of the
-    /// `create → write → release` cycle, then evicted from the inode map
-    /// on release so subsequent lookups return `ENOENT`. Provider-backed
-    /// real-file creates (e.g. the `fs` plugin) fall through to
-    /// [`resolve_inode`](Self::resolve_inode) as before.
+    /// the to-be-created name (e.g. batch-edit `edit/{op}` sinks), the
+    /// node is bound to the inode via [`InodeMap::bind_node`] with the
+    /// TTL declared by its [`CachePolicy`]. Subsequent `lookup_node`
+    /// calls return that bound node directly until the TTL elapses,
+    /// after which the binding lazily clears and lookups fall through
+    /// to the chain (which doesn't surface the sink) → `ENOENT`.
+    /// Provider-backed real-file creates (e.g. the `fs` plugin) attach
+    /// no node and fall through to [`resolve_inode`](Self::resolve_inode).
     pub(super) fn dispatch_and_resolve_path_op(
         &self,
         req: &fuser::Request,
@@ -307,13 +301,9 @@ impl FuseFilesystem {
         let process = self.process_from(req);
         let dispatched = self.dispatch_path_op(&path, op_fn, Some(process.clone()))?;
 
-        // Ephemeral path: an `on_create` callback contributed a node for
-        // `name`. Bind it to a fresh inode and register the node in the
-        // per-inode state so `flush` / `getattr` can reach its
-        // capabilities without going back through the chain.
         if let Some(node) = dispatched.nodes.find(name).cloned() {
             let ino = self.ensure_inode(dir_path, name, parent);
-            self.inode_state.set_ephemeral_node(ino, node.clone());
+            self.inodes.bind_node(ino, node.clone());
             return Ok(Some((ino, node)));
         }
 
@@ -347,18 +337,40 @@ impl FuseFilesystem {
     /// Combines the inode map lookup and chain dispatch into a single call.
     /// Returns `Ok(None)` if the inode is unknown or the node no longer exists.
     ///
-    /// Ephemeral inodes short-circuit: their node is held in
-    /// [`InodeState`](super::inode_state::InodeState) and the chain lookup
-    /// is deliberately hidden (so stat/ls don't see the endpoint), so we
-    /// return the stashed node directly.
+    /// `lookup_node` consults [`InodeMap::bound_node`] first, so inodes
+    /// allocated with a bound node (e.g. `on_create` sinks) resolve
+    /// without round-tripping through the chain.
     pub(super) fn resolve_node_for_inode(&self, ino: u64) -> Result<Option<NamedNode>> {
-        if let Some(node) = self.inode_state.ephemeral_node(ino) {
-            return Ok(Some(node));
-        }
         let Some(entry) = self.inodes.get(ino) else {
             return Ok(None);
         };
         self.lookup_node(&entry.dir_path, &entry.name, None)
+    }
+
+    /// Lifecycle + bound-node TTL bookkeeping for a freshly opened handle.
+    ///
+    /// Single SSOT for the open-side `Lifecycle::on_open` + `InodeMap::touch`
+    /// pair. Called from both [`super::ops::FuseFilesystem::open`] (regular
+    /// FUSE OPEN) and [`super::mutations::FuseFilesystem::do_create`]
+    /// (CREATE atomically opens, bypassing the OPEN op).
+    pub(super) fn notify_open(&self, ino: u64, node: &NamedNode) {
+        if let Some(lc) = node.lifecycle() {
+            lc.on_open();
+        }
+        self.inodes.touch(ino);
+    }
+
+    /// Lifecycle + bound-node TTL bookkeeping for a fully released handle.
+    ///
+    /// Mirrors [`Self::notify_open`] for the close side: invokes the
+    /// node's `Lifecycle::on_close` and refreshes the bound-node TTL so
+    /// the binding outlives the post-release `statx` window. No-op for
+    /// nodes without a `Lifecycle` and inodes without a bound TTL.
+    pub(super) fn notify_close(&self, ino: u64, node: &NamedNode) {
+        if let Some(lc) = node.lifecycle() {
+            lc.on_close();
+        }
+        self.inodes.touch(ino);
     }
 
     /// Notify providers of changed source files and invalidate kernel caches.

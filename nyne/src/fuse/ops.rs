@@ -146,11 +146,8 @@ impl FuseFilesystem {
     /// Allocate or find an existing inode for a (`dir_path`, name) pair.
     pub(super) fn ensure_inode(&self, dir_path: &Path, name: &str, parent_inode: u64) -> u64 {
         self.inodes.find_inode(dir_path, name).unwrap_or_else(|| {
-            self.inodes.allocate(InodeEntry {
-                dir_path: dir_path.to_path_buf(),
-                name: name.to_owned(),
-                parent_inode,
-            })
+            self.inodes
+                .allocate(InodeEntry::new(dir_path.to_path_buf(), name.to_owned(), parent_inode))
         })
     }
 
@@ -477,11 +474,8 @@ impl Filesystem for FuseFilesystem {
             fuse_err!(reply, Errno::EACCES, ino, "open: write rejected (not writable)");
         }
 
-        // Lifecycle open hook.
-        if let Some(ref n) = node
-            && let Some(lc) = n.lifecycle()
-        {
-            lc.on_open();
+        if let Some(ref n) = node {
+            self.notify_open(ino, n);
         }
 
         // Buffered path: load content into handle table.
@@ -581,9 +575,8 @@ impl Filesystem for FuseFilesystem {
         if !self.handles.has_handles_for_inode(ino) {
             if let Some(entry) = self.inodes.get(ino)
                 && let Ok(Some(node)) = self.lookup_node(&entry.dir_path, &entry.name, None)
-                && let Some(lc) = node.lifecycle()
             {
-                lc.on_close();
+                self.notify_close(ino, &node);
             }
 
             // Evict per-inode state to prevent unbounded growth.
@@ -714,16 +707,7 @@ impl Filesystem for FuseFilesystem {
         info!(target: "nyne::fuse", "FUSE session destroyed");
     }
 
-    /// Drop ephemeral-node state when the kernel evicts the dentry.
-    ///
-    /// `on_create`-attached nodes (e.g. batch-edit `edit/{op}` sinks) live
-    /// in [`super::inode_state::InodeState::ephemeral_nodes`] for as long
-    /// as the kernel holds the dentry. Once the kernel drops the inode
-    /// from its cache it sends FORGET, at which point the entry is no
-    /// longer reachable via path lookup and is safe to free. This keeps
-    /// post-close `statx` working (release happens before the kernel
-    /// drops the dentry) while still preventing unbounded growth.
-    fn forget(&self, _req: &Request, ino: INodeNo, _nlookup: u64) { self.inode_state.evict_ephemeral(u64::from(ino)); }
+    fn forget(&self, _req: &Request, _ino: INodeNo, _nlookup: u64) {}
 
     #[expect(clippy::cast_possible_truncation, reason = "fuser API requires u32")]
     fn statfs(&self, _req: &Request, _ino: INodeNo, reply: ReplyStatfs) {

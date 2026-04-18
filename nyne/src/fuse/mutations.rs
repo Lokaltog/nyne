@@ -20,11 +20,16 @@ impl FuseFilesystem {
     ///
     /// Dispatches `Op::Create` through the chain, then opens the new file
     /// and returns a handle with `FOPEN_DIRECT_IO`.
+    ///
+    /// FUSE CREATE atomically opens a file handle (it doesn't go through
+    /// the OPEN op), so the lifecycle `on_open` hook and bound-node TTL
+    /// touch are invoked here directly.
     pub(super) fn do_create(&self, req: &Request, parent: INodeNo, name: &OsStr, flags: i32, reply: ReplyCreate) {
         let (parent, dir_path, name) = prepare_mutation!(self, parent, name, reply, "create");
         match self.dispatch_and_resolve_path_op(req, parent, &dir_path, &name, |name| Op::Create { name }) {
             Ok(Some((ino, node))) => {
                 let fh = self.handles.open(ino, Arc::from([]), flags);
+                self.notify_open(ino, &node);
                 let (attr, ttl) = self.node_attr(ino, &node, req);
                 reply.created(&ttl, &attr, GENERATION, FileHandle(fh), FopenFlags::FOPEN_DIRECT_IO);
             }

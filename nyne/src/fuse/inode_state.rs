@@ -25,8 +25,6 @@ use std::time::SystemTime;
 
 use parking_lot::{Mutex, RwLock};
 
-use crate::router::NamedNode;
-
 /// Per-inode mutable state bundle.
 ///
 /// Every field is keyed by inode number and populated lazily on first
@@ -36,11 +34,6 @@ pub struct InodeState {
     write_locks: RwLock<HashMap<u64, Arc<Mutex<()>>>>,
     write_errors: RwLock<HashMap<u64, String>>,
     atime_overrides: RwLock<HashMap<u64, SystemTime>>,
-    /// Inodes allocated for the lifetime of a single `create → write →
-    /// release` cycle. The stored [`NamedNode`] carries the writable
-    /// targeted by the buffered write; the inode is evicted from the
-    /// inode map on `release`, so subsequent lookups return `ENOENT`.
-    ephemeral_nodes: RwLock<HashMap<u64, NamedNode>>,
 }
 
 impl InodeState {
@@ -73,41 +66,13 @@ impl InodeState {
     /// Look up the atime override for `ino`, if any.
     pub(super) fn atime(&self, ino: u64) -> Option<SystemTime> { self.atime_overrides.read().get(&ino).copied() }
 
-    /// Record the ephemeral node created by an `on_create` callback,
-    /// making its capabilities visible to `getattr` and `flush` for
-    /// the lifetime of the inode.
-    pub(super) fn set_ephemeral_node(&self, ino: u64, node: NamedNode) {
-        self.ephemeral_nodes.write().insert(ino, node);
-    }
-
-    /// Look up the ephemeral node for `ino`, if any.
+    /// Drop all per-inode state for `ino`.
     ///
-    /// Returns a clone — [`NamedNode`] is cheap to clone (capabilities
-    /// are held behind `Arc`).
-    pub(super) fn ephemeral_node(&self, ino: u64) -> Option<NamedNode> {
-        self.ephemeral_nodes.read().get(&ino).cloned()
-    }
-
-    /// Drop handle-scoped per-inode state for `ino`.
-    ///
-    /// Called from `release()` when the last handle for `ino` closes —
-    /// drops state that's only meaningful while a handle is open
-    /// (write locks, deferred write errors, atime override).
-    ///
-    /// **Does not** drop the ephemeral-node entry: that survives until
-    /// the kernel sends `FORGET`, so post-close stat/statx (e.g. Claude
-    /// Code's `creat → write → close → statx` pattern) still resolves
-    /// the path while the kernel holds the dentry.
+    /// Called from `release()` when the last handle for `ino` closes,
+    /// ensuring long-running daemons don't accumulate stale entries.
     pub(super) fn evict(&self, ino: u64) {
         self.write_locks.write().remove(&ino);
         self.write_errors.write().remove(&ino);
         self.atime_overrides.write().remove(&ino);
     }
-
-    /// Drop the ephemeral node entry for `ino`.
-    ///
-    /// Called from `forget()` when the kernel drops the inode from its
-    /// dentry/attr cache — the entry is no longer reachable via path
-    /// lookup, so it's safe to free.
-    pub(super) fn evict_ephemeral(&self, ino: u64) { self.ephemeral_nodes.write().remove(&ino); }
 }

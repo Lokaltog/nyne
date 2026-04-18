@@ -74,18 +74,10 @@ fn seeded_inodes<'a>(paths: impl IntoIterator<Item = &'a (&'a str, &'a str)>) ->
     let mut by_path: HashMap<PathBuf, u64> = HashMap::new();
 
     for &(dir, name) in paths {
-        let parent_ino = *dir_inodes.entry(dir.to_owned()).or_insert_with(|| {
-            inodes.allocate(InodeEntry {
-                dir_path: PathBuf::new(),
-                name: dir.to_owned(),
-                parent_inode: ROOT_INODE,
-            })
-        });
-        let file_ino = inodes.allocate(InodeEntry {
-            dir_path: PathBuf::from(dir),
-            name: name.to_owned(),
-            parent_inode: parent_ino,
-        });
+        let parent_ino = *dir_inodes
+            .entry(dir.to_owned())
+            .or_insert_with(|| inodes.allocate(InodeEntry::new(PathBuf::new(), dir.to_owned(), ROOT_INODE)));
+        let file_ino = inodes.allocate(InodeEntry::new(PathBuf::from(dir), name.to_owned(), parent_ino));
         by_path.insert(PathBuf::from(dir).join(name), file_ino);
     }
     (inodes, by_path)
