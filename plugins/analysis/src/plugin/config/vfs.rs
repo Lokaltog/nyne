@@ -11,18 +11,10 @@ pub struct Vfs {
 
 impl TemplateGlobals for Vfs {}
 
-/// Configurable file names for the analysis plugin.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct VfsFiles {
-    /// Per-symbol analysis hints file name.
-    pub analysis: String,
-}
-
-impl Default for VfsFiles {
-    fn default() -> Self {
-        Self {
-            analysis: "ANALYSIS.md".into(),
-        }
+nyne::vfs_struct! {
+    /// Configurable file names for the analysis plugin.
+    pub struct VfsFiles {
+        /// Per-symbol analysis hints file name.
+        analysis = "ANALYSIS.md",
     }
 }

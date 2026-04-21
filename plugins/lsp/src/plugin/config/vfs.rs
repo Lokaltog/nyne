@@ -28,42 +28,22 @@ pub struct Vfs {
 
 impl TemplateGlobals for Vfs {}
 
-/// Configurable directory names for the LSP plugin.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct VfsDirs {
-    /// Code actions directory inside fragment directories.
-    pub actions: String,
-
-    /// Rename directory (companion root for file-level, fragment for symbol-level).
-    pub rename: String,
-
-    /// Workspace symbol search directory at companion root.
-    pub search: String,
-}
-
-impl Default for VfsDirs {
-    fn default() -> Self {
-        Self {
-            actions: "actions".into(),
-            rename: "rename".into(),
-            search: "search".into(),
-        }
+nyne::vfs_struct! {
+    /// Configurable directory names for the LSP plugin.
+    pub struct VfsDirs {
+        /// Code actions directory inside fragment directories.
+        actions = "actions",
+        /// Rename directory (companion root for file-level, fragment for symbol-level).
+        rename = "rename",
+        /// Workspace symbol search directory at companion root.
+        search = "search",
     }
 }
 
-/// Configurable file names for the LSP plugin.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct VfsFiles {
-    /// Per-file diagnostics file at companion root.
-    pub diagnostics: String,
-}
-
-impl Default for VfsFiles {
-    fn default() -> Self {
-        Self {
-            diagnostics: "DIAGNOSTICS.md".into(),
-        }
+nyne::vfs_struct! {
+    /// Configurable file names for the LSP plugin.
+    pub struct VfsFiles {
+        /// Per-file diagnostics file at companion root.
+        diagnostics = "DIAGNOSTICS.md",
     }
 }

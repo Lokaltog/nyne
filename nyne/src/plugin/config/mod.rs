@@ -114,5 +114,56 @@ impl NyneConfig {
     }
 }
 
+/// Declare a plugin VFS-path config struct with serde defaults derived from
+/// the field list.
+///
+/// Emits `#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize)]`
+/// + `#[serde(default, deny_unknown_fields)]` + a `Default` impl that maps
+/// each field to the provided string literal. Eliminates the paired
+/// struct-definition + Default-impl boilerplate common to every plugin's
+/// `VfsDirs` / `VfsFiles` config.
+///
+/// ```ignore
+/// nyne::vfs_struct! {
+///     /// Configurable directory names for the git plugin.
+///     pub struct VfsDirs {
+///         /// Top-level git content directory.
+///         git = "git",
+///         /// Branch listing subdirectory.
+///         branches = "branches",
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! vfs_struct {
+    (
+        $(#[$meta:meta])*
+        $vis:vis struct $Name:ident {
+            $(
+                $(#[$field_meta:meta])*
+                $field:ident = $default:literal
+            ),* $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize)]
+        #[serde(default, deny_unknown_fields)]
+        $vis struct $Name {
+            $(
+                $(#[$field_meta])*
+                pub $field: ::std::string::String,
+            )*
+        }
+
+        impl ::std::default::Default for $Name {
+            fn default() -> Self {
+                Self {
+                    $( $field: $default.into(), )*
+                }
+            }
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests;
