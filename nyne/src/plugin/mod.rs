@@ -8,7 +8,7 @@
 //! # Registration
 //!
 //! ```ignore
-//! use nyne::plugin::{Plugin, PLUGINS};
+//! use nyne::plugin::Plugin;
 //!
 //! struct MyPlugin;
 //!
@@ -19,10 +19,7 @@
 //!     }
 //! }
 //!
-//! #[linkme::distributed_slice(PLUGINS)]
-//! fn my_plugin() -> Box<dyn Plugin> {
-//!     Box::new(MyPlugin)
-//! }
+//! nyne::register_plugin!(MyPlugin);
 //! ```
 
 use linkme::distributed_slice;
@@ -213,6 +210,28 @@ macro_rules! plugin_config {
         fn resolved_config(&self, config: &$crate::config::NyneConfig) -> Option<toml::Value> {
             <$config_ty as $crate::plugin::PluginConfig>::from_section(config.plugin.get(self.id())).to_value()
         }
+    };
+}
+/// Register a plugin struct into the global [`PLUGINS`] distributed slice.
+///
+/// Emits the `#[distributed_slice(PLUGINS)]` + [`PluginFactory`] boilerplate
+/// every plugin crate needs. Call once per plugin crate, passing a
+/// zero-argument-constructible plugin struct (the typical unit-struct form).
+///
+/// ```ignore
+/// struct GitPlugin;
+///
+/// impl nyne::plugin::Plugin for GitPlugin { /* ... */ }
+///
+/// nyne::register_plugin!(GitPlugin);
+/// ```
+#[macro_export]
+macro_rules! register_plugin {
+    ($Plugin:ident) => {
+        /// Link-time registration of this crate's plugin into the global `PLUGINS` slice.
+        #[allow(unsafe_code)]
+        #[::linkme::distributed_slice($crate::plugin::PLUGINS)]
+        static __NYNE_PLUGIN_FACTORY: $crate::plugin::PluginFactory = || ::std::boxed::Box::new($Plugin);
     };
 }
 

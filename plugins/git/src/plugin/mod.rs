@@ -7,9 +7,8 @@ pub mod config;
 
 use std::sync::Arc;
 
-use linkme::distributed_slice;
 use nyne::ExtensionCounts;
-use nyne::plugin::{PluginConfig, PluginFactory};
+use nyne::plugin::PluginConfig;
 use nyne::prelude::*;
 use nyne::router::Provider;
 use nyne_companion::CompanionContextExt;
@@ -97,7 +96,4 @@ impl Plugin for GitPlugin {
     }
 }
 
-/// Plugin factory registered via `linkme` distributed slice.
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static GIT_PLUGIN: PluginFactory = || Box::new(GitPlugin);
+nyne::register_plugin!(GitPlugin);

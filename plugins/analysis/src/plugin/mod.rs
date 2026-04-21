@@ -4,9 +4,8 @@ pub mod config;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use linkme::distributed_slice;
 use nyne::ActivationContext;
-use nyne::plugin::{PLUGINS, Plugin, PluginConfig, PluginFactory};
+use nyne::plugin::{Plugin, PluginConfig};
 use nyne::router::{NamedNode, Provider, Request, RouteCtx};
 use nyne::templates::{HandleBuilder, TemplateGlobals, TemplateHandle};
 use nyne_companion::CompanionRequest as _;
@@ -91,7 +90,4 @@ impl Plugin for AnalysisPlugin {
     }
 }
 
-/// Link-time registration of the analysis plugin into the global `PLUGINS` slice.
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static ANALYSIS_PLUGIN: PluginFactory = || Box::new(AnalysisPlugin);
+nyne::register_plugin!(AnalysisPlugin);

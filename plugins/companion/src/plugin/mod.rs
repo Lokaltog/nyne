@@ -1,9 +1,7 @@
 pub mod config;
 use std::sync::Arc;
 
-use linkme::distributed_slice;
 use nyne::path_filter::PathFilter;
-use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use nyne::router::{Provider, RouteTree};
 
@@ -38,6 +36,4 @@ impl Plugin for CompanionPlugin {
     }
 }
 
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static COMPANION_PLUGIN: PluginFactory = || Box::new(CompanionPlugin);
+nyne::register_plugin!(CompanionPlugin);

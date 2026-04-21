@@ -26,5 +26,4 @@ impl Plugin for NynePlugin {
     }
 }
 
-#[linkme::distributed_slice(PLUGINS)]
-fn nyne_plugin() -> Box<dyn Plugin> { Box::new(NynePlugin) }
+nyne::register_plugin!(NynePlugin);

@@ -1,5 +1,3 @@
-use linkme::distributed_slice;
-use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use nyne::router::{GenerationMap, Provider};
 
@@ -15,6 +13,4 @@ impl Plugin for CachePlugin {
     }
 }
 
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static CACHE_PLUGIN: PluginFactory = || Box::new(CachePlugin);
+nyne::register_plugin!(CachePlugin);

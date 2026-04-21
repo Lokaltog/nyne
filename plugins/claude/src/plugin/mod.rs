@@ -4,8 +4,7 @@ pub mod config;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use linkme::distributed_slice;
-use nyne::plugin::{PLUGINS, Plugin, PluginConfig, PluginFactory};
+use nyne::plugin::{Plugin, PluginConfig};
 use nyne::router::Provider;
 use nyne::{ActivationContext, ScriptEntry};
 use nyne_source::dominant_ext;
@@ -46,7 +45,4 @@ impl Plugin for ClaudePlugin {
     }
 }
 
-/// Link-time registration of the claude plugin into the global `PLUGINS` slice.
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static CLAUDE_PLUGIN: PluginFactory = || Box::new(ClaudePlugin);
+nyne::register_plugin!(ClaudePlugin);

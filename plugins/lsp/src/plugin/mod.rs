@@ -5,9 +5,8 @@ use std::sync::Arc;
 use std::thread;
 
 use color_eyre::eyre::Result;
-use linkme::distributed_slice;
 use nyne::ActivationContext;
-use nyne::plugin::{PLUGINS, Plugin, PluginConfig, PluginFactory};
+use nyne::plugin::{Plugin, PluginConfig};
 use nyne::router::Provider;
 use nyne_companion::CompanionContextExt;
 use nyne_source::{DecompositionCache, SourceContextExt, SourcePaths, SyntaxRegistry};
@@ -118,10 +117,4 @@ impl Plugin for LspPlugin {
     }
 }
 
-/// Link-time registration of the LSP plugin into the global `PLUGINS` slice.
-///
-/// The binary's `main.rs` pulls in this crate with `use nyne_lsp as _;`,
-/// which is enough for `linkme` to include this static in the final binary.
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static LSP_PLUGIN: PluginFactory = || Box::new(LspPlugin);
+nyne::register_plugin!(LspPlugin);

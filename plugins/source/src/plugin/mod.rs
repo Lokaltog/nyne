@@ -2,9 +2,7 @@ pub mod config;
 use std::path::Path;
 use std::sync::Arc;
 
-use linkme::distributed_slice;
 use nyne::ActivationContext;
-use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use nyne::router::{Filesystem, NodeKind, Provider, Request, RouteCtx};
 use nyne::templates::{HandleBuilder, TemplateHandle};
@@ -127,15 +125,7 @@ impl Plugin for SourcePlugin {
     }
 }
 
-/// Link-time registration of the source plugin into the global `PLUGINS` slice.
-///
-/// The binary's `main.rs` pulls in this crate with `use nyne_source as _;`,
-/// which is enough for `linkme` to include this static in the final binary.
-/// At startup, the framework iterates `PLUGINS` and calls each factory to
-/// obtain a `Box<dyn Plugin>`.
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static SOURCE_PLUGIN: PluginFactory = || Box::new(SourcePlugin);
+nyne::register_plugin!(SourcePlugin);
 
 /// Register `@/edit/staged.diff` into the mount-wide companion extension point.
 ///

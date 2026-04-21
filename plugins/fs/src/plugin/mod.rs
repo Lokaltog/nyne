@@ -1,5 +1,3 @@
-use linkme::distributed_slice;
-use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use nyne::router::Provider;
 
@@ -17,6 +15,4 @@ impl Plugin for FsPlugin {
     }
 }
 
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static FS_PLUGIN: PluginFactory = || Box::new(FsPlugin);
+nyne::register_plugin!(FsPlugin);

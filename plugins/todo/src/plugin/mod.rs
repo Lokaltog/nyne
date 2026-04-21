@@ -3,8 +3,7 @@ pub mod config;
 
 use std::sync::Arc;
 
-use linkme::distributed_slice;
-use nyne::plugin::{PluginConfig, PluginFactory};
+use nyne::plugin::PluginConfig;
 use nyne::prelude::*;
 use nyne::router::Provider;
 use nyne::templates::{HandleBuilder, TemplateHandle};
@@ -80,7 +79,4 @@ impl Plugin for TodoPlugin {
     }
 }
 
-/// Link-time registration of the todo plugin into the global `PLUGINS` slice.
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static TODO_PLUGIN: PluginFactory = || Box::new(TodoPlugin);
+nyne::register_plugin!(TodoPlugin);

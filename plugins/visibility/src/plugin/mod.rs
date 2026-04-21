@@ -2,9 +2,7 @@ mod config;
 use std::iter;
 use std::sync::Arc;
 
-use linkme::distributed_slice;
 use nyne::ControlCommand;
-use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use nyne::router::Provider;
 
@@ -68,6 +66,4 @@ impl Plugin for VisibilityPlugin {
     }
 }
 
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static VISIBILITY_PLUGIN: PluginFactory = || Box::new(VisibilityPlugin);
+nyne::register_plugin!(VisibilityPlugin);

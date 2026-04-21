@@ -1,5 +1,3 @@
-use linkme::distributed_slice;
-use nyne::plugin::PluginFactory;
 use nyne::prelude::*;
 use nyne::router::Provider;
 
@@ -15,6 +13,4 @@ impl Plugin for SlicePlugin {
     }
 }
 
-#[allow(unsafe_code)]
-#[distributed_slice(PLUGINS)]
-static SLICE_PLUGIN: PluginFactory = || Box::new(SlicePlugin);
+nyne::register_plugin!(SlicePlugin);
