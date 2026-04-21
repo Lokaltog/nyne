@@ -63,4 +63,3 @@ pub(super) fn bold_headers<const N: usize>(labels: [&str; N]) -> [Cell; N] {
 
 #[cfg(test)]
 mod tests;
-

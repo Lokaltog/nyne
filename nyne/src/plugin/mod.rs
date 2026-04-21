@@ -225,7 +225,12 @@ pub fn sort_by_deps(plugins: Vec<Box<dyn Plugin>>) -> Result<Vec<Box<dyn Plugin>
     let topo = crate::topo::sort(
         &plugins,
         |p| p.provider_graph().iter().map(|&(id, _)| id).collect(),
-        |p| p.provider_graph().iter().flat_map(|(_, deps)| deps.iter().copied()).collect(),
+        |p| {
+            p.provider_graph()
+                .iter()
+                .flat_map(|(_, deps)| deps.iter().copied())
+                .collect()
+        },
     )
     .map_err(|c| color_eyre::eyre::eyre!("plugin dependency cycle involving {:?}", plugins[c.cycle_item].id()))?;
 

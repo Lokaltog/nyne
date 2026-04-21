@@ -124,7 +124,12 @@ fn sort_by_deps(providers: &[&Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provider
         .iter()
         .filter_map(|&idx| {
             let provider = providers.get(idx)?;
-            Some((topo.depths[idx], provider.priority(), provider.id(), Arc::clone(provider)))
+            Some((
+                topo.depths[idx],
+                provider.priority(),
+                provider.id(),
+                Arc::clone(provider),
+            ))
         })
         .collect();
 
@@ -137,4 +142,3 @@ fn sort_by_deps(providers: &[&Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provider
 
     Ok(result.into_iter().map(|(_, _, _, p)| p).collect())
 }
-

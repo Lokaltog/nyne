@@ -9,12 +9,13 @@ struct Item {
 }
 
 fn item(keys: &[&'static str], deps: &[&'static str]) -> Item {
-    Item { keys: keys.to_vec(), deps: deps.to_vec() }
+    Item {
+        keys: keys.to_vec(),
+        deps: deps.to_vec(),
+    }
 }
 
-fn run(items: &[Item]) -> Result<Toposort, Cycle> {
-    sort(items, |i| i.keys.clone(), |i| i.deps.clone())
-}
+fn run(items: &[Item]) -> Result<Toposort, Cycle> { sort(items, |i| i.keys.clone(), |i| i.deps.clone()) }
 
 /// Order-assertion cases: scenarios where toposort produces a unique,
 /// deterministic order and we can pin down both `order` and `depths`.
@@ -88,5 +89,10 @@ fn sort_produces_expected_order_and_depths(
 )]
 fn cycle_reports_item_in_bounds(#[case] items: Vec<Item>, #[case] item_count: usize) {
     let err = run(&items).expect_err("expected cycle");
-    assert!(err.cycle_item < item_count, "cycle_item {} out of bounds (items: {})", err.cycle_item, item_count);
+    assert!(
+        err.cycle_item < item_count,
+        "cycle_item {} out of bounds (items: {})",
+        err.cycle_item,
+        item_count
+    );
 }

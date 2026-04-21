@@ -95,7 +95,10 @@ fn list_processes(term: &Term, id: &str) -> Result<()> {
             Cell::new(humantime::format_rfc3339_seconds(proc.start_time)).add_attribute(Attribute::Dim),
         ]);
     }
-    term.write_line(&output::render_or_empty(&table, format!("No attached processes for session {id:?}.")))?;
+    term.write_line(&output::render_or_empty(
+        &table,
+        format!("No attached processes for session {id:?}."),
+    ))?;
 
     Ok(())
 }

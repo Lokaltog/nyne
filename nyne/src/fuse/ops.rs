@@ -56,7 +56,10 @@ impl FuseFilesystem {
         if ino == ROOT_INODE {
             return Some((self.root_attr(req), TTL));
         }
-        let node = self.resolve_node_for_inode(ino, Some(self.process_from(req))).ok().flatten()?;
+        let node = self
+            .resolve_node_for_inode(ino, Some(self.process_from(req)))
+            .ok()
+            .flatten()?;
         Some(self.node_attr(ino, &node, req))
     }
 

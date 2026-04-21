@@ -16,6 +16,8 @@
 //! **Caveat:** Prose mentions like "the todo list" without a colon are
 //! intentionally excluded to avoid false positives.
 
+use nyne_source::parse_tag_suffix;
+
 use super::kinds;
 use crate::TsNode;
 use crate::engine::{Hint, Rule, Severity, register_analysis_rule};
@@ -59,18 +61,6 @@ impl Rule for TodoFixme {
     }
 }
 
-/// Given text immediately after a tag keyword (e.g. the `": fix this"` in
-/// `TODO: fix this`), skip an optional `(annotation)` and require a colon.
-///
-/// Returns `None` if no colon follows the tag -- bare mentions are not actionable.
-fn parse_tag_suffix(after_tag: &str) -> Option<&str> {
-    let rest = if after_tag.starts_with('(') {
-        after_tag.find(')').map_or(after_tag, |pos| &after_tag[pos + 1..])
-    } else {
-        after_tag
-    };
-    Some(rest.strip_prefix(':')?.trim())
-}
 /// Find a marker keyword followed by a colon and extract the trailing text.
 ///
 /// Returns `None` if the marker is absent or not followed by a colon.

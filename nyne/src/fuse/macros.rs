@@ -88,7 +88,6 @@ macro_rules! reply_enotsup {
     };
 }
 
-
 pub(crate) use ensure_dir_path;
 pub(crate) use fuse_err;
 pub(crate) use fuse_try;

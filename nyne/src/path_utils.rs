@@ -160,9 +160,7 @@ impl PathExt for Path {
         Some((inner, outer))
     }
 
-    fn extension_str(&self) -> Option<&str> {
-        self.extension()?.to_str()
-    }
+    fn extension_str(&self) -> Option<&str> { self.extension()?.to_str() }
 
     fn split_dir_name(&self) -> Option<(&Path, &str)> {
         let dir = self.parent().unwrap_or_else(|| Self::new(""));
