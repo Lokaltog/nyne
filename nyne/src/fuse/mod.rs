@@ -341,11 +341,16 @@ impl FuseFilesystem {
     /// `lookup_node` consults [`InodeMap::bound_node`] first, so inodes
     /// allocated with a bound node (e.g. `on_create` sinks) resolve
     /// without round-tripping through the chain.
-    pub(super) fn resolve_node_for_inode(&self, ino: u64) -> Result<Option<NamedNode>> {
+    ///
+    /// Pass `Some(process)` when the caller needs per-process visibility
+    /// filtering (e.g. attr resolution); `None` in contexts where the
+    /// operation semantically applies to any process (e.g. `release`,
+    /// `readlink`).
+    pub(super) fn resolve_node_for_inode(&self, ino: u64, process: Option<Process>) -> Result<Option<NamedNode>> {
         let Some(entry) = self.inodes.get(ino) else {
             return Ok(None);
         };
-        self.lookup_node(&entry.dir_path, &entry.name, None)
+        self.lookup_node(&entry.dir_path, &entry.name, process)
     }
 
     /// Lifecycle + bound-node TTL bookkeeping for a freshly opened handle.

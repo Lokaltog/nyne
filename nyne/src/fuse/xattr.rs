@@ -53,7 +53,7 @@ impl FuseFilesystem {
         }
 
         // Delegate to the node's Attributable capability.
-        let Some(node) = fuse_try!(reply, self.resolve_node_for_inode(ino), ino, "getxattr lookup failed") else {
+        let Some(node) = fuse_try!(reply, self.resolve_node_for_inode(ino, None), ino, "getxattr lookup failed") else {
             fuse_err!(reply, Errno::ENOENT, ino, "getxattr: node not found");
         };
         let Some(attr) = node.attributable() else {
@@ -71,7 +71,7 @@ impl FuseFilesystem {
 
         // Collect names from the node's Attributable capability.
         let mut names = self
-            .resolve_node_for_inode(ino)
+            .resolve_node_for_inode(ino, None)
             .ok()
             .flatten()
             .and_then(|n| n.attributable().map(Attributable::list))
@@ -96,7 +96,7 @@ impl FuseFilesystem {
         let attr_name = name.to_string_lossy();
         debug!(target: "nyne::fuse", ino, name = %attr_name, "setxattr");
 
-        let Some(node) = fuse_try!(reply, self.resolve_node_for_inode(ino), ino, "setxattr lookup failed") else {
+        let Some(node) = fuse_try!(reply, self.resolve_node_for_inode(ino, None), ino, "setxattr lookup failed") else {
             fuse_err!(reply, Errno::ENOENT, ino, "setxattr: node not found");
         };
         let Some(attr) = node.attributable() else {

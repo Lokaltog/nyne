@@ -56,10 +56,7 @@ impl FuseFilesystem {
         if ino == ROOT_INODE {
             return Some((self.root_attr(req), TTL));
         }
-        let entry = self.inodes.get(ino)?;
-        let node = self
-            .lookup_node(&entry.dir_path, &entry.name, Some(self.process_from(req)))
-            .ok()??;
+        let node = self.resolve_node_for_inode(ino, Some(self.process_from(req))).ok().flatten()?;
         Some(self.node_attr(ino, &node, req))
     }
 
@@ -573,9 +570,7 @@ impl Filesystem for FuseFilesystem {
 
         // Last-handle cleanup: lifecycle hook + per-inode state eviction.
         if !self.handles.has_handles_for_inode(ino) {
-            if let Some(entry) = self.inodes.get(ino)
-                && let Ok(Some(node)) = self.lookup_node(&entry.dir_path, &entry.name, None)
-            {
+            if let Ok(Some(node)) = self.resolve_node_for_inode(ino, None) {
                 self.notify_close(ino, &node);
             }
 
@@ -603,10 +598,7 @@ impl Filesystem for FuseFilesystem {
             return;
         }
 
-        let Some(entry) = self.inodes.get(ino) else {
-            fuse_err!(reply, Errno::ENOENT, ino, "access: inode not found");
-        };
-        let Some(node) = self.lookup_node(&entry.dir_path, &entry.name, None).ok().flatten() else {
+        let Some(node) = self.resolve_node_for_inode(ino, None).ok().flatten() else {
             fuse_err!(reply, Errno::ENOENT, ino, "access: node not found");
         };
 
@@ -627,10 +619,7 @@ impl Filesystem for FuseFilesystem {
 
     fn readlink(&self, _req: &Request, ino: INodeNo, reply: ReplyData) {
         let ino = u64::from(ino);
-        let Some(entry) = self.inodes.get(ino) else {
-            fuse_err!(reply, Errno::ENOENT, ino, "readlink: inode not found");
-        };
-        match self.lookup_node(&entry.dir_path, &entry.name, None) {
+        match self.resolve_node_for_inode(ino, None) {
             Ok(Some(node)) => match node.target() {
                 Some(target) => reply.data(target.as_os_str().as_encoded_bytes()),
                 None => reply.error(Errno::EINVAL),
