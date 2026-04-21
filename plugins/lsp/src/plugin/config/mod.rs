@@ -5,7 +5,6 @@ pub mod vfs;
 use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
-use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// Maps file extensions to LSP language identifiers.
@@ -149,8 +148,6 @@ pub struct Config {
     /// Configurable VFS directory and file names.
     pub vfs: vfs::Vfs,
 }
-impl PluginConfig for Config {}
-
 impl Default for Config {
     fn default() -> Self {
         Self {

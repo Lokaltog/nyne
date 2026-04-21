@@ -19,11 +19,13 @@ use crate::plugin::Plugin;
 /// Trait for plugin configuration structs.
 ///
 /// Provides a standard deserialization path from a layered TOML document.
-/// Implement on your config struct (requires `Default + Serialize + Deserialize`),
-/// then call `ctx.plugin_config::<Config>(self.id())` in your plugin's
-/// `activate()` to materialize the resolved config.
+/// Automatically implemented for any struct satisfying `Default + Serialize
+/// + Deserialize` via a blanket impl — your plugin config only needs the
+/// standard `#[derive(Default, Serialize, Deserialize)]` to participate.
 ///
-/// Use `nyne::plugin_config!(ConfigType)` inside your `Plugin` impl to wire
+/// Call `ctx.plugin_config::<Config>(self.id())` in your plugin's
+/// `activate()` to materialize the resolved config, and use
+/// `nyne::plugin_config!(ConfigType)` inside your `Plugin` impl to wire
 /// `default_config()` and `resolved_config()` automatically.
 pub trait PluginConfig: Default + serde::Serialize + for<'de> serde::Deserialize<'de> + Sized {
     /// Deserialize from an optional TOML section, falling back to defaults on
@@ -49,6 +51,12 @@ pub trait PluginConfig: Default + serde::Serialize + for<'de> serde::Deserialize
     /// Serialize a resolved config instance as a TOML value for `nyne config` output.
     fn to_value(&self) -> Option<toml::Value> { toml::Value::try_from(self).ok() }
 }
+/// Blanket [`PluginConfig`] for any type that satisfies the supertrait bounds.
+///
+/// Plugin config structs only need `#[derive(Default, Serialize, Deserialize)]` —
+/// the trait is implemented automatically, eliminating the boilerplate
+/// `impl PluginConfig for Config {}` stub.
+impl<T> PluginConfig for T where T: Default + serde::Serialize + for<'de> serde::Deserialize<'de> + Sized {}
 
 impl NyneConfig {
     /// Load configuration by merging layers in priority order.

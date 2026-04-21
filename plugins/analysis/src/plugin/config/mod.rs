@@ -3,7 +3,6 @@
 pub mod vfs;
 use std::collections::HashSet;
 
-use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for the code analysis engine.
@@ -46,8 +45,6 @@ impl Default for Config {
         }
     }
 }
-
-impl PluginConfig for Config {}
 
 #[cfg(test)]
 mod tests;

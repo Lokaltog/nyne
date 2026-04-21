@@ -6,7 +6,6 @@
 
 pub mod vfs;
 
-use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 const fn default_max_depth() -> usize { 5 }
@@ -44,8 +43,6 @@ impl Default for Config {
         }
     }
 }
-
-impl PluginConfig for Config {}
 
 #[cfg(test)]
 mod tests;

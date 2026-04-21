@@ -1,6 +1,5 @@
 //! Configuration for `[plugin.companion]`.
 
-use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// Companion plugin configuration.
@@ -27,5 +26,3 @@ impl Default for CompanionConfig {
         }
     }
 }
-
-impl PluginConfig for CompanionConfig {}

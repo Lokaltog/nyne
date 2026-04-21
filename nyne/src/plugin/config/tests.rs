@@ -9,8 +9,6 @@ struct Dummy {
     name: String,
 }
 
-impl PluginConfig for Dummy {}
-
 #[rstest]
 #[case::valid(toml::toml! { name = "test" }.into(), Dummy { name: "test".into() })]
 #[case::unknown_field_falls_back(toml::toml! { bogus = true }.into(), Dummy::default())]

@@ -1,6 +1,5 @@
 pub mod vfs;
 
-use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// Top-level configuration for the git plugin.
@@ -69,8 +68,6 @@ impl Default for Limits {
         }
     }
 }
-
-impl PluginConfig for Config {}
 
 #[cfg(test)]
 mod tests;

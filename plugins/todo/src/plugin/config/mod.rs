@@ -7,7 +7,6 @@
 //! first in the overview.
 
 pub mod vfs;
-use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 
 /// TODO/FIXME comment aggregation configuration.
@@ -47,8 +46,6 @@ impl Default for Config {
         }
     }
 }
-
-impl PluginConfig for Config {}
 
 #[cfg(test)]
 mod tests;

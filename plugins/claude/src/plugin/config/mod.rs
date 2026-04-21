@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, HashMap};
 
 use nyne::deep_merge;
-use nyne::plugin::PluginConfig;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator as _;
 
@@ -42,8 +41,6 @@ impl Default for Config {
         }
     }
 }
-
-impl PluginConfig for Config {}
 
 /// Per-script toggle map for Claude Code hook integration.
 ///
