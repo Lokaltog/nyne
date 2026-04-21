@@ -55,6 +55,8 @@ pub(crate) mod session;
 pub mod templates;
 /// Shared text utilities: slugification, date formatting, diffs.
 pub mod text;
+/// Generic dependency-graph topological sort (shared by provider chain + plugin lifecycle).
+pub mod topo;
 /// Shared domain types: VFS paths, file metadata, and identifiers.
 pub mod types;
 /// Filesystem watcher for real-FS change detection and cache invalidation.

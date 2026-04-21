@@ -1,11 +1,8 @@
-use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use petgraph::algo::toposort;
-use petgraph::graph::{DiGraph, NodeIndex};
 
 use crate::router::{Op, Provider, ProviderId, Request};
 
@@ -111,54 +108,23 @@ fn topological_sort(providers: &[Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provi
 }
 
 fn sort_by_deps(providers: &[&Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provider>>> {
-    let mut graph = DiGraph::<usize, ()>::new();
-    let mut id_to_idx: HashMap<ProviderId, NodeIndex> = HashMap::new();
-    let mut node_indices: Vec<NodeIndex> = Vec::new();
-
-    // Add nodes
-    for (i, p) in providers.iter().enumerate() {
-        let idx = graph.add_node(i);
-        id_to_idx.insert(p.id(), idx);
-        node_indices.push(idx);
-    }
-
-    // Add edges (dependency → dependent)
-    for (i, p) in providers.iter().enumerate() {
-        #[expect(clippy::indexing_slicing, reason = "node_indices built in lockstep with providers")]
-        let self_idx = node_indices[i];
-        for dep_id in p.dependencies() {
-            // Soft dependency: if the dependency isn't in the provider set,
-            // skip the edge. This allows partial chains (e.g. LSP without syntax).
-            let Some(&dep_idx) = id_to_idx.get(dep_id) else {
-                continue;
-            };
-            // Edge from dependency to dependent (dep must come first)
-            graph.add_edge(dep_idx, self_idx, ());
-        }
-    }
-
-    // Topological sort
-    let sorted_indices = toposort(&graph, None).map_err(|cycle| {
-        let provider_idx = graph[cycle.node_id()];
-        let id = providers.get(provider_idx).map_or("unknown", |p| p.id().as_str());
-        color_eyre::eyre::eyre!("dependency cycle detected involving provider {:?}", id)
+    let topo = crate::topo::sort(providers, |p| vec![p.id()], |p| p.dependencies().to_vec()).map_err(|c| {
+        color_eyre::eyre::eyre!(
+            "dependency cycle detected involving provider {:?}",
+            providers.get(c.cycle_item).map_or("unknown", |p| p.id().as_str())
+        )
     })?;
 
     // petgraph's toposort is deterministic but doesn't guarantee lexicographic
-    // order among siblings. We do a stable sort that preserves topological
-    // order while sorting siblings by priority then lexicographically.
-    //
-    // Approach: assign each node its topological depth (longest path from a root),
-    // then stable-sort by (depth, priority, provider_id).
-    let depths = compute_depths(&graph, &sorted_indices);
-
-    let mut result: Vec<(usize, i32, ProviderId, Arc<dyn Provider>)> = sorted_indices
+    // order among siblings. Stable-sort by (depth, priority, provider_id) to
+    // get a deterministic, priority-aware order while preserving topological
+    // validity.
+    let mut result: Vec<(usize, i32, ProviderId, Arc<dyn Provider>)> = topo
+        .order
         .iter()
-        .filter_map(|&node_idx| {
-            let provider_idx = graph[node_idx];
-            let provider = providers.get(provider_idx)?;
-            let depth = depths.get(&node_idx).copied().unwrap_or(0);
-            Some((depth, provider.priority(), provider.id(), Arc::clone(provider)))
+        .filter_map(|&idx| {
+            let provider = providers.get(idx)?;
+            Some((topo.depths[idx], provider.priority(), provider.id(), Arc::clone(provider)))
         })
         .collect();
 
@@ -172,18 +138,3 @@ fn sort_by_deps(providers: &[&Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provider
     Ok(result.into_iter().map(|(_, _, _, p)| p).collect())
 }
 
-/// Compute the depth (longest path from any root) for each node.
-fn compute_depths(graph: &DiGraph<usize, ()>, topo_order: &[NodeIndex]) -> HashMap<NodeIndex, usize> {
-    let mut depths: HashMap<NodeIndex, usize> = HashMap::new();
-
-    for &node in topo_order {
-        let depth = graph
-            .neighbors_directed(node, petgraph::Direction::Incoming)
-            .filter_map(|pred| depths.get(&pred).map(|d| d + 1))
-            .max()
-            .unwrap_or(0);
-        depths.insert(node, depth);
-    }
-
-    depths
-}

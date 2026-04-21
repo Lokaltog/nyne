@@ -222,42 +222,13 @@ macro_rules! plugin_config {
 /// then topologically sorts plugins so dependencies activate first.
 #[allow(clippy::indexing_slicing)] // graph node weights are always valid plugin indices
 pub fn sort_by_deps(plugins: Vec<Box<dyn Plugin>>) -> Result<Vec<Box<dyn Plugin>>> {
-    use std::collections::HashMap;
-
-    use petgraph::algo::toposort;
-    use petgraph::graph::DiGraph;
-
-    let mut graph = DiGraph::<usize, ()>::new();
-    let nodes: Vec<_> = (0..plugins.len()).map(|i| graph.add_node(i)).collect();
-
-    // Map provider IDs → owning plugin graph node.
-    let provider_to_node: HashMap<_, _> = plugins
-        .iter()
-        .zip(&nodes)
-        .flat_map(|(p, &node)| p.provider_graph().iter().map(move |&(id, _)| (id, node)))
-        .collect();
-
-    // Add edges: dependency plugin → dependent plugin.
-    for (p, &self_node) in plugins.iter().zip(&nodes) {
-        for dep_node in p
-            .provider_graph()
-            .iter()
-            .flat_map(|(_, deps)| deps.iter())
-            .filter_map(|d| provider_to_node.get(d))
-        {
-            if *dep_node != self_node {
-                graph.add_edge(*dep_node, self_node, ());
-            }
-        }
-    }
-
-    let sorted = toposort(&graph, None).map_err(|cycle| {
-        color_eyre::eyre::eyre!(
-            "plugin dependency cycle involving {:?}",
-            plugins[graph[cycle.node_id()]].id()
-        )
-    })?;
+    let topo = crate::topo::sort(
+        &plugins,
+        |p| p.provider_graph().iter().map(|&(id, _)| id).collect(),
+        |p| p.provider_graph().iter().flat_map(|(_, deps)| deps.iter().copied()).collect(),
+    )
+    .map_err(|c| color_eyre::eyre::eyre!("plugin dependency cycle involving {:?}", plugins[c.cycle_item].id()))?;
 
     let mut slots: Vec<_> = plugins.into_iter().map(Some).collect();
-    Ok(sorted.iter().filter_map(|&node| slots[graph[node]].take()).collect())
+    Ok(topo.order.iter().filter_map(|&i| slots[i].take()).collect())
 }
