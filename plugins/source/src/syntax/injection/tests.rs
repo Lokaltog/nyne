@@ -299,20 +299,115 @@ fn inner_full_span_does_not_extend_into_jinja2_directives() {
     );
 }
 
-/// Verifies that inner fragment `full_span` does not bleed into render expressions.
+/// Verifies that an inner fragment's own `byte_range` does not bleed into a
+/// render expression. The children-unioned `full_span` may naturally span a
+/// gap when a parent section has children on the other side of a directive —
+/// that's the expected bounding-box semantics. The invariant enforced here
+/// is stricter: each fragment's direct content range must stay within a
+/// single content region.
 #[test]
-fn inner_full_span_does_not_extend_into_render_expressions() {
-    // Render expressions ({{ var }}) create gaps in content regions just
-    // like control directives. Inner fragment spans must not bleed into them.
+fn inner_byte_range_does_not_extend_into_render_expressions() {
     let source = load_fixture("render-expression.md.j2");
     let file = decompose_j2("md", &source);
 
-    for frag in &file {
-        let extracted = &source[frag.full_span()];
+    fn check(frag: &crate::syntax::fragment::Fragment, source: &str) {
+        let extracted = &source[frag.span.byte_range.clone()];
         assert!(
             !extracted.contains("{{ variable }}"),
-            "fragment '{}' full_span bleeds into render expression: {extracted:?}",
+            "fragment '{}' byte_range bleeds into render expression: {extracted:?}",
             frag.name
         );
+        for child in &frag.children {
+            check(child, source);
+        }
     }
+
+    for frag in &file {
+        check(frag, &source);
+    }
+}
+
+// Inner-language decomposition across Jinja2 directive gaps
+//
+// Regression coverage for templates like `system-prompt.md.j2` where
+// content surrounds a `{% include %}` (or similar unpaired directive) and
+// contains markdown headings AFTER the directive. The inner markdown
+// decomposer must still produce section fragments for headings in the
+// trailing content region — not just a single preamble spanning the
+// leading region.
+
+/// Verifies that markdown headings surrounding a Jinja2 directive (include,
+/// block comment, etc.) still decompose into section fragments. Regression
+/// coverage for the tree-sitter-jinja line-comment pseudo-parse that used
+/// to drop `## heading` lines before the inner decomposer saw them.
+#[rstest]
+#[case::include_between_content("include-with-sections.md.j2")]
+#[case::block_comment_between_content("block-comment-with-sections.md.j2")]
+fn inner_sections_decompose_across_directive_gaps(#[case] fixture: &str) {
+    let source = load_fixture(fixture);
+    let file = decompose_j2("md", &source);
+
+    let section_names: Vec<&str> = file
+        .iter()
+        .filter(|f| matches!(f.kind, FragmentKind::Section { .. }))
+        .map(|f| f.name.as_str())
+        .collect();
+
+    assert!(
+        section_names.contains(&"Code Quality"),
+        "missing 'Code Quality' section in {section_names:?}"
+    );
+    assert!(
+        section_names.contains(&"Proactive Improvement"),
+        "missing 'Proactive Improvement' section in {section_names:?}"
+    );
+}
+
+/// Verifies that section fragment byte ranges still resolve to heading
+/// text in the original source, even when a Jinja2 directive precedes them.
+#[rstest]
+#[case::include_between_content("include-with-sections.md.j2")]
+#[case::block_comment_between_content("block-comment-with-sections.md.j2")]
+fn inner_sections_after_directive_have_correct_byte_ranges(#[case] fixture: &str) {
+    let source = load_fixture(fixture);
+    let file = decompose_j2("md", &source);
+
+    let sections: Vec<_> = file
+        .iter()
+        .filter(|f| matches!(f.kind, FragmentKind::Section { .. }))
+        .collect();
+
+    assert!(!sections.is_empty(), "expected at least one section fragment");
+
+    for section in &sections {
+        let extracted = &source[section.full_span()];
+        assert!(
+            extracted.contains(&section.name),
+            "section '{}' full_span does not contain heading text in original source: {extracted:?}",
+            section.name
+        );
+    }
+}
+
+/// Verifies that real `{# ... #}` block comments remain gaps (not content)
+/// even when the compound grammar also treats `#`-prefix lines as comments.
+/// The fix that unlocks `## heading` decomposition must not regress real
+/// block-comment handling.
+#[test]
+fn real_block_comments_remain_gaps_in_content() {
+    use crate::syntax::languages::jinja2::extract_template;
+    use crate::syntax::span_map::SpanMap;
+
+    let source = load_fixture("block-comment-with-sections.md.j2");
+    let extraction = extract_template(&source);
+    let (_map, inner_content) = SpanMap::build(&source, &extraction.regions);
+
+    assert!(
+        !inner_content.contains("real jinja block comment"),
+        "inner content must not include real `{{# ... #}}` block comments: {inner_content:?}"
+    );
+    assert!(
+        inner_content.contains("## Code Quality"),
+        "inner content must preserve `## heading` lines: {inner_content:?}"
+    );
 }

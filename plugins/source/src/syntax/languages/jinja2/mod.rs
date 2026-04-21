@@ -75,11 +75,23 @@ pub fn extract_template(source: &str) -> TemplateExtraction {
     let mut preamble_end: usize = 0;
 
     // The tree-sitter-jinja AST is flat: all nodes (content, control,
-    // render_expression) are direct children of `source`.
+    // render_expression, comment) are direct children of `source`.
     let mut cursor = root.walk();
     for child in root.children(&mut cursor) {
         match child.kind() {
             "content" => {
+                let range = child.byte_range();
+                if !range.is_empty() {
+                    regions.push(range);
+                }
+            }
+            // tree-sitter-jinja eagerly parses lines starting with `#` as
+            // line comments, but Jinja2's `line_comment_prefix` is disabled
+            // by default — only `{# ... #}` block comments are real comments.
+            // In injection scenarios (`.md.j2`, `.sh.j2`, etc.), lines like
+            // `## heading` or `# shebang` are inner-language content and
+            // must flow through to the inner decomposer.
+            "comment" if !is_block_comment(child, source) => {
                 let range = child.byte_range();
                 if !range.is_empty() {
                     regions.push(range);
@@ -281,6 +293,22 @@ fn is_preamble_directive(node: tree_sitter::Node<'_>, source: &str) -> bool {
         .trim_start_matches(['-', '+'])
         .trim_start();
     inner.starts_with("extends") || inner.starts_with("import") || inner.starts_with("from")
+}
+
+/// Check if a `comment` node is a real Jinja2 block comment (`{# ... #}`).
+///
+/// tree-sitter-jinja also produces `comment` nodes for lines beginning with
+/// `#` (the configurable `line_comment_prefix` feature), which Jinja2 does
+/// not treat as comments by default. Injection decomposers must distinguish
+/// real block comments (actual gaps in content) from these pseudo-comments
+/// (inner-language content like markdown headings) — so only `{#`-prefixed
+/// nodes are real comments.
+fn is_block_comment(node: tree_sitter::Node<'_>, source: &str) -> bool {
+    source
+        .get(node.byte_range())
+        .unwrap_or_default()
+        .trim_start()
+        .starts_with("{#")
 }
 
 /// Extract the identifier name and byte offset from a statement node.
