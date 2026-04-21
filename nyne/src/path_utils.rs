@@ -45,6 +45,20 @@ pub trait PathExt {
     /// ```
     fn compound_extension(&self) -> Option<(&str, &str)>;
 
+    /// Extract the path's extension as a `&str`, or `None` if absent or not UTF-8.
+    ///
+    /// Equivalent to `self.extension().and_then(|e| e.to_str())` — captures
+    /// the idiom every caller that routes on file type needs.
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use nyne::path_utils::PathExt;
+    /// assert_eq!(Path::new("main.rs").extension_str(), Some("rs"));
+    /// assert_eq!(Path::new("archive.tar.gz").extension_str(), Some("gz"));
+    /// assert_eq!(Path::new("Makefile").extension_str(), None);
+    /// ```
+    fn extension_str(&self) -> Option<&str>;
+
     /// Split into (`parent_dir`, `file_name_str`).
     ///
     /// Returns `("")` as the parent for root-level paths. Returns `None`
@@ -144,6 +158,10 @@ impl PathExt for Path {
             return None;
         }
         Some((inner, outer))
+    }
+
+    fn extension_str(&self) -> Option<&str> {
+        self.extension()?.to_str()
     }
 
     fn split_dir_name(&self) -> Option<(&Path, &str)> {

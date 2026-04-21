@@ -9,6 +9,7 @@ use std::ops::Range;
 use std::path::Path;
 use std::time::SystemTime;
 
+use nyne::path_utils::PathExt;
 use nyne::router::{Chain, Filesystem};
 use nyne::templates::TemplateEngine;
 use nyne::{ActivationContext, ScriptContext};
@@ -106,7 +107,7 @@ pub(super) fn source_rel_path(
 /// the same file.
 #[cfg(feature = "lsp")]
 pub(super) fn fetch_diagnostics_for_tool(ctx: &ScriptContext<'_>, rel: &str) -> Vec<DiagnosticRow> {
-    let Some(ext) = Path::new(rel).extension().and_then(|e| e.to_str()) else {
+    let Some(ext) = Path::new(rel).extension_str() else {
         return Vec::new();
     };
 

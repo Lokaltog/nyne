@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use nyne::path_utils::PathExt;
 use nyne::router::Filesystem;
 use nyne::templates::TemplateHandle;
 use nyne_source::{SourcePaths, SyntaxRegistry};
@@ -85,7 +86,7 @@ impl TodoState {
             .into_iter()
             .filter_map(|p| {
                 let path = PathBuf::from(p);
-                let ext = path.extension()?.to_str()?;
+                let ext = path.extension_str()?;
                 // Only include files with a registered decomposer.
                 syntax.get(ext)?;
                 Some(path)

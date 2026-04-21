@@ -198,8 +198,7 @@ impl SyntaxRegistry {
         {
             return Some(d);
         }
-        let ext = path.extension()?.to_str()?;
-        self.get(ext)
+        self.get(path.extension_str()?)
     }
 
     /// Return all registered extensions, sorted.

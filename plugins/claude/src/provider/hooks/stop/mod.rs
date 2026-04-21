@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
+use nyne::path_utils::PathExt;
 use nyne::templates::TemplateEngine;
 use nyne::{Script, ScriptContext};
 
@@ -146,7 +147,7 @@ fn extract_changed_paths(line: &str, root_prefix: &str, ignore_extensions: &[Str
 
 /// Check whether a file path has an extension in the ignore list.
 fn is_ignored_extension(path: &str, ignore_extensions: &[String]) -> bool {
-    let Some(ext) = Path::new(path).extension().and_then(|e| e.to_str()) else {
+    let Some(ext) = Path::new(path).extension_str() else {
         return false;
     };
     ignore_extensions

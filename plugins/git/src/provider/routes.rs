@@ -4,6 +4,7 @@ use std::str::from_utf8;
 use std::sync::Arc;
 
 use color_eyre::eyre::{Result, WrapErr};
+use nyne::path_utils::PathExt;
 use nyne::router::{CachePolicy, Filesystem, NamedNode, Next, Node, Op, Request, RouteCtx};
 use nyne_companion::{CompanionExtensions, CompanionRequest};
 
@@ -135,7 +136,7 @@ pub fn register_companion_extensions(ext: &mut CompanionExtensions, state: &Arc<
                 let source = GitState::require_source_file(req)?;
                 let repo = Arc::clone(&s.repo);
                 let rel = repo.rel_path(&source);
-                let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("");
+                let ext = source.extension_str().unwrap_or("");
                 let entries = repo.file_history(&rel, s.limits.history)?;
                 let rel: Arc<str> = Arc::from(rel);
                 views::emit_history_nodes(

@@ -249,7 +249,7 @@ fn build_view(target: &Target<'_>, mode: Mode, policy: &PreToolPolicy) -> miniji
     let decomposed = &target.decomposed;
     let total_lines = decomposed.source.lines().count();
     let total_bytes = decomposed.source.len();
-    let ext = Path::new(target.rel).extension().and_then(|e| e.to_str()).unwrap_or("");
+    let ext = Path::new(target.rel).extension_str().unwrap_or("");
     let config = minijinja::Value::from_serialize(policy);
     let fragments = fragment_list(&decomposed.decomposed, decomposed);
     let rel = target.rel;

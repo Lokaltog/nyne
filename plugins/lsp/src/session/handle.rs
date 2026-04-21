@@ -22,6 +22,7 @@ use std::sync::Arc;
 
 use crop::Rope;
 use lsp_types::{Position, Range};
+use nyne::path_utils::PathExt;
 
 use super::client::Client;
 use super::manager::Manager;
@@ -60,7 +61,7 @@ impl Handle {
     /// accessing a companion directory is the semantic equivalent of
     /// "opening" the file in an editor.
     pub(crate) fn for_file(lsp: &Arc<Manager>, source_file: &Path) -> Option<Arc<Self>> {
-        let ext = source_file.extension().and_then(|e| e.to_str())?;
+        let ext = source_file.extension_str()?;
         let lsp = Arc::clone(lsp);
 
         let client = lsp.client_for_ext(ext)?;

@@ -8,6 +8,7 @@ use std::path::Path;
 
 use color_eyre::eyre::Result;
 use minijinja::value::Value;
+use nyne::path_utils::PathExt;
 use nyne::templates::{TemplateEngine, TemplateView};
 
 use super::FragmentResolver;
@@ -76,7 +77,7 @@ impl TemplateView for FileOverviewContent {
         Ok(engine.render_bytes(template, &minijinja::context! {
             filename => &self.filename,
             language => &self.language,
-            ext => Path::new(&self.filename).extension().and_then(|e| e.to_str()).unwrap_or(""),
+            ext => Path::new(&self.filename).extension_str().unwrap_or(""),
             total_lines => shared.rope.line_len(),
             total_bytes => shared.source.len(),
             file_doc => file_doc_text(&shared),

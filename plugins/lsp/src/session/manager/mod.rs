@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use color_eyre::eyre::Result;
 use lsp_types::SymbolInformation;
+use nyne::path_utils::PathExt;
 use nyne::process::Spawner;
 use nyne_source::SyntaxRegistry;
 use parking_lot::{Mutex, RwLock};
@@ -404,8 +405,7 @@ impl Manager {
     /// Returns `None` if no LSP client is available for the file's
     /// extension or if the paths cannot be converted to file URIs.
     fn resolve_rename_uris(&self, old_path: &Path, new_path: &Path) -> Option<ResolvedRename> {
-        let ext = old_path.extension().and_then(|e| e.to_str()).unwrap_or_default();
-        let client = self.client_for_ext(ext)?;
+        let client = self.client_for_ext(old_path.extension_str().unwrap_or_default())?;
 
         let old_uri = super::uri::file_path_to_uri_string(old_path).ok()?;
         let new_uri = super::uri::file_path_to_uri_string(new_path).ok()?;

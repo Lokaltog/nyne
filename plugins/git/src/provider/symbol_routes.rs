@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use color_eyre::eyre::Result;
 use nyne::SymbolLineRange;
+use nyne::path_utils::PathExt;
 use nyne::router::{NamedNode, Request, RouteCtx};
 use nyne::templates::TemplateHandle;
 use nyne_companion::CompanionRequest;
@@ -164,7 +165,7 @@ impl SymbolGitCtx {
         };
         let repo = Arc::clone(&self.state.repo);
         let rel = repo.rel_path(&sf);
-        let file_ext = sf.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let file_ext = sf.extension_str().unwrap_or("");
         let sym_ctx = Arc::new(SymbolExtractCtx {
             syntax: Arc::clone(&self.syntax),
             ext: file_ext.to_owned(),

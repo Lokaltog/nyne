@@ -17,6 +17,7 @@ use std::str::from_utf8;
 use std::sync::Arc;
 
 use aho_corasick::AhoCorasick;
+use nyne::path_utils::PathExt;
 use nyne::router::Filesystem;
 use nyne_source::{Decomposer, SyntaxRegistry};
 
@@ -126,7 +127,7 @@ impl Scanner {
         }
 
         let entries = files.iter().filter_map(|file| {
-            let ext = file.extension()?.to_str()?;
+            let ext = file.extension_str()?;
             let decomposer = syntax.get(ext)?;
             Some(self.scan_file(file, fs, decomposer.as_ref()))
         });

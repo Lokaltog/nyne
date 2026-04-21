@@ -291,7 +291,7 @@ impl Repo {
         let mut counts: HashMap<String, usize> = HashMap::new();
         for entry in index.iter() {
             let Ok(path) = from_utf8(&entry.path) else { continue };
-            if let Some(ext) = Path::new(path).extension().and_then(|e| e.to_str()) {
+            if let Some(ext) = Path::new(path).extension_str() {
                 *counts.entry(ext.to_owned()).or_default() += 1;
             }
         }
