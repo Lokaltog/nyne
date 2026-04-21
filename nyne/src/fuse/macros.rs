@@ -10,7 +10,7 @@
 //! thanks to the `pub(super) use` re-exports at the bottom of this
 //! file.
 //!
-//! All four macros assume:
+//! All macros assume:
 //! - `debug!` is in scope (`tracing::debug`).
 //! - For `ensure_dir_path!`/`prepare_mutation!`, the expression passed
 //!   as `$self` has `.inodes` exposing a `dir_path_for(u64)` lookup.
@@ -79,7 +79,18 @@ macro_rules! prepare_mutation {
     }};
 }
 
+/// Reply with ENOTSUP, logging at debug level. Use for stub FUSE handlers
+/// that intentionally reject the operation (e.g. `mknod`, `symlink`, `link`).
+/// Inode field logged as `0` since these handlers don't address a live inode.
+macro_rules! reply_enotsup {
+    ($reply:expr, $op:literal) => {
+        fuse_err!($reply, Errno::from_i32(libc::ENOTSUP), 0u64, $op)
+    };
+}
+
+
 pub(crate) use ensure_dir_path;
 pub(crate) use fuse_err;
 pub(crate) use fuse_try;
 pub(crate) use prepare_mutation;
+pub(crate) use reply_enotsup;

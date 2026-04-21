@@ -27,7 +27,7 @@ use super::attrs::{BLKSIZE, GENERATION, TTL, file_kind_to_fuse, make_attr, resol
 use super::handles::{OpenMode, WriteOutcome};
 use super::inode_map::{InodeEntry, ROOT_INODE};
 use super::mode::{PermissionsExt, WRITE_BITS};
-use super::{FuseFilesystem, ensure_dir_path, fuse_err, fuse_try};
+use super::{FuseFilesystem, ensure_dir_path, fuse_err, fuse_try, reply_enotsup};
 use crate::err::extract_errno;
 use crate::router::fs::mode as fs_mode;
 use crate::router::{NamedNode, Permissions, Process};
@@ -700,7 +700,7 @@ impl Filesystem for FuseFilesystem {
     }
 
     fn removexattr(&self, _req: &Request, _ino: INodeNo, _name: &OsStr, reply: ReplyEmpty) {
-        reply.error(Errno::from_i32(libc::ENOTSUP));
+        reply_enotsup!(reply, "removexattr");
     }
 
     fn destroy(&mut self) {
@@ -739,15 +739,15 @@ impl Filesystem for FuseFilesystem {
         _rdev: u32,
         reply: ReplyEntry,
     ) {
-        reply.error(Errno::from_i32(libc::ENOTSUP));
+        reply_enotsup!(reply, "mknod");
     }
 
     fn symlink(&self, _req: &Request, _parent: INodeNo, _link_name: &OsStr, _target: &Path, reply: ReplyEntry) {
-        reply.error(Errno::from_i32(libc::ENOTSUP));
+        reply_enotsup!(reply, "symlink");
     }
 
     fn link(&self, _req: &Request, _ino: INodeNo, _newparent: INodeNo, _newname: &OsStr, reply: ReplyEntry) {
-        reply.error(Errno::from_i32(libc::ENOTSUP));
+        reply_enotsup!(reply, "link");
     }
 
     fn fsync(&self, _req: &Request, _ino: INodeNo, _fh: FileHandle, _datasync: bool, reply: ReplyEmpty) { reply.ok(); }

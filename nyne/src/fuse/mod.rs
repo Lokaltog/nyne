@@ -15,7 +15,7 @@ mod handles;
 pub mod inode_map;
 /// Per-inode mutable state (write locks, errors, atime overrides).
 mod inode_state;
-/// FUSE protocol macros (fuse_try!, fuse_err!, ensure_dir_path!, prepare_mutation!).
+/// FUSE protocol macros (fuse_try!, fuse_err!, ensure_dir_path!, prepare_mutation!, reply_enotsup!).
 mod macros;
 /// Capability → FUSE mode bit translation.
 mod mode;
@@ -40,7 +40,7 @@ use color_eyre::eyre::Result;
 use handles::HandleTable;
 use inode_map::InodeMap;
 use inode_state::InodeState;
-pub(super) use macros::{ensure_dir_path, fuse_err, fuse_try, prepare_mutation};
+pub(super) use macros::{ensure_dir_path, fuse_err, fuse_try, prepare_mutation, reply_enotsup};
 use notify::KernelNotifier;
 use parking_lot::Mutex;
 use process_name_cache::ProcessNameCache;
