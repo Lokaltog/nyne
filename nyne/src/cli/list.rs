@@ -9,7 +9,7 @@ use std::time::SystemTime;
 use clap::Args;
 use color_eyre::eyre::{Result, eyre};
 
-use super::output::{self, Term, style};
+use super::output::{self, Attribute, Cell, Color, Term};
 use crate::sandbox;
 use crate::session::{self, SessionRegistry};
 
@@ -46,22 +46,16 @@ pub fn run(args: &ListArgs) -> Result<()> {
 /// rather than printing an empty table. This is the default view when
 /// `nyne list` is invoked without arguments.
 fn list_sessions(term: &Term, registry: &SessionRegistry) -> Result<()> {
-    let sessions = registry.sessions();
-
-    if sessions.is_empty() {
-        term.write_line(&style("No active nyne sessions.").dim().to_string())?;
-        return Ok(());
+    let mut table = output::new_table();
+    table.set_header(output::bold_headers(["ID", "PID", "PATH"]));
+    for info in registry.sessions() {
+        table.add_row(vec![
+            Cell::new(&info.id).fg(Color::Cyan),
+            Cell::new(info.pid),
+            Cell::new(info.mount_path.display()).fg(Color::Green),
+        ]);
     }
-
-    term.write_line(&style(format!("{:<16} {:<8} PATH", "ID", "PID")).bold().to_string())?;
-    for info in sessions {
-        term.write_line(&format!(
-            "{:<16} {:<8} {}",
-            style(&info.id).cyan(),
-            info.pid,
-            style(info.mount_path.display()).green(),
-        ))?;
-    }
+    term.write_line(&output::render_or_empty(&table, "No active nyne sessions."))?;
     Ok(())
 }
 
@@ -79,8 +73,7 @@ fn list_sessions(term: &Term, registry: &SessionRegistry) -> Result<()> {
 fn list_processes(term: &Term, id: &str) -> Result<()> {
     let socket_path = session::control_socket(id)?;
 
-    let req = sandbox::control::Request::ListProcesses;
-    let resp = sandbox::control::send_request(&socket_path, &req)?;
+    let resp = sandbox::control::send_request(&socket_path, &sandbox::control::Request::ListProcesses)?;
 
     let sandbox::control::Response::Processes { list } = resp else {
         return match resp {
@@ -89,33 +82,20 @@ fn list_processes(term: &Term, id: &str) -> Result<()> {
         };
     };
 
-    if list.is_empty() {
-        term.write_line(
-            &style(format!("No attached processes for session {id:?}."))
-                .dim()
-                .to_string(),
-        )?;
-        return Ok(());
-    }
-
-    term.write_line(
-        &style(format!("{:<8} {:<24} {:<12} START", "PID", "COMMAND", "DURATION"))
-            .bold()
-            .to_string(),
-    )?;
+    let mut table = output::new_table();
+    table.set_header(output::bold_headers(["PID", "COMMAND", "DURATION", "START"]));
     for proc in &list {
         // unwrap_or_default handles clock skew: if start_time is somehow in the
         // future (e.g., NTP adjustment), we show zero duration rather than failing.
         let elapsed = SystemTime::now().duration_since(proc.start_time).unwrap_or_default();
-
-        term.write_line(&format!(
-            "{:<8} {:<24} {:<12} {}",
-            proc.pid,
-            style(&proc.command).cyan(),
-            humantime::format_duration(elapsed),
-            style(humantime::format_rfc3339_seconds(proc.start_time)).dim(),
-        ))?;
+        table.add_row(vec![
+            Cell::new(proc.pid),
+            Cell::new(&proc.command).fg(Color::Cyan),
+            Cell::new(humantime::format_duration(elapsed)),
+            Cell::new(humantime::format_rfc3339_seconds(proc.start_time)).add_attribute(Attribute::Dim),
+        ]);
     }
+    term.write_line(&output::render_or_empty(&table, format!("No attached processes for session {id:?}.")))?;
 
     Ok(())
 }

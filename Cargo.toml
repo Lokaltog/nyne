@@ -67,6 +67,7 @@ base64 = "0.22.1"
 bitflags = "2.11"
 clap = { version = "4", features = ["derive"] }
 color-eyre = "0.6"
+comfy-table = "7.2.2"
 console = "0.16.3"
 convert_case = "0.11.0"
 crop = { version = "0.4.3", features = ["serde", "utf16-metric"] }
@@ -79,6 +80,7 @@ git2 = { version = "0.20", default-features = false }
 humantime = "2"
 humantime-serde = "1"
 ignore = { version = "0.4.25", features = ["simd-accel"] }
+indicatif = "0.18.4"
 jiff = { version = "0.2", features = ["serde"] }
 libc = "0.2"
 linkme = "0.3.36"
