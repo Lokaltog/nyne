@@ -54,6 +54,18 @@ impl FragmentResolver {
             .map(|f| SymbolLineRange::from_zero_based(&f.line_range(&decomposed.rope))))
     }
 }
+/// Inherent impl on [`DecompositionCache`] for building resolvers.
+///
+/// Lives here rather than alongside `DecompositionCache` in `syntax::decomposed`
+/// to keep the `FragmentResolver` construction concern in one place.
+impl DecompositionCache {
+    /// Build a [`FragmentResolver`] bound to this cache and source file.
+    ///
+    /// Convenience over `FragmentResolver::new(cache.clone(), path)`.
+    pub fn resolver(&self, source_file: PathBuf) -> FragmentResolver {
+        FragmentResolver::new(self.clone(), source_file)
+    }
+}
 
 #[cfg(test)]
 mod tests;

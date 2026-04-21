@@ -8,8 +8,7 @@ use nyne::ActivationContext;
 use nyne::plugin::{Plugin, PluginConfig};
 use nyne::router::{NamedNode, Provider, Request, RouteCtx};
 use nyne::templates::{HandleBuilder, TemplateGlobals, TemplateHandle};
-use nyne_companion::CompanionRequest as _;
-use nyne_source::{FragmentResolver, SourceContextExt, SyntaxRegistry, find_fragment};
+use nyne_source::SourceContextExt;
 use tracing::info;
 
 use crate::engine::Engine;
@@ -50,27 +49,18 @@ impl Plugin for AnalysisPlugin {
 
         // Register into SourceExtensions so ANALYSIS.md appears alongside
         // body, signature, etc. inside fragment directories.
-        let syntax = ctx.syntax_registry().cloned().unwrap_or_else(SyntaxRegistry::global);
         let decomposition = ctx.decomposition_cache().cloned();
 
         if let Some(decomposition) = decomposition {
             let exts = ctx.source_extensions_mut();
             exts.fragment_path.scoped("analysis", |ext| {
-                let syntax = Arc::clone(&syntax);
                 let decomposition = decomposition.clone();
                 let engine = Arc::clone(&engine);
                 let tmpl = tmpl.clone();
                 let file_analysis = file_analysis.clone();
                 ext.content(move |ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
-                    let sf = req.source_file()?;
-                    let path_param = ctx.param("path")?;
-                    let segments: Vec<String> = path_param.split('/').map(String::from).collect();
-
-                    syntax.decomposer_for(&sf)?;
-                    let shared = decomposition.get(&sf).ok()?;
-                    find_fragment(&shared.decomposed, &segments)?;
-
-                    let resolver = FragmentResolver::new(decomposition.clone(), sf);
+                    let resolved = decomposition.resolve_from_ctx(ctx, req)?;
+                    let resolver = decomposition.resolver(resolved.into_source_file());
                     Some(tmpl.named_node(&file_analysis, provider::Content {
                         resolver,
                         engine: Arc::clone(&engine),

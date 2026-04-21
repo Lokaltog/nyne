@@ -7,7 +7,7 @@ use nyne::router::{Filesystem, NamedNode, Next, NodeKind, Request, RouteCtx};
 use nyne::templates::{HandleBuilder, TemplateGlobals, TemplateHandle};
 use nyne_companion::{Companion, CompanionRequest};
 use nyne_diff::{DiffCapable, DiffRequest};
-use nyne_source::{DecompositionCache, FragmentResolver, SourcePaths, SyntaxRegistry, find_fragment};
+use nyne_source::{DecompositionCache, SourcePaths, SyntaxRegistry, find_fragment};
 use strum::IntoEnumIterator;
 
 use super::lsp_links;
@@ -77,7 +77,7 @@ pub fn build_handles(vfs: &Vfs) -> Handles {
 }
 
 /// Result of resolving a fragment path with optional sub-route.
-struct ResolvedFragment<'a> {
+struct LspResolvedFragment<'a> {
     /// The source file backing this fragment.
     source_file: PathBuf,
     /// Path segments identifying the fragment within the decomposition.
@@ -98,20 +98,15 @@ impl LspState {
     /// Returns the template node for `feature` if the fragment resolves,
     /// the LSP server is available, and the feature is supported.
     pub(crate) fn feature_content(&self, ctx: &RouteCtx, req: &Request, feature: Feature) -> Option<NamedNode> {
-        let sf = req.source_file()?;
-        let segments: Vec<String> = ctx.param("path")?.split('/').map(String::from).collect();
-
-        let shared = self.decomposition.get(&sf).ok()?;
-        let frag = find_fragment(&shared.decomposed, &segments)?;
-
-        let lsp_handle = Handle::for_file(&self.lsp, &sf)?;
+        let resolved = self.decomposition.resolve_from_ctx(ctx, req)?;
+        let lsp_handle = Handle::for_file(&self.lsp, resolved.source_file())?;
         if !feature.is_supported(lsp_handle.capabilities()) {
             return None;
         }
-        let resolver = FragmentResolver::new(self.decomposition.clone(), sf);
-        let fragment_path: Arc<[String]> = Arc::from(segments);
-        let source = shared.source.clone();
-        let name_byte_offset = frag.span.name_byte_offset;
+        let fragment_path = resolved.segments_arc();
+        let source = resolved.shared().source.clone();
+        let name_byte_offset = resolved.fragment().span.name_byte_offset;
+        let resolver = self.decomposition.resolver(resolved.into_source_file());
         Some(
             self.handles
                 .features
@@ -266,14 +261,14 @@ impl LspState {
     /// [`fragment_lookup`](Self::fragment_lookup): resolves the source file,
     /// detects sub-routes, and verifies the fragment exists.
     /// Returns `None` if any guard fails.
-    fn resolve_fragment<'a>(&self, req: &Request, segments: &'a [String]) -> Option<ResolvedFragment<'a>> {
+    fn resolve_fragment<'a>(&self, req: &Request, segments: &'a [String]) -> Option<LspResolvedFragment<'a>> {
         let sf = req.source_file()?;
         let (frag_segments, sub_route) = split_sub_route(segments, &self.vfs.dir.actions, &self.vfs.dir.rename);
         self.decomposition
             .get(&sf)
             .ok()
             .filter(|shared| find_fragment(&shared.decomposed, frag_segments).is_some())?;
-        Some(ResolvedFragment {
+        Some(LspResolvedFragment {
             source_file: sf,
             frag_segments,
             sub_route,

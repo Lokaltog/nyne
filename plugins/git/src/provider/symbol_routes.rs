@@ -23,7 +23,7 @@ use nyne::path_utils::PathExt;
 use nyne::router::{NamedNode, Request, RouteCtx};
 use nyne::templates::TemplateHandle;
 use nyne_companion::CompanionRequest;
-use nyne_source::{DecompositionCache, FragmentResolver, SourceExtensions, SyntaxRegistry};
+use nyne_source::{DecompositionCache, SourceExtensions, SyntaxRegistry};
 
 use super::state::{SymbolLoc, build_read_fn_symbol};
 use super::{GitState, views};
@@ -46,11 +46,6 @@ struct SymbolGitCtx {
 }
 
 impl SymbolGitCtx {
-    /// Build a [`FragmentResolver`] for the given source file.
-    fn resolver(&self, source_file: &Path) -> FragmentResolver {
-        FragmentResolver::new(self.decomposition.clone(), source_file.to_owned())
-    }
-
     /// Convert borrowed path segments to an owned fragment path.
     fn to_fragment_path(segments: &[&str]) -> Arc<[String]> {
         Arc::from(segments.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>())
@@ -63,7 +58,7 @@ impl SymbolGitCtx {
     fn symbol_loc(&self, sf: &Path, symbol_segs: &[&str]) -> SymbolLoc {
         SymbolLoc {
             source: sf.to_owned(),
-            resolver: self.resolver(sf),
+            resolver: self.decomposition.resolver(sf.to_owned()),
             fragment_path: Self::to_fragment_path(symbol_segs),
         }
     }
@@ -160,7 +155,7 @@ impl SymbolGitCtx {
     fn history_nodes(&self, req: &mut Request, symbol_segs: &[&str], filter_name: Option<&str>) -> Result<()> {
         let sf = GitState::require_source_file(req)?;
         let fragment_path = Self::to_fragment_path(symbol_segs);
-        let Some(range) = self.resolver(&sf).line_range(&fragment_path)? else {
+        let Some(range) = self.decomposition.resolver(sf.clone()).line_range(&fragment_path)? else {
             return Ok(());
         };
         let repo = Arc::clone(&self.state.repo);

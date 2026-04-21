@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::router::Filesystem;
+use nyne::router::{Filesystem, Request, RouteCtx};
+use nyne_companion::CompanionRequest;
 use parking_lot::RwLock;
 
 use super::SyntaxRegistry;
@@ -116,6 +117,43 @@ struct DecompositionCacheInner {
     cache: RwLock<HashMap<PathBuf, Arc<DecomposedSource>>>,
 }
 
+/// A fragment resolved from a [`RouteCtx`]'s `path` parameter.
+///
+/// Bundles the source file, owned segment path, and decomposition snapshot.
+/// Constructed by [`DecompositionCache::resolve_from_ctx`], which validates
+/// that the fragment exists in the decomposition before returning.
+///
+/// This type is the shared SSOT for the "resolve a fragment from a route
+/// callback" preamble previously duplicated across lsp, analysis, and git.
+pub struct ResolvedFragment {
+    source_file: PathBuf,
+    segments: Vec<String>,
+    shared: Arc<DecomposedSource>,
+}
+
+impl ResolvedFragment {
+    /// Source file path backing this fragment.
+    pub fn source_file(&self) -> &Path { &self.source_file }
+
+    /// Consume into the owned source file path.
+    pub fn into_source_file(self) -> PathBuf { self.source_file }
+
+    /// Path segments identifying the fragment within the decomposition.
+    pub fn segments(&self) -> &[String] { &self.segments }
+
+    /// Segments as an `Arc<[String]>` suitable for closure captures.
+    pub fn segments_arc(&self) -> Arc<[String]> { Arc::from(self.segments.as_slice()) }
+
+    /// Cached decomposition snapshot for the source file.
+    pub const fn shared(&self) -> &Arc<DecomposedSource> { &self.shared }
+
+    /// The fragment at [`Self::segments`]. Guaranteed to exist by construction.
+    pub fn fragment(&self) -> &super::fragment::Fragment {
+        super::find_fragment(&self.shared.decomposed, &self.segments)
+            .expect("ResolvedFragment invariant: fragment existence validated during resolve")
+    }
+}
+
 impl DecompositionCache {
     /// Create a new empty cache.
     pub(crate) fn new(fs: Arc<dyn Filesystem>, syntax: Arc<SyntaxRegistry>, max_depth: usize) -> Self {
@@ -174,6 +212,32 @@ impl DecompositionCache {
             return false;
         };
         super::find_fragment(&shared.decomposed, fragment_path).is_some()
+    }
+
+    /// Resolve a fragment from a [`RouteCtx`]'s `path` parameter.
+    ///
+    /// Extracts the source file from the request's companion state and the
+    /// `path` route parameter, splits on `/` into segments, and validates
+    /// that the fragment exists in the decomposition. Returns `None` if any
+    /// of these is absent:
+    /// - request source file (non-companion request)
+    /// - `path` route parameter
+    /// - decomposition for the file (unsupported language or parse failure)
+    /// - fragment matching the segments
+    ///
+    /// This replaces the four-step preamble previously duplicated across the
+    /// lsp, analysis, and git plugins.
+    pub fn resolve_from_ctx(&self, ctx: &RouteCtx, req: &Request) -> Option<ResolvedFragment> {
+        let source_file = req.source_file()?;
+        let path_param = ctx.param("path")?;
+        let segments: Vec<String> = path_param.split('/').map(String::from).collect();
+        let shared = self.get(&source_file).ok()?;
+        super::find_fragment(&shared.decomposed, &segments)?;
+        Some(ResolvedFragment {
+            source_file,
+            segments,
+            shared,
+        })
     }
 
     /// Evict cached decomposition for a file.
