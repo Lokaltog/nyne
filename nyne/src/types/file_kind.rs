@@ -31,17 +31,9 @@ pub enum FileKind {
 }
 
 impl From<FileType> for FileKind {
-    /// Anything not a directory or symlink is classified as [`FileKind::File`],
-    /// including special file types like sockets or FIFOs.
-    fn from(ft: FileType) -> Self {
-        if ft.is_dir() {
-            Self::Directory
-        } else if ft.is_symlink() {
-            Self::Symlink
-        } else {
-            Self::File
-        }
-    }
+    /// Routes through [`NodeKind::from(FileType)`] to keep the
+    /// directory/symlink/file classification in a single place.
+    fn from(ft: FileType) -> Self { crate::types::NodeKind::from(ft).into() }
 }
 
 impl From<NodeKind> for FileKind {
