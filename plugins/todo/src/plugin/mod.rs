@@ -11,7 +11,7 @@ use nyne::templates::{HandleBuilder, TemplateHandle};
 use nyne_companion::CompanionContextExt as _;
 #[cfg(feature = "git")]
 use nyne_git::GitContextExt as _;
-use nyne_source::{SourceContextExt as _, SyntaxRegistry};
+use nyne_source::{SourceContextExt as _, SourcePaths, SyntaxRegistry};
 use parking_lot::RwLock;
 use tracing::info;
 
@@ -31,7 +31,6 @@ impl Plugin for TodoPlugin {
 
     fn id(&self) -> &'static str { "todo" }
 
-    #[expect(clippy::expect_used, reason = "source plugin activation is a lifecycle invariant")]
     fn activate(&self, ctx: &mut ActivationContext) -> Result<()> {
         let config = ctx.plugin_config::<Config>(self.id());
         if !config.enabled {
@@ -41,10 +40,7 @@ impl Plugin for TodoPlugin {
         #[cfg(feature = "git")]
         let repo = ctx.git_repo().cloned();
 
-        let source_paths = ctx
-            .source_paths()
-            .cloned()
-            .expect("SourcePaths missing — source plugin must activate first");
+        let source_paths = Arc::clone(ctx.require_service::<Arc<SourcePaths>>()?);
 
         let tags = config.tags.clone();
         let scanner = Scanner::new(&tags);

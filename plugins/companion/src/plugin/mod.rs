@@ -8,6 +8,7 @@ use nyne::prelude::*;
 use nyne::router::{Provider, RouteTree};
 
 use crate::context::CompanionContextExt;
+use crate::extensions::CompanionExtensions;
 use crate::plugin::config::CompanionConfig;
 use crate::provider::CompanionProvider;
 
@@ -23,10 +24,9 @@ impl Plugin for CompanionPlugin {
         Ok(())
     }
 
-    #[expect(clippy::expect_used, reason = "companion extension point is a lifecycle invariant")]
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
         let config = ctx.plugin_config::<CompanionConfig>(self.id());
-        let ext = ctx.companion_extensions().expect("CompanionExtensions missing");
+        let ext = ctx.require_service::<CompanionExtensions>()?;
         Ok(vec![Arc::new(CompanionProvider {
             suffix: config.suffix.into(),
             file_tree: RouteTree::builder().apply(&ext.file).build(),

@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anymap2::SendSyncAnyMap;
+use color_eyre::eyre::{Result, eyre};
 
 use crate::config::NyneConfig;
 use crate::plugin::PluginConfig;
@@ -107,6 +108,21 @@ impl ActivationContext {
     /// Returns `None` if no plugin inserted this type. Providers should
     /// handle `None` gracefully (capability degradation).
     pub fn get<T: Send + Sync + 'static>(&self) -> Option<&T> { self.extensions.get::<T>() }
+
+    /// Retrieve a required plugin-provided service, failing with eyre context
+    /// if absent.
+    ///
+    /// Use for services that are lifecycle invariants guaranteed by the
+    /// plugin dependency graph — callers propagate via `?` instead of
+    /// panicking with `expect()`.
+    pub fn require_service<T: Send + Sync + 'static>(&self) -> Result<&T> {
+        self.extensions.get::<T>().ok_or_else(|| {
+            eyre!(
+                "required service `{}` missing from ActivationContext — check provider_graph dependencies",
+                std::any::type_name::<T>(),
+            )
+        })
+    }
 
     /// Retrieve a mutable reference to a plugin-provided service by type.
     ///

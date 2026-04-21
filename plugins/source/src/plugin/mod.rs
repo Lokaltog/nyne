@@ -13,6 +13,7 @@ use tracing::info;
 
 use crate::context::SourceContextExt;
 use crate::edit::staging::{BatchEditAction, EditStaging};
+use crate::extensions::SourceExtensions;
 use crate::paths::SourcePaths;
 use crate::plugin::config::Config;
 use crate::plugin::config::vfs::Vfs;
@@ -94,13 +95,12 @@ impl Plugin for SourcePlugin {
         Ok(())
     }
 
-    #[expect(clippy::expect_used, reason = "source plugin activation is a lifecycle invariant")]
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
         let config = ctx.plugin_config::<Config>(self.id());
-        let syntax = ctx.syntax_registry().expect("SyntaxRegistry missing");
-        let decomposition = ctx.decomposition_cache().expect("DecompositionCache missing");
-        let staging = ctx.edit_staging().expect("EditStaging missing");
-        let exts = ctx.source_extensions().expect("SourceExtensions missing");
+        let syntax = ctx.require_service::<Arc<SyntaxRegistry>>()?;
+        let decomposition = ctx.require_service::<DecompositionCache>()?;
+        let staging = ctx.require_service::<EditStaging>()?;
+        let exts = ctx.require_service::<SourceExtensions>()?;
 
         let mut b = HandleBuilder::new();
         b.register_partial(SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC);

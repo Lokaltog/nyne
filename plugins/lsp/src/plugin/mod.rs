@@ -10,7 +10,7 @@ use nyne::ActivationContext;
 use nyne::plugin::{PLUGINS, Plugin, PluginConfig, PluginFactory};
 use nyne::router::Provider;
 use nyne_companion::CompanionContextExt;
-use nyne_source::{SourceContextExt, SyntaxRegistry};
+use nyne_source::{DecompositionCache, SourceContextExt, SourcePaths, SyntaxRegistry};
 use nyne_visibility::PassthroughProcesses;
 use tracing::info;
 
@@ -76,24 +76,9 @@ impl Plugin for LspPlugin {
 
         // Build shared LSP state — services from source plugin.
         // Source activates before LSP (guaranteed by provider_graph ordering).
-        #[expect(
-            clippy::expect_used,
-            reason = "source plugin activation guaranteed by provider_graph"
-        )]
-        let syntax = Arc::clone(
-            ctx.syntax_registry()
-                .expect("SyntaxRegistry missing — source plugin must activate first"),
-        );
-        #[expect(
-            clippy::expect_used,
-            reason = "source plugin activation guaranteed by provider_graph"
-        )]
-        let decomposition = ctx.decomposition_cache().expect("DecompositionCache missing").clone();
-        #[expect(
-            clippy::expect_used,
-            reason = "source plugin activation guaranteed by provider_graph"
-        )]
-        let source_paths = Arc::clone(ctx.source_paths().expect("SourcePaths missing"));
+        let syntax = Arc::clone(ctx.require_service::<Arc<SyntaxRegistry>>()?);
+        let decomposition = ctx.require_service::<DecompositionCache>()?.clone();
+        let source_paths = Arc::clone(ctx.require_service::<Arc<SourcePaths>>()?);
         let state = Arc::new(LspState {
             lsp: Arc::clone(&lsp),
             syntax,
