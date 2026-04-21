@@ -12,11 +12,7 @@ fn parse_config(toml_str: &str) -> Config {
 }
 
 /// Loads a `Config` from a named test fixture file.
-fn load_fixture(name: &str) -> Config {
-    let path = format!("{}/src/plugin/config/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
-    let content = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read fixture {name}: {e}"));
-    parse_config(&content)
-}
+fn load_fixture(name: &str) -> Config { parse_config(&nyne::load_fixture!("plugin/config", name)) }
 
 #[rstest]
 #[case::rust("Rust", 60)]

@@ -6,8 +6,7 @@ use super::*;
 /// Loads a fixture TOML file from the `fixtures/` directory, parses the `[lsp]`
 /// table, and deserializes it into [`Config`].
 fn load_fixture(name: &str) -> Config {
-    let path = format!("{}/src/plugin/config/fixtures/{name}", env!("CARGO_MANIFEST_DIR"),);
-    let content = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read fixture {name}: {e}"));
+    let content = nyne::load_fixture!("plugin/config", name);
     let table: toml::Table = toml::from_str(&content).unwrap_or_else(|e| panic!("failed to parse fixture {name}: {e}"));
     Config::from_section(table.get("lsp"))
 }
