@@ -25,8 +25,6 @@ mod mutations;
 pub mod notify;
 /// FUSE read-only operations (lookup, getattr, readdir, read, open).
 mod ops;
-/// Bounded PID → process-name cache.
-mod process_name_cache;
 /// Extended attribute handling for FUSE nodes.
 mod xattr;
 
@@ -43,10 +41,10 @@ use inode_state::InodeState;
 pub(super) use macros::{ensure_dir_path, fuse_err, fuse_try, prepare_mutation, reply_enotsup};
 use notify::KernelNotifier;
 use parking_lot::Mutex;
-use process_name_cache::ProcessNameCache;
 
 use crate::err;
 use crate::path_utils::PathExt;
+use crate::process::ProcessNameCache;
 use crate::router::{
     AffectedFiles, Chain, Filesystem, NamedNode, Op, Process, RenameContext, Request, UnlinkContext, WriteContext,
 };
@@ -102,12 +100,16 @@ pub struct FuseFilesystem {
     /// the filesystem watcher to suppress its own fsnotify echoes of
     /// inline writes. See [`InlineWrites`] for the full rationale.
     inline_writes: InlineWrites,
-    /// Bounded PID → comm cache. See [`ProcessNameCache`].
-    process_names: ProcessNameCache,
+    /// Bounded PID → comm cache. Shared with plugins (e.g. visibility)
+    /// via [`ActivationContext`] so all procfs comm reads go through a
+    /// single cache. See [`ProcessNameCache`].
+    ///
+    /// [`ActivationContext`]: crate::dispatch::ActivationContext
+    process_names: Arc<ProcessNameCache>,
 }
 
 impl FuseFilesystem {
-    pub fn new(chain: Arc<Chain>, backing_fs: Arc<dyn Filesystem>) -> Self {
+    pub fn new(chain: Arc<Chain>, backing_fs: Arc<dyn Filesystem>, process_names: Arc<ProcessNameCache>) -> Self {
         Self {
             chain,
             backing_fs,
@@ -117,7 +119,7 @@ impl FuseFilesystem {
             passthrough_enabled: AtomicBool::new(true),
             notifier: Arc::new(OnceLock::new()),
             inline_writes: Arc::new(Mutex::new(HashMap::new())),
-            process_names: ProcessNameCache::new(),
+            process_names,
         }
     }
 

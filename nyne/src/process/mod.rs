@@ -9,8 +9,10 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
 use color_eyre::eyre::{Result, WrapErr, eyre};
+pub use name_cache::ProcessNameCache;
 use parking_lot::Mutex;
 use tracing::{debug, info};
+pub mod name_cache;
 
 pub mod procfs;
 #[cfg(test)]

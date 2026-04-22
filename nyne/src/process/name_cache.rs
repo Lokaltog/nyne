@@ -1,9 +1,11 @@
 //! Bounded PID → process-name cache used to avoid repeated
-//! `/proc/{pid}/comm` reads on every FUSE request.
+//! `/proc/{pid}/comm` reads.
 //!
 //! A single PID can generate thousands of FUSE ops (e.g. `git status`
 //! issuing batched lookups), and `read_comm` is a disk read on procfs —
 //! so the first read per PID is memoised until the entry is evicted.
+//! The same cache is shared with the visibility plugin so its name-rule
+//! lookups reuse the cached comm instead of reading procfs a second time.
 //!
 //! PIDs are recycled by the OS, so we cannot keep entries forever.
 //! Eviction is LRU-by-access: [`LruCache`] promotes each entry to
@@ -28,7 +30,7 @@ impl ProcessNameCache {
     /// bounding memory.
     const CAPACITY: NonZeroUsize = NonZeroUsize::new(4096).expect("4096 != 0");
 
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             cache: Mutex::new(LruCache::new(Self::CAPACITY)),
         }
@@ -39,7 +41,7 @@ impl ProcessNameCache {
     ///
     /// `None` means the PID has no entry in procfs (exited, permission
     /// denied, or procfs unavailable).
-    pub(super) fn get_or_read(&self, pid: u32) -> Option<String> {
+    pub fn get_or_read(&self, pid: u32) -> Option<String> {
         let mut cache = self.cache.lock();
         if let Some(name) = cache.get(&pid) {
             return name.clone();
@@ -48,4 +50,8 @@ impl ProcessNameCache {
         cache.put(pid, name.clone());
         name
     }
+}
+
+impl Default for ProcessNameCache {
+    fn default() -> Self { Self::new() }
 }

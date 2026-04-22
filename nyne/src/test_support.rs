@@ -12,7 +12,7 @@ use color_eyre::eyre::{Result, bail};
 
 use crate::config::NyneConfig;
 use crate::dispatch::activation::ActivationContext;
-use crate::process::Spawner;
+use crate::process::{ProcessNameCache, Spawner};
 use crate::router::{
     AffectedFiles, DirEntry, Filesystem, MemFs, Metadata, Next, Node, Provider, ProviderId, ProviderMeta, ReadContext,
     Readable, Request, Writable, WriteContext,
@@ -73,6 +73,7 @@ pub fn stub_activation_context() -> ActivationContext {
         Arc::new(StubFs),
         Arc::new(NyneConfig::default()),
         Arc::new(Spawner::new()),
+        Arc::new(ProcessNameCache::default()),
     )
 }
 /// A readable that returns static content.

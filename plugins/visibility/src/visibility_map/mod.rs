@@ -15,8 +15,10 @@
 //! (writes), so visibility changes from `nyne ctl` take effect immediately.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use nyne::process::procfs::{read_comm, read_ppid, truncate_comm};
+use nyne::process::ProcessNameCache;
+use nyne::process::procfs::{read_ppid, truncate_comm};
 use parking_lot::RwLock;
 use tracing::debug;
 
@@ -81,6 +83,12 @@ pub struct VisibilityMap {
     /// Optional cgroups v2 tracker for child process visibility inheritance.
     /// `None` when cgroups v2 is unavailable — ancestor walk provides fallback.
     cgroup_tracker: Option<CgroupTracker>,
+    /// Shared PID → comm cache. Supplied by the mount-wide
+    /// [`ActivationContext`] so both FUSE request labelling and visibility
+    /// name-rule matching read `/proc/{pid}/comm` through the same cache.
+    ///
+    /// [`ActivationContext`]: nyne::dispatch::ActivationContext
+    process_names: Arc<ProcessNameCache>,
 }
 
 /// Visibility resolution and PID management.
@@ -90,7 +98,10 @@ impl VisibilityMap {
     /// Each name is truncated to [`COMM_MAX_LEN`] chars to match the kernel's
     /// `/proc/{pid}/comm` truncation — callers can pass full binary names
     /// (e.g., `"typescript-language-server"`) and matching works transparently.
-    pub fn new(name_rules: impl IntoIterator<Item = (String, ProcessVisibility)>) -> Self {
+    pub fn new(
+        name_rules: impl IntoIterator<Item = (String, ProcessVisibility)>,
+        process_names: Arc<ProcessNameCache>,
+    ) -> Self {
         Self {
             pid_entries: RwLock::new(HashMap::new()),
             name_rules: name_rules
@@ -99,6 +110,7 @@ impl VisibilityMap {
                 .collect(),
             dynamic_name_rules: RwLock::new(HashMap::new()),
             cgroup_tracker: None,
+            process_names,
         }
     }
 
@@ -265,12 +277,13 @@ impl VisibilityMap {
         None
     }
 
-    /// Read `/proc/{pid}/comm` and check against name-based rules.
+    /// Read `/proc/{pid}/comm` (via the shared [`ProcessNameCache`]) and
+    /// check against name-based rules.
     ///
     /// Dynamic rules (set at runtime via control requests) take precedence
     /// over static rules (from config).
     fn resolve_by_comm(&self, pid: u32) -> Option<ProcessVisibility> {
-        let comm = read_comm(pid)?;
+        let comm = self.process_names.get_or_read(pid)?;
         self.dynamic_name_rules
             .read()
             .get(comm.as_str())

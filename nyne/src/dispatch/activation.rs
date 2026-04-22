@@ -13,7 +13,7 @@ use color_eyre::eyre::{Result, eyre};
 
 use crate::config::NyneConfig;
 use crate::plugin::PluginConfig;
-use crate::process::Spawner;
+use crate::process::{ProcessNameCache, Spawner};
 use crate::router::Filesystem;
 
 /// Shared context provided to all providers during activation.
@@ -42,6 +42,10 @@ pub struct ActivationContext {
     fs: Arc<dyn Filesystem>,
     /// Process spawner with env isolation.
     spawner: Arc<Spawner>,
+    /// Bounded PID → comm cache. Shared between the FUSE handler and
+    /// plugins (e.g. visibility) so every `/proc/{pid}/comm` read goes
+    /// through a single memoized lookup.
+    process_names: Arc<ProcessNameCache>,
     /// Full configuration, stored for provider access.
     config: Arc<NyneConfig>,
     /// Display root with trailing slash — precomputed for path stripping.
@@ -63,6 +67,7 @@ impl ActivationContext {
         fs: Arc<dyn Filesystem>,
         config: Arc<NyneConfig>,
         spawner: Arc<Spawner>,
+        process_names: Arc<ProcessNameCache>,
     ) -> Self {
         let mut root_prefix = root.display().to_string();
         root_prefix.push('/');
@@ -72,6 +77,7 @@ impl ActivationContext {
             source_root,
             fs,
             spawner,
+            process_names,
             config,
             root_prefix,
             extensions: SendSyncAnyMap::new(),
@@ -92,6 +98,10 @@ impl ActivationContext {
 
     /// Process spawner with env isolation.
     pub const fn spawner(&self) -> &Arc<Spawner> { &self.spawner }
+
+    /// Bounded PID → comm cache shared across the FUSE handler and
+    /// plugins. See [`ProcessNameCache`].
+    pub const fn process_names(&self) -> &Arc<ProcessNameCache> { &self.process_names }
 
     /// Filesystem access abstraction.
     pub fn fs(&self) -> &Arc<dyn Filesystem> { &self.fs }

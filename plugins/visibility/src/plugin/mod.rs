@@ -24,17 +24,18 @@ impl Plugin for VisibilityPlugin {
         let config = ctx.plugin_config::<VisibilityConfig>(self.id());
 
         // Merge config passthrough names with plugin-contributed names.
-        let plugin_procs = ctx
-            .passthrough_processes()
-            .map_or_else(Vec::new, |p| p.as_slice().to_vec());
         let name_rules = config
             .passthrough_processes
             .into_iter()
-            .chain(plugin_procs)
+            .chain(
+                ctx.passthrough_processes()
+                    .map_or_else(Vec::new, |p| p.as_slice().to_vec()),
+            )
             .map(|name| (name, ProcessVisibility::None));
 
-        let vis = Arc::new(VisibilityMap::new(name_rules).with_cgroup_tracking());
-        ctx.insert(vis);
+        ctx.insert(Arc::new(
+            VisibilityMap::new(name_rules, Arc::clone(ctx.process_names())).with_cgroup_tracking(),
+        ));
 
         Ok(())
     }
@@ -43,7 +44,7 @@ impl Plugin for VisibilityPlugin {
         let vis = ctx
             .visibility_map()
             .cloned()
-            .unwrap_or_else(|| Arc::new(VisibilityMap::new(iter::empty())));
+            .unwrap_or_else(|| Arc::new(VisibilityMap::new(iter::empty(), Arc::clone(ctx.process_names()))));
 
         let policy: VisibilityPolicy = Box::new(move |req| {
             let pid = req.process()?.pid;

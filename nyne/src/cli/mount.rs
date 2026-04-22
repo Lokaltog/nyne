@@ -24,7 +24,7 @@ use crate::dispatch::{ControlRegistry, ScriptRegistry};
 use crate::fuse::FuseFilesystem;
 use crate::fuse::notify::{AsyncNotifier, FuseNotifier};
 use crate::path_filter::PathFilter;
-use crate::process::{Spawner, procfs};
+use crate::process::{ProcessNameCache, Spawner, procfs};
 use crate::router::fs::os::OsFilesystem;
 use crate::router::{Chain, Filesystem};
 use crate::session::{self, SessionId, SessionRegistry};
@@ -305,6 +305,10 @@ fn build_fuse_session(
     let fs_backend: Arc<dyn Filesystem> = Arc::new(OsFilesystem::new(&storage_root));
     let display_root = nyne_config.sandbox.mount_root.as_path();
     let spawner = Arc::new(Spawner::new());
+    // Shared procfs comm cache — FUSE handler and plugins (visibility)
+    // read `/proc/{pid}/comm` through this single cache so a first
+    // request from a new PID hits procfs exactly once.
+    let process_names = Arc::new(ProcessNameCache::new());
     let mut activation_ctx = ActivationContext::new(
         mount_path.clone(),
         display_root.to_path_buf(),
@@ -312,6 +316,7 @@ fn build_fuse_session(
         Arc::clone(&fs_backend),
         Arc::clone(nyne_config),
         spawner,
+        Arc::clone(&process_names),
     );
 
     // Build the gitignore-backed path filter and publish it to plugins
@@ -374,7 +379,7 @@ fn build_fuse_session(
     let control_server = Some(sandbox::control::start_server(control_socket_path, handlers)?);
 
     // Build FuseFilesystem and mount.
-    let fs = FuseFilesystem::new(Arc::clone(&chain), fs_backend);
+    let fs = FuseFilesystem::new(Arc::clone(&chain), fs_backend, process_names);
     let notifier_slot = Arc::clone(fs.notifier());
     let inodes = Arc::clone(fs.inodes());
     let inline_writes = Arc::clone(fs.inline_writes());
