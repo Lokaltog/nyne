@@ -1,35 +1,21 @@
-use nyne::load_fixture;
-use rstest::{fixture, rstest};
+use rstest::rstest;
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::decompose_fixture;
 
-/// Fixture: decompose the basic.toml test file into fragments.
-#[fixture]
-fn basic() -> DecomposedFile {
-    let source = load_fixture!("syntax/languages/toml", "basic.toml");
-    decompose_fixture("toml", &source)
-}
-
-/// Top-level: preamble (bare keys) + [package] + [dependencies] +
-/// [dev-dependencies] + [[bin]] + [[bin]] = 6 fragments.
-#[rstest]
-fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.len(), 6);
-}
-
-/// Verifies that fragment names match the expected table names in order.
-#[rstest]
-fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, &[
-        "preamble",
-        "package",
-        "dependencies",
-        "dev-dependencies",
-        "bin",
-        "bin"
-    ]);
+crate::language_tests! {
+    ext: "toml",
+    fixture_module: "syntax/languages/toml",
+    fixture_file: "basic.toml",
+    fragment_count: 6,
+    fragment_names: ["preamble", "package", "dependencies", "dev-dependencies", "bin", "bin"],
+    fragment_kinds: [
+        FragmentKind::Preamble,
+        FragmentKind::Symbol(SymbolKind::Module),
+        FragmentKind::Symbol(SymbolKind::Module),
+        FragmentKind::Symbol(SymbolKind::Module),
+        FragmentKind::Symbol(SymbolKind::Module),
+        FragmentKind::Symbol(SymbolKind::Module),
+    ],
 }
 
 /// First fragment is a preamble containing bare top-level key-value pairs.

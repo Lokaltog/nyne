@@ -1,41 +1,20 @@
-use nyne::load_fixture;
-use rstest::{fixture, rstest};
+use rstest::rstest;
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::decompose_fixture;
 
-/// Fixture: decompose the basic.fnl test file into fragments.
-#[fixture]
-fn basic() -> DecomposedFile {
-    let source = load_fixture!("syntax/languages/fennel", "basic.fnl");
-    decompose_fixture("fnl", &source)
-}
-
-/// Top-level: MAX-RETRIES, greet, process, with-retry, config = 5 fragments.
-/// The require forms (lume, utils) should be coalesced into imports.
-#[rstest]
-fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.len(), 5);
-}
-
-/// Verifies that fragment names match the expected symbol names in order.
-#[rstest]
-fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, &["MAX-RETRIES", "greet", "process", "with-retry", "config"]);
-}
-
-/// Verifies that fragment kinds match the expected symbol kinds in order.
-#[rstest]
-fn fragment_kinds(basic: DecomposedFile) {
-    let kinds: Vec<_> = basic.iter().map(|f| &f.kind).collect();
-    assert_eq!(kinds, &[
-        &FragmentKind::Symbol(SymbolKind::Variable),
-        &FragmentKind::Symbol(SymbolKind::Function),
-        &FragmentKind::Symbol(SymbolKind::Function),
-        &FragmentKind::Symbol(SymbolKind::Macro),
-        &FragmentKind::Symbol(SymbolKind::Variable),
-    ]);
+crate::language_tests! {
+    ext: "fnl",
+    fixture_module: "syntax/languages/fennel",
+    fixture_file: "basic.fnl",
+    fragment_count: 5,
+    fragment_names: ["MAX-RETRIES", "greet", "process", "with-retry", "config"],
+    fragment_kinds: [
+        FragmentKind::Symbol(SymbolKind::Variable),
+        FragmentKind::Symbol(SymbolKind::Function),
+        FragmentKind::Symbol(SymbolKind::Function),
+        FragmentKind::Symbol(SymbolKind::Macro),
+        FragmentKind::Symbol(SymbolKind::Variable),
+    ],
 }
 
 /// Require bindings are excluded from fragments (not meaningful decomposition targets).

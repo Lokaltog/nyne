@@ -59,3 +59,69 @@ pub fn splice_content(source: &str, byte_range: Range<usize>, new_content: &str)
 /// Test-only convenience wrapper that builds a [`Rope`] internally.
 #[must_use]
 pub fn line_start_of(source: &str, offset: usize) -> usize { line_start_of_rope(&Rope::from(source), offset) }
+/// Generate the standard language-decomposition test skeleton.
+///
+/// Emits `load_basic()`, the `basic` rstest fixture, and the three
+/// canonical assertions (`fragment_count`, `fragment_names`,
+/// `fragment_kinds`). Language-specific tests (class children,
+/// imports handling quirks, etc.) stay in the calling module.
+///
+/// # Example
+///
+/// ```ignore
+/// crate::language_tests! {
+///     ext: "rs",
+///     fixture_module: "syntax/languages/rust",
+///     fixture_file: "basic.rs",
+///     fragment_count: 9,
+///     fragment_names: [
+///         "imports", "MAX_SIZE", "process", "helper",
+///         "Config", "Status", "Processor",
+///         "Processor_for_Config", "Config",
+///     ],
+///     fragment_kinds: [
+///         FragmentKind::Imports,
+///         FragmentKind::Symbol(SymbolKind::Const),
+///         // ...
+///     ],
+/// }
+/// ```
+#[macro_export]
+macro_rules! language_tests {
+    (
+        ext: $ext:literal,
+        fixture_module: $module:literal,
+        fixture_file: $fixture:literal,
+        fragment_count: $count:expr,
+        fragment_names: [ $($name:expr),* $(,)? ],
+        fragment_kinds: [ $($kind:expr),* $(,)? ] $(,)?
+    ) => {
+        /// Load the shared fixture source for this language.
+        fn load_basic() -> ::std::string::String { ::nyne::load_fixture!($module, $fixture) }
+
+        /// Fixture: decompose the basic fixture into fragments.
+        #[::rstest::fixture]
+        fn basic() -> $crate::syntax::fragment::DecomposedFile {
+            $crate::test_support::decompose_fixture($ext, &load_basic())
+        }
+
+        #[::rstest::rstest]
+        fn fragment_count(basic: $crate::syntax::fragment::DecomposedFile) {
+            assert_eq!(basic.len(), $count);
+        }
+
+        #[::rstest::rstest]
+        fn fragment_names(basic: $crate::syntax::fragment::DecomposedFile) {
+            let names: ::std::vec::Vec<&str> = basic.iter().map(|f| f.name.as_str()).collect();
+            assert_eq!(names, [$($name),*]);
+        }
+
+        #[::rstest::rstest]
+        fn fragment_kinds(basic: $crate::syntax::fragment::DecomposedFile) {
+            let kinds: ::std::vec::Vec<$crate::syntax::fragment::FragmentKind> =
+                basic.iter().map(|f| f.kind.clone()).collect();
+            let expected: ::std::vec::Vec<$crate::syntax::fragment::FragmentKind> = ::std::vec![$($kind),*];
+            assert_eq!(kinds, expected);
+        }
+    };
+}

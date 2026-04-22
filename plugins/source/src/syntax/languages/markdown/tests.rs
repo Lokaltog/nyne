@@ -1,28 +1,18 @@
-use nyne::load_fixture;
-use rstest::{fixture, rstest};
+use rstest::rstest;
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind};
-use crate::test_support::decompose_fixture;
 
-/// Fixture: decompose the basic.md test file into fragments.
-#[fixture]
-fn basic() -> DecomposedFile {
-    let source = load_fixture!("syntax/languages/markdown", "basic.md");
-    decompose_fixture("md", &source)
-}
-
-/// Top-level: preamble (frontmatter + pre-heading content) +
-/// 2 h1 sections (Introduction, API Reference) = 3 fragments.
-#[rstest]
-fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.len(), 3);
-}
-
-/// Verifies that fragment names match the expected section names in order.
-#[rstest]
-fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, &["preamble", "Introduction", "API Reference"]);
+crate::language_tests! {
+    ext: "md",
+    fixture_module: "syntax/languages/markdown",
+    fixture_file: "basic.md",
+    fragment_count: 3,
+    fragment_names: ["preamble", "Introduction", "API Reference"],
+    fragment_kinds: [
+        FragmentKind::Preamble,
+        FragmentKind::Section { level: 1 },
+        FragmentKind::Section { level: 1 },
+    ],
 }
 
 /// First fragment is a preamble containing frontmatter and intro text.

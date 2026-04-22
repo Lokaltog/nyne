@@ -1,51 +1,28 @@
-use nyne::load_fixture;
-use rstest::{fixture, rstest};
+use rstest::rstest;
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::decompose_fixture;
 
-/// Load `basic.py` fixture source. Single source of truth for the fixture path.
-fn load_basic() -> String { load_fixture!("syntax/languages/python", "basic.py") }
-
-/// Fixture: decompose the basic.py test file into fragments.
-#[fixture]
-fn basic() -> DecomposedFile {
-    let source = load_basic();
-    decompose_fixture("py", &source)
-}
-
-/// Top-level: imports + 2 assignments + 1 function + 2 classes = 6 fragments.
-#[rstest]
-fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.len(), 6);
-}
-
-/// Verifies that fragment names match the expected symbol names in order.
-#[rstest]
-fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, &[
+crate::language_tests! {
+    ext: "py",
+    fixture_module: "syntax/languages/python",
+    fixture_file: "basic.py",
+    fragment_count: 6,
+    fragment_names: [
         "imports",
         "MAX_RETRIES",
         "DEFAULT_NAME",
         "greet",
         "Config",
-        "Processor"
-    ]);
-}
-
-/// Verifies that fragment kinds match the expected symbol kinds in order.
-#[rstest]
-fn fragment_kinds(basic: DecomposedFile) {
-    let kinds: Vec<_> = basic.iter().map(|f| &f.kind).collect();
-    assert_eq!(kinds, &[
-        &FragmentKind::Imports,
-        &FragmentKind::Symbol(SymbolKind::Variable),
-        &FragmentKind::Symbol(SymbolKind::Variable),
-        &FragmentKind::Symbol(SymbolKind::Function),
-        &FragmentKind::Symbol(SymbolKind::Class),
-        &FragmentKind::Symbol(SymbolKind::Class),
-    ]);
+        "Processor",
+    ],
+    fragment_kinds: [
+        FragmentKind::Imports,
+        FragmentKind::Symbol(SymbolKind::Variable),
+        FragmentKind::Symbol(SymbolKind::Variable),
+        FragmentKind::Symbol(SymbolKind::Function),
+        FragmentKind::Symbol(SymbolKind::Class),
+        FragmentKind::Symbol(SymbolKind::Class),
+    ],
 }
 
 /// Imports are coalesced into a single Imports fragment.

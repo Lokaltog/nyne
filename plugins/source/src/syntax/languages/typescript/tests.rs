@@ -1,30 +1,13 @@
-use nyne::load_fixture;
-use rstest::{fixture, rstest};
+use rstest::rstest;
 
 use crate::syntax::fragment::{DecomposedFile, FragmentKind, SymbolKind};
-use crate::test_support::decompose_fixture;
 
-/// Load `basic.ts` fixture source. Single source of truth for the fixture path.
-fn load_basic() -> String { load_fixture!("syntax/languages/typescript", "basic.ts") }
-
-/// Fixture: decompose the basic.ts test file into fragments.
-#[fixture]
-fn basic() -> DecomposedFile {
-    let source = load_basic();
-    decompose_fixture("ts", &source)
-}
-
-/// Top-level: imports + const + 2 fns + interface + class + enum + type alias = 8 fragments.
-#[rstest]
-fn fragment_count(basic: DecomposedFile) {
-    assert_eq!(basic.len(), 8);
-}
-
-/// Verifies that fragment names match the expected symbol names in order.
-#[rstest]
-fn fragment_names(basic: DecomposedFile) {
-    let names: Vec<_> = basic.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, &[
+crate::language_tests! {
+    ext: "ts",
+    fixture_module: "syntax/languages/typescript",
+    fixture_file: "basic.ts",
+    fragment_count: 8,
+    fragment_names: [
         "imports",
         "MAX_RETRIES",
         "greet",
@@ -32,24 +15,18 @@ fn fragment_names(basic: DecomposedFile) {
         "Processor",
         "AppConfig",
         "Status",
-        "Result"
-    ]);
-}
-
-/// Verifies that fragment kinds match the expected symbol kinds in order.
-#[rstest]
-fn fragment_kinds(basic: DecomposedFile) {
-    let kinds: Vec<_> = basic.iter().map(|f| &f.kind).collect();
-    assert_eq!(kinds, &[
-        &FragmentKind::Imports,
-        &FragmentKind::Symbol(SymbolKind::Variable),
-        &FragmentKind::Symbol(SymbolKind::Function),
-        &FragmentKind::Symbol(SymbolKind::Function),
-        &FragmentKind::Symbol(SymbolKind::Interface),
-        &FragmentKind::Symbol(SymbolKind::Class),
-        &FragmentKind::Symbol(SymbolKind::Enum),
-        &FragmentKind::Symbol(SymbolKind::TypeAlias),
-    ]);
+        "Result",
+    ],
+    fragment_kinds: [
+        FragmentKind::Imports,
+        FragmentKind::Symbol(SymbolKind::Variable),
+        FragmentKind::Symbol(SymbolKind::Function),
+        FragmentKind::Symbol(SymbolKind::Function),
+        FragmentKind::Symbol(SymbolKind::Interface),
+        FragmentKind::Symbol(SymbolKind::Class),
+        FragmentKind::Symbol(SymbolKind::Enum),
+        FragmentKind::Symbol(SymbolKind::TypeAlias),
+    ],
 }
 
 /// Imports are coalesced into a single Imports fragment.
