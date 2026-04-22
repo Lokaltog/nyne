@@ -5,8 +5,8 @@ use color_eyre::eyre::Result;
 use rstest::rstest;
 
 use super::*;
-use crate::router::test_support::{StubReadable, test_read_ctx};
 use crate::router::{Chain, NamedNode, Next, Node, Op, Provider, Request};
+use crate::test_support::{StubReadable, test_read_ctx};
 
 struct TestProvider;
 
@@ -101,7 +101,7 @@ fn no_handler_defaults_to_next() {
         Arc::new(TreeProvider {
             tree: RouteTree::builder().build(),
         }),
-        Arc::new(crate::router::test_support::StoppingProvider::new()),
+        Arc::new(crate::test_support::StoppingProvider::new()),
     ])
     .unwrap();
     let mut req = readdir_req("");
@@ -149,7 +149,7 @@ fn no_match_passthrough() {
         .build();
     let chain = Chain::build(vec![
         Arc::new(TreeProvider { tree }),
-        Arc::new(crate::router::test_support::StoppingProvider::new()),
+        Arc::new(crate::test_support::StoppingProvider::new()),
     ])
     .unwrap();
     let mut req = readdir_req("unknown/path");
@@ -293,7 +293,7 @@ fn dispatch_when_passes_through_without_state() {
         Arc::new(TreeProvider {
             tree: RouteTree::builder().content(TreeProvider::leaf).build(),
         }),
-        Arc::new(crate::router::test_support::StoppingProvider::new()),
+        Arc::new(crate::test_support::StoppingProvider::new()),
     ])
     .unwrap();
     let mut req = readdir_req("");
@@ -642,7 +642,7 @@ fn on_op_receives_next_and_can_chain() {
                 })
                 .build(),
         }),
-        Arc::new(crate::router::test_support::StoppingProvider::new()),
+        Arc::new(crate::test_support::StoppingProvider::new()),
     ])
     .unwrap();
 
@@ -677,7 +677,7 @@ fn on_readdir_chains_next_automatically() {
         Arc::new(AProvider {
             tree: RouteTree::builder().on_readdir(AProvider::add_items).build(),
         }),
-        Arc::new(crate::router::test_support::StoppingProvider::new()),
+        Arc::new(crate::test_support::StoppingProvider::new()),
     ])
     .unwrap();
 

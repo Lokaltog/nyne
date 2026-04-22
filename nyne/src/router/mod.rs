@@ -4,9 +4,6 @@ mod node;
 mod pipeline;
 pub mod tree;
 
-#[cfg(test)]
-mod test_support;
-
 pub use cache::GenCache;
 pub use cache::generation::GenerationMap;
 pub use fs::mem::MemFs;

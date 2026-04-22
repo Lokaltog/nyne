@@ -6,13 +6,17 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use color_eyre::eyre::{Result, bail};
 
 use crate::config::NyneConfig;
 use crate::dispatch::activation::ActivationContext;
 use crate::process::Spawner;
-use crate::router::{AffectedFiles, DirEntry, Filesystem, Metadata};
+use crate::router::{
+    AffectedFiles, DirEntry, Filesystem, MemFs, Metadata, Next, Node, Provider, ProviderId, ProviderMeta, ReadContext,
+    Readable, Request, Writable, WriteContext,
+};
 
 /// Stub [`Filesystem`] — all methods bail. Use when the test never touches
 /// the filesystem (e.g., template rendering, snapshot assertions).
@@ -70,4 +74,108 @@ pub fn stub_activation_context() -> ActivationContext {
         Arc::new(NyneConfig::default()),
         Arc::new(Spawner::new()),
     )
+}
+/// A readable that returns static content.
+///
+/// Supports optional backing path (`.with_backing(path)`) to simulate a
+/// real on-disk file, and optional call counting (`.with_counter()`) to
+/// let tests observe read invocations across ownership boundaries.
+#[derive(Clone, Default)]
+pub struct StubReadable {
+    content: Vec<u8>,
+    backing_path: Option<PathBuf>,
+    call_count: Option<Arc<AtomicU32>>,
+}
+
+impl StubReadable {
+    /// Empty readable — returns no content, no backing path.
+    pub fn empty() -> Self { Self::default() }
+
+    /// Readable returning the given text content.
+    pub fn new(content: &str) -> Self {
+        Self {
+            content: content.as_bytes().to_vec(),
+            ..Self::default()
+        }
+    }
+
+    /// Readable returning the given byte content.
+    pub fn from_bytes(content: &[u8]) -> Self {
+        Self {
+            content: content.to_vec(),
+            ..Self::default()
+        }
+    }
+
+    /// Attach a backing path so the readable reports as file-backed.
+    pub fn with_backing(mut self, path: impl Into<PathBuf>) -> Self {
+        self.backing_path = Some(path.into());
+        self
+    }
+
+    /// Enable call counting. Returns `(self, counter)` — the returned
+    /// `Arc<AtomicU32>` observes read calls even after `self` is moved
+    /// into a node.
+    pub fn with_counter(mut self) -> (Self, Arc<AtomicU32>) {
+        let counter = Arc::new(AtomicU32::new(0));
+        self.call_count = Some(Arc::clone(&counter));
+        (self, counter)
+    }
+}
+
+impl Readable for StubReadable {
+    fn read(&self, _ctx: &ReadContext<'_>) -> Result<Vec<u8>> {
+        if let Some(c) = &self.call_count {
+            c.fetch_add(1, Ordering::Relaxed);
+        }
+        Ok(self.content.clone())
+    }
+
+    fn backing_path(&self) -> Option<&Path> { self.backing_path.as_deref() }
+}
+
+/// A writable that discards all content.
+pub struct StubWritable;
+
+impl Writable for StubWritable {
+    fn write(&self, _ctx: &WriteContext<'_>, _data: &[u8]) -> Result<AffectedFiles> { Ok(vec![]) }
+}
+
+/// A provider that stops the chain and emits `stopped.txt`.
+pub struct StoppingProvider {
+    id: ProviderId,
+}
+
+impl StoppingProvider {
+    pub const fn new() -> Self {
+        Self {
+            id: ProviderId::new("stopper"),
+        }
+    }
+}
+
+impl Default for StoppingProvider {
+    fn default() -> Self { Self::new() }
+}
+
+impl ProviderMeta for StoppingProvider {
+    fn id(&self) -> ProviderId { self.id }
+
+    fn terminal(&self) -> bool { true }
+}
+
+impl Provider for StoppingProvider {
+    fn accept(&self, req: &mut Request, _next: &Next) -> Result<()> {
+        req.nodes.add(Node::file().named("stopped.txt"));
+        Ok(())
+    }
+}
+
+/// Create a [`ReadContext`] backed by an empty [`MemFs`] for testing.
+pub fn test_read_ctx() -> ReadContext<'static> {
+    ReadContext {
+        path: Path::new(""),
+        // Leak the MemFs so we get a &'static reference for tests.
+        fs: Box::leak(Box::new(MemFs::new())),
+    }
 }

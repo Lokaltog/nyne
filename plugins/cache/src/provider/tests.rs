@@ -1,39 +1,12 @@
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::Ordering;
 
-use color_eyre::eyre::Result;
 use nyne::router::{CachePolicy, NamedNode, ReadContext, Readable};
+use nyne::test_support::StubReadable;
 use rstest::rstest;
 
 use super::cached::{CachedReadable, wrap_readable};
-
-struct CountingReadable {
-    content: Vec<u8>,
-    call_count: Arc<AtomicU32>,
-}
-
-impl CountingReadable {
-    fn new(content: &[u8]) -> Self {
-        Self {
-            content: content.to_vec(),
-            call_count: Arc::new(AtomicU32::new(0)),
-        }
-    }
-
-    /// Clone the shared call counter so a test can observe it after the
-    /// `CountingReadable` is moved into a node.
-    fn counter(&self) -> Arc<AtomicU32> { Arc::clone(&self.call_count) }
-
-    fn calls(&self) -> u32 { self.call_count.load(Ordering::Relaxed) }
-}
-
-impl Readable for CountingReadable {
-    fn read(&self, _ctx: &ReadContext<'_>) -> Result<Vec<u8>> {
-        self.call_count.fetch_add(1, Ordering::Relaxed);
-        Ok(self.content.clone())
-    }
-}
 
 fn dummy_ctx() -> ReadContext<'static> {
     // ReadContext needs a path and fs — use a stub that won't be called.
@@ -45,9 +18,9 @@ fn dummy_ctx() -> ReadContext<'static> {
 
 #[test]
 fn cached_readable_returns_correct_size_after_read() {
-    let inner = Arc::new(CountingReadable::new(b"hello world"));
+    let (stub, calls) = StubReadable::from_bytes(b"hello world").with_counter();
     let cached = CachedReadable {
-        inner: inner.clone(),
+        inner: Arc::new(stub),
         persistent: std::sync::OnceLock::new(),
         timed: std::sync::Mutex::new(None),
         // None → persistent mode (matches `CachePolicy::Default` outcome in `wrap_readable`).
@@ -61,19 +34,19 @@ fn cached_readable_returns_correct_size_after_read() {
     let content = cached.read(&dummy_ctx()).unwrap();
     assert_eq!(content, b"hello world");
     assert_eq!(cached.size(), Some(11));
-    assert_eq!(inner.calls(), 1);
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
 
     // Second read returns cached content without calling inner.
     let content = cached.read(&dummy_ctx()).unwrap();
     assert_eq!(content, b"hello world");
-    assert_eq!(inner.calls(), 1);
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
 }
 
 #[test]
 fn cached_readable_delegates_backing_path() {
     assert_eq!(
         CachedReadable {
-            inner: Arc::new(CountingReadable::new(b"")),
+            inner: Arc::new(StubReadable::empty()),
             persistent: std::sync::OnceLock::new(),
             timed: std::sync::Mutex::new(None),
             ttl: None,
@@ -95,10 +68,10 @@ fn wrap_readable_skips_nodes_with_backing_path() {
 fn wrap_readable_wraps_virtual_readable() {
     let mut node = NamedNode::new(
         "test",
-        nyne::router::Node::file().with_readable(CountingReadable::new(b"content")),
+        nyne::router::Node::file().with_readable(StubReadable::from_bytes(b"content")),
     );
 
-    // Before wrapping, size is None (CountingReadable doesn't impl size).
+    // Before wrapping, size is None (StubReadable doesn't impl size).
     assert_eq!(node.readable().unwrap().size(), None);
 
     wrap_readable(&mut node);
@@ -200,13 +173,10 @@ fn wrap_readable_skips_opt_out_policies(#[case] policy: CachePolicy) {
     // the readable must NOT be wrapped, so consecutive reads see the live
     // inner state. Regression for the bug where a frozen "No changes." was
     // returned from staged.diff after the first read.
-    let counting = CountingReadable::new(b"v1");
-    let calls = counting.counter();
+    let (stub, calls) = StubReadable::from_bytes(b"v1").with_counter();
     let mut node = NamedNode::new(
         "test",
-        nyne::router::Node::file()
-            .with_readable(counting)
-            .with_cache_policy(policy),
+        nyne::router::Node::file().with_readable(stub).with_cache_policy(policy),
     );
 
     wrap_readable(&mut node);

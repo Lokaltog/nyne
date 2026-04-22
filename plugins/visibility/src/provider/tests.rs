@@ -1,8 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
-use nyne::router::{Chain, NamedNode, Next, Node, Op, Provider, ReadContext, Readable, Request};
+use nyne::router::{Chain, NamedNode, Next, Node, Op, Provider, Request};
+use nyne::test_support::StubReadable;
 use rstest::rstest;
 
 use super::{Visibility, VisibilityProvider};
@@ -14,25 +15,13 @@ fn chain(visibility: Visibility) -> Chain {
     Chain::build(vec![Arc::new(provider) as Arc<dyn Provider>]).unwrap()
 }
 
-/// Readable with a backing path — simulates a real on-disk file.
-struct BackedReadable;
-
-impl Readable for BackedReadable {
-    fn read(&self, _ctx: &ReadContext<'_>) -> Result<Vec<u8>> { Ok(vec![]) }
-
-    fn backing_path(&self) -> Option<&Path> { Some(Path::new("real")) }
+fn file_with_backing(name: &str) -> NamedNode {
+    Node::file()
+        .with_readable(StubReadable::empty().with_backing("real"))
+        .named(name)
 }
 
-fn file_with_backing(name: &str) -> NamedNode { Node::file().with_readable(BackedReadable).named(name) }
-
-fn virtual_file(name: &str) -> NamedNode { Node::file().with_readable(VirtualReadable).named(name) }
-
-/// Readable without a backing path — simulates a virtual file.
-struct VirtualReadable;
-
-impl Readable for VirtualReadable {
-    fn read(&self, _ctx: &ReadContext<'_>) -> Result<Vec<u8>> { Ok(vec![]) }
-}
+fn virtual_file(name: &str) -> NamedNode { Node::file().with_readable(StubReadable::empty()).named(name) }
 
 fn names(req: &Request) -> Vec<&str> {
     let mut v: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();

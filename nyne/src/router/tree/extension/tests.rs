@@ -4,9 +4,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use rstest::rstest;
 
-use crate::router::test_support::StubReadable;
 use crate::router::tree::RouteTree;
 use crate::router::{NamedNode, Next, Node, Op, Request, RouteExtension};
+use crate::test_support::StubReadable;
 
 struct P;
 

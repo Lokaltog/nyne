@@ -1,7 +1,7 @@
 use rstest::rstest;
 
 use super::*;
-use crate::router::test_support::{StubReadable, StubWritable};
+use crate::test_support::{StubReadable, StubWritable};
 
 #[test]
 fn bitor_combines_flags() {
