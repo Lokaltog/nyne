@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use color_eyre::eyre::{Result, eyre};
+use rstest::rstest;
 use serde::Serialize;
 
 use super::{TemplateContent, TemplateEngine, TemplateGlobals, TemplateHandle, TemplateView, serialize_view};
@@ -25,7 +26,7 @@ struct TestView {
 }
 
 /// Tests that a basic template renders with a simple view model.
-#[test]
+#[rstest]
 fn render_basic_template() {
     let engine = engine_with_fixture("basic.j2");
     let view = TestView {
@@ -36,7 +37,7 @@ fn render_basic_template() {
 }
 
 /// Tests that `trim_blocks` and `lstrip_blocks` engine settings strip whitespace correctly.
-#[test]
+#[rstest]
 fn trim_blocks_and_lstrip() {
     let engine = engine_with_fixture("trim_blocks.j2");
     let view = TestView {
@@ -47,7 +48,7 @@ fn trim_blocks_and_lstrip() {
 }
 
 /// Tests that the tokens filter formats values below 1k as plain numbers.
-#[test]
+#[rstest]
 fn tokens_filter_below_1k() {
     let engine = engine_with_fixture("tokens.j2");
 
@@ -61,7 +62,7 @@ fn tokens_filter_below_1k() {
 }
 
 /// Tests that the tokens filter formats values above 1k with decimal notation.
-#[test]
+#[rstest]
 fn tokens_filter_above_1k() {
     let engine = engine_with_fixture("tokens.j2");
 
@@ -75,7 +76,7 @@ fn tokens_filter_above_1k() {
 }
 
 /// Static view via `serialize_view` — the simple path.
-#[test]
+#[rstest]
 fn template_view_serialize() {
     let engine = engine_with_fixture("basic.j2");
 
@@ -95,7 +96,7 @@ fn template_view_serialize() {
 }
 
 /// Dynamic view via manual `TemplateView` impl — computes at render time.
-#[test]
+#[rstest]
 fn template_view_dynamic() {
     let engine = engine_with_fixture("basic.j2");
 
@@ -127,7 +128,7 @@ fn template_view_dynamic() {
 }
 
 /// Fallible view — errors propagate through `TemplateView::render`.
-#[test]
+#[rstest]
 fn template_view_fallible() {
     let engine = engine_with_fixture("basic.j2");
 
@@ -145,7 +146,7 @@ fn template_view_fallible() {
 }
 
 /// `TemplateContent` accepts both `serialize_view` and manual `TemplateView` impls.
-#[test]
+#[rstest]
 fn template_content_construction() {
     let engine = Arc::new(engine_with_fixture("basic.j2"));
 
@@ -176,7 +177,7 @@ fn template_content_construction() {
     let _content = TemplateContent::new(&engine, "test", ManualView);
 }
 /// `TemplateHandle::lazy_node` creates a closure-backed template node.
-#[test]
+#[rstest]
 fn lazy_node_renders_via_closure() {
     let engine = Arc::new(engine_with_fixture("basic.j2"));
     let handle = TemplateHandle::new(&engine, "test");
@@ -198,7 +199,7 @@ fn lazy_node_renders_via_closure() {
 }
 
 /// `TemplateHandle::editable_lazy_node` creates a closure-backed readable+writable node.
-#[test]
+#[rstest]
 fn editable_lazy_node_renders_and_writes() {
     let engine = Arc::new(engine_with_fixture("basic.j2"));
     let handle = TemplateHandle::new(&engine, "test");
@@ -235,7 +236,7 @@ fn editable_lazy_node_renders_and_writes() {
 }
 /// `TemplateGlobals` default impl walks nested fields and registers each
 /// string leaf as a template global using UPPER_SNAKE keys joined by `_`.
-#[test]
+#[rstest]
 fn template_globals_derives_nested_keys() {
     #[derive(Serialize)]
     struct Vfs {

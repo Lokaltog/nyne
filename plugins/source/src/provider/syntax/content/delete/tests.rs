@@ -1,7 +1,9 @@
+use rstest::rstest;
+
 use crate::edit::splice::extend_delete_range;
 
 /// Tests that a range without trailing blank lines is unchanged.
-#[test]
+#[rstest]
 fn no_trailing_blanks() {
     let source = "fn foo() {}\nfn bar() {}\n";
     let span = 0..12; // "fn foo() {}\n"
@@ -10,7 +12,7 @@ fn no_trailing_blanks() {
 }
 
 /// Tests that one trailing blank line is absorbed into the deletion range.
-#[test]
+#[rstest]
 fn one_trailing_blank() {
     let source = "fn foo() {}\n\nfn bar() {}\n";
     let span = 0..12; // "fn foo() {}\n"
@@ -19,7 +21,7 @@ fn one_trailing_blank() {
 }
 
 /// Tests that multiple trailing blank lines are all absorbed.
-#[test]
+#[rstest]
 fn multiple_trailing_blanks() {
     let source = "fn foo() {}\n\n\n\nfn bar() {}\n";
     let span = 0..12;
@@ -28,7 +30,7 @@ fn multiple_trailing_blanks() {
 }
 
 /// Tests that trailing blank lines at EOF are absorbed.
-#[test]
+#[rstest]
 fn trailing_blanks_at_eof() {
     let source = "fn foo() {}\n\n\n";
     let span = 0..12;
@@ -37,7 +39,7 @@ fn trailing_blanks_at_eof() {
 }
 
 /// Tests that whitespace-only trailing lines are treated as blank.
-#[test]
+#[rstest]
 fn whitespace_only_lines() {
     let source = "fn foo() {}\n  \n\t\nfn bar() {}\n";
     let span = 0..12;

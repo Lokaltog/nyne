@@ -1,9 +1,11 @@
 use std::path::Path;
 
+use rstest::rstest;
+
 use super::*;
 
 /// Tests that `find_cgroup2_mount` locates the cgroup2 mount point.
-#[test]
+#[rstest]
 fn find_cgroup2_mount_finds_mount_point() {
     // On any modern Linux system with cgroups v2, this should succeed.
     let mount = find_cgroup2_mount();
@@ -14,7 +16,7 @@ fn find_cgroup2_mount_finds_mount_point() {
 }
 
 /// Tests that `read_pid_cgroup_raw` returns the current process cgroup path.
-#[test]
+#[rstest]
 fn read_pid_cgroup_raw_returns_self_cgroup() {
     let path = read_pid_cgroup_raw(Path::new("/proc/self/cgroup"));
     // On systems with cgroups v2 (even hybrid), this should return a path.
@@ -24,26 +26,26 @@ fn read_pid_cgroup_raw_returns_self_cgroup() {
 }
 
 /// Tests that `read_pid_cgroup_raw` returns None for a nonexistent PID.
-#[test]
+#[rstest]
 fn read_pid_cgroup_raw_returns_none_for_nonexistent() {
     assert_eq!(read_pid_cgroup_raw(Path::new("/proc/99999999/cgroup")), None);
 }
 
 /// Verifies the session cgroup name format.
-#[test]
+#[rstest]
 fn session_name_format() {
     assert_eq!(session_name(12345), "pid-12345");
 }
 
 /// Tests that `CgroupTracker::new` gracefully returns None when unavailable.
-#[test]
+#[rstest]
 fn tracker_new_graceful_fallback() {
     // CgroupTracker::new() should either succeed or return None — never panic.
     let _tracker = CgroupTracker::new();
 }
 
 /// Tests that resolve returns None for an untracked PID.
-#[test]
+#[rstest]
 fn tracker_resolve_returns_none_for_untracked() {
     // Even if cgroups work, an untracked PID should resolve to None.
     if let Some(tracker) = CgroupTracker::new() {
@@ -52,7 +54,7 @@ fn tracker_resolve_returns_none_for_untracked() {
 }
 
 /// Tests that tracking a PID allows it to be resolved.
-#[test]
+#[rstest]
 fn tracker_track_and_resolve() {
     let Some(tracker) = CgroupTracker::new() else { return };
 
@@ -69,7 +71,7 @@ fn tracker_track_and_resolve() {
 }
 
 /// Tests that untracking a PID removes it from resolution.
-#[test]
+#[rstest]
 fn tracker_untrack_removes_session() {
     let Some(tracker) = CgroupTracker::new() else { return };
 

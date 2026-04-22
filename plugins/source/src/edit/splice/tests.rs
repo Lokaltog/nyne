@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use nyne::router::fs::os::OsFilesystem;
+use rstest::rstest;
 
 use super::*;
 use crate::test_support::splice_validate_write;
@@ -26,7 +27,7 @@ fn reject_if_contains_error(source: &str) -> Result<(), String> {
 }
 
 /// Tests that splicing valid content into a valid file succeeds.
-#[test]
+#[rstest]
 fn splice_valid_to_valid_succeeds() {
     let (_dir, fs, path) = setup("fn hello() {}");
     let result = splice_validate_write(&fs, &path, 3..8, "world", always_ok);
@@ -36,7 +37,7 @@ fn splice_valid_to_valid_succeeds() {
 }
 
 /// Tests that splicing invalid content into a valid file is rejected.
-#[test]
+#[rstest]
 fn splice_valid_to_invalid_is_rejected() {
     let (_dir, fs, path) = setup("fn hello() {}");
     let result = splice_validate_write(&fs, &path, 3..8, "SYNTAX_ERROR", reject_if_contains_error);
@@ -57,7 +58,7 @@ fn splice_valid_to_invalid_is_rejected() {
 /// The splice keeps the `SYNTAX_ERROR` marker in the output so that
 /// post-splice validation fails, forcing the fallback branch to fire
 /// rather than trivially passing on a clean spliced result.
-#[test]
+#[rstest]
 fn splice_already_invalid_file_allows_write() {
     let (_dir, fs, path) = setup("fn SYNTAX_ERROR_old() {}");
     // Replace "old" with "new" at bytes 16..19 — both pre- and post-splice
@@ -74,7 +75,7 @@ fn splice_already_invalid_file_allows_write() {
 }
 
 /// Tests that an out-of-bounds splice range is rejected.
-#[test]
+#[rstest]
 fn splice_out_of_bounds_is_rejected() {
     let (_dir, fs, path) = setup("short");
     let result = splice_validate_write(&fs, &path, 0..100, "x", always_ok);
@@ -83,7 +84,7 @@ fn splice_out_of_bounds_is_rejected() {
 
 /// Splicing content that removes the trailing newline must re-add it.
 /// POSIX text file convention; tree-sitter-markdown rejects files without it.
-#[test]
+#[rstest]
 fn splice_ensures_trailing_newline() {
     let (_dir, fs, path) = setup("hello\n");
     let result = splice_validate_write(&fs, &path, 0..6, "world", always_ok);
@@ -93,7 +94,7 @@ fn splice_ensures_trailing_newline() {
 }
 
 /// Splicing into content that already has a trailing newline does not double it.
-#[test]
+#[rstest]
 fn splice_does_not_double_trailing_newline() {
     let (_dir, fs, path) = setup("hello\n");
     let result = splice_validate_write(&fs, &path, 0..6, "world\n", always_ok);
@@ -108,7 +109,7 @@ fn splice_does_not_double_trailing_newline() {
 /// This prevents cascading cache invalidations from round-trips like
 /// `cat body.rs > body.rs` where downstream providers would otherwise
 /// evict the kernel page cache for an unchanged file.
-#[test]
+#[rstest]
 fn splice_noop_skips_validate_and_write() {
     let (_dir, fs, path) = setup("hello world\n");
     let validate_calls = std::cell::Cell::new(0);

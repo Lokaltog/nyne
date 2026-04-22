@@ -1,7 +1,9 @@
+use rstest::rstest;
+
 use super::*;
 
 /// Verifies that `SessionInfo` survives JSON serialization and deserialization.
-#[test]
+#[rstest]
 fn session_info_roundtrip() {
     let info = SessionInfo {
         id: SessionId::new("test-session".into()).unwrap(),
@@ -16,7 +18,7 @@ fn session_info_roundtrip() {
 }
 
 /// Verifies that resolve fails when the registry has no sessions.
-#[test]
+#[rstest]
 fn registry_resolve_empty() {
     let registry = SessionRegistry { sessions: vec![] };
     assert!(registry.resolve(None).is_err());
@@ -24,7 +26,7 @@ fn registry_resolve_empty() {
 }
 
 /// Verifies that resolve returns the only active session without requiring an explicit ID.
-#[test]
+#[rstest]
 fn registry_resolve_single_session() {
     let registry = SessionRegistry {
         sessions: vec![SessionInfo {
@@ -44,7 +46,7 @@ fn registry_resolve_single_session() {
 }
 
 /// Verifies that resolve requires an explicit ID when multiple sessions are active.
-#[test]
+#[rstest]
 fn registry_resolve_multiple_sessions_requires_id() {
     let registry = SessionRegistry {
         sessions: vec![
@@ -67,7 +69,7 @@ fn registry_resolve_multiple_sessions_requires_id() {
 }
 
 /// Verifies that `is_active` returns true for known sessions and false for unknown ones.
-#[test]
+#[rstest]
 fn registry_is_active() {
     let registry = SessionRegistry {
         sessions: vec![SessionInfo {

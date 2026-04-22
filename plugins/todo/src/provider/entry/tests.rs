@@ -1,21 +1,23 @@
 use std::path::PathBuf;
 
+use rstest::rstest;
+
 use super::*;
 
 /// Tests that basic alphanumeric content is slugified correctly.
-#[test]
+#[rstest]
 fn slugify_basic() {
     assert_eq!(slugify_content("fix the frobnicator"), "fix-the-frobnicator");
 }
 
 /// Tests that special characters are stripped during slugification.
-#[test]
+#[rstest]
 fn slugify_special_chars() {
     assert_eq!(slugify_content("handle error (URGENT!)"), "handle-error-urgent");
 }
 
 /// Tests that long content is truncated at a word boundary.
-#[test]
+#[rstest]
 fn slugify_truncation() {
     let long = "this is a very long comment that should be truncated at a word boundary";
     let slug = slugify_content(long);
@@ -24,14 +26,14 @@ fn slugify_truncation() {
 }
 
 /// Tests that empty or whitespace-only content produces "unnamed".
-#[test]
+#[rstest]
 fn slugify_empty() {
     assert_eq!(slugify_content(""), "unnamed");
     assert_eq!(slugify_content("   "), "unnamed");
 }
 
 /// Tests the filesystem-safe name format for todo entries.
-#[test]
+#[rstest]
 fn fs_name_format() {
     let entry = Entry {
         source_file: PathBuf::from("src/main.rs"),
@@ -44,7 +46,7 @@ fn fs_name_format() {
 
 /// Symlink from `@/todo/FIXME/<entry>` must reach `src/dispatch/router.rs@/symbols/at-line/10`.
 /// Paths are mount-root-relative: base includes the `@` companion prefix.
-#[test]
+#[rstest]
 fn symlink_target_nested_source_file() {
     let entry = Entry {
         source_file: PathBuf::from("src/dispatch/router.rs"),
@@ -62,7 +64,7 @@ fn symlink_target_nested_source_file() {
 }
 
 /// Same test with a root-level file — ensures depth computation works at all levels.
-#[test]
+#[rstest]
 fn symlink_target_root_source_file() {
     let entry = Entry {
         source_file: PathBuf::from("ROADMAP.md"),

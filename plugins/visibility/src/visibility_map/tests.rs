@@ -1,9 +1,10 @@
 use nyne::process::procfs::{COMM_MAX_LEN, read_ppid};
+use rstest::rstest;
 
 use super::*;
 
 /// Tests that resolve returns Default when no rules or overrides exist.
-#[test]
+#[rstest]
 fn resolve_returns_default_when_empty() {
     let map = VisibilityMap::new(std::iter::empty());
     // PID 1 (init) always exists on Linux.
@@ -11,7 +12,7 @@ fn resolve_returns_default_when_empty() {
 }
 
 /// Tests that an explicit PID override takes precedence over other rules.
-#[test]
+#[rstest]
 fn pid_override_takes_precedence() {
     let map = VisibilityMap::new(std::iter::empty());
     map.set_pid(99999, ProcessVisibility::All);
@@ -19,7 +20,7 @@ fn pid_override_takes_precedence() {
 }
 
 /// Tests that removing a PID override restores Default visibility.
-#[test]
+#[rstest]
 fn remove_pid_restores_default() {
     let map = VisibilityMap::new(std::iter::empty());
     map.set_pid(99999, ProcessVisibility::None);
@@ -28,7 +29,7 @@ fn remove_pid_restores_default() {
 }
 
 /// Tests that name rules are truncated to match kernel comm length.
-#[test]
+#[rstest]
 fn name_rule_truncation_matches_kernel() {
     // Names longer than 15 chars are truncated to match /proc/pid/comm.
     let map = VisibilityMap::new([("typescript-language-server".to_owned(), ProcessVisibility::None)]);
@@ -37,7 +38,7 @@ fn name_rule_truncation_matches_kernel() {
 }
 
 /// Tests that a PID override shadows a matching name rule.
-#[test]
+#[rstest]
 fn pid_override_shadows_name_rule() {
     // Even if a name rule would match, a PID override wins.
     let map = VisibilityMap::new([("init".to_owned(), ProcessVisibility::None)]);
@@ -46,7 +47,7 @@ fn pid_override_shadows_name_rule() {
 }
 
 /// Tests that dynamic name rules take precedence over static ones.
-#[test]
+#[rstest]
 fn dynamic_name_rule_takes_precedence_over_static() {
     let map = VisibilityMap::new([("test-proc".to_owned(), ProcessVisibility::None)]);
     map.set_name_rule("test-proc", ProcessVisibility::All);
@@ -57,7 +58,7 @@ fn dynamic_name_rule_takes_precedence_over_static() {
 }
 
 /// Tests that dynamic name rules truncate long names to `COMM_MAX_LEN`.
-#[test]
+#[rstest]
 fn dynamic_name_rule_truncates_long_names() {
     let map = VisibilityMap::new([]);
     let long_name = "a".repeat(20);
@@ -68,7 +69,7 @@ fn dynamic_name_rule_truncates_long_names() {
 }
 
 /// Tests that `explicit_pid_entries` excludes cached resolution entries.
-#[test]
+#[rstest]
 fn explicit_pid_entries_excludes_cached() {
     let map = VisibilityMap::new([]);
     map.set_pid(42, ProcessVisibility::All);
@@ -81,7 +82,7 @@ fn explicit_pid_entries_excludes_cached() {
 }
 
 /// Tests that a child process inherits its parent's explicit visibility.
-#[test]
+#[rstest]
 fn child_inherits_parent_visibility() {
     // Our own PID's parent (the test runner) should be walkable.
     let our_pid = std::process::id();
@@ -101,7 +102,7 @@ fn child_inherits_parent_visibility() {
 }
 
 /// Tests that cached entries do not propagate to child processes.
-#[test]
+#[rstest]
 fn cached_entry_does_not_propagate_to_children() {
     // A cached Default on a parent must NOT be inherited by children.
     // This was the root cause of git seeing VFS files when spawned by
@@ -130,7 +131,7 @@ fn cached_entry_does_not_propagate_to_children() {
 }
 
 /// Tests that the ancestor walk stops at PID 1 (init).
-#[test]
+#[rstest]
 fn ancestor_walk_stops_at_init() {
     // PID 1 (init) has no override — should not inherit anything.
     let map = VisibilityMap::new(std::iter::empty());

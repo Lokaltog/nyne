@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::Write as _;
 
 use lsp_types::{Position, Range, TextEdit, WorkspaceEdit};
+use rstest::rstest;
 
 use super::*;
 
@@ -45,7 +46,7 @@ fn workspace_edit(entries: Vec<(lsp_types::Uri, Vec<TextEdit>)>) -> WorkspaceEdi
 }
 
 /// Tests applying a single replacement to one file.
-#[test]
+#[rstest]
 fn single_file_single_edit() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     write!(tmp, "hello world").unwrap();
@@ -59,7 +60,7 @@ fn single_file_single_edit() {
 }
 
 /// Tests applying multiple replacements to the same file.
-#[test]
+#[rstest]
 fn single_file_multiple_edits() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     write!(tmp, "aaa bbb ccc").unwrap();
@@ -77,7 +78,7 @@ fn single_file_multiple_edits() {
 }
 
 /// Tests applying edits across multiple files simultaneously.
-#[test]
+#[rstest]
 fn multiple_files() {
     let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
     write!(tmp1, "file one").unwrap();
@@ -100,7 +101,7 @@ fn multiple_files() {
 }
 
 /// Tests applying edits on different lines of the same file.
-#[test]
+#[rstest]
 fn multiline_edits() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     write!(tmp, "line one\nline two\nline three").unwrap();
@@ -118,7 +119,7 @@ fn multiline_edits() {
 }
 
 /// Tests inserting text at a position using an empty range.
-#[test]
+#[rstest]
 fn insert_at_position() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     write!(tmp, "ab").unwrap();
@@ -133,7 +134,7 @@ fn insert_at_position() {
 }
 
 /// Tests deleting a range by replacing it with empty text.
-#[test]
+#[rstest]
 fn delete_range() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     write!(tmp, "hello world").unwrap();
@@ -148,7 +149,7 @@ fn delete_range() {
 }
 
 /// Tests that an empty workspace edit succeeds without error.
-#[test]
+#[rstest]
 fn empty_edit_warns_but_succeeds() {
     let edit = WorkspaceEdit {
         changes: Some(HashMap::new()),
@@ -161,7 +162,7 @@ fn empty_edit_warns_but_succeeds() {
 }
 
 /// Tests that edits handle UTF-16 surrogate positions correctly.
-#[test]
+#[rstest]
 fn utf16_surrogate_positions() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     // 'a' + emoji (U+1F600, 4 bytes UTF-8, 2 code units UTF-16) + 'b'
@@ -177,7 +178,7 @@ fn utf16_surrogate_positions() {
 }
 
 /// Tests that a single rope replacement applies correctly.
-#[test]
+#[rstest]
 fn rope_single_replacement() {
     let content = "hello world";
     let edit = text_edit(0, 0, 0, 5, "goodbye");
@@ -187,7 +188,7 @@ fn rope_single_replacement() {
 }
 
 /// Tests that multiple rope edits are applied in reverse order correctly.
-#[test]
+#[rstest]
 fn rope_multiple_edits_reverse_order() {
     let content = "aaa bbb ccc";
     let e1 = text_edit(0, 0, 0, 3, "xxx");
@@ -198,7 +199,7 @@ fn rope_multiple_edits_reverse_order() {
 }
 
 /// Tests rope insertion at a zero-width range.
-#[test]
+#[rstest]
 fn rope_insertion() {
     let content = "ab";
     let edit = text_edit(0, 1, 0, 1, "X");
@@ -208,7 +209,7 @@ fn rope_insertion() {
 }
 
 /// Tests rope deletion with empty replacement text.
-#[test]
+#[rstest]
 fn rope_deletion() {
     let content = "hello world";
     let edit = text_edit(0, 5, 0, 11, "");
@@ -218,7 +219,7 @@ fn rope_deletion() {
 }
 
 /// Tests rope edits spanning multiple lines.
-#[test]
+#[rstest]
 fn rope_multiline() {
     let content = "line one\nline two\nline three";
     let e1 = text_edit(1, 5, 1, 8, "TWO");
@@ -229,7 +230,7 @@ fn rope_multiline() {
 }
 
 /// Tests that an out-of-range rope edit returns an error.
-#[test]
+#[rstest]
 fn rope_out_of_range_returns_error() {
     let content = "short";
     let edit = text_edit(5, 0, 5, 1, "x");
@@ -238,7 +239,7 @@ fn rope_out_of_range_returns_error() {
 }
 
 /// Tests that a single-file edit resolves to the correct modified content.
-#[test]
+#[rstest]
 fn resolve_single_file_single_edit() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     writeln!(tmp, "hello world").unwrap();
@@ -254,7 +255,7 @@ fn resolve_single_file_single_edit() {
 }
 
 /// Tests that multiple edits in one file resolve to combined modified content.
-#[test]
+#[rstest]
 fn resolve_multi_edit_single_file() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     writeln!(tmp, "aaa bbb ccc").unwrap();
@@ -273,7 +274,7 @@ fn resolve_multi_edit_single_file() {
 }
 
 /// Tests that edits across multiple files resolve to per-file results.
-#[test]
+#[rstest]
 fn resolve_multiple_files() {
     let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
     writeln!(tmp1, "file one").unwrap();
@@ -298,7 +299,7 @@ fn resolve_multiple_files() {
 }
 
 /// Tests that a pure insertion resolves to modified content with the new line.
-#[test]
+#[rstest]
 fn resolve_insertion_only() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     write!(tmp, "line one\nline two\n").unwrap();
@@ -314,7 +315,7 @@ fn resolve_insertion_only() {
 }
 
 /// Tests that a pure deletion resolves to modified content without the removed line.
-#[test]
+#[rstest]
 fn resolve_deletion_only() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     write!(tmp, "keep\nremove\ntrailing\n").unwrap();
@@ -330,7 +331,7 @@ fn resolve_deletion_only() {
 }
 
 /// Tests that an empty workspace edit resolves to no results.
-#[test]
+#[rstest]
 fn resolve_empty_edit_returns_empty() {
     let edit = WorkspaceEdit {
         changes: Some(HashMap::new()),
@@ -343,7 +344,7 @@ fn resolve_empty_edit_returns_empty() {
 }
 
 /// Tests that replacing text with identical content produces no effective change.
-#[test]
+#[rstest]
 fn resolve_no_change_returns_identical_content() {
     let mut tmp = tempfile::NamedTempFile::new().unwrap();
     writeln!(tmp, "unchanged").unwrap();

@@ -1,3 +1,5 @@
+use rstest::rstest;
+
 use super::*;
 use crate::syntax::fragment::{Fragment, FragmentKind, FragmentSpan, SymbolKind};
 
@@ -38,7 +40,7 @@ fn code_fragment(
 // Issue 3: Replace must use full_span (matching body.rs read range)
 
 /// Verifies that replacing a symbol body includes the full span with doc comments.
-#[test]
+#[rstest]
 fn replace_body_uses_full_span_including_doc_comment() {
     // Source with a doc comment preceding a function.
     let source = "/// Doc comment\nfn foo() {\n    42\n}\n";
@@ -72,7 +74,7 @@ fn replace_body_uses_full_span_including_doc_comment() {
 }
 
 /// Verifies that replacing a body with identical content is a no-op.
-#[test]
+#[rstest]
 fn replace_body_round_trip_is_noop() {
     // Round-trip: reading the body (full_span) and writing it back via
     // edit/replace must be a no-op.
@@ -103,7 +105,7 @@ fn replace_body_round_trip_is_noop() {
 // Issue 4: Append into empty scopes
 
 /// Verifies that appending into an empty impl block inserts correctly.
-#[test]
+#[rstest]
 fn append_into_empty_impl_block() {
     let source = "impl Foo {}\n";
     //            ^0         ^11^12
@@ -132,7 +134,7 @@ fn append_into_empty_impl_block() {
 }
 
 /// Verifies that appending into an impl block with existing children works.
-#[test]
+#[rstest]
 fn append_into_scope_with_children_still_works() {
     let source = "impl Foo {\n    fn existing() {}\n}\n";
     //            ^0          ^11               ^30^31^32
@@ -164,7 +166,7 @@ fn append_into_scope_with_children_still_works() {
 /// Regression: `check_conflicts` must detect overlap when a zero-width insertion
 /// and a non-empty edit share the same `byte_range.start`. Sort instability
 /// could hide the conflict, letting `apply()` panic with begin > end.
-#[test]
+#[rstest]
 fn check_conflicts_detects_zero_width_at_same_start_as_nonempty() {
     let source = "/// Doc A\nfn aaa() {}\n/// Doc B\nfn bbb() {}\n";
     //            ^0        ^10        ^22        ^32        ^44
@@ -202,7 +204,7 @@ fn check_conflicts_detects_zero_width_at_same_start_as_nonempty() {
 /// `apply` requires edits pre-sorted ascending with zero-width insertions
 /// before non-empty edits at the same offset — matching the ordering
 /// produced by [`EditPlan::resolve`] via [`ResolvedEdit::cmp_ascending`].
-#[test]
+#[rstest]
 fn apply_handles_zero_width_and_nonempty_at_same_offset() {
     let source = "aaabbbccc";
     let edits = vec![

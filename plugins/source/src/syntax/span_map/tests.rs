@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use rstest::rstest;
+
 use super::*;
 use crate::syntax::fragment::{Fragment, FragmentKind, FragmentMetadata, FragmentSpan, SymbolKind};
 
@@ -19,7 +21,7 @@ fn code_fragment(byte_range: Range<usize>, name_byte_offset: usize, children: Ve
 }
 
 /// Verifies that `SpanMap::build` produces correct virtual content and offset mapping.
-#[test]
+#[rstest]
 fn build_produces_correct_content_and_map() {
     let source = "AAAbbbCCCdddEEE";
     //            0123456789...
@@ -33,7 +35,7 @@ fn build_produces_correct_content_and_map() {
 }
 
 /// Verifies that zero-length regions are skipped during `SpanMap` construction.
-#[test]
+#[rstest]
 fn build_skips_zero_length_regions() {
     let source = "hello world";
     let (map, content) = SpanMap::build(source, &[0..0, 6..11]);
@@ -43,7 +45,7 @@ fn build_skips_zero_length_regions() {
 }
 
 /// Verifies that empty region list produces empty content and zero-length map.
-#[test]
+#[rstest]
 fn build_empty_regions_produces_empty_content() {
     let (map, content) = SpanMap::build("anything", &[]);
 
@@ -52,7 +54,7 @@ fn build_empty_regions_produces_empty_content() {
 }
 
 /// Verifies that `SpanMap::build` clamps regions that extend past source bounds.
-#[test]
+#[rstest]
 fn build_clamps_to_source_bounds() {
     let source = "short";
     // Region extends past source end — should not panic, just clamp.
@@ -67,7 +69,7 @@ fn build_clamps_to_source_bounds() {
 }
 
 /// Verifies that a single contiguous region starting at zero is an identity mapping.
-#[test]
+#[rstest]
 fn single_contiguous_region_identity() {
     // Region starting at real offset 0 — identity mapping.
     let map = SpanMap::new(&[(0, 10)]);
@@ -78,7 +80,7 @@ fn single_contiguous_region_identity() {
 }
 
 /// Verifies that two disjoint regions map virtual offsets to correct real offsets.
-#[test]
+#[rstest]
 fn two_disjoint_regions() {
     // Region 1: real [10..20), Region 2: real [30..40)
     // Virtual [0..10) → real [10..20), virtual [10..20) → real [30..40)
@@ -97,7 +99,7 @@ fn two_disjoint_regions() {
 }
 
 /// Verifies that three regions with varying gaps map every boundary correctly.
-#[test]
+#[rstest]
 fn three_regions_every_boundary() {
     // Three regions with varying gaps:
     // real [5..8)   len=3  → virtual [0..3)
@@ -118,7 +120,7 @@ fn three_regions_every_boundary() {
 }
 
 /// Verifies that `to_real` at `virtual_len` maps to one past the last real byte.
-#[test]
+#[rstest]
 fn to_real_at_virtual_len() {
     // virtual_len is a valid exclusive-end offset. It should map via
     // the last region (one past its last byte), not fall through.
@@ -131,14 +133,14 @@ fn to_real_at_virtual_len() {
 }
 
 /// Verifies that `remap_range` maps a virtual range within a single region correctly.
-#[test]
+#[rstest]
 fn remap_range_within_single_region() {
     let map = SpanMap::new(&[(10, 20)]);
     assert_eq!(map.remap_range(5..15), 15..25);
 }
 
 /// Verifies that `remap_range` handles ranges at region boundaries and cross-boundary clamping.
-#[test]
+#[rstest]
 fn remap_range_at_region_boundaries() {
     // Two regions: real [10..20), real [30..40)
     let map = SpanMap::new(&[(10, 10), (30, 10)]);
@@ -154,7 +156,7 @@ fn remap_range_at_region_boundaries() {
 }
 
 /// Verifies that an empty virtual range remaps to the corresponding real position.
-#[test]
+#[rstest]
 fn remap_range_empty_is_identity_at_start() {
     let map = SpanMap::new(&[(100, 10)]);
     // Empty range: start == end → maps start, end = start
@@ -162,7 +164,7 @@ fn remap_range_empty_is_identity_at_start() {
 }
 
 /// Verifies that `remap_fragment` remaps `byte_range` and `name_byte_offset` correctly.
-#[test]
+#[rstest]
 fn remap_fragment_basic() {
     let map = SpanMap::new(&[(100, 50)]);
 
@@ -175,7 +177,7 @@ fn remap_fragment_basic() {
 }
 
 /// Verifies that `remap_fragment` remaps a parent fragment with children.
-#[test]
+#[rstest]
 fn remap_fragment_with_children() {
     let map = SpanMap::new(&[(100, 50)]);
 
@@ -188,7 +190,7 @@ fn remap_fragment_with_children() {
 }
 
 /// Verifies that `remap_fragment` recursively remaps nested children.
-#[test]
+#[rstest]
 fn remap_fragment_recursive_children() {
     let map = SpanMap::new(&[(200, 100)]);
 
@@ -207,7 +209,7 @@ fn remap_fragment_recursive_children() {
 }
 
 /// Verifies that `remap_fragment` preserves name, signature, `parent_name`, and `fs_name`.
-#[test]
+#[rstest]
 fn remap_fragment_preserves_non_byte_fields() {
     let map = SpanMap::new(&[(50, 30)]);
 
@@ -225,7 +227,7 @@ fn remap_fragment_preserves_non_byte_fields() {
 }
 
 /// Verifies that `remap_fragment` preserves Section metadata (Document index) unchanged.
-#[test]
+#[rstest]
 fn remap_fragment_section_metadata_unchanged() {
     let map = SpanMap::new(&[(100, 50)]);
 
@@ -248,7 +250,7 @@ fn remap_fragment_section_metadata_unchanged() {
 }
 
 /// Verifies that `remap_fragment` preserves `CodeBlock` metadata (index and lang) unchanged.
-#[test]
+#[rstest]
 fn remap_fragment_code_block_metadata_unchanged() {
     let map = SpanMap::new(&[(50, 30)]);
 
@@ -275,14 +277,14 @@ fn remap_fragment_code_block_metadata_unchanged() {
 }
 
 /// Verifies that an empty `SpanMap` has zero virtual length.
-#[test]
+#[rstest]
 fn empty_map() {
     let map = SpanMap::new(&[]);
     assert_eq!(map.virtual_len(), 0);
 }
 
 /// Verifies that zero-length regions are skipped when constructing a `SpanMap`.
-#[test]
+#[rstest]
 fn zero_length_regions_skipped() {
     let map = SpanMap::new(&[(10, 0), (20, 5)]);
     assert_eq!(map.virtual_len(), 5);
@@ -291,7 +293,7 @@ fn zero_length_regions_skipped() {
 }
 
 /// Verifies that remapped byte ranges extract the correct text from the original source.
-#[test]
+#[rstest]
 fn round_trip_extract_via_remapped_ranges() {
     // Simulates the real use case: compound source with template gaps,
     // inner content extracted and remapped, then byte ranges verified

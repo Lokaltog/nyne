@@ -1,3 +1,5 @@
+use rstest::rstest;
+
 use super::*;
 use crate::plugin::control::{ControlCommand, ProcessTable};
 use crate::test_support::stub_activation_context;
@@ -8,7 +10,7 @@ fn test_context() -> (crate::dispatch::activation::ActivationContext, ProcessTab
     (ctx, procs)
 }
 
-#[test]
+#[rstest]
 fn dispatch_returns_none_for_unknown_command() {
     let registry = ControlRegistry::from_commands(vec![]);
     let (ctx, procs) = test_context();
@@ -19,7 +21,7 @@ fn dispatch_returns_none_for_unknown_command() {
     assert!(registry.dispatch("Unknown", serde_json::json!({}), &ctrl_ctx).is_none());
 }
 
-#[test]
+#[rstest]
 fn dispatch_calls_registered_handler() {
     let cmd = ControlCommand {
         name: "Ping",
@@ -35,7 +37,7 @@ fn dispatch_calls_registered_handler() {
     assert_eq!(result, Some(serde_json::json!({"type": "Pong"})));
 }
 
-#[test]
+#[rstest]
 fn dispatch_passes_payload_to_handler() {
     let cmd = ControlCommand {
         name: "Echo",

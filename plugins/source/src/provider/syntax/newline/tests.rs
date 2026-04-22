@@ -1,3 +1,5 @@
+use rstest::rstest;
+
 /// Simulate `AppendTrailingNewline::process_read` — just appends `\n`.
 fn read(mut data: Vec<u8>) -> Vec<u8> {
     data.push(b'\n');
@@ -13,7 +15,7 @@ fn write(mut data: Vec<u8>) -> Vec<u8> {
 }
 
 /// Tests round-trip: content without trailing newline is preserved.
-#[test]
+#[rstest]
 fn round_trip_no_trailing_newline() {
     let original = b"fn foo() {}".to_vec();
     let after_read = read(original.clone());
@@ -22,7 +24,7 @@ fn round_trip_no_trailing_newline() {
 }
 
 /// Tests round-trip: content with trailing newline is preserved.
-#[test]
+#[rstest]
 fn round_trip_with_trailing_newline() {
     let original = b"## Section\n\nContent.\n".to_vec();
     let after_read = read(original.clone());
@@ -31,7 +33,7 @@ fn round_trip_with_trailing_newline() {
 }
 
 /// Tests round-trip: edited content has trailing newline stripped on write.
-#[test]
+#[rstest]
 fn round_trip_with_edit() {
     let original = b"fn foo() {\n    bar()\n}".to_vec();
     let _after_read = read(original);

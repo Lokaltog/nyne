@@ -1,8 +1,10 @@
+use rstest::rstest;
+
 use super::*;
 use crate::syntax::fragment::{ConflictEntry, SymbolKind};
 
 /// Verifies that a name with a tilde-separated kind suffix is split correctly.
-#[test]
+#[rstest]
 fn split_disambiguator_with_kind() {
     assert_eq!(split_disambiguator("Foo~Struct"), ("Foo", Some("Struct")));
     assert_eq!(
@@ -12,14 +14,14 @@ fn split_disambiguator_with_kind() {
 }
 
 /// Verifies that a name without a tilde has no kind disambiguator.
-#[test]
+#[rstest]
 fn split_disambiguator_without_kind() {
     assert_eq!(split_disambiguator("Foo"), ("Foo", None));
     assert_eq!(split_disambiguator("my_function"), ("my_function", None));
 }
 
 /// Verifies edge cases: trailing tilde, leading tilde, and multiple tildes.
-#[test]
+#[rstest]
 fn split_disambiguator_edge_cases() {
     // Trailing tilde — empty kind, treated as no disambiguator.
     assert_eq!(split_disambiguator("Foo~"), ("Foo~", None));
@@ -31,7 +33,7 @@ fn split_disambiguator_edge_cases() {
 
 /// When two fragments share the same name and the same kind, `~Kind` alone
 /// doesn't disambiguate. The fallback appends `-N` to subsequent duplicates.
-#[test]
+#[rstest]
 fn resolve_kind_suffix_duplicate_kinds() {
     let conflicts = vec![ConflictSet {
         name: "Foo".to_owned(),
@@ -60,7 +62,7 @@ fn resolve_kind_suffix_duplicate_kinds() {
 }
 
 /// When all entries have unique kinds, no numeric suffix is needed.
-#[test]
+#[rstest]
 fn resolve_kind_suffix_unique_kinds() {
     let conflicts = vec![ConflictSet {
         name: "Foo".to_owned(),

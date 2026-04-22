@@ -2,12 +2,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use rstest::rstest;
+
 use super::*;
 use crate::router::GenerationMap;
 
 fn test_generations() -> Arc<GenerationMap> { Arc::new(GenerationMap::new()) }
 
-#[test]
+#[rstest]
 fn hit_returns_cached_value() {
     let gens = test_generations();
     let cache = GenCache::new(gens);
@@ -28,7 +30,7 @@ fn hit_returns_cached_value() {
     assert_eq!(calls.load(Ordering::Relaxed), 1, "compute called only once");
 }
 
-#[test]
+#[rstest]
 fn stale_entry_recomputes() {
     let gens = test_generations();
     let cache = GenCache::new(gens.clone());
@@ -44,7 +46,7 @@ fn stale_entry_recomputes() {
     assert_eq!(v2, "new", "stale entry should trigger recompute");
 }
 
-#[test]
+#[rstest]
 fn invalidate_forces_recompute() {
     let gens = test_generations();
     let cache = GenCache::new(gens);

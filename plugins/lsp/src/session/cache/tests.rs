@@ -2,6 +2,8 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 
+use rstest::rstest;
+
 use super::*;
 
 /// Build a `CacheKey` from string components for testing.
@@ -15,7 +17,7 @@ fn key<'a>(path: &'a str, method: &'a str, line: u32, param: u32) -> CacheKey<'a
 }
 
 /// Tests that inserting a value and retrieving it returns the same value.
-#[test]
+#[rstest]
 fn insert_and_get() {
     let cache = Cache::new(Duration::from_secs(60));
     let values = vec!["alpha".to_owned(), "beta".to_owned()];
@@ -27,7 +29,7 @@ fn insert_and_get() {
 }
 
 /// Tests that querying an empty cache returns `None`.
-#[test]
+#[rstest]
 fn miss_on_empty() {
     let cache = Cache::new(Duration::from_secs(60));
     let k = key("/src/main.rs", "references", 1, 0);
@@ -36,7 +38,7 @@ fn miss_on_empty() {
 }
 
 /// Tests that entries expire after the configured TTL.
-#[test]
+#[rstest]
 fn ttl_expiry() {
     let cache = Cache::new(Duration::from_millis(1));
     let k = key("/src/main.rs", "hover", 5, 3);
@@ -49,7 +51,7 @@ fn ttl_expiry() {
 }
 
 /// Tests that invalidating a file clears only that file's entries.
-#[test]
+#[rstest]
 fn invalidate_file() {
     let cache = Cache::new(Duration::from_secs(60));
     let main_key = key("/src/main.rs", "references", 10, 5);
@@ -66,7 +68,7 @@ fn invalidate_file() {
 }
 
 /// Tests that clearing the cache removes all entries.
-#[test]
+#[rstest]
 fn clear() {
     let cache = Cache::new(Duration::from_secs(60));
     let k1 = key("/a", "hover", 0, 0);
@@ -83,7 +85,7 @@ fn clear() {
 }
 
 /// Tests that `len` and `is_empty` reflect the number of cached entries.
-#[test]
+#[rstest]
 fn len_and_is_empty() {
     let cache = Cache::new(Duration::from_secs(60));
     assert!(cache.is_empty());
@@ -100,7 +102,7 @@ fn len_and_is_empty() {
 }
 
 /// Tests that requesting a cached value as a different type returns `None`.
-#[test]
+#[rstest]
 fn type_mismatch_returns_none() {
     let cache = Cache::new(Duration::from_secs(60));
     let k = key("/src/main.rs", "hover", 1, 0);
@@ -112,7 +114,7 @@ fn type_mismatch_returns_none() {
 }
 
 /// Tests that `get_with_age` returns the cached value along with its age.
-#[test]
+#[rstest]
 fn get_with_age_returns_age() {
     let cache = Cache::new(Duration::from_secs(60));
     let k = key("/src/main.rs", "hover", 1, 0);

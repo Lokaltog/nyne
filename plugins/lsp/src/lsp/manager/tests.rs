@@ -1,3 +1,4 @@
+use rstest::rstest;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -31,7 +32,7 @@ fn test_manager(enabled: bool) -> Manager {
 }
 
 /// Tests that a disabled manager returns no clients for any extension.
-#[test]
+#[rstest]
 fn disabled_returns_none() {
     let mgr = test_manager(false);
     assert!(!mgr.is_enabled());
@@ -40,7 +41,7 @@ fn disabled_returns_none() {
 }
 
 /// Tests that an unregistered extension returns no clients.
-#[test]
+#[rstest]
 fn unknown_extension_returns_none() {
     let mgr = test_manager(true);
     // "xyz" has no syntax or LSP registration.
@@ -49,7 +50,7 @@ fn unknown_extension_returns_none() {
 }
 
 /// Tests that detection prevents spawning when the project root is missing.
-#[test]
+#[rstest]
 fn detection_gate_prevents_spawn_on_missing_root() {
     let mgr = test_manager(true);
     // "rs" has a registered syntax and LSP server, but the detect
@@ -60,7 +61,7 @@ fn detection_gate_prevents_spawn_on_missing_root() {
 }
 
 /// Tests that `has_lsp_support` requires both enabled config and syntax registration.
-#[test]
+#[rstest]
 fn has_lsp_support_requires_enabled_and_syntax() {
     let enabled = test_manager(true);
     let disabled = test_manager(false);
@@ -76,14 +77,14 @@ fn has_lsp_support_requires_enabled_and_syntax() {
 }
 
 /// Verifies that the cache is accessible and starts empty.
-#[test]
+#[rstest]
 fn cache_is_wired() {
     let mgr = test_manager(true);
     assert!(mgr.cache().is_empty());
 }
 
 /// Tests that invalidating a file on an empty cache is a no-op.
-#[test]
+#[rstest]
 fn invalidate_file_delegates_to_cache() {
     let mgr = test_manager(true);
     // Should not panic — just a no-op on empty cache.
@@ -92,21 +93,21 @@ fn invalidate_file_delegates_to_cache() {
 }
 
 /// Verifies that status is empty when no LSP clients are running.
-#[test]
+#[rstest]
 fn status_empty_when_no_clients() {
     let mgr = test_manager(true);
     assert!(mgr.status().is_empty());
 }
 
 /// Tests that the diagnostics timeout comes from config defaults.
-#[test]
+#[rstest]
 fn diagnostics_timeout_from_config() {
     let mgr = test_manager(true);
     assert_eq!(mgr.diagnostics_timeout(), std::time::Duration::from_secs(2));
 }
 
 /// Tests that closing a non-tracked document does not panic.
-#[test]
+#[rstest]
 fn close_document_noop_when_not_open() {
     let mgr = test_manager(true);
     // Should not panic — no-op when no document is tracked.

@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use rstest::rstest;
+
 use super::*;
 use crate::syntax::decomposed::DecompositionCache;
 use crate::test_support::registry;
@@ -14,7 +16,7 @@ fn resolver_for_source(dir: &std::path::Path, source: &str) -> FragmentResolver 
 }
 
 /// Tests that `line_range` returns a valid range for a top-level symbol.
-#[test]
+#[rstest]
 fn line_range_returns_range_for_top_level_symbol() {
     let dir = tempfile::tempdir().unwrap();
     let source = "fn hello() {}\n\nfn world() {}\n";
@@ -31,7 +33,7 @@ fn line_range_returns_range_for_top_level_symbol() {
 }
 
 /// Tests that `line_range` returns None for a nonexistent symbol.
-#[test]
+#[rstest]
 fn line_range_returns_none_for_missing_symbol() {
     let dir = tempfile::tempdir().unwrap();
     let resolver = resolver_for_source(dir.path(), "fn hello() {}\n");
@@ -41,7 +43,7 @@ fn line_range_returns_none_for_missing_symbol() {
 }
 
 /// Tests that `line_range` reflects source changes after cache invalidation.
-#[test]
+#[rstest]
 fn line_range_reflects_source_change_after_invalidation() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("test.rs");

@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use rstest::rstest;
+
 use super::*;
 
 /// Build a test resolver mapping `/code` to a source root path.
@@ -8,7 +10,7 @@ fn test_resolver() -> PathResolver {
 }
 
 /// Tests that rewrite replaces the display root prefix with the source root.
-#[test]
+#[rstest]
 fn rewrite_replaces_display_root_prefix() {
     assert_eq!(
         test_resolver().rewrite("/code/src/main.rs"),
@@ -17,7 +19,7 @@ fn rewrite_replaces_display_root_prefix() {
 }
 
 /// Tests that rewrite passes through paths outside the display root.
-#[test]
+#[rstest]
 fn rewrite_leaves_non_root_paths_unchanged() {
     assert_eq!(
         test_resolver().rewrite("/other/path/file.rs"),
@@ -26,7 +28,7 @@ fn rewrite_leaves_non_root_paths_unchanged() {
 }
 
 /// Tests that rewrite handles the exact display root path.
-#[test]
+#[rstest]
 fn rewrite_handles_root_itself() {
     assert_eq!(
         test_resolver().rewrite("/code"),
@@ -35,7 +37,7 @@ fn rewrite_handles_root_itself() {
 }
 
 /// Tests that `rewrite_to_fuse` replaces the source root prefix with the display root.
-#[test]
+#[rstest]
 fn rewrite_to_display_replaces_source_prefix() {
     assert_eq!(
         test_resolver().rewrite_to_fuse(Path::new("/tmp/nyne/proc/123/fs/merged/home/user/project/src/main.rs")),
@@ -44,7 +46,7 @@ fn rewrite_to_display_replaces_source_prefix() {
 }
 
 /// Tests that `rewrite_to_fuse` passes through paths outside the source root.
-#[test]
+#[rstest]
 fn rewrite_to_display_leaves_non_source_paths_unchanged() {
     assert_eq!(
         test_resolver().rewrite_to_fuse(Path::new("/other/path/file.rs")),
@@ -53,7 +55,7 @@ fn rewrite_to_display_leaves_non_source_paths_unchanged() {
 }
 
 /// Tests that `rewrite_to_fuse` handles the exact source root path.
-#[test]
+#[rstest]
 fn rewrite_to_display_handles_source_root_itself() {
     assert_eq!(
         test_resolver().rewrite_to_fuse(Path::new("/tmp/nyne/proc/123/fs/merged/home/user/project")),

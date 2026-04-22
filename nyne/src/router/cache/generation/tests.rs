@@ -2,14 +2,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 
+use rstest::rstest;
+
 use super::*;
 
-#[test]
+#[rstest]
 fn get_returns_zero_for_unknown() {
     assert_eq!(GenerationMap::new().get(Path::new("unknown.rs")), 0);
 }
 
-#[test]
+#[rstest]
 fn bump_increments_and_returns() {
     let map = GenerationMap::new();
     let path = Path::new("foo.rs");
@@ -20,7 +22,7 @@ fn bump_increments_and_returns() {
     assert_eq!(map.get(path), 3);
 }
 
-#[test]
+#[rstest]
 fn bump_increments_all() {
     let map = GenerationMap::new();
     let paths = vec![PathBuf::from("a.rs"), PathBuf::from("b.rs"), PathBuf::from("c.rs")];
@@ -41,7 +43,7 @@ fn bump_increments_all() {
     assert_eq!(map.get(&paths[2]), 2);
 }
 
-#[test]
+#[rstest]
 fn concurrent_reads_dont_block() {
     let map = Arc::new(GenerationMap::new());
     let path = PathBuf::from("shared.rs");

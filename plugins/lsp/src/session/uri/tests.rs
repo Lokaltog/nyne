@@ -1,24 +1,25 @@
 use crop::Rope;
 use lsp_types::Position;
+use rstest::rstest;
 
 use super::*;
 
 /// Tests that an absolute path converts to a URI preserving the path.
-#[test]
+#[rstest]
 fn file_path_to_uri_absolute() {
     let uri = file_path_to_uri(Path::new("/tmp/src/main.rs")).unwrap();
     assert_eq!(uri.path().as_str(), "/tmp/src/main.rs");
 }
 
 /// Tests that `text_document_id` builds a valid identifier from a path.
-#[test]
+#[rstest]
 fn text_document_id_from_path() {
     let td = text_document_id(Path::new("/tmp/lib.rs")).unwrap();
     assert_eq!(td.uri.path().as_str(), "/tmp/lib.rs");
 }
 
 /// Tests that `versioned_text_document_id` includes path and version.
-#[test]
+#[rstest]
 fn versioned_text_document_id_from_path() {
     let vtd = versioned_text_document_id(Path::new("/tmp/lib.rs"), 3).unwrap();
     assert_eq!(vtd.uri.path().as_str(), "/tmp/lib.rs");
@@ -26,7 +27,7 @@ fn versioned_text_document_id_from_path() {
 }
 
 /// Tests basic byte offset to LSP position conversion on a single line.
-#[test]
+#[rstest]
 fn byte_offset_to_position_basic() {
     let text = "hello world";
     let rope = Rope::from(text);
@@ -35,7 +36,7 @@ fn byte_offset_to_position_basic() {
 }
 
 /// Tests byte offset to position conversion across multiple lines.
-#[test]
+#[rstest]
 fn byte_offset_to_position_multiline() {
     let text = "line one\nline two\nline three";
     let rope = Rope::from(text);
@@ -46,7 +47,7 @@ fn byte_offset_to_position_multiline() {
 }
 
 /// Tests byte offset to position with UTF-16 surrogate pairs (emoji).
-#[test]
+#[rstest]
 fn byte_offset_to_position_utf16_surrogate() {
     // Emoji (U+1F600) is 4 bytes in UTF-8 and 2 code units in UTF-16.
     let text = "a\u{1F600}b";
@@ -60,7 +61,7 @@ fn byte_offset_to_position_utf16_surrogate() {
 }
 
 /// Tests basic LSP position to byte offset conversion on a single line.
-#[test]
+#[rstest]
 fn position_to_byte_offset_basic() {
     let text = "hello world";
     let rope = Rope::from(text);
@@ -75,7 +76,7 @@ fn position_to_byte_offset_basic() {
 }
 
 /// Tests that a position beyond the last line returns `None`.
-#[test]
+#[rstest]
 fn position_to_byte_offset_out_of_range() {
     let text = "one line";
     let rope = Rope::from(text);
@@ -83,7 +84,7 @@ fn position_to_byte_offset_out_of_range() {
 }
 
 /// Verifies that byte offset and position conversions roundtrip correctly.
-#[test]
+#[rstest]
 fn position_byte_offset_roundtrip() {
     let text = "first line\nsecond line\nthird line";
     let rope = Rope::from(text);
@@ -101,7 +102,7 @@ fn position_byte_offset_roundtrip() {
 }
 
 /// Tests position to byte offset with UTF-16 surrogate pairs (emoji).
-#[test]
+#[rstest]
 fn position_to_byte_offset_utf16_surrogate() {
     // Verify roundtrip with multi-byte UTF-16 characters.
     let text = "a\u{1F600}b";
@@ -119,7 +120,7 @@ fn position_to_byte_offset_utf16_surrogate() {
 }
 
 /// Tests that a column past end-of-line clamps to the line's byte length.
-#[test]
+#[rstest]
 fn position_to_byte_offset_clamps_past_eol() {
     let text = "short\nline";
     let rope = Rope::from(text);

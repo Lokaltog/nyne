@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+use rstest::rstest;
 
 use super::DiagnosticStore;
 
@@ -18,7 +19,7 @@ fn dummy_diagnostic(message: &str, severity: DiagnosticSeverity) -> Diagnostic {
 
 // SC-1: Clean reads are non-blocking.
 /// Tests that a clean (non-dirty) file returns diagnostics without blocking.
-#[test]
+#[rstest]
 fn clean_file_returns_immediately() {
     let store = DiagnosticStore::new();
     let path = Path::new("/src/main.rs");
@@ -35,7 +36,7 @@ fn clean_file_returns_immediately() {
 
 // SC-1 supplement: Unknown file returns empty immediately.
 /// Tests that an unknown file returns empty diagnostics without blocking.
-#[test]
+#[rstest]
 fn unknown_file_returns_empty_immediately() {
     let store = DiagnosticStore::new();
     let start = Instant::now();
@@ -46,7 +47,7 @@ fn unknown_file_returns_empty_immediately() {
 
 // SC-2: Dirty file blocks until publish.
 /// Tests that a dirty file blocks readers until diagnostics are published.
-#[test]
+#[rstest]
 fn dirty_file_blocks_until_publish() {
     let store = Arc::new(DiagnosticStore::new());
     let path = Path::new("/src/lib.rs");
@@ -76,7 +77,7 @@ fn dirty_file_blocks_until_publish() {
 
 // SC-3: Dirty file times out.
 /// Tests that a dirty file returns stale diagnostics after the timeout.
-#[test]
+#[rstest]
 fn dirty_file_times_out() {
     let store = DiagnosticStore::new();
     let path = Path::new("/src/timeout.rs");
@@ -99,7 +100,7 @@ fn dirty_file_times_out() {
 
 // SC-4: Multiple waiters all wake on publish.
 /// Tests that multiple waiters on the same file all wake on publish.
-#[test]
+#[rstest]
 fn multiple_waiters_all_wake() {
     let store = Arc::new(DiagnosticStore::new());
     let path = Path::new("/src/multi.rs");
@@ -132,7 +133,7 @@ fn multiple_waiters_all_wake() {
 
 // SC-5: Publish for file X doesn't wake waiter for file Y.
 /// Tests that publishing diagnostics for file B does not unblock a waiter on file A.
-#[test]
+#[rstest]
 fn publish_for_other_file_does_not_unblock() {
     let store = Arc::new(DiagnosticStore::new());
     let path_a = Path::new("/src/a.rs");
@@ -162,7 +163,7 @@ fn publish_for_other_file_does_not_unblock() {
 }
 
 /// Tests that removing a file clears its diagnostics.
-#[test]
+#[rstest]
 fn remove_clears_entry() {
     let store = DiagnosticStore::new();
     let path = Path::new("/src/gone.rs");
@@ -175,7 +176,7 @@ fn remove_clears_entry() {
 }
 
 /// Tests that a mark-dirty then publish cycle updates diagnostics correctly.
-#[test]
+#[rstest]
 fn mark_dirty_then_publish_cycle() {
     let store = DiagnosticStore::new();
     let path = Path::new("/src/cycle.rs");

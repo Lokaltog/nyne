@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use rstest::rstest;
 use serde_json::{Value, json};
 
 use super::*;
@@ -8,7 +9,7 @@ use super::*;
 fn root() -> &'static Path { Path::new("/mnt/project") }
 
 /// Tests that injected hooks merge correctly into an empty JSON object.
-#[test]
+#[rstest]
 fn merge_into_empty_object() {
     let base = json!({});
     let injected = injected_hooks(root());
@@ -27,7 +28,7 @@ fn merge_into_empty_object() {
 }
 
 /// Tests that existing JSON keys are preserved during hook injection.
-#[test]
+#[rstest]
 fn preserves_existing_keys() {
     let base = json!({
         "permissions": { "allow": ["Read"] },
@@ -42,7 +43,7 @@ fn preserves_existing_keys() {
 }
 
 /// Tests that injected hooks append to existing `SessionStart` entries.
-#[test]
+#[rstest]
 fn appends_to_existing_session_start_hooks() {
     let base = json!({
         "hooks": {
@@ -67,7 +68,7 @@ fn appends_to_existing_session_start_hooks() {
 }
 
 /// Tests that hooks for non-injected events are preserved unchanged.
-#[test]
+#[rstest]
 fn preserves_existing_hooks_for_other_events() {
     let base = json!({
         "hooks": {
@@ -92,7 +93,7 @@ fn preserves_existing_hooks_for_other_events() {
 }
 
 /// Tests that rendering with no existing file produces valid JSON with hooks.
-#[test]
+#[rstest]
 fn render_settings_with_no_real_file() {
     let result = render_settings(None, root()).unwrap();
     let parsed: Value = serde_json::from_slice(&result).unwrap();
@@ -100,7 +101,7 @@ fn render_settings_with_no_real_file() {
 }
 
 /// Tests that rendering with empty bytes produces valid JSON with hooks.
-#[test]
+#[rstest]
 fn render_settings_with_empty_bytes() {
     let result = render_settings(Some(b""), root()).unwrap();
     let parsed: Value = serde_json::from_slice(&result).unwrap();
@@ -108,7 +109,7 @@ fn render_settings_with_empty_bytes() {
 }
 
 /// Tests that existing JSON content is preserved when rendering settings.
-#[test]
+#[rstest]
 fn render_settings_with_existing_json() {
     let existing = br#"{"model": "fast"}"#;
     let result = render_settings(Some(existing), root()).unwrap();
@@ -118,7 +119,7 @@ fn render_settings_with_existing_json() {
 }
 
 /// Tests that invalid JSON input produces an error.
-#[test]
+#[rstest]
 fn render_settings_with_invalid_json_returns_error() {
     let bad = b"not json";
     let result = render_settings(Some(bad), root());
@@ -126,7 +127,7 @@ fn render_settings_with_invalid_json_returns_error() {
 }
 
 /// Tests that hook commands use jq for JSON envelope construction.
-#[test]
+#[rstest]
 fn hook_command_uses_jq_envelope() {
     let hooks = injected_hooks(root());
     let entries = hooks["SessionStart"].as_array().unwrap();
@@ -140,7 +141,7 @@ fn hook_command_uses_jq_envelope() {
 }
 
 /// Tests that `PostToolUse` injection does not interfere with `SessionStart` hooks.
-#[test]
+#[rstest]
 fn post_tool_use_does_not_interfere_with_session_start() {
     let base = json!({
         "hooks": {
@@ -169,7 +170,7 @@ fn post_tool_use_does_not_interfere_with_session_start() {
 /// multiple narrow scripts with distinct matchers. This asserts the
 /// full post-decomposition registry wires every script's command line
 /// correctly.
-#[test]
+#[rstest]
 fn hook_commands_use_nyne_exec() {
     let hooks = injected_hooks(root());
 
