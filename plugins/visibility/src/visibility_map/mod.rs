@@ -98,6 +98,10 @@ impl VisibilityMap {
     /// Each name is truncated to [`COMM_MAX_LEN`] chars to match the kernel's
     /// `/proc/{pid}/comm` truncation — callers can pass full binary names
     /// (e.g., `"typescript-language-server"`) and matching works transparently.
+    ///
+    /// `process_names` is the mount-wide shared [`ProcessNameCache`]. Name-rule
+    /// lookups read the comm through this cache so FUSE request labelling and
+    /// visibility resolution never double up on `/proc/{pid}/comm` reads.
     pub fn new(
         name_rules: impl IntoIterator<Item = (String, ProcessVisibility)>,
         process_names: Arc<ProcessNameCache>,

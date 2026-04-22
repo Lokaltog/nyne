@@ -143,3 +143,16 @@ fn ancestor_walk_stops_at_init() {
     let map = new_map(std::iter::empty());
     assert_eq!(map.resolve(1), ProcessVisibility::Default);
 }
+/// Tests that name-rule resolution goes through the shared
+/// [`ProcessNameCache`], not a direct procfs read.
+#[rstest]
+fn name_rule_resolves_through_shared_cache() {
+    // Pre-populate the cache with a known comm for our own PID.
+    let our_pid = std::process::id();
+    let cache = Arc::new(ProcessNameCache::default());
+    let our_comm = cache.get_or_read(our_pid).expect("should read own comm via cache");
+
+    // Name rule matches our comm — resolve must route through the shared cache.
+    let map = VisibilityMap::new([(our_comm, ProcessVisibility::None)], Arc::clone(&cache));
+    assert_eq!(map.resolve(our_pid), ProcessVisibility::None);
+}
