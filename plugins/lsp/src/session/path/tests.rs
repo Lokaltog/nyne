@@ -4,61 +4,30 @@ use rstest::rstest;
 
 use super::*;
 
+const SOURCE_ROOT: &str = "/tmp/nyne/proc/123/fs/merged/home/user/project";
+
 /// Build a test resolver mapping `/code` to a source root path.
-fn test_resolver() -> PathResolver {
-    PathResolver::new("/code".into(), "/tmp/nyne/proc/123/fs/merged/home/user/project".into())
+fn test_resolver() -> PathResolver { PathResolver::new("/code".into(), SOURCE_ROOT.into()) }
+
+/// `rewrite` translates display-root paths to source-root paths and
+/// passes non-matching paths through unchanged.
+#[rstest]
+#[case::prefix_replaced("/code/src/main.rs", "/tmp/nyne/proc/123/fs/merged/home/user/project/src/main.rs")]
+#[case::root_itself("/code", "/tmp/nyne/proc/123/fs/merged/home/user/project")]
+#[case::non_matching_unchanged("/other/path/file.rs", "/other/path/file.rs")]
+fn rewrite_translates_display_paths(#[case] input: &str, #[case] expected: &str) {
+    assert_eq!(test_resolver().rewrite(input), PathBuf::from(expected));
 }
 
-/// Tests that rewrite replaces the display root prefix with the source root.
+/// `rewrite_to_fuse` translates source-root paths back to display-root
+/// paths and passes non-matching paths through unchanged.
 #[rstest]
-fn rewrite_replaces_display_root_prefix() {
+#[case::prefix_replaced("/tmp/nyne/proc/123/fs/merged/home/user/project/src/main.rs", "/code/src/main.rs")]
+#[case::root_itself("/tmp/nyne/proc/123/fs/merged/home/user/project", "/code")]
+#[case::non_matching_unchanged("/other/path/file.rs", "/other/path/file.rs")]
+fn rewrite_to_fuse_translates_source_paths(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(
-        test_resolver().rewrite("/code/src/main.rs"),
-        PathBuf::from("/tmp/nyne/proc/123/fs/merged/home/user/project/src/main.rs")
-    );
-}
-
-/// Tests that rewrite passes through paths outside the display root.
-#[rstest]
-fn rewrite_leaves_non_root_paths_unchanged() {
-    assert_eq!(
-        test_resolver().rewrite("/other/path/file.rs"),
-        PathBuf::from("/other/path/file.rs")
-    );
-}
-
-/// Tests that rewrite handles the exact display root path.
-#[rstest]
-fn rewrite_handles_root_itself() {
-    assert_eq!(
-        test_resolver().rewrite("/code"),
-        PathBuf::from("/tmp/nyne/proc/123/fs/merged/home/user/project")
-    );
-}
-
-/// Tests that `rewrite_to_fuse` replaces the source root prefix with the display root.
-#[rstest]
-fn rewrite_to_display_replaces_source_prefix() {
-    assert_eq!(
-        test_resolver().rewrite_to_fuse(Path::new("/tmp/nyne/proc/123/fs/merged/home/user/project/src/main.rs")),
-        PathBuf::from("/code/src/main.rs")
-    );
-}
-
-/// Tests that `rewrite_to_fuse` passes through paths outside the source root.
-#[rstest]
-fn rewrite_to_display_leaves_non_source_paths_unchanged() {
-    assert_eq!(
-        test_resolver().rewrite_to_fuse(Path::new("/other/path/file.rs")),
-        PathBuf::from("/other/path/file.rs")
-    );
-}
-
-/// Tests that `rewrite_to_fuse` handles the exact source root path.
-#[rstest]
-fn rewrite_to_display_handles_source_root_itself() {
-    assert_eq!(
-        test_resolver().rewrite_to_fuse(Path::new("/tmp/nyne/proc/123/fs/merged/home/user/project")),
-        PathBuf::from("/code")
+        test_resolver().rewrite_to_fuse(Path::new(input)),
+        PathBuf::from(expected)
     );
 }

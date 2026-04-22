@@ -20,6 +20,19 @@ Must run outside the sandbox (daemon needs host filesystem access for libgit2 sn
 - `assertions.rs` — `assert_ok`, `assert_fails`, `assert_contains[_any]`.
 - `targets.rs` — shared test target constants (`targets::rust`, `targets::lsp`). Use these instead of inlining paths.
 
+## NyneMount helpers
+
+Prefer the helper methods over hand-rolled `sh` + `assert_ok` triads:
+
+| Method | Replaces |
+|-|-|
+| `mount.sh_ok(script) -> String` | `let out = mount.sh(...); assert_ok(&out); out.stdout` |
+| `mount.cat_contains(path, needle)` | `let s = mount.read(path); assert_contains(&s, needle);` |
+| `mount.cat_contains_any(path, needles)` | `let s = mount.read(path); assert_contains_any(&s, needles);` |
+| `mount.read(path) -> String` | `let out = mount.sh(&format!("cat {path}")); assert_ok(&out); out.stdout` |
+
+All helpers are `#[track_caller]` — panic sites point to the test, not the harness.
+
 ## Writing Tests
 
 Each test takes an owned `NyneMount` via rstest. The fixture is NOT `#[once]` — static fixtures aren't dropped when nextest exits via `process::exit()`, orphaning daemons.
@@ -27,8 +40,9 @@ Each test takes an owned `NyneMount` via rstest. The fixture is NOT `#[once]` �
 ```rust
 #[rstest]
 fn my_test(mount: NyneMount) {
-    let out = mount.sh("cat @/git/STATUS.md");
-    assert_ok(&out);
+    // Preferred: use helper methods.
+    mount.cat_contains("@/git/STATUS.md", "main");
+    mount.sh_ok("ls @/git/branches/");
 }
 ```
 
