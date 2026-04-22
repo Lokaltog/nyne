@@ -37,7 +37,7 @@ fn t_1901_large_symbol_body(mount: NyneMount) {
 /// T-1902: Concurrent reads — all clients observe identical content.
 #[rstest]
 fn t_1902_concurrent_reads(mount: NyneMount) {
-    let out = mount.sh(&format!(
+    let stdout = mount.sh_ok(&format!(
         "for i in 1 2 3 4 5; do \
             cat {FILE}@/symbols/{SYMBOL}@/body.rs > /tmp/nyne_concurrent_$i & \
          done; wait; \
@@ -48,10 +48,5 @@ fn t_1902_concurrent_reads(mount: NyneMount) {
          done; \
          rm -f /tmp/nyne_concurrent_*"
     ));
-    assert_ok(&out);
-    assert!(
-        !out.stdout.contains("MISMATCH"),
-        "concurrent reads diverged: {}",
-        out.stdout
-    );
+    assert!(!stdout.contains("MISMATCH"), "concurrent reads diverged: {stdout}");
 }

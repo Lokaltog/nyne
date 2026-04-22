@@ -19,10 +19,10 @@ fn t_200_shorthand_body(mount: NyneMount) {
 /// T-201: `symbols/Foo@/body.rs` — explicit body equals shorthand read.
 #[rstest]
 fn t_201_explicit_body_equals_shorthand(mount: NyneMount) {
-    assert_ok(&mount.sh(&format!(
+    mount.sh_ok(&format!(
         "diff <(cat {FILE}@/symbols/{SYMBOL}.rs) \
               <(cat {FILE}@/symbols/{SYMBOL}@/body.rs)"
-    )));
+    ));
 }
 
 /// T-202: `symbols/Foo@/signature.rs` — declaration only, small.
@@ -71,8 +71,7 @@ fn t_206_nested_child_body(mount: NyneMount) {
 /// reachable only via direct path access) and is not asserted here.
 #[rstest]
 fn t_207_symbol_directory_listing(mount: NyneMount) {
-    let out = mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/"));
-    assert_ok(&out);
+    let stdout = mount.sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/"));
     for entry in &[
         "body.rs",
         "signature.rs",
@@ -81,6 +80,6 @@ fn t_207_symbol_directory_listing(mount: NyneMount) {
         "REFERENCES.md",
         "actions",
     ] {
-        assert_contains(&out.stdout, entry);
+        assert_contains(&stdout, entry);
     }
 }

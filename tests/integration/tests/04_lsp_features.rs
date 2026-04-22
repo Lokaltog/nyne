@@ -8,7 +8,7 @@
 //! implemented and referenced trait that populates all LSP views.
 
 use nyne_integration_tests::targets::lsp::{FILE, SYMBOL};
-use nyne_integration_tests::{NyneMount, assert_contains, assert_contains_any, assert_ok, mount};
+use nyne_integration_tests::{NyneMount, assert_contains, assert_contains_any, mount};
 use rstest::rstest;
 
 /// T-300: `CALLERS.md` — incoming call hierarchy node is readable.
@@ -23,7 +23,7 @@ fn t_300_callers_md(mount: NyneMount) {
 
 /// T-301: `callers/` — caller symlink directory exists.
 #[rstest]
-fn t_301_callers_dir(mount: NyneMount) { assert_ok(&mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/callers/"))); }
+fn t_301_callers_dir(mount: NyneMount) { mount.sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/callers/")); }
 
 /// T-302: `DEPS.md` — outgoing dependencies node is readable.
 #[rstest]
@@ -36,7 +36,7 @@ fn t_302_deps_md(mount: NyneMount) {
 
 /// T-303: `deps/` — dependency symlink directory exists.
 #[rstest]
-fn t_303_deps_dir(mount: NyneMount) { assert_ok(&mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/deps/"))); }
+fn t_303_deps_dir(mount: NyneMount) { mount.sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/deps/")); }
 
 /// T-304: `REFERENCES.md` — lists file paths and line numbers.
 #[rstest]
@@ -52,10 +52,11 @@ fn t_304_references_md(mount: NyneMount) {
 /// REFERENCES.md is non-empty.
 #[rstest]
 fn t_305_references_dir(mount: NyneMount) {
-    let out = mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/references/"));
-    assert_ok(&out);
     assert!(
-        !out.stdout.trim().is_empty(),
+        !mount
+            .sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/references/"))
+            .trim()
+            .is_empty(),
         "Provider trait has >70 references; references/ should have entries"
     );
 }
@@ -68,9 +69,7 @@ fn t_306_declaration_md(mount: NyneMount) {
 
 /// T-307: `declaration/` — declaration symlink directory exists.
 #[rstest]
-fn t_307_declaration_dir(mount: NyneMount) {
-    assert_ok(&mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/declaration/")));
-}
+fn t_307_declaration_dir(mount: NyneMount) { mount.sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/declaration/")); }
 
 /// T-308: `DEFINITION.md` — contains a file path and line number.
 #[rstest]
@@ -80,9 +79,7 @@ fn t_308_definition_md(mount: NyneMount) {
 
 /// T-309: `definition/` — definition symlink directory exists.
 #[rstest]
-fn t_309_definition_dir(mount: NyneMount) {
-    assert_ok(&mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/definition/")));
-}
+fn t_309_definition_dir(mount: NyneMount) { mount.sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/definition/")); }
 
 /// T-310: `IMPLEMENTATION.md` — lists concrete impl sites.
 #[rstest]
@@ -96,10 +93,11 @@ fn t_310_implementation_md(mount: NyneMount) {
 /// T-311: `implementation/` — implementation symlink directory has entries.
 #[rstest]
 fn t_311_implementation_dir(mount: NyneMount) {
-    let out = mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/implementation/"));
-    assert_ok(&out);
     assert!(
-        !out.stdout.trim().is_empty(),
+        !mount
+            .sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/implementation/"))
+            .trim()
+            .is_empty(),
         "Provider has 14 implementations; implementation/ should have entries"
     );
 }
@@ -107,13 +105,13 @@ fn t_311_implementation_dir(mount: NyneMount) {
 /// T-312: `TYPE-DEFINITION.md` — node is readable.
 #[rstest]
 fn t_312_type_definition_md(mount: NyneMount) {
-    assert_ok(&mount.sh(&format!("cat {FILE}@/symbols/{SYMBOL}@/TYPE-DEFINITION.md")));
+    mount.sh_ok(&format!("cat {FILE}@/symbols/{SYMBOL}@/TYPE-DEFINITION.md"));
 }
 
 /// T-313: `type-definition/` — type definition symlink directory exists.
 #[rstest]
 fn t_313_type_definition_dir(mount: NyneMount) {
-    assert_ok(&mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/type-definition/")));
+    mount.sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/type-definition/"));
 }
 
 /// T-314: `DOC.md` — hover documentation contains symbol name.
@@ -139,13 +137,12 @@ fn t_315_hints_md(mount: NyneMount) {
 #[rstest]
 fn t_316_actions_dir(mount: NyneMount) {
     // Read first action via shell chain: list → head → cat.
-    let diff = mount.sh(&format!(
+    let diff = mount.sh_ok(&format!(
         "cat {FILE}@/symbols/{SYMBOL}@/actions/$(ls {FILE}@/symbols/{SYMBOL}@/actions/ | head -1)"
     ));
-    assert_ok(&diff);
-    assert_contains(&diff.stdout, "---");
-    assert_contains(&diff.stdout, "+++");
-    assert_contains(&diff.stdout, "@@");
+    for marker in &["---", "+++", "@@"] {
+        assert_contains(&diff, marker);
+    }
 }
 
 /// T-317: `rename/<new>.diff` — rename preview node is readable and produces
@@ -153,7 +150,7 @@ fn t_316_actions_dir(mount: NyneMount) {
 #[rstest]
 fn t_317_rename_preview_readable(mount: NyneMount) {
     let diff = mount.read(&format!("{FILE}@/symbols/{SYMBOL}@/rename/RenamedProvider.diff"));
-    assert_contains(&diff, "---");
-    assert_contains(&diff, "+++");
-    assert_contains(&diff, "@@");
+    for marker in &["---", "+++", "@@"] {
+        assert_contains(&diff, marker);
+    }
 }

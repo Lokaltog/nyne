@@ -3,7 +3,7 @@
 //! Validates that directory companions expose a directory-level OVERVIEW.md
 //! and do not leak file-specific nodes (symbols/, git/BLAME.md, etc.).
 
-use nyne_integration_tests::{NyneMount, assert_contains, assert_ok, mount};
+use nyne_integration_tests::{NyneMount, assert_contains, mount};
 use rstest::rstest;
 
 const TEST_DIR: &str = "nyne/src/cli";
@@ -18,18 +18,14 @@ fn t_1400_directory_overview(mount: NyneMount) {
 /// T-1401: Directory `@/` companion listing exposes OVERVIEW.md.
 #[rstest]
 fn t_1401_directory_companion_lists_overview(mount: NyneMount) {
-    let out = mount.sh(&format!("ls {TEST_DIR}/@/"));
-    assert_ok(&out);
-    assert_contains(&out.stdout, "OVERVIEW.md");
+    assert_contains(&mount.sh_ok(&format!("ls {TEST_DIR}/@/")), "OVERVIEW.md");
 }
 
 /// T-1402: Directory `@/` does not expose file-specific `symbols/` directory.
 #[rstest]
 fn t_1402_no_file_symbols_in_dir_companion(mount: NyneMount) {
-    let out = mount.sh(&format!("ls {TEST_DIR}/@/"));
-    assert_ok(&out);
     assert!(
-        !out.stdout.contains("symbols"),
+        !mount.sh_ok(&format!("ls {TEST_DIR}/@/")).contains("symbols"),
         "directory companion should not expose file-specific symbols/"
     );
 }

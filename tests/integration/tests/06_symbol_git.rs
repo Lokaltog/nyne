@@ -4,7 +4,7 @@
 //! and historical body versions.
 
 use nyne_integration_tests::targets::rust::{FILE, SYMBOL};
-use nyne_integration_tests::{NyneMount, assert_contains, assert_ok, mount};
+use nyne_integration_tests::{NyneMount, assert_contains, mount};
 use rstest::rstest;
 
 /// T-500: `git/BLAME.md` — symbol-scoped blame has entries.
@@ -23,6 +23,4 @@ fn t_501_symbol_log(mount: NyneMount) {
 
 /// T-502: `git/history/` — historical symbol body directory exists.
 #[rstest]
-fn t_502_symbol_history(mount: NyneMount) {
-    assert_ok(&mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/git/history/")));
-}
+fn t_502_symbol_history(mount: NyneMount) { mount.sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/git/history/")); }

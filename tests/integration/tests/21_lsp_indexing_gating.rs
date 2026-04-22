@@ -16,7 +16,7 @@
 //! rust-analyzer indexing to populate.
 
 use nyne_integration_tests::targets::lsp::{FILE, METHOD_FILE, METHOD_SYMBOL, SYMBOL};
-use nyne_integration_tests::{NyneMount, assert_contains, assert_ok, mount};
+use nyne_integration_tests::{NyneMount, assert_contains, mount};
 use rstest::rstest;
 
 /// T-400: cold-mount LSP-backed `*.md` reads contain real indexed
@@ -60,10 +60,11 @@ fn t_400_cold_md_contains_indexed_content(
 #[case::implementation_dir("implementation")]
 #[case::references_dir("references")]
 fn t_401_cold_dir_has_entries(mount: NyneMount, #[case] dir: &str) {
-    let out = mount.sh(&format!("ls {FILE}@/symbols/{SYMBOL}@/{dir}/"));
-    assert_ok(&out);
     assert!(
-        !out.stdout.trim().is_empty(),
+        !mount
+            .sh_ok(&format!("ls {FILE}@/symbols/{SYMBOL}@/{dir}/"))
+            .trim()
+            .is_empty(),
         "{dir}/ should have entries on cold mount; the gate must park readdir until indexed",
     );
 }
@@ -78,15 +79,14 @@ fn t_401_cold_dir_has_entries(mount: NyneMount, #[case] dir: &str) {
 /// empty and the aggregate `assert_contains` fails.
 #[rstest]
 fn t_402_concurrent_cold_reads_all_indexed(mount: NyneMount) {
-    let out = mount.sh(&format!(
+    let stdout = mount.sh_ok(&format!(
         "for node in CALLERS.md REFERENCES.md IMPLEMENTATION.md DEPS.md; do \
              cat {FILE}@/symbols/{SYMBOL}@/$node & \
          done; \
          wait"
     ));
-    assert_ok(&out);
-    assert_contains(&out.stdout, "plugins/");
-    assert_contains(&out.stdout, ".rs");
+    assert_contains(&stdout, "plugins/");
+    assert_contains(&stdout, ".rs");
 }
 
 /// T-403: after the first cold-mount LSP read pays the indexing wait,
