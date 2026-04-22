@@ -147,6 +147,32 @@ impl NyneMount {
         );
         out.stdout
     }
+    /// Run `script`, assert success, and return captured stdout.
+    ///
+    /// Panics with captured output on failure. Use instead of the
+    /// `let out = self.sh(...); assert_ok(&out); out.stdout` triad.
+    #[track_caller]
+    pub fn sh_ok(&self, script: &str) -> String {
+        let out = self.sh(script);
+        crate::assert_ok(&out);
+        out.stdout
+    }
+
+    /// Read a VFS path via `cat` and assert that stdout contains `needle`.
+    ///
+    /// Collapses the common `let s = mount.read(p); assert_contains(&s, needle);` pair.
+    #[track_caller]
+    pub fn cat_contains(&self, vfs_path: &str, needle: &str) {
+        crate::assert_contains(&self.read(vfs_path), needle);
+    }
+
+    /// Read a VFS path via `cat` and assert that stdout contains at least
+    /// one of `needles`. Panics with captured output otherwise.
+    #[track_caller]
+    pub fn cat_contains_any(&self, vfs_path: &str, needles: &[&str]) {
+        crate::assert_contains_any(&self.read(vfs_path), needles);
+    }
+
 
     /// Create a RAII guard that restores the mount to HEAD via
     /// `git checkout HEAD -- .` on drop.
