@@ -32,9 +32,7 @@ fn t_101_symbols_overview(mount: NyneMount) {
 /// T-102: `file@/DIAGNOSTICS.md` — LSP diagnostics node is readable.
 #[rstest]
 fn t_102_file_diagnostics(mount: NyneMount) {
-    let out = mount.sh(&format!("cat {FILE}@/DIAGNOSTICS.md"));
-    assert_ok(&out);
-    assert_contains_any(&out.stdout, &[
+    mount.cat_contains_any(&format!("{FILE}@/DIAGNOSTICS.md"), &[
         "Diagnostics",
         "diagnostics",
         "No diagnostics",
@@ -45,19 +43,19 @@ fn t_102_file_diagnostics(mount: NyneMount) {
 /// T-103: `file@/lines` — full file content equals raw file byte-for-byte.
 #[rstest]
 fn t_103_lines_full_file(mount: NyneMount) {
-    assert_ok(&mount.sh(&format!("diff <(cat {FILE}) <(cat {FILE}@/lines)")));
+    mount.sh_ok(&format!("diff <(cat {FILE}) <(cat {FILE}@/lines)"));
 }
 
 /// T-104: `file@/lines:M-N` — line range read matches `head -N` on the raw file.
 #[rstest]
 fn t_104_lines_range(mount: NyneMount) {
-    assert_ok(&mount.sh(&format!("diff <(head -5 {FILE}) <(cat {FILE}@/lines:1-5)")));
+    mount.sh_ok(&format!("diff <(head -5 {FILE}) <(cat {FILE}@/lines:1-5)"));
 }
 
 /// T-105: `file@/lines:M` — single line read matches `sed -n 'Mp'`.
 #[rstest]
 fn t_105_lines_single(mount: NyneMount) {
-    assert_ok(&mount.sh(&format!("diff <(sed -n '3p' {FILE}) <(cat {FILE}@/lines:3)")));
+    mount.sh_ok(&format!("diff <(sed -n '3p' {FILE}) <(cat {FILE}@/lines:3)"));
 }
 
 /// T-106: `file@/symbols/imports.rs` — import block contains `use` statements.
@@ -69,7 +67,8 @@ fn t_106_imports_block(mount: NyneMount) {
 /// T-107: `file@/symbols/by-kind/` — kind-filtered directories are listed.
 #[rstest]
 fn t_107_by_kind_directories(mount: NyneMount) {
-    let out = mount.sh(&format!("ls {FILE}@/symbols/by-kind/"));
-    assert_ok(&out);
-    assert_contains_any(&out.stdout, &["fn", "struct", "enum", "module", "impl", "const"]);
+    assert_contains_any(
+        &mount.sh_ok(&format!("ls {FILE}@/symbols/by-kind/")),
+        &["fn", "struct", "enum", "module", "impl", "const"],
+    );
 }

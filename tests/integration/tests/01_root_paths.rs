@@ -100,7 +100,10 @@ fn t_011_edit_insert_after_stages(mount: NyneMount) {
         "printf '/// staged-marker-t011\\nfn __t011() {{}}\\n' > {edit_dir}/insert-after"
     ));
 
-    assert_contains(&mount.sh_ok(&format!("cat {edit_dir}/staged.diff")), "staged-marker-t011");
+    assert_contains(
+        &mount.sh_ok(&format!("cat {edit_dir}/staged.diff")),
+        "staged-marker-t011",
+    );
 
     // Drain without applying so the source file is untouched — the scoped
     // `> staged.diff` write clears only this file's ops.
