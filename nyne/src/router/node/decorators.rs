@@ -1,8 +1,12 @@
-//! Slice boundary decorators for virtual file reads and writes.
+//! Capability decorators for wrapping [`Readable`] and [`Writable`] implementations.
 //!
-//! Content slices (symbol bodies, signatures, docstrings) don't inherently end
-//! with `\n`, but editors expect it. This decorator pair appends `\n` on read
-//! and strips it on write, ensuring symmetric round-tripping at slice boundaries.
+//! Decorators wrap inner capabilities to transform content on read or write.
+//! Providers compose them by nesting: `SliceReadable(MyReadable)`.
+//!
+//! Slice boundary decorators: content slices (symbol bodies, signatures,
+//! docstrings) don't inherently end with `\n`, but editors expect it. The
+//! [`SliceReadable`]/[`SliceWritable`] pair appends `\n` on read and strips
+//! it on write, ensuring symmetric round-tripping at slice boundaries.
 
 use color_eyre::eyre::Result;
 
