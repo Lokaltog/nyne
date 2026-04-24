@@ -15,7 +15,7 @@ use crate::extensions::SourceExtensions;
 use crate::paths::SourcePaths;
 use crate::plugin::config::Config;
 use crate::plugin::config::vfs::Vfs;
-use crate::provider::syntax::{SyntaxProvider, file_doc_text, routes};
+use crate::provider::{SyntaxProvider, file_doc_text, routes};
 use crate::syntax::SyntaxRegistry;
 use crate::syntax::decomposed::DecompositionCache;
 use crate::syntax::view::{SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC};
@@ -79,7 +79,7 @@ impl Plugin for SourcePlugin {
         let mut b = HandleBuilder::new();
         let key = b.register(
             "syntax/dir_overview",
-            include_str!("../provider/syntax/templates/dir_overview.md.j2"),
+            include_str!("../provider/templates/dir_overview.md.j2"),
         );
         register_dir_overview(
             ctx.companion_extensions_mut(),
@@ -102,13 +102,10 @@ impl Plugin for SourcePlugin {
 
         let mut b = HandleBuilder::new();
         b.register_partial(SYMBOL_TABLE_PARTIAL_KEY, SYMBOL_TABLE_PARTIAL_SRC);
-        let overview_key = b.register(
-            "syntax/overview",
-            include_str!("../provider/syntax/templates/overview.md.j2"),
-        );
+        let overview_key = b.register("syntax/overview", include_str!("../provider/templates/overview.md.j2"));
         let file_overview_key = b.register(
             "syntax/file_overview",
-            include_str!("../provider/syntax/templates/file_overview.md.j2"),
+            include_str!("../provider/templates/file_overview.md.j2"),
         );
         let engine = b.finish();
 

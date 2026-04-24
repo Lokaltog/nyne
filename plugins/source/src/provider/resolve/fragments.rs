@@ -8,8 +8,8 @@ use nyne::router::{NamedNode, Node, Permissions, slice_node};
 use nyne_companion::Companion;
 
 use super::{build_fragment_nodes, code_block_extension};
-use crate::provider::syntax::SyntaxProvider;
-use crate::provider::syntax::content::{BodySplice, FragmentPath, MetaSplice, Slice, SpliceTarget, build_meta_nodes};
+use crate::provider::SyntaxProvider;
+use crate::provider::content::{BodySplice, FragmentPath, MetaSplice, Slice, SpliceTarget, build_meta_nodes};
 use crate::syntax::fragment::FragmentKind;
 
 /// Fragment directory resolution methods for [`SyntaxProvider`].

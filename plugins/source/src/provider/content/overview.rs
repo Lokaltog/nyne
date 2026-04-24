@@ -21,7 +21,7 @@ use crate::syntax::view::fragment_list;
 /// View that renders the OVERVIEW.md template for a file's symbol table.
 ///
 /// Resolves lazily via [`FragmentResolver`] — never stale after writes.
-pub(in crate::provider::syntax) struct OverviewContent {
+pub(in crate::provider) struct OverviewContent {
     pub resolver: FragmentResolver,
     pub filename: String,
 }
@@ -42,7 +42,7 @@ impl TemplateView for OverviewContent {
 /// View for a per-symbol OVERVIEW.md (lists child symbols).
 ///
 /// Resolves lazily via [`FragmentResolver`] — never stale after writes.
-pub(in crate::provider::syntax) struct SymbolOverviewContent {
+pub(in crate::provider) struct SymbolOverviewContent {
     pub resolver: FragmentResolver,
     pub fragment_path: FragmentPath,
 }
@@ -64,7 +64,7 @@ impl TemplateView for SymbolOverviewContent {
 /// View for the file-level `OVERVIEW.md` at `file.ext@/OVERVIEW.md`.
 ///
 /// Resolves lazily via [`FragmentResolver`] — never stale after writes.
-pub(in crate::provider::syntax) struct FileOverviewContent {
+pub(in crate::provider) struct FileOverviewContent {
     pub resolver: FragmentResolver,
     pub filename: String,
     pub language: String,

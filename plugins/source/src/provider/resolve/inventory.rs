@@ -8,7 +8,7 @@ use nyne::router::{NamedNode, Node};
 use nyne_companion::Companion;
 
 use super::build_fragment_nodes;
-use crate::provider::syntax::SyntaxProvider;
+use crate::provider::SyntaxProvider;
 use crate::syntax::fragment::FragmentKind;
 
 /// Symbol inventory methods for [`SyntaxProvider`].

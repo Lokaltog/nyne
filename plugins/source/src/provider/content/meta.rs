@@ -30,7 +30,7 @@ use crate::syntax::{self};
 /// Wraps `Arc<[String]>` so that multiple content readers and splice writers
 /// can share the same allocation instead of cloning `Vec<String>` per node.
 #[derive(Clone, Debug)]
-pub(in crate::provider::syntax) struct FragmentPath(pub Arc<[String]>);
+pub(in crate::provider) struct FragmentPath(pub Arc<[String]>);
 
 impl FragmentPath {
     /// Create a new `FragmentPath` from a slice of path segments.
@@ -52,7 +52,7 @@ impl Deref for FragmentPath {
 /// [`DocstringContent`], [`DecoratorsContent`]) resolve their ranges
 /// from the same [`FragmentResolver`].
 #[derive(Clone, Debug)]
-pub(in crate::provider::syntax) enum SpliceTarget {
+pub(in crate::provider) enum SpliceTarget {
     /// Fragment body: `line_start_of(full_span.start)..full_span.end`.
     FragmentBody(FragmentPath),
     /// Signature text within a fragment's byte range.
@@ -76,7 +76,7 @@ pub(in crate::provider::syntax) enum SpliceTarget {
 ///
 /// Sliced variants (`lines:M-N`) are handled by the [`LineSlice`](nyne::node::line_slice::LineSlice)
 /// plugin attached via `.sliceable()`.
-pub(in crate::provider::syntax) struct LinesContent {
+pub(in crate::provider) struct LinesContent {
     pub source_file: PathBuf,
 }
 
@@ -90,7 +90,7 @@ impl Readable for LinesContent {
 ///
 /// Uses a [`FragmentResolver`] to re-derive byte offsets from the current
 /// file state, so writes never target stale ranges.
-pub(in crate::provider::syntax) struct MetaSplice {
+pub(in crate::provider) struct MetaSplice {
     pub resolver: FragmentResolver,
     pub target: SpliceTarget,
 }
@@ -243,7 +243,7 @@ impl Writable for MetaSplice {
 /// Validates the new content with the decomposer before writing.
 /// Sliced writes (`lines:M-N`) are handled by the [`LineSlice`](nyne::node::line_slice::LineSlice)
 /// plugin's `SlicedWritable`, which splices and delegates back through this writable.
-pub(in crate::provider::syntax) struct LinesWrite {
+pub(in crate::provider) struct LinesWrite {
     pub source_file: PathBuf,
     pub decomposer: Arc<dyn Decomposer>,
     pub resolver: FragmentResolver,
@@ -267,7 +267,7 @@ impl Writable for LinesWrite {
 ///
 /// The returned node lazily reads the file docstring and strips comment markers.
 /// Used by both the route-tree builder and the readdir inventory handler.
-pub(in crate::provider::syntax) fn file_docstring_node(resolver: &FragmentResolver, files: &VfsFiles) -> NamedNode {
+pub(in crate::provider) fn file_docstring_node(resolver: &FragmentResolver, files: &VfsFiles) -> NamedNode {
     let r = resolver.clone();
     lazy_slice_node(
         format!("{}.txt", files.docstring),
@@ -297,7 +297,7 @@ pub(in crate::provider::syntax) fn file_docstring_node(resolver: &FragmentResolv
 /// and `OVERVIEW.md` depending on which metadata the fragment carries. Each
 /// node is both readable (via [`Slice`]) and writable (via [`MetaSplice`]),
 /// with trailing-newline decoration for editor compatibility.
-pub(in crate::provider::syntax) fn build_meta_nodes(
+pub(in crate::provider) fn build_meta_nodes(
     frag: &Fragment,
     ext: &str,
     overview_handle: &TemplateHandle,

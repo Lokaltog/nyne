@@ -19,7 +19,7 @@ use crate::syntax::decomposed::DecompositionCache;
 /// Implements [`DiffSource`] — the diff middleware renders a preview on
 /// read and applies on `rm delete.diff` via [`DiffCapable`] request state.
 #[derive(Clone)]
-pub(in crate::provider::syntax) struct SymbolDelete {
+pub(in crate::provider) struct SymbolDelete {
     pub decomposition: DecompositionCache,
     pub source_file: PathBuf,
     pub fragment_path: Vec<String>,

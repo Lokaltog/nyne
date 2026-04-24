@@ -16,7 +16,7 @@ use crate::syntax::spec::SpliceMode;
 /// On write: reads the current source, replaces the full span with the new
 /// content, validates the result with tree-sitter, and writes back to disk.
 /// Rejects with `EINVAL` if the spliced result has parse errors.
-pub(in crate::provider::syntax) struct BodySplice {
+pub(in crate::provider) struct BodySplice {
     pub meta: MetaSplice,
 }
 

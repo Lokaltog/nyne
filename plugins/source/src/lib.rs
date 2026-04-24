@@ -31,7 +31,7 @@ pub(crate) mod fragment_resolver;
 
 // Additional re-exports for downstream plugin crates.
 pub use fragment_resolver::FragmentResolver;
-pub use provider::syntax::SyntaxProvider;
+pub use provider::SyntaxProvider;
 pub use syntax::decomposed::{DecomposedSource, DecompositionCache, ResolvedFragment};
 pub use syntax::fragment::Fragment;
 pub use syntax::fs_mapping::split_disambiguator;
