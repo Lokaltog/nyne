@@ -18,20 +18,19 @@ fn decompose_j2(inner_ext: &str, source: &str) -> DecomposedFile {
 
 // Core pipeline
 
-/// Verifies that a markdown-in-jinja2 file produces both Jinja2 and markdown fragments.
-#[test]
-fn markdown_in_jinja2_produces_both_layers() {
-    let source = load_fixture("markdown-blocks.md.j2");
-    let file = decompose_j2("md", &source);
-    insta::assert_debug_snapshot!(file);
-}
-
-/// Verifies that a TOML-in-jinja2 file decomposes TOML table structures.
-#[test]
-fn toml_in_jinja2_decomposes_tables() {
-    let source = load_fixture("toml-conditional.toml.j2");
-    let file = decompose_j2("toml", &source);
-    insta::assert_debug_snapshot!(file);
+/// Verifies that compound `.j2` fixtures decompose correctly across language combinations.
+#[rstest]
+#[case::markdown_in_jinja2_produces_both_layers(
+    "markdown-blocks.md.j2",
+    "md",
+    "markdown_in_jinja2_produces_both_layers"
+)]
+#[case::toml_in_jinja2_decomposes_tables("toml-conditional.toml.j2", "toml", "toml_in_jinja2_decomposes_tables")]
+#[case::empty_content_only_jinja2_directives("directives-only.md.j2", "md", "empty_content_only_jinja2_directives")]
+#[case::preserves_inner_children("toml-block.toml.j2", "toml", "preserves_inner_children")]
+fn compound_decompose_snapshots(#[case] fixture: &str, #[case] inner_ext: &str, #[case] snapshot: &str) {
+    let source = load_fixture(fixture);
+    insta::assert_debug_snapshot!(snapshot, decompose_j2(inner_ext, &source));
 }
 
 // Byte-range accuracy
@@ -111,14 +110,6 @@ fn multi_region_remapping_across_disjoint_gaps() {
 
 // Children & structure preservation
 
-/// Verifies that inner decomposition preserves child fragments from the inner language.
-#[test]
-fn preserves_inner_children() {
-    let source = load_fixture("toml-block.toml.j2");
-    let file = decompose_j2("toml", &source);
-    insta::assert_debug_snapshot!(file);
-}
-
 /// Verifies that compound decomposition passes through inner fields like imports and `file_doc`.
 #[test]
 fn inner_decomposition_fields_pass_through() {
@@ -190,14 +181,6 @@ fn fragments_sorted_by_position() {
 }
 
 // Edge cases
-
-/// Verifies that a file with only Jinja2 directives and no content decomposes correctly.
-#[test]
-fn empty_content_only_jinja2_directives() {
-    let source = load_fixture("directives-only.md.j2");
-    let file = decompose_j2("md", &source);
-    insta::assert_debug_snapshot!(file);
-}
 
 /// Verifies that a file with no Jinja2 directives degenerates to inner-only decomposition.
 #[test]
