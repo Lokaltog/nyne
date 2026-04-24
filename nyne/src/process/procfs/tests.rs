@@ -2,18 +2,20 @@ use rstest::rstest;
 
 use super::*;
 
-/// Verifies `read_comm` returns a non-empty name for the current process.
+/// Verifies `read_comm` and `read_ppid` both return `None` for a PID that cannot exist.
+#[rstest]
+#[case::read_comm(|| read_comm(u32::MAX).is_none())]
+#[case::read_ppid(|| read_ppid(u32::MAX).is_none())]
+fn procfs_readers_return_none_for_nonexistent_pid(#[case] check: fn() -> bool) {
+    assert!(check());
+}
+
+/// Verifies `read_comm` returns a non-empty, length-bounded name for the current process.
 #[rstest]
 fn read_comm_of_current_process_has_name() {
     let comm = read_comm(std::process::id()).expect("current process must have comm");
     assert!(!comm.is_empty());
     assert!(comm.len() <= COMM_MAX_LEN);
-}
-
-/// Verifies `read_comm` returns `None` for a PID that cannot exist.
-#[rstest]
-fn read_comm_returns_none_for_nonexistent_pid() {
-    assert_eq!(read_comm(u32::MAX), None);
 }
 
 /// Verifies `read_ppid` returns a positive parent PID for the current process.
@@ -22,34 +24,15 @@ fn read_ppid_of_current_process_is_positive() {
     assert!(read_ppid(std::process::id()).is_some_and(|p| p > 0));
 }
 
-/// Verifies `read_ppid` returns `None` for a PID that cannot exist.
+/// Verifies truncation behavior: short names borrow, long names get truncated to
+/// `COMM_MAX_LEN`, and truncation respects UTF-8 character boundaries.
 #[rstest]
-fn read_ppid_returns_none_for_nonexistent_pid() {
-    assert_eq!(read_ppid(u32::MAX), None);
-}
-
-/// Verifies short names are returned as `Cow::Borrowed` (no allocation).
-#[rstest]
-fn truncate_comm_borrows_short_name() {
-    let result = truncate_comm("bash");
-    assert_eq!(result, "bash");
-    assert!(matches!(result, Cow::Borrowed(_)));
-}
-
-/// Verifies long names are truncated to `COMM_MAX_LEN` bytes.
-#[rstest]
-fn truncate_comm_owns_long_name() {
-    let result = truncate_comm("very_long_process_name_here");
-    assert_eq!(result.len(), COMM_MAX_LEN);
-    assert!(matches!(result, Cow::Owned(_)));
-}
-
-/// Verifies truncation respects UTF-8 character boundaries.
-#[rstest]
-fn truncate_comm_respects_utf8_boundaries() {
-    // 15 ASCII bytes followed by a 3-byte UTF-8 char — naive truncation at
-    // byte 15 would split the multi-byte character.
-    let result = truncate_comm("abcdefghijklmno香");
-    assert_eq!(result, "abcdefghijklmno");
+#[case::borrows_short("bash", "bash", true)]
+#[case::owns_long("very_long_process_name_here", "very_long_proce", false)]
+#[case::respects_utf8_boundaries("abcdefghijklmno香", "abcdefghijklmno", false)]
+fn truncate_comm_cases(#[case] input: &str, #[case] expected: &str, #[case] is_borrowed: bool) {
+    let result = truncate_comm(input);
+    assert_eq!(result, expected);
     assert!(result.len() <= COMM_MAX_LEN);
+    assert_eq!(matches!(result, Cow::Borrowed(_)), is_borrowed);
 }

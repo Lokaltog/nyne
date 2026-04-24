@@ -2,14 +2,10 @@ use rstest::rstest;
 
 use super::*;
 
-/// Verifies that the current process PID is reported as alive.
+/// Verifies that `is_pid_alive` correctly distinguishes live from dead PIDs.
 #[rstest]
-fn current_process_is_alive() {
-    assert!(is_pid_alive(std::process::id() as i32));
-}
-
-/// Verifies that an invalid PID is reported as not alive.
-#[rstest]
-fn bogus_pid_is_not_alive() {
-    assert!(!is_pid_alive(i32::MAX));
+#[case::current_process(std::process::id() as i32, true)]
+#[case::bogus_pid(i32::MAX, false)]
+fn is_pid_alive_reports(#[case] pid: i32, #[case] expected: bool) {
+    assert_eq!(is_pid_alive(pid), expected);
 }

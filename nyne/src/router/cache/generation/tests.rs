@@ -7,15 +7,10 @@ use rstest::rstest;
 use super::*;
 
 #[rstest]
-fn get_returns_zero_for_unknown() {
-    assert_eq!(GenerationMap::new().get(Path::new("unknown.rs")), 0);
-}
-
-#[rstest]
-fn bump_increments_and_returns() {
+fn get_returns_zero_then_increments_on_bump() {
     let map = GenerationMap::new();
     let path = Path::new("foo.rs");
-
+    assert_eq!(map.get(path), 0, "unknown path starts at 0");
     assert_eq!(map.bump(path), 1);
     assert_eq!(map.bump(path), 2);
     assert_eq!(map.bump(path), 3);

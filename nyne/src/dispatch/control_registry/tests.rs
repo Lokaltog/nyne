@@ -4,21 +4,20 @@ use super::*;
 use crate::plugin::control::{ControlCommand, ProcessTable};
 use crate::test_support::stub_activation_context;
 
-fn test_context() -> (crate::dispatch::activation::ActivationContext, ProcessTable) {
+fn run_dispatch(commands: Vec<ControlCommand>, name: &str, payload: serde_json::Value) -> Option<serde_json::Value> {
+    let registry = ControlRegistry::from_commands(commands);
     let ctx = stub_activation_context();
     let procs: ProcessTable = Default::default();
-    (ctx, procs)
-}
-
-#[rstest]
-fn dispatch_returns_none_for_unknown_command() {
-    let registry = ControlRegistry::from_commands(vec![]);
-    let (ctx, procs) = test_context();
     let ctrl_ctx = ControlContext {
         activation: &ctx,
         processes: &procs,
     };
-    assert!(registry.dispatch("Unknown", serde_json::json!({}), &ctrl_ctx).is_none());
+    registry.dispatch(name, payload, &ctrl_ctx)
+}
+
+#[rstest]
+fn dispatch_returns_none_for_unknown_command() {
+    assert!(run_dispatch(vec![], "Unknown", serde_json::json!({})).is_none());
 }
 
 #[rstest]
@@ -27,14 +26,10 @@ fn dispatch_calls_registered_handler() {
         name: "Ping",
         handler: Box::new(|_payload, _ctx| serde_json::json!({"type": "Pong"})),
     };
-    let registry = ControlRegistry::from_commands(vec![cmd]);
-    let (ctx, procs) = test_context();
-    let ctrl_ctx = ControlContext {
-        activation: &ctx,
-        processes: &procs,
-    };
-    let result = registry.dispatch("Ping", serde_json::json!({}), &ctrl_ctx);
-    assert_eq!(result, Some(serde_json::json!({"type": "Pong"})));
+    assert_eq!(
+        run_dispatch(vec![cmd], "Ping", serde_json::json!({})),
+        Some(serde_json::json!({"type": "Pong"}))
+    );
 }
 
 #[rstest]
@@ -43,13 +38,6 @@ fn dispatch_passes_payload_to_handler() {
         name: "Echo",
         handler: Box::new(|payload, _ctx| payload),
     };
-    let registry = ControlRegistry::from_commands(vec![cmd]);
-    let (ctx, procs) = test_context();
-    let ctrl_ctx = ControlContext {
-        activation: &ctx,
-        processes: &procs,
-    };
     let input = serde_json::json!({"data": 42});
-    let result = registry.dispatch("Echo", input.clone(), &ctrl_ctx);
-    assert_eq!(result, Some(input));
+    assert_eq!(run_dispatch(vec![cmd], "Echo", input.clone()), Some(input));
 }

@@ -3,72 +3,69 @@ use rstest::rstest;
 
 use super::{diagnostics_to_rows, severity_label};
 
-/// Tests that all severity levels map to the expected labels.
+/// Tests that every severity level (including unknown) maps to its display label.
 #[rstest]
-fn severity_labels() {
-    assert_eq!(severity_label(Some(DiagnosticSeverity::ERROR)), "error");
-    assert_eq!(severity_label(Some(DiagnosticSeverity::WARNING)), "warning");
-    assert_eq!(severity_label(Some(DiagnosticSeverity::INFORMATION)), "info");
-    assert_eq!(severity_label(Some(DiagnosticSeverity::HINT)), "hint");
-    assert_eq!(severity_label(None), "unknown");
+#[case::error(Some(DiagnosticSeverity::ERROR), "error")]
+#[case::warning(Some(DiagnosticSeverity::WARNING), "warning")]
+#[case::info(Some(DiagnosticSeverity::INFORMATION), "info")]
+#[case::hint(Some(DiagnosticSeverity::HINT), "hint")]
+#[case::unknown(None, "unknown")]
+fn severity_labels(#[case] severity: Option<DiagnosticSeverity>, #[case] expected: &str) {
+    assert_eq!(severity_label(severity), expected);
 }
 
-/// Build a minimal diagnostic at the given position for testing.
-fn diag(line: u32, col: u32, severity: DiagnosticSeverity, message: &str) -> Diagnostic {
+/// Build a diagnostic at `(line, col)` with optional `code` and `source` for testing.
+fn diag(
+    line: u32,
+    col: u32,
+    severity: DiagnosticSeverity,
+    message: &str,
+    code: Option<NumberOrString>,
+    source: Option<&str>,
+) -> Diagnostic {
     Diagnostic {
         range: Range::new(Position::new(line, col), Position::new(line, col + 1)),
         severity: Some(severity),
         message: message.to_owned(),
+        code,
+        source: source.map(str::to_owned),
         ..Default::default()
     }
 }
 
-/// Tests that row positions are 1-based (offset from 0-based LSP positions).
+/// Tests that `diagnostics_to_rows` maps LSP diagnostics to display rows correctly:
+/// 1-based positions, severity labels, code coercion (string/numeric), and empty defaults.
+///
+/// Each expected-row tuple is `(line, col, severity, message, code, source)`.
 #[rstest]
-fn rows_offset_by_one() {
-    let diags = vec![diag(0, 0, DiagnosticSeverity::ERROR, "err")];
+#[case::offset_by_one(
+    vec![diag(0, 0, DiagnosticSeverity::ERROR, "err", None, None)],
+    &[(1, 1, "error", "err", "", "")],
+)]
+#[case::code_string(
+    vec![diag(5, 10, DiagnosticSeverity::WARNING, "warn",
+        Some(NumberOrString::String("E0308".to_owned())), Some("rust-analyzer"))],
+    &[(6, 11, "warning", "warn", "E0308", "rust-analyzer")],
+)]
+#[case::code_numeric(
+    vec![diag(0, 0, DiagnosticSeverity::HINT, "hint",
+        Some(NumberOrString::Number(42)), None)],
+    &[(1, 1, "hint", "hint", "42", "")],
+)]
+#[case::missing_optional_fields(
+    vec![diag(0, 0, DiagnosticSeverity::ERROR, "bare", None, None)],
+    &[(1, 1, "error", "bare", "", "")],
+)]
+#[case::empty_input(vec![], &[])]
+fn diagnostics_to_rows_cases(#[case] diags: Vec<Diagnostic>, #[case] expected: &[(u32, u32, &str, &str, &str, &str)]) {
     let rows = diagnostics_to_rows(&diags);
-    assert_eq!(rows.len(), 1);
-    // LSP positions are 0-based; rows are 1-based for display.
-    assert_eq!(rows[0].line, 1);
-    assert_eq!(rows[0].col, 1);
-    assert_eq!(rows[0].severity, "error");
-    assert_eq!(rows[0].message, "err");
-}
-
-/// Tests that string diagnostic codes and source are extracted into rows.
-#[rstest]
-fn code_extraction() {
-    let mut d = diag(5, 10, DiagnosticSeverity::WARNING, "warn");
-    d.code = Some(NumberOrString::String("E0308".to_owned()));
-    d.source = Some("rust-analyzer".to_owned());
-
-    let rows = diagnostics_to_rows(&[d]);
-    assert_eq!(rows[0].code, "E0308");
-    assert_eq!(rows[0].source, "rust-analyzer");
-}
-
-/// Tests that numeric diagnostic codes are converted to strings.
-#[rstest]
-fn numeric_code() {
-    let mut d = diag(0, 0, DiagnosticSeverity::HINT, "hint");
-    d.code = Some(NumberOrString::Number(42));
-
-    let rows = diagnostics_to_rows(&[d]);
-    assert_eq!(rows[0].code, "42");
-}
-
-/// Tests that missing code and source default to empty strings.
-#[rstest]
-fn missing_optional_fields() {
-    let d = diag(0, 0, DiagnosticSeverity::ERROR, "bare");
-    let rows = diagnostics_to_rows(&[d]);
-    assert_eq!(rows[0].code, "");
-    assert_eq!(rows[0].source, "");
-}
-
-/// Tests that empty diagnostics input produces empty rows.
-#[rstest]
-fn empty_input() {
-    assert!(diagnostics_to_rows(&[]).is_empty());
+    assert_eq!(rows.len(), expected.len());
+    for (row, (line, col, sev, msg, code, source)) in rows.iter().zip(expected) {
+        assert_eq!(row.line, *line);
+        assert_eq!(row.col, *col);
+        assert_eq!(row.severity, *sev);
+        assert_eq!(row.message, *msg);
+        assert_eq!(row.code, *code);
+        assert_eq!(row.source, *source);
+    }
 }

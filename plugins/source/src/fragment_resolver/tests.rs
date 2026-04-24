@@ -15,31 +15,17 @@ fn resolver_for_source(dir: &std::path::Path, source: &str) -> FragmentResolver 
     FragmentResolver::new(cache, PathBuf::from("test.rs"))
 }
 
-/// Tests that `line_range` returns a valid range for a top-level symbol.
+/// Tests that `line_range` returns the correct 1-based line for existing symbols
+/// and `None` for nonexistent ones.
 #[rstest]
-fn line_range_returns_range_for_top_level_symbol() {
+#[case::first_symbol("fn hello() {}\n\nfn world() {}\n", "hello", Some(1))]
+#[case::later_symbol("fn hello() {}\n\nfn world() {}\n", "world", Some(3))]
+#[case::missing_symbol("fn hello() {}\n", "nonexistent", None)]
+fn line_range_cases(#[case] source: &str, #[case] symbol: &str, #[case] expected_start: Option<usize>) {
     let dir = tempfile::tempdir().unwrap();
-    let source = "fn hello() {}\n\nfn world() {}\n";
     let resolver = resolver_for_source(dir.path(), source);
-
-    let range = resolver.line_range(&["hello".into()]).unwrap();
-    assert!(range.is_some(), "expected Some for existing symbol");
-    let range = range.unwrap();
-    assert_eq!(range.start, 1, "hello is on line 1 (1-based)");
-
-    let range = resolver.line_range(&["world".into()]).unwrap();
-    let range = range.unwrap();
-    assert_eq!(range.start, 3, "world is on line 3 (1-based)");
-}
-
-/// Tests that `line_range` returns None for a nonexistent symbol.
-#[rstest]
-fn line_range_returns_none_for_missing_symbol() {
-    let dir = tempfile::tempdir().unwrap();
-    let resolver = resolver_for_source(dir.path(), "fn hello() {}\n");
-
-    let range = resolver.line_range(&["nonexistent".into()]).unwrap();
-    assert!(range.is_none());
+    let range = resolver.line_range(&[symbol.into()]).unwrap();
+    assert_eq!(range.map(|r| r.start), expected_start);
 }
 
 /// Tests that `line_range` reflects source changes after cache invalidation.
@@ -48,16 +34,13 @@ fn line_range_reflects_source_change_after_invalidation() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("test.rs");
     let resolver = resolver_for_source(dir.path(), "fn hello() {}\n");
+    let hello_start = || resolver.line_range(&["hello".into()]).unwrap().map(|r| r.start);
 
-    // Initial: hello on line 1.
-    let range = resolver.line_range(&["hello".into()]).unwrap().unwrap();
-    assert_eq!(range.start, 1);
+    assert_eq!(hello_start(), Some(1), "initial: hello on line 1");
 
     // Modify source: insert a blank line + new function before hello.
     std::fs::write(&file, "fn first() {}\n\nfn hello() {}\n").unwrap();
     resolver.invalidate();
 
-    // After invalidation: hello moved to line 3.
-    let range = resolver.line_range(&["hello".into()]).unwrap().unwrap();
-    assert_eq!(range.start, 3, "hello should move to line 3 after source change");
+    assert_eq!(hello_start(), Some(3), "after invalidation: hello moved to line 3");
 }
