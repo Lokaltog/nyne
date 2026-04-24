@@ -1,6 +1,81 @@
 use super::*;
 use crate::history;
 
+/// Shared helpers for git-backed test fixtures.
+mod test_repo {
+    use std::path::Path;
+    use std::sync::Arc;
+
+    use tempfile::TempDir;
+
+    use crate::repo::Repo;
+
+    /// A built git repo plus the `TempDir` guard (must be kept alive).
+    pub(super) struct TestRepo {
+        pub repo: Arc<Repo>,
+        pub dir: TempDir,
+    }
+
+    /// Builder for [`TestRepo`] — collects files and branches, then
+    /// commits them all in a single initial commit on HEAD.
+    #[derive(Default)]
+    pub(super) struct Builder<'a> {
+        files: Vec<(&'a str, &'a str)>,
+        branches: Vec<&'a str>,
+    }
+
+    impl<'a> Builder<'a> {
+        pub fn file(mut self, path: &'a str, content: &'a str) -> Self {
+            self.files.push((path, content));
+            self
+        }
+
+        pub fn files(mut self, files: &[(&'a str, &'a str)]) -> Self {
+            self.files.extend_from_slice(files);
+            self
+        }
+
+        pub fn branches(mut self, names: &[&'a str]) -> Self {
+            self.branches.extend_from_slice(names);
+            self
+        }
+
+        pub fn build(self) -> TestRepo {
+            let dir = tempfile::tempdir().expect("create temp dir");
+            let git_repo = git2::Repository::init(dir.path()).expect("git init");
+
+            let mut index = git_repo.index().expect("get index");
+            for (path, content) in &self.files {
+                let full = dir.path().join(path);
+                if let Some(parent) = full.parent() {
+                    std::fs::create_dir_all(parent).expect("mkdir");
+                }
+                std::fs::write(&full, content).expect("write file");
+                index.add_path(Path::new(path)).expect("add path");
+            }
+            index.write().expect("write index");
+            let tree_oid = index.write_tree().expect("write tree");
+            let tree = git_repo.find_tree(tree_oid).expect("find tree");
+            let sig = git2::Signature::now("Test Author", "test@example.com").expect("signature");
+            let commit_oid = git_repo
+                .commit(Some("HEAD"), &sig, &sig, "initial commit", &tree, &[])
+                .expect("commit");
+            let commit = git_repo.find_commit(commit_oid).expect("find commit");
+
+            for name in &self.branches {
+                git_repo.branch(name, &commit, false).expect("create branch");
+            }
+
+            let repo = Repo::open(dir.path()).expect("open repo");
+            TestRepo {
+                repo: Arc::new(repo),
+                dir,
+            }
+        }
+    }
+
+    pub(super) fn builder<'a>() -> Builder<'a> { Builder::default() }
+}
 /// Tests that `hunk_overlaps_range` correctly detects overlap between blame hunks and line ranges.
 mod hunk_overlap_tests {
     use nyne::SymbolLineRange;
@@ -208,6 +283,7 @@ mod sliced_content_tests {
 
     use nyne::SliceSpec;
     use nyne::templates::{HandleBuilder, LazyView, TemplateHandle};
+    use rstest::rstest;
 
     use crate::history::HistoryQueries as _;
 
@@ -215,29 +291,6 @@ mod sliced_content_tests {
     struct TestHandles {
         blame: TemplateHandle,
         log: TemplateHandle,
-    }
-
-    /// Create a temp git repo with a committed file, returning the `Repo`
-    /// handle and the `TempDir` guard (must be kept alive).
-    fn test_repo_with_file(filename: &str, content: &str) -> (Arc<crate::repo::Repo>, tempfile::TempDir) {
-        let dir = tempfile::tempdir().expect("create temp dir");
-        let git_repo = git2::Repository::init(dir.path()).expect("git init");
-
-        let file_path = dir.path().join(filename);
-        std::fs::write(&file_path, content).expect("write file");
-
-        let mut index = git_repo.index().expect("get index");
-        index.add_path(std::path::Path::new(filename)).expect("add path");
-        index.write().expect("write index");
-        let tree_oid = index.write_tree().expect("write tree");
-        let tree = git_repo.find_tree(tree_oid).expect("find tree");
-        let sig = git2::Signature::now("Test Author", "test@example.com").expect("signature");
-        git_repo
-            .commit(Some("HEAD"), &sig, &sig, "initial commit", &tree, &[])
-            .expect("commit");
-
-        let repo = crate::repo::Repo::open(dir.path()).expect("open GitRepo");
-        (Arc::new(repo), dir)
     }
 
     fn git_handles() -> TestHandles {
@@ -281,71 +334,70 @@ mod sliced_content_tests {
         })
     }
 
-    #[test]
-    fn sliced_blame_range_selects_subset() {
-        let (repo, _dir) = test_repo_with_file("hello.txt", "line1\nline2\nline3\nline4\n");
+    /// Expected output shape for sliced blame/log rendering.
+    enum Expect {
+        /// Row count must lie within the inclusive range.
+        RowsBetween(usize, usize),
+        /// Output must contain the given substring.
+        Contains(&'static str),
+    }
+
+    impl Expect {
+        fn rows(n: usize) -> Self { Self::RowsBetween(n, n) }
+
+        fn check(&self, output: &str) {
+            let rows = output.lines().filter(|l| l.starts_with('|') && l.contains('`')).count();
+            match *self {
+                Self::RowsBetween(min, max) => {
+                    assert!(
+                        rows >= min && rows <= max,
+                        "expected {min}..={max} rows, got {rows} in:\n{output}"
+                    );
+                }
+                Self::Contains(needle) => {
+                    assert!(output.contains(needle), "expected substring `{needle}` in:\n{output}");
+                }
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::range_selects_subset(
+        "hello.txt",
+        "line1\nline2\nline3\nline4\n",
+        SliceSpec::Range(1, 2),
+        Expect::RowsBetween(1, 2)
+    )]
+    #[case::empty_on_range_beyond_data(
+        "tiny.txt",
+        "only line\n",
+        SliceSpec::Range(100, 200),
+        Expect::Contains("No blame data available")
+    )]
+    #[case::tail("four.txt", "a\nb\nc\nd\n", SliceSpec::Tail(1), Expect::rows(1))]
+    fn sliced_blame(#[case] filename: &str, #[case] content: &str, #[case] spec: SliceSpec, #[case] expect: Expect) {
+        let repo = super::test_repo::builder().file(filename, content).build();
         let h = git_handles();
-        let view = sliced_blame_view(repo, "hello.txt", SliceSpec::Range(1, 2));
+        let view = sliced_blame_view(repo.repo.clone(), filename, spec);
         let output = String::from_utf8(h.blame.render_view(&view).expect("render")).expect("utf8");
-        assert!(output.contains("# Blame"), "expected blame header");
-        let row_count = output.lines().filter(|l| l.starts_with('|') && l.contains('`')).count();
-        assert!(row_count > 0, "expected at least one blame row");
-        assert!(row_count <= 2, "expected at most 2 blame rows, got {row_count}");
+        expect.check(&output);
     }
 
-    #[test]
-    fn sliced_blame_empty_on_range_beyond_data() {
-        let (repo, _dir) = test_repo_with_file("tiny.txt", "only line\n");
+    #[rstest]
+    #[case::single_entry("hello.txt", "content\n", SliceSpec::Single(1), Expect::rows(1))]
+    #[case::tail_with_fewer_entries("hello.txt", "content\n", SliceSpec::Tail(100), Expect::rows(1))]
+    #[case::range_beyond_data(
+        "hello.txt",
+        "content\n",
+        SliceSpec::Range(50, 100),
+        Expect::Contains("No history available")
+    )]
+    fn sliced_log(#[case] filename: &str, #[case] content: &str, #[case] spec: SliceSpec, #[case] expect: Expect) {
+        let repo = super::test_repo::builder().file(filename, content).build();
         let h = git_handles();
-        let view = sliced_blame_view(repo, "tiny.txt", SliceSpec::Range(100, 200));
-        let output = String::from_utf8(h.blame.render_view(&view).expect("render")).expect("utf8");
-        assert!(
-            output.contains("No blame data available"),
-            "expected empty-blame fallback, got: {output}"
-        );
-    }
-
-    #[test]
-    fn sliced_blame_tail() {
-        let (repo, _dir) = test_repo_with_file("four.txt", "a\nb\nc\nd\n");
-        let h = git_handles();
-        let view = sliced_blame_view(repo, "four.txt", SliceSpec::Tail(1));
-        let output = String::from_utf8(h.blame.render_view(&view).expect("render")).expect("utf8");
-        let row_count = output.lines().filter(|l| l.starts_with('|') && l.contains('`')).count();
-        assert_eq!(row_count, 1, "tail(1) should yield exactly 1 blame row");
-    }
-
-    #[test]
-    fn sliced_log_single_entry() {
-        let (repo, _dir) = test_repo_with_file("hello.txt", "content\n");
-        let h = git_handles();
-        let view = sliced_log_view(repo, "hello.txt", SliceSpec::Single(1));
+        let view = sliced_log_view(repo.repo.clone(), filename, spec);
         let output = String::from_utf8(h.log.render_view(&view).expect("render")).expect("utf8");
-        assert!(output.contains("# Log"), "expected log header");
-        let row_count = output.lines().filter(|l| l.starts_with('|') && l.contains('`')).count();
-        assert_eq!(row_count, 1, "expected exactly 1 log row");
-    }
-
-    #[test]
-    fn sliced_log_tail_with_fewer_entries() {
-        let (repo, _dir) = test_repo_with_file("hello.txt", "content\n");
-        let h = git_handles();
-        let view = sliced_log_view(repo, "hello.txt", SliceSpec::Tail(100));
-        let output = String::from_utf8(h.log.render_view(&view).expect("render")).expect("utf8");
-        let row_count = output.lines().filter(|l| l.starts_with('|') && l.contains('`')).count();
-        assert_eq!(row_count, 1, "tail(100) with 1 commit should yield 1 row");
-    }
-
-    #[test]
-    fn sliced_log_range_beyond_data() {
-        let (repo, _dir) = test_repo_with_file("hello.txt", "content\n");
-        let h = git_handles();
-        let view = sliced_log_view(repo, "hello.txt", SliceSpec::Range(50, 100));
-        let output = String::from_utf8(h.log.render_view(&view).expect("render")).expect("utf8");
-        assert!(
-            output.contains("No history available"),
-            "expected empty-log fallback, got: {output}"
-        );
+        expect.check(&output);
     }
 }
 
@@ -356,27 +408,6 @@ mod branch_segment_tests {
     use rstest::rstest;
 
     use crate::repo::Repo;
-
-    /// Create a temp repo and add the given branch names (on top of the initial commit).
-    fn repo_with_branches(branch_names: &[&str]) -> (Arc<Repo>, tempfile::TempDir) {
-        let dir = tempfile::tempdir().expect("create temp dir");
-        let git_repo = git2::Repository::init(dir.path()).expect("git init");
-
-        let sig = git2::Signature::now("Test", "t@t.com").expect("sig");
-        let tree_oid = git_repo.index().expect("idx").write_tree().expect("tree");
-        let tree = git_repo.find_tree(tree_oid).expect("find tree");
-        let commit_oid = git_repo
-            .commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
-            .expect("commit");
-        let commit = git_repo.find_commit(commit_oid).expect("find commit");
-
-        for name in branch_names {
-            git_repo.branch(name, &commit, false).expect("create branch");
-        }
-
-        let repo = Repo::open(dir.path()).expect("open");
-        (Arc::new(repo), dir)
-    }
 
     /// Collect sorted (name, `has_rename`, `has_unlink`) tuples from `branch_segments_at_prefix`.
     fn segments(repo: &Arc<Repo>, prefix: &str) -> Vec<(String, bool, bool)> {
@@ -401,8 +432,8 @@ mod branch_segment_tests {
     #[case::deep_leaf(&["a/b/c", "a/b/d"], "a/b/", &[("c", true, true), ("d", true, true)])]
     #[case::nonexistent_prefix(&["feat/foo"], "nonexistent/", &[])]
     fn branch_segments(#[case] branches: &[&str], #[case] prefix: &str, #[case] expected: &[(&str, bool, bool)]) {
-        let (repo, _dir) = repo_with_branches(branches);
-        let segs = segments(&repo, prefix);
+        let built = super::test_repo::builder().branches(branches).build();
+        let segs = segments(&built.repo, prefix);
         let expected: Vec<(String, bool, bool)> = expected.iter().map(|(n, r, u)| ((*n).into(), *r, *u)).collect();
         // Use contains checks — HEAD branch (main/master) also appears at root.
         for entry in &expected {
@@ -416,49 +447,28 @@ mod branch_segment_tests {
 }
 /// Tests for `GitRepo::delete_branch` merge-safety checks.
 mod delete_branch_tests {
-    use std::sync::Arc;
-
-    use crate::repo::Repo;
-
-    /// Create a temp repo with an initial commit on the default branch,
-    /// plus additional branches. Returns (repo, tempdir, `initial_commit_oid`).
-    fn repo_with_branches(branch_names: &[&str]) -> (Arc<Repo>, tempfile::TempDir, git2::Oid) {
-        let dir = tempfile::tempdir().expect("create temp dir");
-        let git_repo = git2::Repository::init(dir.path()).expect("git init");
-
-        let sig = git2::Signature::now("Test", "t@t.com").expect("sig");
-        let tree_oid = git_repo.index().expect("idx").write_tree().expect("tree");
-        let tree = git_repo.find_tree(tree_oid).expect("find tree");
-        let commit_oid = git_repo
-            .commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
-            .expect("commit");
-        let commit = git_repo.find_commit(commit_oid).expect("find commit");
-
-        for name in branch_names {
-            git_repo.branch(name, &commit, false).expect("create branch");
-        }
-
-        let repo = Repo::open(dir.path()).expect("open");
-        (Arc::new(repo), dir, commit_oid)
-    }
-
     /// Verifies that a fully-merged branch can be deleted.
     #[test]
     fn delete_merged_branch() {
-        let (repo, _dir, _) = repo_with_branches(&["merged-feature"]);
+        let built = super::test_repo::builder().branches(&["merged-feature"]).build();
         // Branch points at same commit as HEAD → fully merged.
-        repo.delete_branch("merged-feature")
+        built
+            .repo
+            .delete_branch("merged-feature")
             .expect("should delete merged branch");
-        let branches = repo.branches().expect("list branches");
+        let branches = built.repo.branches().expect("list branches");
         assert!(!branches.contains(&"merged-feature".to_owned()));
     }
 
     /// Verifies that deleting the current HEAD branch is refused with `PermissionDenied`.
     #[test]
     fn delete_head_branch_refused() {
-        let (repo, _dir, _) = repo_with_branches(&[]);
-        let head = repo.head_branch();
-        let err = repo.delete_branch(&head).expect_err("should refuse HEAD deletion");
+        let built = super::test_repo::builder().build();
+        let head = built.repo.head_branch();
+        let err = built
+            .repo
+            .delete_branch(&head)
+            .expect_err("should refuse HEAD deletion");
         let io_err = err.downcast_ref::<std::io::Error>().expect("should be io::Error");
         assert_eq!(io_err.kind(), std::io::ErrorKind::PermissionDenied);
     }
@@ -466,10 +476,10 @@ mod delete_branch_tests {
     /// Verifies that deleting an unmerged branch is refused with `PermissionDenied`.
     #[test]
     fn delete_unmerged_branch_refused() {
-        let (repo, dir, _) = repo_with_branches(&["diverged"]);
+        let built = super::test_repo::builder().branches(&["diverged"]).build();
         // Add a commit only on `diverged` so it's not an ancestor of HEAD.
         {
-            let git_repo = git2::Repository::open(dir.path()).expect("open raw");
+            let git_repo = git2::Repository::open(built.dir.path()).expect("open raw");
             let sig = git2::Signature::now("Test", "t@t.com").expect("sig");
             let head_commit = git_repo.head().expect("head").peel_to_commit().expect("commit");
             let tree = head_commit.tree().expect("tree");
@@ -481,7 +491,10 @@ mod delete_branch_tests {
                 .branch("diverged", &diverged_commit, true)
                 .expect("update branch");
         }
-        let err = repo.delete_branch("diverged").expect_err("should refuse unmerged");
+        let err = built
+            .repo
+            .delete_branch("diverged")
+            .expect_err("should refuse unmerged");
         let io_err = err.downcast_ref::<std::io::Error>().expect("should be io::Error");
         assert_eq!(io_err.kind(), std::io::ErrorKind::PermissionDenied);
     }
@@ -494,37 +507,6 @@ mod branch_tree_tests {
     use rstest::rstest;
 
     use crate::repo::Repo;
-
-    /// Create a temp repo with branches and committed files.
-    fn repo_with_files(branch_names: &[&str], files: &[(&str, &str)]) -> (Arc<Repo>, tempfile::TempDir) {
-        let dir = tempfile::tempdir().expect("create temp dir");
-        let git_repo = git2::Repository::init(dir.path()).expect("git init");
-
-        let mut index = git_repo.index().expect("idx");
-        for (path, content) in files {
-            let full = dir.path().join(path);
-            if let Some(parent) = full.parent() {
-                std::fs::create_dir_all(parent).expect("mkdir");
-            }
-            std::fs::write(&full, content).expect("write");
-            index.add_path(std::path::Path::new(path)).expect("add");
-        }
-        index.write().expect("write index");
-        let tree_oid = index.write_tree().expect("tree");
-        let tree = git_repo.find_tree(tree_oid).expect("find tree");
-        let sig = git2::Signature::now("Test", "t@t.com").expect("sig");
-        let commit_oid = git_repo
-            .commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
-            .expect("commit");
-        let commit = git_repo.find_commit(commit_oid).expect("find commit");
-
-        for name in branch_names {
-            git_repo.branch(name, &commit, false).expect("create branch");
-        }
-
-        let repo = Repo::open(dir.path()).expect("open");
-        (Arc::new(repo), dir)
-    }
 
     /// Collect sorted (name, `is_file`) pairs from `branch_tree_nodes`.
     fn tree_entries(repo: &Arc<Repo>, branch: &str, path: &str) -> Vec<(String, bool)> {
@@ -544,12 +526,15 @@ mod branch_tree_tests {
     #[case::root_tree("dev", "", &[("README.md", true), ("src", false)])]
     #[case::subtree("dev", "src", &[("lib.rs", true), ("main.rs", true)])]
     fn tree_listing(#[case] branch: &str, #[case] path: &str, #[case] expected: &[(&str, bool)]) {
-        let (repo, _dir) = repo_with_files(&["dev"], &[
-            ("README.md", "hello"),
-            ("src/main.rs", "fn main() {}"),
-            ("src/lib.rs", "// lib"),
-        ]);
-        let entries = tree_entries(&repo, branch, path);
+        let built = super::test_repo::builder()
+            .branches(&["dev"])
+            .files(&[
+                ("README.md", "hello"),
+                ("src/main.rs", "fn main() {}"),
+                ("src/lib.rs", "// lib"),
+            ])
+            .build();
+        let entries = tree_entries(&built.repo, branch, path);
         let expected: Vec<(String, bool)> = expected.iter().map(|(n, r)| ((*n).into(), *r)).collect();
         assert_eq!(entries, expected);
     }
@@ -557,9 +542,11 @@ mod branch_tree_tests {
     /// Verifies that blob content can be read from a branch's tree.
     #[test]
     fn blob_content_readable() {
-        let (repo, _dir) = repo_with_files(&["dev"], &[("hello.txt", "world")]);
-        let content = repo.blob_at_ref("dev", "hello.txt").expect("read blob");
-        assert_eq!(content, b"world");
+        let built = super::test_repo::builder()
+            .branches(&["dev"])
+            .file("hello.txt", "world")
+            .build();
+        assert_eq!(built.repo.blob_at_ref("dev", "hello.txt").expect("read blob"), b"world");
     }
 
     mod slice_blame_hunks_tests {

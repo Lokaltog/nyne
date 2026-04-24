@@ -10,33 +10,23 @@ use crate::test_support::{StubReadable, test_read_ctx};
 
 struct TestProvider;
 
+/// Generates a static file content callback:
+/// `fn $name(...) -> Option<NamedNode>` returning a file with the given content and filename.
+macro_rules! file_cb {
+    ($($name:ident => ($content:expr, $filename:expr)),* $(,)?) => {
+        $(
+            fn $name(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> {
+                Some(Node::file().with_readable(StubReadable::new($content)).named($filename))
+            }
+        )*
+    };
+}
 impl TestProvider {
-    fn file_a(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> {
-        Some(
-            Node::file()
-                .with_readable(StubReadable::new("content-a"))
-                .named("a.txt"),
-        )
-    }
-
-    fn file_b(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> {
-        Some(
-            Node::file()
-                .with_readable(StubReadable::new("content-b"))
-                .named("b.txt"),
-        )
-    }
-
-    fn inner_txt(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> {
-        Some(
-            Node::file()
-                .with_readable(StubReadable::new("inner"))
-                .named("inner.txt"),
-        )
-    }
-
-    fn leaf_txt(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> {
-        Some(Node::file().with_readable(StubReadable::new("leaf")).named("leaf.txt"))
+    file_cb! {
+        file_a => ("content-a", "a.txt"),
+        file_b => ("content-b", "b.txt"),
+        inner_txt => ("inner", "inner.txt"),
+        leaf_txt => ("leaf", "leaf.txt"),
     }
 
     fn captured_body(_: &Self, ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> {
