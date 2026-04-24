@@ -27,19 +27,7 @@ crate::language_tests! {
         FragmentKind::Symbol(SymbolKind::Enum),
         FragmentKind::Symbol(SymbolKind::TypeAlias),
     ],
-}
-
-/// Imports are coalesced into a single Imports fragment.
-#[rstest]
-fn imports_extracted(basic: DecomposedFile) {
-    let range = crate::syntax::fragment::find_fragment_of_kind(&basic, &FragmentKind::Imports)
-        .expect("imports fragment should be present")
-        .span
-        .byte_range
-        .clone();
-    let source = load_basic();
-    assert!(source[range.clone()].contains("import { readFile }"));
-    assert!(source[range].contains("import type { Config }"));
+    imports_contain: ["import { readFile }", "import type { Config }"],
 }
 
 /// Class `AppConfig` has 3 method children: constructor, validate, reset.

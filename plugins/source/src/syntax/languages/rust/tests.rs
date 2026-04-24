@@ -29,19 +29,7 @@ crate::language_tests! {
         FragmentKind::Symbol(SymbolKind::Impl),
         FragmentKind::Symbol(SymbolKind::Impl),
     ],
-}
-
-/// Imports are coalesced into a single Imports fragment.
-#[rstest]
-fn imports_extracted(basic: DecomposedFile) {
-    let range = crate::syntax::fragment::find_fragment_of_kind(&basic, &FragmentKind::Imports)
-        .expect("imports fragment should be present")
-        .span
-        .byte_range
-        .clone();
-    let source = load_basic();
-    assert!(source[range.clone()].contains("use std::collections::HashMap;"));
-    assert!(source[range].contains("use std::io;"));
+    imports_contain: ["use std::collections::HashMap;", "use std::io;"],
 }
 
 /// Trait method signatures (`function_signature_item`) are not currently

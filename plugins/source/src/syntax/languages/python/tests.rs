@@ -23,19 +23,7 @@ crate::language_tests! {
         FragmentKind::Symbol(SymbolKind::Class),
         FragmentKind::Symbol(SymbolKind::Class),
     ],
-}
-
-/// Imports are coalesced into a single Imports fragment.
-#[rstest]
-fn imports_extracted(basic: DecomposedFile) {
-    let range = crate::syntax::fragment::find_fragment_of_kind(&basic, &FragmentKind::Imports)
-        .expect("imports fragment should be present")
-        .span
-        .byte_range
-        .clone();
-    let source = load_basic();
-    assert!(source[range.clone()].contains("import os"));
-    assert!(source[range].contains("from pathlib import Path"));
+    imports_contain: ["import os", "from pathlib import Path"],
 }
 
 /// Class `Config` has docstring, decorators, field annotations and methods as children.

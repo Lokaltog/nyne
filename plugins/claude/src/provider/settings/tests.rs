@@ -92,21 +92,18 @@ fn preserves_existing_hooks_for_other_events() {
     assert_eq!(session.len(), 2);
 }
 
-/// Tests that rendering with no existing file produces valid JSON with hooks.
+
+/// Verifies `render_settings` produces valid JSON with injected hooks for every
+/// empty-input shape (missing file or empty bytes).
 #[rstest]
-fn render_settings_with_no_real_file() {
-    let result = render_settings(None, root()).unwrap();
+#[case::no_real_file(None)]
+#[case::empty_bytes(Some(&[] as &[u8]))]
+fn render_settings_empty_inputs_produce_hooks(#[case] existing: Option<&[u8]>) {
+    let result = render_settings(existing, root()).unwrap();
     let parsed: Value = serde_json::from_slice(&result).unwrap();
     assert!(parsed["hooks"]["SessionStart"].is_array());
 }
 
-/// Tests that rendering with empty bytes produces valid JSON with hooks.
-#[rstest]
-fn render_settings_with_empty_bytes() {
-    let result = render_settings(Some(b""), root()).unwrap();
-    let parsed: Value = serde_json::from_slice(&result).unwrap();
-    assert!(parsed["hooks"]["SessionStart"].is_array());
-}
 
 /// Tests that existing JSON content is preserved when rendering settings.
 #[rstest]

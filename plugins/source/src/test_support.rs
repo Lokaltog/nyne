@@ -59,12 +59,17 @@ pub fn splice_content(source: &str, byte_range: Range<usize>, new_content: &str)
 /// Test-only convenience wrapper that builds a [`Rope`] internally.
 #[must_use]
 pub fn line_start_of(source: &str, offset: usize) -> usize { line_start_of_rope(&Rope::from(source), offset) }
+
 /// Generate the standard language-decomposition test skeleton.
 ///
 /// Emits `load_basic()`, the `basic` rstest fixture, and the three
 /// canonical assertions (`fragment_count`, `fragment_names`,
 /// `fragment_kinds`). Language-specific tests (class children,
-/// imports handling quirks, etc.) stay in the calling module.
+/// import-coalescing quirks, etc.) stay in the calling module.
+///
+/// `imports_contain` is optional — when provided, generates an
+/// `imports_extracted` test asserting the `Imports` fragment range
+/// contains each given substring.
 ///
 /// # Example
 ///
@@ -84,6 +89,7 @@ pub fn line_start_of(source: &str, offset: usize) -> usize { line_start_of_rope(
 ///         FragmentKind::Symbol(SymbolKind::Const),
 ///         // ...
 ///     ],
+///     imports_contain: ["use std::collections::HashMap;", "use std::io;"],
 /// }
 /// ```
 #[macro_export]
@@ -94,7 +100,9 @@ macro_rules! language_tests {
         fixture_file: $fixture:literal,
         fragment_count: $count:expr,
         fragment_names: [ $($name:expr),* $(,)? ],
-        fragment_kinds: [ $($kind:expr),* $(,)? ] $(,)?
+        fragment_kinds: [ $($kind:expr),* $(,)? ]
+        $(, imports_contain: [ $($import:expr),* $(,)? ] )?
+        $(,)?
     ) => {
         /// Load the shared fixture source for this language.
         fn load_basic() -> ::std::string::String { ::nyne::load_fixture!($module, $fixture) }
@@ -123,5 +131,30 @@ macro_rules! language_tests {
             let expected: ::std::vec::Vec<$crate::syntax::fragment::FragmentKind> = ::std::vec![$($kind),*];
             assert_eq!(kinds, expected);
         }
+
+        $(
+            /// Imports are coalesced into a single Imports fragment containing every
+            /// expected substring.
+            #[::rstest::rstest]
+            fn imports_extracted(basic: $crate::syntax::fragment::DecomposedFile) {
+                let range = $crate::syntax::fragment::find_fragment_of_kind(
+                    &basic,
+                    &$crate::syntax::fragment::FragmentKind::Imports,
+                )
+                .expect("imports fragment should be present")
+                .span
+                .byte_range
+                .clone();
+                let source = load_basic();
+                $(
+                    assert!(
+                        source[range.clone()].contains($import),
+                        "imports fragment should contain {:?}",
+                        $import,
+                    );
+                )*
+            }
+        )?
     };
 }
+
