@@ -6,11 +6,9 @@ use rstest::rstest;
 
 use crate::router::tree::RouteTree;
 use crate::router::{NamedNode, Next, Node, Op, Request, RouteExtension};
-use crate::test_support::StubReadable;
+use crate::test_support::{StubReadable, readdir_req};
 
 struct P;
-
-fn readdir_req(path: &str) -> Request { Request::new(PathBuf::from(path), Op::Readdir) }
 
 fn names(req: &Request) -> Vec<&str> {
     let mut v: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();

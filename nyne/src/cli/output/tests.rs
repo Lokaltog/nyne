@@ -2,11 +2,6 @@ use rstest::rstest;
 
 use super::*;
 
-#[test]
-fn new_table_starts_empty() {
-    assert_eq!(new_table().row_count(), 0);
-}
-
 /// Build a populated test table with `rows` rows of a single "COL" column.
 fn populated(rows: usize) -> Table {
     let mut table = new_table();

@@ -4,9 +4,9 @@ use super::*;
 
 #[rstest]
 fn default_uses_canonical_names() {
-    let paths = SourcePaths::default();
-    assert_eq!(paths.symbols_dir(), "symbols");
-    assert_eq!(paths.at_line(42), "symbols/at-line/42");
+    // `at_line` formatting is covered by `at_line_formats_numbers` — this test pins the
+    // root `symbols` dir name, which has no parametrized coverage elsewhere.
+    assert_eq!(SourcePaths::default().symbols_dir(), "symbols");
 }
 
 #[rstest]

@@ -197,43 +197,6 @@ fn separator_not_triggered(#[case] ext: &str, #[case] fixture: &str) {
     );
 }
 
-/// Recursively collect all tree-sitter node kinds from a syntax tree.
-fn collect_kinds(node: tree_sitter::Node<'_>, kinds: &mut std::collections::BTreeSet<String>) {
-    kinds.insert(node.kind().to_owned());
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_kinds(child, kinds);
-    }
-}
-
-/// Debug helper that dumps all tree-sitter node kinds for a set of fixtures.
-#[test]
-fn debug_dump_tree_kinds() {
-    let fixtures = &[
-        ("rs", "too-many-methods.rs"),
-        ("rs", "repeated-field-access.rs"),
-        ("rs", "manual-map.rs"),
-        ("rs", "long-match.rs"),
-        ("rs", "index-in-loop.rs"),
-        ("ts", "empty-catch.js"),
-        ("rs", "no-deeply-nested-type.rs"),
-    ];
-    for (ext, name) in fixtures {
-        let source = load_fixture(name);
-        let reg = registry();
-        let decomposer = reg.get(ext).expect("no decomposer");
-        let (_file, tree) = decomposer.decompose(&source, 5);
-        let tree = tree.expect("parse should succeed");
-
-        let mut kinds = std::collections::BTreeSet::new();
-        collect_kinds(tree.root_node(), &mut kinds);
-        tracing::debug!("\n=== {name} ===");
-        for kind in &kinds {
-            tracing::debug!("  {kind}");
-        }
-    }
-}
-
 /// Analyze inline source with a filtered `AnalysisConfig` and return all hints.
 fn analyze_source_filtered(ext: &str, source: &str, config: &Config) -> Vec<Hint> {
     let reg = registry();

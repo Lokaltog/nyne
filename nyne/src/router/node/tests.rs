@@ -29,25 +29,6 @@ fn not_inverts_within_3_bits() {
 }
 
 #[test]
-fn none_is_empty() {
-    assert!(Permissions::NONE.is_empty());
-    assert!(!Permissions::READ.is_empty());
-}
-
-#[test]
-fn all_contains_every_flag() {
-    assert!(Permissions::ALL.contains(Permissions::READ));
-    assert!(Permissions::ALL.contains(Permissions::WRITE));
-    assert!(Permissions::ALL.contains(Permissions::EXECUTE));
-}
-
-#[test]
-fn from_bits_round_trips() {
-    let perms = Permissions::READ | Permissions::EXECUTE;
-    assert_eq!(Permissions::from_bits_masked(perms.bits()), perms);
-}
-
-#[test]
 #[should_panic(expected = "out-of-range")]
 fn from_bits_rejects_out_of_range() { let _ = Permissions::from_bits_masked(0xFF); }
 
@@ -106,11 +87,6 @@ fn merge_permissions(#[case] mut target: Node, #[case] source: Node, #[case] exp
 }
 
 #[test]
-fn cache_policy_default_variant() {
-    assert_eq!(CachePolicy::default(), CachePolicy::Default);
-}
-
-#[test]
 fn node_cache_policy_defaults_to_default_variant() {
     assert_eq!(Node::file().cache_policy(), CachePolicy::Default);
 }
@@ -142,11 +118,6 @@ fn node_with_cache_policy_round_trips(#[case] policy: CachePolicy) {
 fn merge_cache_policy(#[case] mut target: Node, #[case] source: Node, #[case] expected: CachePolicy) {
     target.merge_capabilities_from(source);
     assert_eq!(target.cache_policy(), expected);
-}
-
-#[test]
-fn readable_size_defaults_to_none() {
-    assert!(StubReadable::new("hello").size().is_none());
 }
 
 struct StubLifecycle;

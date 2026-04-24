@@ -6,7 +6,7 @@ use rstest::rstest;
 
 use super::*;
 use crate::router::{Chain, NamedNode, Next, Node, Op, Provider, Request};
-use crate::test_support::{StubReadable, test_read_ctx};
+use crate::test_support::{StubReadable, readdir_req, test_read_ctx};
 
 struct TestProvider;
 
@@ -50,8 +50,6 @@ impl TestProvider {
         Ok(())
     }
 }
-
-fn readdir_req(path: &str) -> Request { Request::new(PathBuf::from(path), Op::Readdir) }
 
 #[test]
 fn handler_runs_before_auto_emit() {

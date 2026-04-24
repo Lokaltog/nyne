@@ -735,22 +735,6 @@ fn bar() {}
 
 // Decorator: typescript ignored test
 
-/// Tests that TypeScript decorator extraction on non-exported classes is not yet supported.
-#[test]
-#[ignore = "TS decorator extraction only works on exported classes — needs unwrap_wrapper support"]
-fn typescript_decorator_on_class() {
-    let source = "@Injectable()\nclass Service {}\n";
-    let result = decompose("ts", source);
-    let dec_child = result[0]
-        .child_of_kind(&FragmentKind::Decorator)
-        .expect("TS decorator should be captured");
-    let text = &source[dec_child.span.byte_range.clone()];
-    assert!(
-        text.contains("@Injectable"),
-        "range should cover the decorator: got {text:?}"
-    );
-}
-
 // FS mapping / conflict resolution
 
 /// Verifies that `fs_name` mapping preserves function names as-is for Rust.

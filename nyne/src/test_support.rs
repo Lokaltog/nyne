@@ -207,3 +207,6 @@ pub fn test_read_ctx() -> ReadContext<'static> {
         fs: Box::leak(Box::new(MemFs::new())),
     }
 }
+/// Create a [`Request`] for a `Readdir` operation at `path`.
+#[must_use]
+pub fn readdir_req(path: &str) -> Request { Request::new(PathBuf::from(path), crate::router::Op::Readdir) }
