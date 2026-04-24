@@ -24,6 +24,7 @@ tree-sitter.workspace = true
 minijinja.workspace = true
 
 [dev-dependencies]
+nyne-source = { workspace = true, features = ["test-support"] }
 rstest.workspace = true
 
 [lints]

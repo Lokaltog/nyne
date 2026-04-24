@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
 
 use nyne_source::test_support::registry;
 use rstest::rstest;
@@ -7,13 +6,10 @@ use rstest::rstest;
 use super::{DEFAULT_DISABLED_RULES, Engine, Hint};
 use crate::plugin::config::Config;
 
+
 /// Load a test fixture file relative to this crate's `src/engine/fixtures/`.
-fn load_fixture(name: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src/engine/fixtures")
-        .join(name);
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to load fixture {}: {e}", path.display()))
-}
+fn load_fixture(name: &str) -> String { nyne::load_fixture!("engine", name) }
+
 
 /// Analyze a fixture file and return all hints.
 fn analyze_fixture(ext: &str, name: &str) -> Vec<Hint> {
