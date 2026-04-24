@@ -52,39 +52,30 @@ fn reject_invalid_config(#[case] toml_input: &str) {
     assert!(result.is_err(), "invalid config should be rejected: {toml_input}");
 }
 
-/// Tests that `agent_files` defaults to CLAUDE.md and AGENTS.md when the section is omitted.
-#[test]
-fn agent_files_defaults_when_omitted() {
-    let config = load_fixture("minimal.toml");
-    assert_eq!(config.agent_files.filenames, default_agent_filenames());
+
+/// Verifies that `agent_files.filenames` deserializes correctly across all supported
+/// fixture shapes. `None` in `expected` means the result should equal
+/// [`default_agent_filenames()`]; `Some(list)` pins an exact custom list.
+#[rstest]
+#[case::defaults_when_omitted("minimal.toml", None)]
+#[case::section_without_filenames("agent_files_section_only.toml", None)]
+#[case::custom("agent_files_custom.toml", Some(&["COPILOT.md"] as &[&str]))]
+#[case::empty("agent_files_empty.toml", Some(&[] as &[&str]))]
+fn agent_files_deserialization(#[case] fixture: &str, #[case] expected: Option<&[&str]>) {
+    let config = load_fixture(fixture);
+    let actual = &config.agent_files.filenames;
+    match expected {
+        None => assert_eq!(actual, &default_agent_filenames()),
+        Some(list) => assert_eq!(actual.iter().map(String::as_str).collect::<Vec<_>>(), list),
+    }
 }
+
 
 /// Verifies that the `AgentFilesConfig` default has the expected filenames.
 #[test]
 fn agent_files_default_is_valid() {
     let config = AgentFilesConfig::default();
     assert_eq!(config.filenames, default_agent_filenames());
-}
-
-/// Tests that custom agent filenames are deserialized from TOML.
-#[test]
-fn deserialize_agent_files_custom() {
-    let config = load_fixture("agent_files_custom.toml");
-    assert_eq!(config.agent_files.filenames, vec!["COPILOT.md"]);
-}
-
-/// Tests that an empty filenames list is accepted and results in no agent files.
-#[test]
-fn deserialize_agent_files_empty_filenames() {
-    let config = load_fixture("agent_files_empty.toml");
-    assert!(config.agent_files.filenames.is_empty());
-}
-
-/// Tests that an `agent_files` section without a filenames key uses defaults.
-#[test]
-fn deserialize_agent_files_section_without_filenames() {
-    let config = load_fixture("agent_files_section_only.toml");
-    assert_eq!(config.agent_files.filenames, default_agent_filenames());
 }
 
 /// [`NyneConfig::repository.storage_strategy`] deserializes from explicit values, defaulting when omitted.
@@ -98,19 +89,17 @@ fn repository_storage_strategy(#[case] toml_input: &str, #[case] expected: Stora
     assert_eq!(config.repository.storage_strategy, expected);
 }
 
-/// Tests that sandbox defaults to "nyne-sandbox" hostname when the section is omitted.
-#[test]
-fn sandbox_defaults_when_omitted() {
-    let config = load_fixture("minimal.toml");
-    assert_eq!(config.sandbox.hostname, "nyne-sandbox");
+
+/// Verifies that `sandbox.hostname` defaults to `nyne-sandbox` when unset and
+/// picks up custom values when specified.
+#[rstest]
+#[case::defaults_when_omitted("minimal.toml", "nyne-sandbox")]
+#[case::custom("sandbox_custom_hostname.toml", "my-sandbox")]
+fn sandbox_hostname(#[case] fixture: &str, #[case] expected: &str) {
+    let config = load_fixture(fixture);
+    assert_eq!(config.sandbox.hostname, expected);
 }
 
-/// Tests that a custom sandbox hostname is deserialized from TOML.
-#[test]
-fn sandbox_custom_hostname() {
-    let config = load_fixture("sandbox_custom_hostname.toml");
-    assert_eq!(config.sandbox.hostname, "my-sandbox");
-}
 
 /// Tests that bind mounts with source, target, and flags deserialize correctly.
 #[test]
