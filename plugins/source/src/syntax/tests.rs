@@ -659,66 +659,56 @@ fn lines_suffix_roundtrips_through_parse() {
 
 // full_span tests (unique assertions per test)
 
-/// Verifies that a bare symbol without doc or decorator has `full_span` equal to `byte_range`.
-#[test]
-fn full_span_bare_symbol_matches_byte_range() {
-    let result = decompose("rs", "fn bare() {}\n");
-    let frag = &result[0];
-    assert_eq!(
-        frag.full_span(),
-        frag.span.byte_range,
-        "bare symbol: full_span == byte_range"
-    );
+
+/// How a fragment's `full_span` relates to its `byte_range`, depending on
+/// whether the language includes decorators inside the wrapper node (Python)
+/// or as a prefix preceding it (Rust, TypeScript).
+#[derive(Copy, Clone, Debug)]
+enum DecoratorMode {
+    /// No decorator or doc — `full_span` and `byte_range` are identical.
+    Bare,
+    /// Decorator is inside the wrapper node (Python): both ranges start at 0.
+    Wrapped,
+    /// Decorator/doc is a prefix before the wrapper node (Rust, TypeScript,
+    /// Rust with doc comment): `full_span.start < byte_range.start`.
+    Prefixed,
 }
 
-/// Verifies that `full_span` includes a Rust attribute but `byte_range` starts after it.
-#[test]
-fn full_span_rust_decorator_only() {
-    let result = decompose("rs", "#[derive(Debug)]\npub struct Foo;\n");
+/// Verifies `full_span` vs `byte_range` semantics for every (language, decorator)
+/// combination.
+#[rstest]
+#[case::bare_rust("rs", "fn bare() {}\n", DecoratorMode::Bare)]
+#[case::rust_decorator_only("rs", "#[derive(Debug)]\npub struct Foo;\n", DecoratorMode::Prefixed)]
+#[case::rust_decorator_and_doc("rs", "/// Documented.\n#[derive(Debug)]\npub struct Foo;\n", DecoratorMode::Prefixed)]
+#[case::python_decorated_class_with_docstring(
+    "py",
+    "@dataclass\nclass Bar:\n    \"\"\"A bar.\"\"\"\n    x: int = 0\n",
+    DecoratorMode::Wrapped
+)]
+#[case::typescript_jsdoc("ts", "/** Documented. */\nfunction greet() {}\n", DecoratorMode::Prefixed)]
+fn full_span_vs_byte_range(#[case] ext: &str, #[case] source: &str, #[case] mode: DecoratorMode) {
+    let result = decompose(ext, source);
     let frag = &result[0];
-    assert_eq!(frag.full_span().start, 0, "full_span should include attribute");
-    assert!(
-        frag.span.byte_range.start > 0,
-        "byte_range should start after attribute"
-    );
-    assert_eq!(frag.full_span().end, frag.span.byte_range.end, "ends should match");
+    let full = frag.full_span();
+    let byte = &frag.span.byte_range;
+
+    match mode {
+        DecoratorMode::Bare => {
+            assert_eq!(full, *byte, "bare symbol: full_span == byte_range");
+        }
+        DecoratorMode::Wrapped => {
+            assert_eq!(full.start, 0, "wrapper node should start at 0");
+            assert_eq!(byte.start, 0, "wrapper node includes decorator");
+            assert_eq!(full.end, byte.end, "ends match");
+        }
+        DecoratorMode::Prefixed => {
+            assert_eq!(full.start, 0, "full_span should include leading doc/decorator");
+            assert!(byte.start > 0, "byte_range should start after leading doc/decorator");
+            assert_eq!(full.end, byte.end, "ends match");
+        }
+    }
 }
 
-/// Verifies that `full_span` includes both doc comment and attribute for a Rust symbol.
-#[test]
-fn full_span_rust_decorator_and_doc_comment() {
-    let result = decompose("rs", "/// Documented.\n#[derive(Debug)]\npub struct Foo;\n");
-    let frag = &result[0];
-    assert_eq!(frag.full_span().start, 0, "full_span should start at doc comment");
-    assert!(
-        frag.span.byte_range.start > 0,
-        "byte_range should be the node range only"
-    );
-    assert_eq!(frag.full_span().end, frag.span.byte_range.end);
-}
-
-/// Verifies that `full_span` includes the decorator for a Python class with a docstring.
-#[test]
-fn full_span_python_decorated_class_with_docstring() {
-    let result = decompose("py", "@dataclass\nclass Bar:\n    \"\"\"A bar.\"\"\"\n    x: int = 0\n");
-    let frag = &result[0];
-    assert_eq!(frag.full_span().start, 0, "full_span should include decorator");
-    assert_eq!(frag.span.byte_range.start, 0, "wrapper node includes decorator");
-    assert_eq!(frag.full_span().end, frag.span.byte_range.end);
-}
-
-/// Verifies that `full_span` includes a `JSDoc` comment for a TypeScript function.
-#[test]
-fn full_span_typescript_jsdoc() {
-    let result = decompose("ts", "/** Documented. */\nfunction greet() {}\n");
-    let frag = &result[0];
-    assert_eq!(frag.full_span().start, 0, "full_span should include JSDoc");
-    assert!(
-        frag.span.byte_range.start > 0,
-        "byte_range should start at function keyword"
-    );
-    assert_eq!(frag.full_span().end, frag.span.byte_range.end);
-}
 
 /// Verifies that `full_span` ranges of adjacent Python classes do not overlap.
 #[test]
