@@ -104,57 +104,29 @@ fn section_first_line_extracts(#[case] input: &str, #[case] expected: Option<&st
     assert_eq!(section_first_line(input).as_deref(), expected);
 }
 
-/// Verifies that description returns the cleaned doc comment text.
-#[test]
-fn description_uses_doc_comment_via_decomposer() {
+/// Verifies that `description()` sources the correct text per fragment kind:
+/// cleaned doc comment for symbols, empty when absent, first content line for sections.
+#[rstest]
+#[case::rust_doc_comment("rs", "documented_function.rs", "foo", "Does something cool.")]
+#[case::rust_bare_function("rs", "bare_function.rs", "bar", "")]
+#[case::markdown_section("md", "section_with_code_blocks.md", "Getting Started", "Welcome to the project.")]
+fn description_cases(#[case] ext: &str, #[case] fixture: &str, #[case] name: &str, #[case] expected: &str) {
     let reg = registry();
-    let shared = decompose_fixture(&reg, "rs", "documented_function.rs");
-    let view = find_view(&shared, "foo");
-    assert_eq!(view.description(), "Does something cool.");
+    let shared = decompose_fixture(&reg, ext, fixture);
+    assert_eq!(find_view(&shared, name).description(), expected);
 }
 
-/// Verifies that description returns empty string when no doc comment exists.
-#[test]
-fn description_empty_without_doc_comment() {
+/// Verifies `visibility()` across Rust visibility forms and non-applicable
+/// (markdown section) fragment kinds.
+#[rstest]
+#[case::public("rs", "mixed_visibility.rs", "public_fn", "pub")]
+#[case::crate_scoped("rs", "mixed_visibility.rs", "crate_fn", "crate")]
+#[case::private("rs", "mixed_visibility.rs", "private_fn", "")]
+#[case::markdown_section("md", "section_with_code_blocks.md", "API", "")]
+fn visibility_cases(#[case] ext: &str, #[case] fixture: &str, #[case] name: &str, #[case] expected: &str) {
     let reg = registry();
-    let shared = decompose_fixture(&reg, "rs", "bare_function.rs");
-    let view = find_view(&shared, "bar");
-    // No doc comment → empty description, no signature fallback.
-    assert_eq!(view.description(), "");
-}
-
-/// Verifies that description returns the first content line for markdown sections.
-#[test]
-fn description_section_returns_first_content_line() {
-    let reg = registry();
-    let shared = decompose_fixture(&reg, "md", "section_with_code_blocks.md");
-    let view = find_view(&shared, "Getting Started");
-    assert_eq!(view.description(), "Welcome to the project.");
-}
-
-/// Verifies that visibility returns the compact form of the visibility modifier.
-#[test]
-fn visibility_returns_compact_form() {
-    let reg = registry();
-    let shared = decompose_fixture(&reg, "rs", "mixed_visibility.rs");
-
-    let pub_view = find_view(&shared, "public_fn");
-    assert_eq!(pub_view.visibility(), "pub");
-
-    let crate_view = find_view(&shared, "crate_fn");
-    assert_eq!(crate_view.visibility(), "crate");
-
-    let private_view = find_view(&shared, "private_fn");
-    assert_eq!(private_view.visibility(), "");
-}
-
-/// Verifies that visibility returns empty string for markdown sections.
-#[test]
-fn visibility_empty_for_sections() {
-    let reg = registry();
-    let shared = decompose_fixture(&reg, "md", "section_with_code_blocks.md");
-    let view = find_view(&shared, "API");
-    assert_eq!(view.visibility(), "");
+    let shared = decompose_fixture(&reg, ext, fixture);
+    assert_eq!(find_view(&shared, name).visibility(), expected);
 }
 
 /// Verifies that `fragment_list` filters out code block fragments.

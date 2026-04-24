@@ -31,33 +31,19 @@ fn test_manager(enabled: bool) -> Manager {
     test_manager_with_config(config)
 }
 
-/// Tests that a disabled manager returns no clients for any extension.
+/// Verifies that no client is returned across disabled / unknown-extension /
+/// missing-project-root paths. "rs" has a registered syntax and LSP server,
+/// but the detect function checks for Cargo.toml in /nonexistent — detection
+/// fails and no spawn is attempted.
 #[rstest]
-fn disabled_returns_none() {
-    let mgr = test_manager(false);
-    assert!(!mgr.is_enabled());
-    assert!(mgr.client_for_ext("rs").is_none());
-    assert!(mgr.all_clients_for_ext("rs").is_empty());
-}
-
-/// Tests that an unregistered extension returns no clients.
-#[rstest]
-fn unknown_extension_returns_none() {
-    let mgr = test_manager(true);
-    // "xyz" has no syntax or LSP registration.
-    assert!(mgr.client_for_ext("xyz").is_none());
-    assert!(mgr.all_clients_for_ext("xyz").is_empty());
-}
-
-/// Tests that detection prevents spawning when the project root is missing.
-#[rstest]
-fn detection_gate_prevents_spawn_on_missing_root() {
-    let mgr = test_manager(true);
-    // "rs" has a registered syntax and LSP server, but the detect
-    // function checks for Cargo.toml in /nonexistent — which doesn't
-    // exist. So detection fails and no spawn attempt is made.
-    assert!(mgr.client_for_ext("rs").is_none());
-    assert!(mgr.all_clients_for_ext("rs").is_empty());
+#[case::disabled(false, "rs")]
+#[case::unknown_extension(true, "xyz")]
+#[case::missing_project_root(true, "rs")]
+fn no_client_returned(#[case] enabled: bool, #[case] ext: &str) {
+    let mgr = test_manager(enabled);
+    assert_eq!(mgr.is_enabled(), enabled);
+    assert!(mgr.client_for_ext(ext).is_none());
+    assert!(mgr.all_clients_for_ext(ext).is_empty());
 }
 
 /// Tests that `has_lsp_support` requires both enabled config and syntax registration.

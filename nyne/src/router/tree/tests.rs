@@ -746,27 +746,23 @@ fn rest_subtree_dispatches_callbacks(#[case] path: &str, #[case] op: Op, #[case]
 
 #[test]
 fn same_named_dirs_merge_on_build() {
-    struct P;
-    impl P {
-        fn file_a(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> { Some(Node::file().named("a.txt")) }
-
-        fn file_b(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> { Some(Node::file().named("b.txt")) }
-    }
-
     let tree = RouteTree::builder()
-        .dir("shared", |d| d.content(P::file_a))
-        .dir("shared", |d| d.content(P::file_b))
+        .dir("shared", |d| d.content(TestProvider::file_a))
+        .dir("shared", |d| d.content(TestProvider::file_b))
         .build();
 
     // readdir at root: only one "shared" entry (not two)
     let mut req = readdir_req("");
-    tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
-    let dir_count = req.nodes.iter().filter(|n| n.name() == "shared").count();
-    assert_eq!(dir_count, 1, "same-named dirs should merge into one");
+    tree.dispatch(&TestProvider, &mut req, &Next::empty()).unwrap();
+    assert_eq!(
+        req.nodes.iter().filter(|n| n.name() == "shared").count(),
+        1,
+        "same-named dirs should merge into one",
+    );
 
     // readdir inside shared: both content producers fire
     let mut req = readdir_req("shared");
-    tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
+    tree.dispatch(&TestProvider, &mut req, &Next::empty()).unwrap();
     let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     assert_eq!(names, &["a.txt", "b.txt"]);
@@ -774,20 +770,13 @@ fn same_named_dirs_merge_on_build() {
 
 #[test]
 fn nested_same_named_dirs_merge_recursively() {
-    struct P;
-    impl P {
-        fn file_a(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> { Some(Node::file().named("a.txt")) }
-
-        fn file_b(_: &Self, _ctx: &RouteCtx, _req: &Request) -> Option<NamedNode> { Some(Node::file().named("b.txt")) }
-    }
-
     let tree = RouteTree::builder()
-        .dir("level1", |d| d.dir("level2", |d| d.content(P::file_a)))
-        .dir("level1", |d| d.dir("level2", |d| d.content(P::file_b)))
+        .dir("level1", |d| d.dir("level2", |d| d.content(TestProvider::file_a)))
+        .dir("level1", |d| d.dir("level2", |d| d.content(TestProvider::file_b)))
         .build();
 
     let mut req = readdir_req("level1/level2");
-    tree.dispatch(&P, &mut req, &Next::empty()).unwrap();
+    tree.dispatch(&TestProvider, &mut req, &Next::empty()).unwrap();
     let mut names: Vec<&str> = req.nodes.iter().map(NamedNode::name).collect();
     names.sort_unstable();
     assert_eq!(names, &["a.txt", "b.txt"]);
