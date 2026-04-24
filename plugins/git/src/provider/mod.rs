@@ -22,14 +22,10 @@ pub use state::*;
 
 /// Branch browsing and mutation.
 mod branches;
-/// Diff generation.
-mod diff;
 /// Route tree and handler/content functions.
 pub mod routes;
 pub mod symbol_routes;
 
-/// Working tree status rendering.
-mod status;
 /// History filename formatting and shared template constants.
 pub mod views;
 
