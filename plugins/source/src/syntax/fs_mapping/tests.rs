@@ -3,33 +3,27 @@ use rstest::rstest;
 use super::*;
 use crate::syntax::fragment::{ConflictEntry, SymbolKind};
 
-/// Verifies that a name with a tilde-separated kind suffix is split correctly.
+
+/// Verifies the tilde-split behavior of `split_disambiguator` across every kind of input.
 #[rstest]
-fn split_disambiguator_with_kind() {
-    assert_eq!(split_disambiguator("Foo~Struct"), ("Foo", Some("Struct")));
-    assert_eq!(
-        split_disambiguator("Display_for_Foo~Impl"),
-        ("Display_for_Foo", Some("Impl"))
-    );
+#[case::with_kind_struct("Foo~Struct", "Foo", Some("Struct"))]
+#[case::with_kind_impl("Display_for_Foo~Impl", "Display_for_Foo", Some("Impl"))]
+#[case::plain_type("Foo", "Foo", None)]
+#[case::plain_fn("my_function", "my_function", None)]
+// Trailing tilde — empty kind, treated as no disambiguator.
+#[case::trailing_tilde("Foo~", "Foo~", None)]
+// Leading tilde — empty base, treated as no disambiguator.
+#[case::leading_tilde("~Struct", "~Struct", None)]
+// Multiple tildes — splits on the last one.
+#[case::multiple_tildes("A~B~C", "A~B", Some("C"))]
+fn split_disambiguator_cases(
+    #[case] input: &str,
+    #[case] expected_base: &str,
+    #[case] expected_kind: Option<&str>,
+) {
+    assert_eq!(split_disambiguator(input), (expected_base, expected_kind));
 }
 
-/// Verifies that a name without a tilde has no kind disambiguator.
-#[rstest]
-fn split_disambiguator_without_kind() {
-    assert_eq!(split_disambiguator("Foo"), ("Foo", None));
-    assert_eq!(split_disambiguator("my_function"), ("my_function", None));
-}
-
-/// Verifies edge cases: trailing tilde, leading tilde, and multiple tildes.
-#[rstest]
-fn split_disambiguator_edge_cases() {
-    // Trailing tilde — empty kind, treated as no disambiguator.
-    assert_eq!(split_disambiguator("Foo~"), ("Foo~", None));
-    // Leading tilde — empty base, treated as no disambiguator.
-    assert_eq!(split_disambiguator("~Struct"), ("~Struct", None));
-    // Multiple tildes — splits on the last one.
-    assert_eq!(split_disambiguator("A~B~C"), ("A~B", Some("C")));
-}
 
 /// When two fragments share the same name and the same kind, `~Kind` alone
 /// doesn't disambiguate. The fallback appends `-N` to subsequent duplicates.

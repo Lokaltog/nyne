@@ -38,41 +38,25 @@ fn dispatch(chain: &Chain, op: Op, nodes: Vec<NamedNode>) -> Request {
     req
 }
 
+
+/// Verifies that each visibility setting produces the expected node set
+/// for both readdir and lookup ops.
 #[rstest]
-#[case::readdir(Op::Readdir)]
-#[case::lookup(Op::Lookup { name: "virtual.rs".into() })]
-fn hidden_strips_virtual_nodes(#[case] op: Op) {
-    let chain = chain(Visibility::Hidden);
+#[case::hidden_readdir(Visibility::Hidden, Op::Readdir, &["real.rs"])]
+#[case::hidden_lookup(Visibility::Hidden, Op::Lookup { name: "virtual.rs".into() }, &["real.rs"])]
+#[case::default_readdir(Visibility::Default, Op::Readdir, &["real.rs", "virtual.rs"])]
+#[case::default_lookup(Visibility::Default, Op::Lookup { name: "virtual.rs".into() }, &["real.rs", "virtual.rs"])]
+#[case::force_readdir(Visibility::Force, Op::Readdir, &["real.rs", "virtual.rs"])]
+#[case::force_lookup(Visibility::Force, Op::Lookup { name: "virtual.rs".into() }, &["real.rs", "virtual.rs"])]
+fn visibility_filters_nodes(#[case] visibility: Visibility, #[case] op: Op, #[case] expected: &[&str]) {
+    let chain = chain(visibility);
     let req = dispatch(&chain, op, vec![
         file_with_backing("real.rs"),
         virtual_file("virtual.rs"),
     ]);
-    assert_eq!(names(&req), &["real.rs"]);
+    assert_eq!(names(&req), expected);
 }
 
-#[rstest]
-#[case::readdir(Op::Readdir)]
-#[case::lookup(Op::Lookup { name: "virtual.rs".into() })]
-fn default_keeps_virtual_nodes(#[case] op: Op) {
-    let chain = chain(Visibility::Default);
-    let req = dispatch(&chain, op, vec![
-        file_with_backing("real.rs"),
-        virtual_file("virtual.rs"),
-    ]);
-    assert_eq!(names(&req), &["real.rs", "virtual.rs"]);
-}
-
-#[rstest]
-#[case::readdir(Op::Readdir)]
-#[case::lookup(Op::Lookup { name: "virtual.rs".into() })]
-fn force_keeps_all_nodes(#[case] op: Op) {
-    let chain = chain(Visibility::Force);
-    let req = dispatch(&chain, op, vec![
-        file_with_backing("real.rs"),
-        virtual_file("virtual.rs"),
-    ]);
-    assert_eq!(names(&req), &["real.rs", "virtual.rs"]);
-}
 
 /// Inner provider that overwrites the visibility state — simulates the cache
 /// middleware restoring a snapshot from a non-hidden process on cache hit.
