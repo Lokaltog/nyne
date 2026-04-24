@@ -45,50 +45,61 @@ fn workspace_edit(entries: Vec<(lsp_types::Uri, Vec<TextEdit>)>) -> WorkspaceEdi
     }
 }
 
+/// Helper: create a temp file with the given content and return `(handle, path_str)`.
+///
+/// The handle must stay in scope for the test — dropping it deletes the file.
+fn tempfile_with(content: &str) -> (tempfile::NamedTempFile, String) {
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(content.as_bytes()).unwrap();
+    tmp.flush().unwrap();
+    let path = tmp.path().to_str().unwrap().to_owned();
+    (tmp, path)
+}
+
+/// Helper: build a `WorkspaceEdit` targeting a single file with the given edits.
+fn single_file_edit(path: &str, edits: Vec<TextEdit>) -> WorkspaceEdit {
+    workspace_edit(vec![(uri_from_path(path), edits)])
+}
+
+/// Helper: build an empty `WorkspaceEdit` (no file changes).
+fn empty_workspace_edit() -> WorkspaceEdit {
+    WorkspaceEdit {
+        changes: Some(HashMap::new()),
+        document_changes: None,
+        change_annotations: None,
+    }
+}
+
 /// Tests applying a single replacement to one file.
 #[rstest]
 fn single_file_single_edit() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "hello world").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
-
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(0, 0, 0, 5, "goodbye")])]);
+    let (_tmp, path) = tempfile_with("hello world");
+    let edit = single_file_edit(&path, vec![text_edit(0, 0, 0, 5, "goodbye")]);
 
     apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(path).unwrap(), "goodbye world");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "goodbye world");
 }
 
 /// Tests applying multiple replacements to the same file.
 #[rstest]
 fn single_file_multiple_edits() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "aaa bbb ccc").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("aaa bbb ccc");
 
     // Replace "aaa" with "xxx" and "ccc" with "zzz" in the same file.
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![
+    let edit = single_file_edit(&path, vec![
         text_edit(0, 0, 0, 3, "xxx"),
         text_edit(0, 8, 0, 11, "zzz"),
-    ])]);
+    ]);
 
     apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(path).unwrap(), "xxx bbb zzz");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "xxx bbb zzz");
 }
 
 /// Tests applying edits across multiple files simultaneously.
 #[rstest]
 fn multiple_files() {
-    let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp1, "file one").unwrap();
-    tmp1.flush().unwrap();
-    let path1 = tmp1.path().to_str().unwrap().to_owned();
-
-    let mut tmp2 = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp2, "file two").unwrap();
-    tmp2.flush().unwrap();
-    let path2 = tmp2.path().to_str().unwrap().to_owned();
+    let (_tmp1, path1) = tempfile_with("file one");
+    let (_tmp2, path2) = tempfile_with("file two");
 
     let edit = workspace_edit(vec![
         (uri_from_path(&path1), vec![text_edit(0, 5, 0, 8, "ONE")]),
@@ -103,78 +114,60 @@ fn multiple_files() {
 /// Tests applying edits on different lines of the same file.
 #[rstest]
 fn multiline_edits() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "line one\nline two\nline three").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("line one\nline two\nline three");
 
     // Replace "two" on line 1 and "three" on line 2.
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![
+    let edit = single_file_edit(&path, vec![
         text_edit(1, 5, 1, 8, "TWO"),
         text_edit(2, 5, 2, 10, "THREE"),
-    ])]);
+    ]);
 
     apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(path).unwrap(), "line one\nline TWO\nline THREE");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "line one\nline TWO\nline THREE");
 }
 
 /// Tests inserting text at a position using an empty range.
 #[rstest]
 fn insert_at_position() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "ab").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("ab");
 
     // Insert "X" between "a" and "b" (empty range = insertion).
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(0, 1, 0, 1, "X")])]);
+    let edit = single_file_edit(&path, vec![text_edit(0, 1, 0, 1, "X")]);
 
     apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(path).unwrap(), "aXb");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "aXb");
 }
 
 /// Tests deleting a range by replacing it with empty text.
 #[rstest]
 fn delete_range() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "hello world").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("hello world");
 
     // Delete " world" (empty new_text = deletion).
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(0, 5, 0, 11, "")])]);
+    let edit = single_file_edit(&path, vec![text_edit(0, 5, 0, 11, "")]);
 
     apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(path).unwrap(), "hello");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
 }
 
 /// Tests that an empty workspace edit succeeds without error.
 #[rstest]
 fn empty_edit_warns_but_succeeds() {
-    let edit = WorkspaceEdit {
-        changes: Some(HashMap::new()),
-        document_changes: None,
-        change_annotations: None,
-    };
-
     // Should succeed (no files to modify), just emits a warning.
-    apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
+    apply_workspace_edit(&empty_workspace_edit(), &passthrough_resolver()).unwrap();
 }
 
 /// Tests that edits handle UTF-16 surrogate positions correctly.
 #[rstest]
 fn utf16_surrogate_positions() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
     // 'a' + emoji (U+1F600, 4 bytes UTF-8, 2 code units UTF-16) + 'b'
-    write!(tmp, "a\u{1F600}b").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("a\u{1F600}b");
 
     // Replace 'b' which is at UTF-16 offset 3 (after 'a'=1 + emoji=2).
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(0, 3, 0, 4, "Z")])]);
+    let edit = single_file_edit(&path, vec![text_edit(0, 3, 0, 4, "Z")]);
 
     apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(path).unwrap(), "a\u{1F600}Z");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "a\u{1F600}Z");
 }
 
 /// Tests that a single rope replacement applies correctly.
@@ -241,12 +234,9 @@ fn rope_out_of_range_returns_error() {
 /// Tests that a single-file edit resolves to the correct modified content.
 #[rstest]
 fn resolve_single_file_single_edit() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    writeln!(tmp, "hello world").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("hello world\n");
 
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(0, 0, 0, 5, "goodbye")])]);
+    let edit = single_file_edit(&path, vec![text_edit(0, 0, 0, 5, "goodbye")]);
     let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
     assert_eq!(results.len(), 1);
@@ -257,15 +247,12 @@ fn resolve_single_file_single_edit() {
 /// Tests that multiple edits in one file resolve to combined modified content.
 #[rstest]
 fn resolve_multi_edit_single_file() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    writeln!(tmp, "aaa bbb ccc").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("aaa bbb ccc\n");
 
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![
+    let edit = single_file_edit(&path, vec![
         text_edit(0, 0, 0, 3, "xxx"),
         text_edit(0, 8, 0, 11, "zzz"),
-    ])]);
+    ]);
     let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
     assert_eq!(results.len(), 1);
@@ -276,15 +263,8 @@ fn resolve_multi_edit_single_file() {
 /// Tests that edits across multiple files resolve to per-file results.
 #[rstest]
 fn resolve_multiple_files() {
-    let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
-    writeln!(tmp1, "file one").unwrap();
-    tmp1.flush().unwrap();
-    let path1 = tmp1.path().to_str().unwrap().to_owned();
-
-    let mut tmp2 = tempfile::NamedTempFile::new().unwrap();
-    writeln!(tmp2, "file two").unwrap();
-    tmp2.flush().unwrap();
-    let path2 = tmp2.path().to_str().unwrap().to_owned();
+    let (_tmp1, path1) = tempfile_with("file one\n");
+    let (_tmp2, path2) = tempfile_with("file two\n");
 
     let edit = workspace_edit(vec![
         (uri_from_path(&path1), vec![text_edit(0, 5, 0, 8, "ONE")]),
@@ -301,13 +281,10 @@ fn resolve_multiple_files() {
 /// Tests that a pure insertion resolves to modified content with the new line.
 #[rstest]
 fn resolve_insertion_only() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "line one\nline two\n").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("line one\nline two\n");
 
     // Insert a new line between line one and line two.
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(1, 0, 1, 0, "inserted\n")])]);
+    let edit = single_file_edit(&path, vec![text_edit(1, 0, 1, 0, "inserted\n")]);
     let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
     assert_eq!(results.len(), 1);
@@ -317,13 +294,10 @@ fn resolve_insertion_only() {
 /// Tests that a pure deletion resolves to modified content without the removed line.
 #[rstest]
 fn resolve_deletion_only() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    write!(tmp, "keep\nremove\ntrailing\n").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("keep\nremove\ntrailing\n");
 
     // Delete the second line entirely (line 1 through start of line 2).
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(1, 0, 2, 0, "")])]);
+    let edit = single_file_edit(&path, vec![text_edit(1, 0, 2, 0, "")]);
     let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
     assert_eq!(results.len(), 1);
@@ -333,26 +307,17 @@ fn resolve_deletion_only() {
 /// Tests that an empty workspace edit resolves to no results.
 #[rstest]
 fn resolve_empty_edit_returns_empty() {
-    let edit = WorkspaceEdit {
-        changes: Some(HashMap::new()),
-        document_changes: None,
-        change_annotations: None,
-    };
-
-    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
+    let results = resolve_edits(&empty_workspace_edit(), &passthrough_resolver()).unwrap();
     assert!(results.is_empty());
 }
 
 /// Tests that replacing text with identical content produces no effective change.
 #[rstest]
 fn resolve_no_change_returns_identical_content() {
-    let mut tmp = tempfile::NamedTempFile::new().unwrap();
-    writeln!(tmp, "unchanged").unwrap();
-    tmp.flush().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let (_tmp, path) = tempfile_with("unchanged\n");
 
     // Replace "unchanged" with "unchanged" — no actual change.
-    let edit = workspace_edit(vec![(uri_from_path(path), vec![text_edit(0, 0, 0, 9, "unchanged")])]);
+    let edit = single_file_edit(&path, vec![text_edit(0, 0, 0, 9, "unchanged")]);
     let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
 
     assert_eq!(results.len(), 1);
