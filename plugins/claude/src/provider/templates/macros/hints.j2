@@ -47,7 +47,7 @@
 | Kind | When to use | Body payload |
 |-|-|-|
 {% for kind, when, payload, _, _ in BATCH_EDIT_KINDS -%}
-| `{{ kind }}` | {{ when }} | {{ payload }} |
+| {{ kind }} | {{ when }} | {{ payload }} |
 {% endfor -%}
 {%- endmacro -%}
 
@@ -58,7 +58,7 @@
      expressions. Example: `batch_edit_kinds_examples('file.' ~ ext)`. --#}
 {%- macro batch_edit_kinds_examples(file_ref="<file>") -%}
 {% for kind, _, _, name, body in BATCH_EDIT_KINDS -%}
-echo '{{ body }}' >{{ paths.edit_stage(file_ref, name, kind) }}
+Write '{{ body }}' to {{ paths.edit_stage(file_ref, name, kind) }}
 {% endfor -%}
 {%- endmacro -%}
 

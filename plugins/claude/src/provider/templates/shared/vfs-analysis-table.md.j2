@@ -1,12 +1,9 @@
 {% import "macros/paths" as paths %}
-## Analysis
-
 | What | When to use | Path |
 |-|-|-|
 | Callers (incoming) | Before changing signature or behavior — shows who will break | `Read {{ paths.sym_md("file." ~ ext, "Foo", "CALLERS") }}` |
 | Dependencies (outgoing) | Tracing what a function calls — don't Grep for callees | `Read {{ paths.sym_md("file." ~ ext, "Foo", "DEPS") }}` |
 | All references | Before renaming, moving, or deleting — every usage site | `Read {{ paths.sym_md("file." ~ ext, "Foo", "REFERENCES") }}` |
 | Trait implementations | Working with a trait — all concrete impls | `Read {{ paths.sym_md("file." ~ ext, "MyTrait", "IMPLEMENTATION") }}` |
-| Project TODOs | Scanning for outstanding work | `Read @/todo/TODO.md` |
 
-Note: Symlinks in `callers/`, `deps/`, `references/`, `implementation/` are shortcuts to related symbols' `@/` directories — follow to read, edit, and inspect linked symbols directly.
+Note: Symlinks in `callers/`, `deps/`, `references/`, `implementation/` are shortcuts to related symbols' `@/` directories — you can browse, Read/Edit, and inspect linked symbols directly.

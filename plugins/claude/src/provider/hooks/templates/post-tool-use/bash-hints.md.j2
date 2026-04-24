@@ -1,7 +1,6 @@
 {% import "macros/hints" as hints %}
 {% if bin == "cat" %}
 {{ hints.overview_redirect("prefer the Read tool over `cat` for reading source files.", rel_paths) }}
-Reserve `cat` for batch reads (brace expansion) and shell pipelines.
 {% elif bin in ["head", "tail"] %}
 {{ hints.overview_redirect("line offsets are fragile — they shift when the file changes. Use stable symbol paths instead.", rel_paths) }}
 {% elif bin in ["grep", "rg"] %}

@@ -1,37 +1,31 @@
 {% import "macros/paths" as paths %}
 {% import "macros/hints" as hints %}
-## Batch Edit Staging
-
 Batch edit stages multiple operations across symbols and files, then applies them atomically in one write. Apply returns an error if validation fails — no need to preview first.
 
-**Batch edit is for 2+ staged operations.** For a single change, use the Edit tool directly. A single staged op followed by apply is an Edit tool call with extra steps — prefer Edit.
+Prefer batch edits for 2+ operations. For a single change, use the Edit tool directly. Stage all related edits first, then apply together with `rm {{ paths.edit_staged_diff() }}`. This is safe (tree-sitter validated) and efficient (one atomic write).
 
-### Staging
-
-Staging endpoints under `edit/{kind}` are write-only: they never appear in `ls`, `stat`, or `cat` (attempting to read returns `ENOENT`). **Writing to an endpoint creates it and stages the edit in one step** — no prior `Read` required, and repeated writes to the same endpoint stage more operations. Stage with either Bash redirects or the `Write` tool.
-
-The `edit/` directory itself is hidden from the parent fragment's `ls` — it's reachable via direct path access (`ls <file>@/symbols/Foo@/edit/`) and only shows `staged.diff`.
-
-Kinds:
+Writing to a staging endpoint stages the edit directly — no prior read required. Repeated writes to the same endpoint stage more operations. Stage edits with the `Write` tool.
 
 {{ hints.batch_edit_kinds_table() }}
 `append` writes inside the symbol's body (impls, modules, classes). `insert-after` places content as a sibling after the symbol closes.
 
-Examples (use `Write` instead of `echo` for multi-line content):
+Examples:
 
 ```bash
 {{ hints.batch_edit_kinds_examples("file." ~ ext) }}```
 
-### Apply
+### Extracting and Moving Symbols
 
-Two scopes for `staged.diff`:
-
-- **Mount-root** — aggregates every staged edit across every file. Apply/clear affects the whole batch.
-- **Per-file** — under the source file's companion, surfaces only edits staged against that file. Apply/clear affects only that file's ops.
-
-Preview with the **Read** tool (reading the file is the idiomatic preview — don't `cat` it from a shell). Apply and clear are shell operations:
+To extract symbols or move symbols from one file to another (e.g., extracting helpers into a new module), use batch staging in combination with `cat` — this is a more powerful, precise and token-efficient technique than using the Edit/Write tools, and preserves exact content (docstrings, attributes, etc.).
 
 ```bash
+# Extract symbol bodies into the new file:
+cat {{ paths.sym("source." ~ ext, "Foo", ext) }} > {{ paths.edit_stage("file." ~ ext, "Bar", "insert-after") }}
+cat {{ paths.sym("source." ~ ext, "Baz", ext) }} > {{ paths.edit_stage("file." ~ ext, "Bar", "replace") }}
+
+# Remove original symbols from the source file with `rmdir` or staged delete:
+rmdir {{ paths.sym_dir("source." ~ ext, "Foo") }} {{ paths.sym_dir("source." ~ ext, "Bar") }}
+
 # Apply / clear — mount-wide
 rm {{ paths.edit_staged_diff() }}        # apply all staged edits atomically
 >  {{ paths.edit_staged_diff() }}        # clear all staged edits
@@ -41,11 +35,11 @@ rm {{ paths.edit_staged_diff_for("file." ~ ext) }}    # apply only this file's o
 >  {{ paths.edit_staged_diff_for("file." ~ ext) }}    # clear only this file's ops
 ```
 
-To preview before applying: `Read {{ paths.edit_staged_diff() }}` (or the scoped path). Apply returns an error if tree-sitter validation fails — no need to preview first.
+Apply returns an error if tree-sitter validation fails — no need to preview first.
 
 ### Recipes
 
 - **Rename a symbol with body changes** — `insert-before` the new + `delete` the old.
-- **Add multiple methods to an impl** — repeated `append` on the impl body.
+- **Add multiple methods to an impl** — `append` on the impl body.
 - **Split one function into two** — `replace` the original (significant rewrite) + `insert-after` the extracted helper.
 - **Bulk delete** — `delete` on each dead symbol, apply once.

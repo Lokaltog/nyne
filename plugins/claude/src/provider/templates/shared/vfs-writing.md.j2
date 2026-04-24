@@ -1,26 +1,7 @@
 {% import "macros/paths" as paths %}
-### Writing
-
 Prefer the Edit tool for targeted changes in known files:
 
     Read {{ paths.sym("<file>", "process", ext) }} ← Read first
-    Edit {{ paths.sym("<file>", "process", ext) }} ← old_string/new_string
-
-Bash examples for single-value writes and structural operations:
-
-```bash
-# Add an import
-echo 'use std::collections::HashMap;' >>{{ paths.imports("<file>", ext) }}
-
-# Replace a function signature
-echo 'fn process(input: &str, opts: Options) -> Result<()>' \
-    >{{ paths.sym_signature("<file>", "process", ext) }}
-
-# Add a decorator/attribute
-echo '#[instrument]' >>{{ paths.sym_decorators("<file>", "process", ext) }}
-
-# Delete a symbol (removes the entire body, docstring, decorators, etc.)
-rmdir <file>@/symbols/old_helper@/
-```
+    Edit {{ paths.sym("<file>", "process", ext) }} ← old_string/new_string - remember that the path must be identical to the prior read
 
 All writes to `@/` paths are tree-sitter validated and safe. Invalid syntax returns an error, not a broken file.
