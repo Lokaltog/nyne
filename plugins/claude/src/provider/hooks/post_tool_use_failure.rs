@@ -22,7 +22,7 @@ pub(in crate::provider) struct PostToolUseFailure {
 
 pub(in crate::provider) fn build_engine() -> Arc<TemplateEngine> {
     let mut b = super::hook_builder();
-    b.register(TMPL, include_str!("../templates/post-tool-use/symbol-renamed.md.j2"));
+    b.register(TMPL, include_str!("templates/post-tool-use/symbol-renamed.md.j2"));
     b.finish()
 }
 
