@@ -30,17 +30,11 @@ crate::language_tests! {
     imports_contain: ["import { readFile }", "import type { Config }"],
 }
 
-/// Class `AppConfig` has 3 method children: constructor, validate, reset.
+/// Verifies TypeScript fragment children: classes expose methods;
+/// interfaces are opaque (method signatures are part of the body).
 #[rstest]
-fn class_children(basic: DecomposedFile) {
-    let config = basic.iter().find(|f| f.name == "AppConfig").unwrap();
-    let child_names: Vec<_> = config.children.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(child_names, &["constructor", "validate", "reset"]);
-}
-
-/// Interface has no children (method signatures are part of the body).
-#[rstest]
-fn interface_no_children(basic: DecomposedFile) {
-    let iface = basic.iter().find(|f| f.name == "Processor").unwrap();
-    assert!(iface.children.is_empty());
+#[case::class_has_methods("AppConfig", &["constructor", "validate", "reset"])]
+#[case::interface_no_children("Processor", &[])]
+fn fragment_children(basic: DecomposedFile, #[case] name: &str, #[case] expected: &[&str]) {
+    crate::test_support::assert_fragment_children(&basic, name, expected);
 }

@@ -20,9 +20,7 @@ crate::language_tests! {
 /// `meta` has nested attrset children (one level of decomposition).
 #[rstest]
 fn meta_children(basic: DecomposedFile) {
-    let meta = basic.iter().find(|f| f.name == "meta").unwrap();
-    let child_names: Vec<_> = meta.children.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(child_names, &["description", "license", "maintainers"]);
+    crate::test_support::assert_fragment_children(&basic, "meta", &["description", "license", "maintainers"]);
 }
 
 /// No imports in Nix (currently).

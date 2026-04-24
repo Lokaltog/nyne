@@ -17,6 +17,28 @@ pub fn decompose_fixture(ext: &str, source: &str) -> DecomposedFile {
     let (result, _tree) = registry().get(ext).unwrap().decompose(source, 5);
     result
 }
+/// Assert that the fragment named `name` (searched recursively through nested
+/// children) has exactly the expected child names.
+///
+/// The recursive search covers hierarchical languages (Markdown sections) and
+/// flat ones (Python, TypeScript, Nix) with a single helper.
+pub fn assert_fragment_children(decomposed: &crate::syntax::fragment::DecomposedFile, name: &str, expected: &[&str]) {
+    fn find<'a>(
+        frags: &'a [crate::syntax::fragment::Fragment],
+        name: &str,
+    ) -> Option<&'a crate::syntax::fragment::Fragment> {
+        frags.iter().find_map(|f| {
+            if f.name == name {
+                Some(f)
+            } else {
+                find(&f.children, name)
+            }
+        })
+    }
+    let frag = find(decomposed, name).unwrap_or_else(|| panic!("no fragment named {name:?}"));
+    let child_names: Vec<_> = frag.children.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(child_names, expected, "children of {name:?}");
+}
 
 use std::ops::Range;
 use std::path::Path;

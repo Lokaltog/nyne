@@ -23,25 +23,16 @@ fn preamble_is_first(basic: DecomposedFile) {
     assert_eq!(first.kind, FragmentKind::Preamble);
 }
 
-/// Section hierarchy: Introduction has children Getting Started and Configuration.
-/// Getting Started has child Prerequisites.
+/// Verifies Markdown section hierarchy: Introduction has nested Getting Started
+/// (with its own Prerequisites child) and Configuration; API Reference has
+/// Endpoints. Covers both top-level and nested (Getting Started is inside
+/// Introduction) section child assertions.
 #[rstest]
-fn introduction_children(basic: DecomposedFile) {
-    let intro = basic.iter().find(|f| f.name == "Introduction").unwrap();
-    let child_names: Vec<_> = intro.children.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(child_names, &["Getting Started", "Configuration"]);
-
-    let getting_started = intro.children.iter().find(|f| f.name == "Getting Started").unwrap();
-    let gs_child_names: Vec<_> = getting_started.children.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(gs_child_names, &["Prerequisites"]);
-}
-
-/// API Reference has one child: Endpoints.
-#[rstest]
-fn api_reference_children(basic: DecomposedFile) {
-    let api = basic.iter().find(|f| f.name == "API Reference").unwrap();
-    let child_names: Vec<_> = api.children.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(child_names, &["Endpoints"]);
+#[case::introduction("Introduction", &["Getting Started", "Configuration"])]
+#[case::getting_started_nested("Getting Started", &["Prerequisites"])]
+#[case::api_reference("API Reference", &["Endpoints"])]
+fn section_children(basic: DecomposedFile, #[case] name: &str, #[case] expected: &[&str]) {
+    crate::test_support::assert_fragment_children(&basic, name, expected);
 }
 
 /// No imports in Markdown.

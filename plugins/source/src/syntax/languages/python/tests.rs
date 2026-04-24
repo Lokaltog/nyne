@@ -26,25 +26,11 @@ crate::language_tests! {
     imports_contain: ["import os", "from pathlib import Path"],
 }
 
-/// Class `Config` has docstring, decorators, field annotations and methods as children.
+/// Verifies that Python class fragments expose the expected child symbols
+/// (docstring, decorators, annotated fields, methods).
 #[rstest]
-fn class_children(basic: DecomposedFile) {
-    let config = basic.iter().find(|f| f.name == "Config").unwrap();
-    let child_names: Vec<_> = config.children.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(child_names, &[
-        "docstring",
-        "decorators",
-        "name",
-        "debug",
-        "validate",
-        "reset"
-    ]);
-}
-
-/// Class `Processor` has 2 methods.
-#[rstest]
-fn processor_children(basic: DecomposedFile) {
-    let processor = basic.iter().find(|f| f.name == "Processor").unwrap();
-    let child_names: Vec<_> = processor.children.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(child_names, &["__init__", "run"]);
+#[case::config_class("Config", &["docstring", "decorators", "name", "debug", "validate", "reset"])]
+#[case::processor_class("Processor", &["__init__", "run"])]
+fn class_children_cases(basic: DecomposedFile, #[case] class_name: &str, #[case] expected: &[&str]) {
+    crate::test_support::assert_fragment_children(&basic, class_name, expected);
 }
