@@ -145,11 +145,7 @@ fn empty_edit_warns_but_succeeds() {
     Some("line one\nline TWO\nline THREE"),
 )]
 #[case::out_of_range_errors("short", vec![text_edit(5, 0, 5, 1, "x")], None)]
-fn apply_edits_to_rope_cases(
-    #[case] content: &str,
-    #[case] edits: Vec<TextEdit>,
-    #[case] expected: Option<&str>,
-) {
+fn apply_edits_to_rope_cases(#[case] content: &str, #[case] edits: Vec<TextEdit>, #[case] expected: Option<&str>) {
     let refs: Vec<&TextEdit> = edits.iter().collect();
     let mut edits_refs = refs;
     let result = apply_edits_to_rope(content, &mut edits_refs);

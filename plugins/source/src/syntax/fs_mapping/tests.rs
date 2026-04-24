@@ -3,7 +3,6 @@ use rstest::rstest;
 use super::*;
 use crate::syntax::fragment::{ConflictEntry, SymbolKind};
 
-
 /// Verifies the tilde-split behavior of `split_disambiguator` across every kind of input.
 #[rstest]
 #[case::with_kind_struct("Foo~Struct", "Foo", Some("Struct"))]
@@ -16,14 +15,9 @@ use crate::syntax::fragment::{ConflictEntry, SymbolKind};
 #[case::leading_tilde("~Struct", "~Struct", None)]
 // Multiple tildes — splits on the last one.
 #[case::multiple_tildes("A~B~C", "A~B", Some("C"))]
-fn split_disambiguator_cases(
-    #[case] input: &str,
-    #[case] expected_base: &str,
-    #[case] expected_kind: Option<&str>,
-) {
+fn split_disambiguator_cases(#[case] input: &str, #[case] expected_base: &str, #[case] expected_kind: Option<&str>) {
     assert_eq!(split_disambiguator(input), (expected_base, expected_kind));
 }
-
 
 /// When two fragments share the same name and the same kind, `~Kind` alone
 /// doesn't disambiguate. The fallback appends `-N` to subsequent duplicates.

@@ -169,7 +169,6 @@ impl Writable for RecordingWritable {
     }
 }
 
-
 /// A provider that stops the chain and emits `stopped.txt`.
 pub struct StoppingProvider {
     id: ProviderId,

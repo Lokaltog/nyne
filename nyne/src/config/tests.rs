@@ -52,7 +52,6 @@ fn reject_invalid_config(#[case] toml_input: &str) {
     assert!(result.is_err(), "invalid config should be rejected: {toml_input}");
 }
 
-
 /// Verifies that `agent_files.filenames` deserializes correctly across all supported
 /// fixture shapes. `None` in `expected` means the result should equal
 /// [`default_agent_filenames()`]; `Some(list)` pins an exact custom list.
@@ -69,7 +68,6 @@ fn agent_files_deserialization(#[case] fixture: &str, #[case] expected: Option<&
         Some(list) => assert_eq!(actual.iter().map(String::as_str).collect::<Vec<_>>(), list),
     }
 }
-
 
 /// Verifies that the `AgentFilesConfig` default has the expected filenames.
 #[test]
@@ -89,7 +87,6 @@ fn repository_storage_strategy(#[case] toml_input: &str, #[case] expected: Stora
     assert_eq!(config.repository.storage_strategy, expected);
 }
 
-
 /// Verifies that `sandbox.hostname` defaults to `nyne-sandbox` when unset and
 /// picks up custom values when specified.
 #[rstest]
@@ -99,7 +96,6 @@ fn sandbox_hostname(#[case] fixture: &str, #[case] expected: &str) {
     let config = load_fixture(fixture);
     assert_eq!(config.sandbox.hostname, expected);
 }
-
 
 /// Tests that bind mounts with source, target, and flags deserialize correctly.
 #[test]

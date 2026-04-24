@@ -659,7 +659,6 @@ fn lines_suffix_roundtrips_through_parse() {
 
 // full_span tests (unique assertions per test)
 
-
 /// How a fragment's `full_span` relates to its `byte_range`, depending on
 /// whether the language includes decorators inside the wrapper node (Python)
 /// or as a prefix preceding it (Rust, TypeScript).
@@ -679,7 +678,11 @@ enum DecoratorMode {
 #[rstest]
 #[case::bare_rust("rs", "fn bare() {}\n", DecoratorMode::Bare)]
 #[case::rust_decorator_only("rs", "#[derive(Debug)]\npub struct Foo;\n", DecoratorMode::Prefixed)]
-#[case::rust_decorator_and_doc("rs", "/// Documented.\n#[derive(Debug)]\npub struct Foo;\n", DecoratorMode::Prefixed)]
+#[case::rust_decorator_and_doc(
+    "rs",
+    "/// Documented.\n#[derive(Debug)]\npub struct Foo;\n",
+    DecoratorMode::Prefixed
+)]
 #[case::python_decorated_class_with_docstring(
     "py",
     "@dataclass\nclass Bar:\n    \"\"\"A bar.\"\"\"\n    x: int = 0\n",
@@ -708,7 +711,6 @@ fn full_span_vs_byte_range(#[case] ext: &str, #[case] source: &str, #[case] mode
         }
     }
 }
-
 
 /// Verifies that `full_span` ranges of adjacent Python classes do not overlap.
 #[test]

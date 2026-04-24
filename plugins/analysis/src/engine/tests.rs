@@ -6,10 +6,8 @@ use rstest::rstest;
 use super::{DEFAULT_DISABLED_RULES, Engine, Hint};
 use crate::plugin::config::Config;
 
-
 /// Load a test fixture file relative to this crate's `src/engine/fixtures/`.
 fn load_fixture(name: &str) -> String { nyne::load_fixture!("engine", name) }
-
 
 /// Analyze a fixture file and return all hints.
 fn analyze_fixture(ext: &str, name: &str) -> Vec<Hint> {

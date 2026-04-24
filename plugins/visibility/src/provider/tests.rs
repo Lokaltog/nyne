@@ -38,7 +38,6 @@ fn dispatch(chain: &Chain, op: Op, nodes: Vec<NamedNode>) -> Request {
     req
 }
 
-
 /// Verifies that each visibility setting produces the expected node set
 /// for both readdir and lookup ops.
 #[rstest]
@@ -56,7 +55,6 @@ fn visibility_filters_nodes(#[case] visibility: Visibility, #[case] op: Op, #[ca
     ]);
     assert_eq!(names(&req), expected);
 }
-
 
 /// Inner provider that overwrites the visibility state — simulates the cache
 /// middleware restoring a snapshot from a non-hidden process on cache hit.
