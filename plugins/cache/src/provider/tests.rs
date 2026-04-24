@@ -1,20 +1,11 @@
-use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use nyne::router::{CachePolicy, NamedNode, ReadContext, Readable};
-use nyne::test_support::StubReadable;
+use nyne::router::{CachePolicy, NamedNode, Readable};
+use nyne::test_support::{StubReadable, test_read_ctx};
 use rstest::rstest;
 
 use super::cached::{CachedReadable, wrap_readable};
-
-fn dummy_ctx() -> ReadContext<'static> {
-    // ReadContext needs a path and fs — use a stub that won't be called.
-    ReadContext {
-        path: Path::new(""),
-        fs: &nyne::test_support::StubFs,
-    }
-}
 
 #[test]
 fn cached_readable_returns_correct_size_after_read() {
@@ -31,14 +22,12 @@ fn cached_readable_returns_correct_size_after_read() {
     assert_eq!(cached.size(), None);
 
     // First read populates cache.
-    let content = cached.read(&dummy_ctx()).unwrap();
-    assert_eq!(content, b"hello world");
+    assert_eq!(cached.read(&test_read_ctx()).unwrap(), b"hello world");
     assert_eq!(cached.size(), Some(11));
     assert_eq!(calls.load(Ordering::Relaxed), 1);
 
     // Second read returns cached content without calling inner.
-    let content = cached.read(&dummy_ctx()).unwrap();
-    assert_eq!(content, b"hello world");
+    assert_eq!(cached.read(&test_read_ctx()).unwrap(), b"hello world");
     assert_eq!(calls.load(Ordering::Relaxed), 1);
 }
 
@@ -80,8 +69,7 @@ fn wrap_readable_wraps_virtual_readable() {
     assert_eq!(node.readable().unwrap().size(), None);
 
     // After read, size is correct.
-    let content = node.readable().unwrap().read(&dummy_ctx()).unwrap();
-    assert_eq!(content, b"content");
+    assert_eq!(node.readable().unwrap().read(&test_read_ctx()).unwrap(), b"content");
     assert_eq!(node.readable().unwrap().size(), Some(7));
 }
 
@@ -184,7 +172,7 @@ fn wrap_readable_skips_opt_out_policies(#[case] policy: CachePolicy) {
     for _ in 0..3 {
         node.readable()
             .expect("readable present after wrap_readable")
-            .read(&dummy_ctx())
+            .read(&test_read_ctx())
             .expect("inner readable read must succeed");
     }
 
