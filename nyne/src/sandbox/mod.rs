@@ -432,12 +432,8 @@ fn command_main(
         // Inject env vars for nested nyne invocations: the control
         // socket (for `nyne exec`) and the session dir (for nested
         // `nyne mount`/`nyne list` to find each other's sessions).
-        inject_path_env(
-            &mut sandbox_env,
-            session::env::NYNE_CONTROL_SOCKET_ENV,
-            paths.control_socket,
-        );
-        inject_path_env(&mut sandbox_env, session::env::NYNE_SESSION_DIR_ENV, paths.session_dir);
+        inject_path_env(&mut sandbox_env, session::NYNE_CONTROL_SOCKET_ENV, paths.control_socket);
+        inject_path_env(&mut sandbox_env, session::NYNE_SESSION_DIR_ENV, paths.session_dir);
         let init_pid = fork_or_die(|| {
             init_main(&command, identity, paths, &sandbox_env);
         })

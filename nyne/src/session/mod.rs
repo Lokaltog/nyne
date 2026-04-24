@@ -6,9 +6,19 @@
 //! - Session directory paths (`$XDG_RUNTIME_DIR/nyne/`)
 //! - Control socket paths
 //! - Active session discovery (registry scan)
+//! - Environment variables bridging daemon and attached processes (below)
 
-/// Environment variables bridging daemon and attached processes.
-pub mod env;
+/// Control socket env var — points at the daemon's Unix domain socket for IPC.
+///
+/// Injected by `sandbox::command_main` into every process spawned inside a
+/// sandbox so CLI commands (`nyne exec`, `nyne list`, `nyne attach`, nested
+/// `nyne mount`) can locate the owning daemon without path discovery.
+pub const NYNE_CONTROL_SOCKET_ENV: &str = "NYNE_CONTROL_SOCKET";
+
+/// Session directory env var — where nested sessions spawned inside the sandbox
+/// live. Ensures nested mounts share the parent daemon's session scope instead
+/// of landing in per-namespace buckets.
+pub const NYNE_SESSION_DIR_ENV: &str = "NYNE_SESSION_DIR";
 /// Session identifier generation and validation.
 mod id;
 use std::env::var_os;
@@ -20,7 +30,6 @@ use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use self::env::NYNE_SESSION_DIR_ENV;
 pub use self::id::SessionId;
 
 /// Persisted daemon metadata for session discovery.

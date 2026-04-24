@@ -174,7 +174,7 @@ fn discover_socket(id: Option<&str>) -> Result<PathBuf> {
         return session::control_socket(id);
     }
 
-    if let Ok(socket) = env::var(session::env::NYNE_CONTROL_SOCKET_ENV) {
+    if let Ok(socket) = env::var(session::NYNE_CONTROL_SOCKET_ENV) {
         return Ok(PathBuf::from(socket));
     }
 
