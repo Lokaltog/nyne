@@ -41,3 +41,9 @@ crate::language_tests! {
 Applies to rust/python/typescript/fennel/nix/toml/markdown. jinja2 has
 a bespoke structure (nested blocks, macros) and is tested directly
 without the macro.
+
+Per-language "this symbol has these children" assertions use the shared
+`test_support::assert_fragment_children(&basic, name, &[expected...])`
+helper. The helper recursively searches the fragment tree, so it works
+uniformly for flat languages (Python, TypeScript, Nix) and hierarchical
+ones (Markdown sections).
