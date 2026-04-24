@@ -37,49 +37,34 @@ fn session_name_format() {
     assert_eq!(session_name(12345), "pid-12345");
 }
 
-/// Tests that `CgroupTracker::new` gracefully returns None when unavailable.
+/// Tests CgroupTracker session state across `track`/`untrack` operations.
+/// Each case applies a sequence of ops and then asserts `resolve` for the
+/// current PID. Skipped cleanly on systems without cgroup v2 support.
 #[rstest]
-fn tracker_new_graceful_fallback() {
-    // CgroupTracker::new() should either succeed or return None — never panic.
-    let _tracker = CgroupTracker::new();
-}
-
-/// Tests that resolve returns None for an untracked PID.
-#[rstest]
-fn tracker_resolve_returns_none_for_untracked() {
-    // Even if cgroups work, an untracked PID should resolve to None.
-    if let Some(tracker) = CgroupTracker::new() {
-        assert_eq!(tracker.resolve(std::process::id()), None);
+#[case::untracked(&[], None)]
+#[case::track_makes_resolvable(
+    &[Op::Track(ProcessVisibility::All)],
+    Some(ProcessVisibility::All),
+)]
+#[case::untrack_removes_session(
+    &[Op::Track(ProcessVisibility::None), Op::Untrack],
+    None,
+)]
+fn tracker_session_operations(#[case] ops: &[Op], #[case] expected: Option<ProcessVisibility>) {
+    let Some(tracker) = CgroupTracker::new() else { return };
+    let pid = std::process::id();
+    for op in ops {
+        match op {
+            Op::Track(v) => tracker.track(pid, *v),
+            Op::Untrack => tracker.untrack(pid),
+        }
     }
-}
-
-/// Tests that tracking a PID allows it to be resolved.
-#[rstest]
-fn tracker_track_and_resolve() {
-    let Some(tracker) = CgroupTracker::new() else { return };
-
-    let pid = std::process::id();
-    tracker.track(pid, ProcessVisibility::All);
-
-    // Our process should now be in the tracked cgroup.
-    assert_eq!(tracker.resolve(pid), Some(ProcessVisibility::All));
-
-    // Cleanup: untrack so Drop doesn't leave stale cgroups.
-    // Note: untrack removes from sessions map; cgroup dir persists
-    // while our process is alive, cleaned up on Drop.
+    assert_eq!(tracker.resolve(pid), expected);
+    // Clean up so Drop doesn't leave stale cgroups and so successive cases start fresh.
     tracker.untrack(pid);
 }
 
-/// Tests that untracking a PID removes it from resolution.
-#[rstest]
-fn tracker_untrack_removes_session() {
-    let Some(tracker) = CgroupTracker::new() else { return };
-
-    let pid = std::process::id();
-    tracker.track(pid, ProcessVisibility::None);
-    tracker.untrack(pid);
-
-    // After untrack, resolve should return None (session removed from map).
-    // The cgroup dir may still exist (process alive), but we don't match it.
-    assert_eq!(tracker.resolve(pid), None);
+enum Op {
+    Track(ProcessVisibility),
+    Untrack,
 }

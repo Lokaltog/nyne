@@ -10,8 +10,36 @@ fn frame(msg: &serde_json::Value) -> Vec<u8> {
     let payload = serde_json::to_string(msg).unwrap();
     format!("Content-Length: {}\r\n\r\n{payload}", payload.len()).into_bytes()
 }
+/// Parse `write_message` output into (declared_len, body), asserting the
+/// Content-Length framing invariants along the way.
+fn parse_written_message(buf: Vec<u8>) -> (usize, serde_json::Value) {
+    let output = String::from_utf8(buf).unwrap();
+    assert!(
+        output.starts_with("Content-Length: "),
+        "missing Content-Length prefix: {output:?}"
+    );
+    let (header, body) = output.split_once("\r\n\r\n").expect("missing \\r\\n\\r\\n boundary");
+    let declared_len: usize = header
+        .strip_prefix("Content-Length: ")
+        .unwrap()
+        .split("\r\n")
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(declared_len, body.len(), "Content-Length matches body size");
+    (declared_len, serde_json::from_str(body).unwrap())
+}
 
-/// Tests that `write_message` produces valid Content-Length framed JSON-RPC.
+/// Write `msg` via `write_message` and return the parsed body (framing validated).
+fn write_and_parse(msg: &serde_json::Value) -> serde_json::Value {
+    let mut buf = Vec::new();
+    write_message(&mut buf, msg).unwrap();
+    parse_written_message(buf).1
+}
+
+/// Tests that `write_message` produces Content-Length framed JSON-RPC with
+/// the full message body preserved (request form, with `id`).
 #[rstest]
 fn write_message_framing() {
     let msg = json!({
@@ -20,25 +48,11 @@ fn write_message_framing() {
         "method": "initialize",
         "params": {"rootUri": null},
     });
-    let mut buf = Vec::new();
-    write_message(&mut buf, &msg).unwrap();
-
-    let output = String::from_utf8(buf).unwrap();
-    assert!(output.starts_with("Content-Length: "));
-
-    // Split header from body at the \r\n\r\n boundary.
-    let parts: Vec<&str> = output.splitn(2, "\r\n\r\n").collect();
-    assert_eq!(parts.len(), 2);
-
-    let body: serde_json::Value = serde_json::from_str(parts[1]).unwrap();
+    let body = write_and_parse(&msg);
     assert_eq!(body["jsonrpc"], "2.0");
     assert_eq!(body["id"], 1);
     assert_eq!(body["method"], "initialize");
     assert_eq!(body["params"]["rootUri"], serde_json::Value::Null);
-
-    // Verify Content-Length matches body size.
-    let declared_len: usize = parts[0].strip_prefix("Content-Length: ").unwrap().parse().unwrap();
-    assert_eq!(declared_len, parts[1].len());
 }
 
 /// Tests that `write_message` faithfully writes a notification (no `id` field).
@@ -49,13 +63,7 @@ fn write_message_notification_has_no_id() {
         "method": "initialized",
         "params": {},
     });
-    let mut buf = Vec::new();
-    write_message(&mut buf, &msg).unwrap();
-
-    let output = String::from_utf8(buf).unwrap();
-    let parts: Vec<&str> = output.splitn(2, "\r\n\r\n").collect();
-    let body: serde_json::Value = serde_json::from_str(parts[1]).unwrap();
-
+    let body = write_and_parse(&msg);
     assert_eq!(body["jsonrpc"], "2.0");
     assert_eq!(body["method"], "initialized");
     assert!(body.get("id").is_none());
@@ -70,69 +78,64 @@ fn read_headers_ignores_extra_headers() {
     assert_eq!(len, 42);
 }
 
-/// Tests that `read_message` parses a Content-Length framed JSON value.
+/// Tests that `read_message` correctly parses Content-Length framed JSON
+/// payloads, both single messages and consecutive messages in a stream.
 #[rstest]
-fn read_message_parses_framed_json() {
-    let msg = json!({"jsonrpc": "2.0", "id": 1, "result": {"ok": true}});
-    let mut cursor = Cursor::new(frame(&msg));
-    let parsed = read_message(&mut cursor).unwrap();
-    assert_eq!(parsed, msg);
-}
-
-/// Tests that `read_message` reads two consecutive messages from a stream.
-#[rstest]
-fn read_message_reads_sequential_messages() {
-    let msg1 = json!({"jsonrpc": "2.0", "method": "progress", "params": {}});
-    let msg2 = json!({"jsonrpc": "2.0", "id": 1, "result": null});
-    let mut data = frame(&msg1);
-    data.extend(frame(&msg2));
-
+#[case::single(vec![json!({"jsonrpc": "2.0", "id": 1, "result": {"ok": true}})])]
+#[case::sequential(vec![
+    json!({"jsonrpc": "2.0", "method": "progress", "params": {}}),
+    json!({"jsonrpc": "2.0", "id": 1, "result": null}),
+])]
+fn read_message_parses(#[case] msgs: Vec<serde_json::Value>) {
+    let mut data = Vec::new();
+    for msg in &msgs {
+        data.extend(frame(msg));
+    }
     let mut cursor = Cursor::new(data);
-    assert_eq!(read_message(&mut cursor).unwrap(), msg1);
-    assert_eq!(read_message(&mut cursor).unwrap(), msg2);
+    for msg in &msgs {
+        assert_eq!(read_message(&mut cursor).unwrap(), *msg);
+    }
 }
 
-/// Tests that `parse_response_result` extracts the `result` field.
+/// Tests `parse_response_result` across result/error/missing-result scenarios.
+/// `Ok(value)` and `Err { code, message_contains }` cover both branches;
+/// code `-32601` additionally asserts `is_method_not_found`.
 #[rstest]
-fn parse_response_result_extracts_result() {
-    let msg = json!({"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {}}});
-    let result = parse_response_result(&msg).unwrap();
-    assert_eq!(result, json!({"capabilities": {}}));
+#[case::extracts_result(
+    json!({"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {}}}),
+    ExpectParse::Ok(json!({"capabilities": {}})),
+)]
+#[case::missing_result_is_null(
+    json!({"jsonrpc": "2.0", "id": 1}),
+    ExpectParse::Ok(serde_json::Value::Null),
+)]
+#[case::generic_error(
+    json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -32600, "message": "Invalid Request"}}),
+    ExpectParse::Err { code: -32600, message_contains: "Invalid Request" },
+)]
+#[case::method_not_found(
+    json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -32601, "message": "Method not found"}}),
+    ExpectParse::Err { code: -32601, message_contains: "Method not found" },
+)]
+fn parse_response_result_cases(#[case] msg: serde_json::Value, #[case] expect: ExpectParse) {
+    let result = parse_response_result(&msg);
+    match expect {
+        ExpectParse::Ok(v) => assert_eq!(result.unwrap(), v),
+        ExpectParse::Err { code, message_contains } => {
+            let rpc_err = result
+                .unwrap_err()
+                .downcast::<JsonRpcError>()
+                .expect("should be JsonRpcError");
+            assert_eq!(rpc_err.code, code);
+            assert!(rpc_err.message.contains(message_contains));
+            assert_eq!(rpc_err.is_method_not_found(), code == -32601);
+        }
+    }
 }
 
-/// Tests that a missing `result` field returns `Null` rather than an error.
-#[rstest]
-fn parse_response_result_returns_null_when_result_missing() {
-    let msg = json!({"jsonrpc": "2.0", "id": 1});
-    let result = parse_response_result(&msg).unwrap();
-    assert_eq!(result, serde_json::Value::Null);
-}
-
-/// Tests that an `error` field is returned as a `JsonRpcError`.
-#[rstest]
-fn parse_response_result_returns_json_rpc_error() {
-    let msg = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "error": {"code": -32600, "message": "Invalid Request"},
-    });
-    let err = parse_response_result(&msg).unwrap_err();
-    let rpc_err = err.downcast_ref::<JsonRpcError>().expect("should be JsonRpcError");
-    assert_eq!(rpc_err.code, -32600);
-    assert!(rpc_err.message.contains("Invalid Request"));
-}
-
-/// Tests that error code -32601 is recognized as method-not-found.
-#[rstest]
-fn parse_response_result_method_not_found() {
-    let msg = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "error": {"code": -32601, "message": "Method not found"},
-    });
-    let err = parse_response_result(&msg).unwrap_err();
-    let rpc_err = err.downcast_ref::<JsonRpcError>().expect("should be JsonRpcError");
-    assert!(rpc_err.is_method_not_found());
+enum ExpectParse {
+    Ok(serde_json::Value),
+    Err { code: i64, message_contains: &'static str },
 }
 
 /// Verifies that `write_message` output can be read back by `read_message`.

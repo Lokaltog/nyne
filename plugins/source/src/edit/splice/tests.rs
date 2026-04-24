@@ -26,25 +26,45 @@ fn reject_if_contains_error(source: &str) -> Result<(), String> {
     }
 }
 
-/// Tests that splicing valid content into a valid file succeeds.
+/// Exercises `splice_validate_write` across success/failure paths:
+/// valid-to-valid replace, valid-to-invalid rejection, out-of-bounds rejection,
+/// and trailing-newline normalization (add + preserve without duplicating).
+///
+/// `Some(expected)` = success; file contents must equal `expected`.
+/// `None` = failure; file contents must be unchanged from `initial`.
 #[rstest]
-fn splice_valid_to_valid_succeeds() {
-    let (_dir, fs, path) = setup("fn hello() {}");
-    let result = splice_validate_write(&fs, &path, 3..8, "world", always_ok);
-    assert!(result.is_ok());
+#[case::valid_to_valid(
+    "fn hello() {}", 3..8, "world", always_ok as fn(&str) -> Result<(), String>,
+    Some("fn world() {}\n"),
+)]
+#[case::valid_to_invalid(
+    "fn hello() {}", 3..8, "SYNTAX_ERROR", reject_if_contains_error,
+    None,
+)]
+#[case::out_of_bounds("short", 0..100, "x", always_ok, None)]
+#[case::ensures_trailing_newline("hello\n", 0..6, "world", always_ok, Some("world\n"))]
+#[case::no_double_newline("hello\n", 0..6, "world\n", always_ok, Some("world\n"))]
+fn splice_validate_write_cases(
+    #[case] initial: &str,
+    #[case] range: std::ops::Range<usize>,
+    #[case] new: &str,
+    #[case] validator: fn(&str) -> Result<(), String>,
+    #[case] expected: Option<&str>,
+) {
+    let (_dir, fs, path) = setup(initial);
+    let result = splice_validate_write(&fs, &path, range, new, validator);
     let written = fs.read_file(&path).unwrap();
-    assert_eq!(std::str::from_utf8(&written).unwrap(), "fn world() {}\n");
-}
-
-/// Tests that splicing invalid content into a valid file is rejected.
-#[rstest]
-fn splice_valid_to_invalid_is_rejected() {
-    let (_dir, fs, path) = setup("fn hello() {}");
-    let result = splice_validate_write(&fs, &path, 3..8, "SYNTAX_ERROR", reject_if_contains_error);
-    assert!(result.is_err());
-    // Original file should be unchanged.
-    let written = fs.read_file(&path).unwrap();
-    assert_eq!(std::str::from_utf8(&written).unwrap(), "fn hello() {}");
+    let written_str = std::str::from_utf8(&written).unwrap();
+    match expected {
+        Some(expected_content) => {
+            assert!(result.is_ok(), "expected ok, got: {result:?}");
+            assert_eq!(written_str, expected_content);
+        }
+        None => {
+            assert!(result.is_err());
+            assert_eq!(written_str, initial, "failed splice must not mutate file");
+        }
+    }
 }
 
 /// Tests that splicing into an already-invalid file is allowed even when
@@ -72,35 +92,6 @@ fn splice_already_invalid_file_allows_write() {
         std::str::from_utf8(&fs.read_file(&path).unwrap()).unwrap(),
         "fn SYNTAX_ERROR_new() {}\n",
     );
-}
-
-/// Tests that an out-of-bounds splice range is rejected.
-#[rstest]
-fn splice_out_of_bounds_is_rejected() {
-    let (_dir, fs, path) = setup("short");
-    let result = splice_validate_write(&fs, &path, 0..100, "x", always_ok);
-    assert!(result.is_err());
-}
-
-/// Splicing content that removes the trailing newline must re-add it.
-/// POSIX text file convention; tree-sitter-markdown rejects files without it.
-#[rstest]
-fn splice_ensures_trailing_newline() {
-    let (_dir, fs, path) = setup("hello\n");
-    let result = splice_validate_write(&fs, &path, 0..6, "world", always_ok);
-    assert!(result.is_ok());
-    let written = fs.read_file(&path).unwrap();
-    assert_eq!(std::str::from_utf8(&written).unwrap(), "world\n");
-}
-
-/// Splicing into content that already has a trailing newline does not double it.
-#[rstest]
-fn splice_does_not_double_trailing_newline() {
-    let (_dir, fs, path) = setup("hello\n");
-    let result = splice_validate_write(&fs, &path, 0..6, "world\n", always_ok);
-    assert!(result.is_ok());
-    let written = fs.read_file(&path).unwrap();
-    assert_eq!(std::str::from_utf8(&written).unwrap(), "world\n");
 }
 
 /// A splice whose new content is byte-identical to the existing slice is a

@@ -32,30 +32,29 @@ crate::language_tests! {
     imports_contain: ["use std::collections::HashMap;", "use std::io;"],
 }
 
-/// Trait method signatures (`function_signature_item`) are not currently
-/// decomposed as children — only method definitions with bodies are.
+/// Verifies which Rust fragments expose child fragments:
+/// * traits don't decompose method signatures (only definitions with bodies),
+/// * trait impls expose their methods,
+/// * inherent impls expose their methods (kind filter disambiguates struct vs impl).
 #[rstest]
-fn trait_has_no_children_for_signatures(basic: DecomposedFile) {
-    let processor_trait = basic.iter().find(|f| f.name == "Processor").unwrap();
-    assert!(processor_trait.children.is_empty());
-}
-
-/// `impl Processor for Config` has 2 methods as children.
-#[rstest]
-fn trait_impl_children(basic: DecomposedFile) {
-    let impl_frag = basic.iter().find(|f| f.name == "Processor_for_Config").unwrap();
-    let child_names: Vec<_> = impl_frag.children.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(child_names, &["run", "reset"]);
-}
-
-/// `impl Config` has 1 method child.
-#[rstest]
-fn inherent_impl_children(basic: DecomposedFile) {
-    let impl_frag = basic
+#[case::trait_no_children("Processor", None, &[])]
+#[case::trait_impl_children("Processor_for_Config", None, &["run", "reset"])]
+#[case::inherent_impl_children(
+    "Config",
+    Some(FragmentKind::Symbol(SymbolKind::Impl)),
+    &["new"],
+)]
+fn fragment_children(
+    basic: DecomposedFile,
+    #[case] name: &str,
+    #[case] kind: Option<FragmentKind>,
+    #[case] expected: &[&str],
+) {
+    let fragment = basic
         .iter()
-        .filter(|f| f.name == "Config")
-        .find(|f| f.kind == FragmentKind::Symbol(SymbolKind::Impl))
-        .unwrap();
-    let child_names: Vec<_> = impl_frag.children.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(child_names, &["new"]);
+        .filter(|f| f.name == name)
+        .find(|f| kind.as_ref().is_none_or(|k| &f.kind == k))
+        .unwrap_or_else(|| panic!("no matching fragment for {name:?}"));
+    let child_names: Vec<_> = fragment.children.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(child_names, expected);
 }

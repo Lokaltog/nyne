@@ -9,29 +9,48 @@ fn new_map(rules: impl IntoIterator<Item = (String, ProcessVisibility)>) -> Visi
     VisibilityMap::new(rules, Arc::new(ProcessNameCache::default()))
 }
 
-/// Tests that resolve returns Default when no rules or overrides exist.
+/// Tests `resolve` across the precedence chain: empty map → Default,
+/// explicit PID override wins, removing the override restores Default,
+/// PID override shadows a matching name rule.
 #[rstest]
-fn resolve_returns_default_when_empty() {
-    let map = new_map(std::iter::empty());
-    // PID 1 (init) always exists on Linux.
-    assert_eq!(map.resolve(1), ProcessVisibility::Default);
+#[case::empty_map_returns_default(vec![], &[], 1, ProcessVisibility::Default)]
+#[case::explicit_pid_override(
+    vec![],
+    &[Op::SetPid(99999, ProcessVisibility::All)],
+    99999, ProcessVisibility::All,
+)]
+#[case::remove_pid_restores_default(
+    vec![],
+    &[Op::SetPid(99999, ProcessVisibility::None), Op::RemovePid(99999)],
+    99999, ProcessVisibility::Default,
+)]
+#[case::pid_shadows_name_rule(
+    vec![("init", ProcessVisibility::None)],
+    &[Op::SetPid(1, ProcessVisibility::All)],
+    1, ProcessVisibility::All,
+)]
+fn resolve_scenarios(
+    #[case] name_rules: Vec<(&str, ProcessVisibility)>,
+    #[case] ops: &[Op],
+    #[case] pid: u32,
+    #[case] expected: ProcessVisibility,
+) {
+    let map = new_map(name_rules.into_iter().map(|(k, v)| (k.to_owned(), v)));
+    for op in ops {
+        match *op {
+            Op::SetPid(p, v) => map.set_pid(p, v),
+            Op::RemovePid(p) => {
+                map.remove_pid(p);
+            }
+        }
+    }
+    assert_eq!(map.resolve(pid), expected);
 }
 
-/// Tests that an explicit PID override takes precedence over other rules.
-#[rstest]
-fn pid_override_takes_precedence() {
-    let map = new_map(std::iter::empty());
-    map.set_pid(99999, ProcessVisibility::All);
-    assert_eq!(map.resolve(99999), ProcessVisibility::All);
-}
-
-/// Tests that removing a PID override restores Default visibility.
-#[rstest]
-fn remove_pid_restores_default() {
-    let map = new_map(std::iter::empty());
-    map.set_pid(99999, ProcessVisibility::None);
-    map.remove_pid(99999);
-    assert_eq!(map.resolve(99999), ProcessVisibility::Default);
+#[derive(Clone, Copy)]
+enum Op {
+    SetPid(u32, ProcessVisibility),
+    RemovePid(u32),
 }
 
 /// Tests that name rules are truncated to match kernel comm length.
@@ -41,15 +60,6 @@ fn name_rule_truncation_matches_kernel() {
     let map = new_map([("typescript-language-server".to_owned(), ProcessVisibility::None)]);
     // The stored key should be truncated to 15 chars.
     assert!(map.name_rules.contains_key("typescript-lang"));
-}
-
-/// Tests that a PID override shadows a matching name rule.
-#[rstest]
-fn pid_override_shadows_name_rule() {
-    // Even if a name rule would match, a PID override wins.
-    let map = new_map([("init".to_owned(), ProcessVisibility::None)]);
-    map.set_pid(1, ProcessVisibility::All);
-    assert_eq!(map.resolve(1), ProcessVisibility::All);
 }
 
 /// Tests that dynamic name rules take precedence over static ones.
@@ -136,13 +146,6 @@ fn cached_entry_does_not_propagate_to_children() {
     );
 }
 
-/// Tests that the ancestor walk stops at PID 1 (init).
-#[rstest]
-fn ancestor_walk_stops_at_init() {
-    // PID 1 (init) has no override — should not inherit anything.
-    let map = new_map(std::iter::empty());
-    assert_eq!(map.resolve(1), ProcessVisibility::Default);
-}
 /// Tests that name-rule resolution goes through the shared
 /// [`ProcessNameCache`], not a direct procfs read.
 #[rstest]
