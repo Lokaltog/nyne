@@ -16,18 +16,13 @@ fn default_config_is_valid() {
     insta::assert_toml_snapshot!(config);
 }
 
-/// Tests that a minimal TOML fixture deserializes correctly.
-#[test]
-fn deserialize_minimal_config() {
-    let config = load_fixture("minimal.toml");
-    insta::assert_toml_snapshot!(config);
-}
-
-/// Tests that a mount configuration TOML fixture deserializes correctly.
-#[test]
-fn deserialize_mount_config() {
-    let config = load_fixture("mount.toml");
-    insta::assert_toml_snapshot!(config);
+/// Tests that fixture TOML files deserialize correctly into `NyneConfig`.
+#[rstest]
+#[case::minimal("minimal.toml", "deserialize_minimal_config")]
+#[case::mount("mount.toml", "deserialize_mount_config")]
+fn deserialize_fixture(#[case] fixture: &str, #[case] snapshot: &str) {
+    let config = load_fixture(fixture);
+    insta::assert_toml_snapshot!(snapshot, config);
 }
 
 /// Tests that mount config with excluded patterns preserves the exclusion list.

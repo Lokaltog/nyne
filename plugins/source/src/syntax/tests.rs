@@ -40,129 +40,55 @@ fn registry_registers_all_extensions() {
 
 // Snapshot: decompose tests
 
-/// Verifies that a single Rust function decomposes correctly via snapshot.
-#[test]
-fn rust_decompose_function() {
-    insta::assert_debug_snapshot!(decompose("rs", "pub fn hello() {}\n"));
-}
-
-/// Verifies that a Rust struct with an impl block decomposes into separate fragments.
-#[test]
-fn rust_decompose_struct_with_impl() {
-    let source = "\
-pub struct Foo {
-    x: i32,
-}
-
-impl Foo {
-    pub fn new() -> Self {
-        Self { x: 0 }
-    }
-}
-";
-    insta::assert_debug_snapshot!(decompose("rs", source));
-}
-
-/// Verifies that Python functions and classes decompose into expected fragments.
-#[test]
-fn python_decompose_function_and_class() {
-    let source = "\
-def greet(name):
-    \"\"\"Greet someone.\"\"\"
-    print(f'Hello, {name}!')
-
-class Person:
-    def __init__(self, name):
-        self.name = name
-";
-    insta::assert_debug_snapshot!(decompose("py", source));
-}
-
-/// Verifies that TypeScript functions and interfaces decompose into expected fragments.
-#[test]
-fn typescript_decompose_function_and_interface() {
-    let source = "\
-export function greet(name: string): void {
-    console.log(`Hello, ${name}!`);
-}
-
-interface Config {
-    host: string;
-    port: number;
-}
-";
-    insta::assert_debug_snapshot!(decompose("ts", source));
-}
-
-/// Verifies that a Python decorated function decomposes correctly.
-#[test]
-fn python_decorated_function() {
-    insta::assert_debug_snapshot!(decompose("py", "@app.route('/')\ndef index():\n    pass\n"));
-}
-
-/// Verifies that a Python module-level variable is extracted as a fragment.
-#[test]
-fn python_module_variable() {
-    insta::assert_debug_snapshot!(decompose("py", "MAX_SIZE = 100\n"));
-}
-
-/// Verifies that a Python decorated class decomposes correctly.
-#[test]
-fn python_decorated_class() {
-    insta::assert_debug_snapshot!(decompose("py", "@dataclass\nclass Point:\n    x: int\n    y: int\n"));
-}
-
-/// Verifies that a TypeScript const variable is extracted as a fragment.
-#[test]
-fn typescript_const_variable() {
-    insta::assert_debug_snapshot!(decompose("ts", "export const API_URL = 'https://example.com';\n"));
-}
-
-/// Verifies that TSX files use a different tree-sitter grammar than TS.
-#[test]
-fn tsx_uses_different_grammar() {
-    insta::assert_debug_snapshot!(decompose(
-        "tsx",
-        "export function App() {\n    return <div>Hello</div>;\n}\n"
-    ));
-}
-
-/// Verifies that a TypeScript class with methods decomposes correctly.
-#[test]
-fn typescript_class_with_methods() {
-    insta::assert_debug_snapshot!(decompose("ts", "class Greeter {\n    greet() { return 'hi'; }\n}\n"));
-}
-
-/// Verifies that a TypeScript enum declaration decomposes correctly.
-#[test]
-fn typescript_enum_declaration() {
-    insta::assert_debug_snapshot!(decompose(
-        "ts",
-        "export enum Color {\n    Red,\n    Green,\n    Blue,\n}\n"
-    ));
-}
-
-/// Verifies that markdown headings decompose into section fragments.
-#[test]
-fn markdown_decompose_headings() {
-    let source = "\
-# Getting Started
-
-Some intro text.
-
-## Installation
-
-Install with cargo.
-
-## Usage
-
-Run the binary.
-
-# API Reference
-
-Details here.
-";
-    insta::assert_debug_snapshot!(decompose("md", source));
+/// Verifies decomposition snapshots across languages and source shapes.
+#[rstest]
+#[case::rust_function("rust_decompose_function", "rs", "pub fn hello() {}\n")]
+#[case::rust_struct_with_impl(
+    "rust_decompose_struct_with_impl",
+    "rs",
+    "pub struct Foo {\n    x: i32,\n}\n\nimpl Foo {\n    pub fn new() -> Self {\n        Self { x: 0 }\n    }\n}\n"
+)]
+#[case::rust_trait_impl_naming(
+    "rust_trait_impl_naming",
+    "rs",
+    "impl Display for Foo {\n    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { Ok(()) }\n}\n"
+)]
+#[case::python_function_and_class(
+    "python_decompose_function_and_class",
+    "py",
+    "def greet(name):\n    \"\"\"Greet someone.\"\"\"\n    print(f'Hello, {name}!')\n\nclass Person:\n    def __init__(self, name):\n        self.name = name\n"
+)]
+#[case::python_decorated_function("python_decorated_function", "py", "@app.route('/')\ndef index():\n    pass\n")]
+#[case::python_module_variable("python_module_variable", "py", "MAX_SIZE = 100\n")]
+#[case::python_decorated_class("python_decorated_class", "py", "@dataclass\nclass Point:\n    x: int\n    y: int\n")]
+#[case::typescript_function_and_interface(
+    "typescript_decompose_function_and_interface",
+    "ts",
+    "export function greet(name: string): void {\n    console.log(`Hello, ${name}!`);\n}\n\ninterface Config {\n    host: string;\n    port: number;\n}\n"
+)]
+#[case::typescript_const_variable("typescript_const_variable", "ts", "export const API_URL = 'https://example.com';\n")]
+#[case::typescript_class_with_methods(
+    "typescript_class_with_methods",
+    "ts",
+    "class Greeter {\n    greet() { return 'hi'; }\n}\n"
+)]
+#[case::typescript_enum_declaration(
+    "typescript_enum_declaration",
+    "ts",
+    "export enum Color {\n    Red,\n    Green,\n    Blue,\n}\n"
+)]
+#[case::tsx_uses_different_grammar(
+    "tsx_uses_different_grammar",
+    "tsx",
+    "export function App() {\n    return <div>Hello</div>;\n}\n"
+)]
+#[case::markdown_decompose_headings(
+    "markdown_decompose_headings",
+    "md",
+    "# Getting Started\n\nSome intro text.\n\n## Installation\n\nInstall with cargo.\n\n## Usage\n\nRun the binary.\n\n# API Reference\n\nDetails here.\n"
+)]
+fn decompose_snapshots(#[case] snapshot: &str, #[case] ext: &str, #[case] source: &str) {
+    insta::assert_debug_snapshot!(snapshot, decompose(ext, source));
 }
 
 /// Verifies that markdown fragment names are slugified for filesystem mapping.
@@ -170,14 +96,6 @@ Details here.
 fn markdown_fs_mapping_slugified() {
     let frags = decompose_mapped("md", "# Getting Started\n\nText.\n\n## Quick Setup\n\nMore.\n");
     insta::assert_debug_snapshot!(frags);
-}
-
-/// Verifies that a trait impl is named as `TraitName_for_TypeName`.
-#[test]
-fn rust_trait_impl_naming() {
-    let source =
-        "impl Display for Foo {\n    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { Ok(()) }\n}\n";
-    insta::assert_debug_snapshot!(decompose("rs", source));
 }
 
 /// Verifies that Rust use statements are extracted into an Imports fragment.
