@@ -17,8 +17,6 @@
 pub mod actions;
 /// LSP feature definitions and query dispatch.
 pub mod feature;
-/// Formatting helpers for LSP data types.
-mod format;
 /// LSP-powered rename support.
 pub mod rename;
 /// View types for rendering LSP query results.
