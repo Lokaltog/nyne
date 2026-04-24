@@ -16,60 +16,67 @@ fn dummy_diagnostic(message: &str, severity: DiagnosticSeverity) -> Diagnostic {
         ..Default::default()
     }
 }
+/// Spawn a waiter on `waiter_path`, let it park, then publish `diags` on
+/// `publish_path`. Returns `(elapsed, result)` from the waiter thread.
+fn park_waiter_then_publish(
+    store: &Arc<DiagnosticStore>,
+    waiter_path: &'static str,
+    timeout: Duration,
+    publish_path: &Path,
+    diags: Vec<Diagnostic>,
+) -> (Duration, Vec<Diagnostic>) {
+    let store2 = Arc::clone(store);
+    let handle = std::thread::spawn(move || {
+        let start = Instant::now();
+        let result = store2.get_or_wait(Path::new(waiter_path), timeout);
+        (start.elapsed(), result)
+    });
+    std::thread::sleep(Duration::from_millis(50));
+    store.publish(publish_path, diags);
+    handle.join().unwrap()
+}
 
 // SC-1: Clean reads are non-blocking.
-/// Tests that a clean (non-dirty) file returns diagnostics without blocking.
+/// Tests that `get_or_wait` returns immediately for non-dirty queries —
+/// either because the file already has published diagnostics (clean) or
+/// because it's unknown to the store (empty result).
 #[rstest]
-fn clean_file_returns_immediately() {
+#[case::clean_published_file(
+    &[("unused var", DiagnosticSeverity::WARNING)],
+    "/src/main.rs",
+    &["unused var"],
+)]
+#[case::unknown_file(&[], "/no/such/file.rs", &[])]
+fn returns_immediately(
+    #[case] pre_publish: &[(&str, DiagnosticSeverity)],
+    #[case] query_path: &str,
+    #[case] expected_messages: &[&str],
+) {
     let store = DiagnosticStore::new();
-    let path = Path::new("/src/main.rs");
-    let diags = vec![dummy_diagnostic("unused var", DiagnosticSeverity::WARNING)];
-
-    store.publish(path, diags);
-
+    if !pre_publish.is_empty() {
+        let diags = pre_publish.iter().map(|(m, s)| dummy_diagnostic(m, *s)).collect();
+        store.publish(Path::new(query_path), diags);
+    }
     let start = Instant::now();
-    let result = store.get_or_wait(path, Duration::from_secs(2));
+    let result = store.get_or_wait(Path::new(query_path), Duration::from_secs(2));
     assert!(start.elapsed() < Duration::from_millis(10));
-    assert_eq!(result.len(), 1);
-    assert_eq!(result[0].message, "unused var");
+    let actual: Vec<_> = result.iter().map(|d| d.message.as_str()).collect();
+    assert_eq!(actual, expected_messages);
 }
 
 // SC-1 supplement: Unknown file returns empty immediately.
-/// Tests that an unknown file returns empty diagnostics without blocking.
-#[rstest]
-fn unknown_file_returns_empty_immediately() {
-    let store = DiagnosticStore::new();
-    let start = Instant::now();
-    let result = store.get_or_wait(Path::new("/no/such/file.rs"), Duration::from_secs(2));
-    assert!(start.elapsed() < Duration::from_millis(10));
-    assert!(result.is_empty());
-}
-
 // SC-2: Dirty file blocks until publish.
 /// Tests that a dirty file blocks readers until diagnostics are published.
 #[rstest]
 fn dirty_file_blocks_until_publish() {
     let store = Arc::new(DiagnosticStore::new());
     let path = Path::new("/src/lib.rs");
-
     store.mark_dirty(path);
 
-    let store2 = Arc::clone(&store);
-    let handle = std::thread::spawn(move || {
-        let start = Instant::now();
-        let result = store2.get_or_wait(Path::new("/src/lib.rs"), Duration::from_secs(2));
-        (start.elapsed(), result)
-    });
+    let (waited, result) = park_waiter_then_publish(&store, "/src/lib.rs", Duration::from_secs(2), path, vec![
+        dummy_diagnostic("error here", DiagnosticSeverity::ERROR),
+    ]);
 
-    // Let the waiter park on the condvar.
-    std::thread::sleep(Duration::from_millis(50));
-
-    // Publish — should wake the waiter.
-    let diags = vec![dummy_diagnostic("error here", DiagnosticSeverity::ERROR)];
-    store.publish(path, diags);
-
-    let (waited, result) = handle.join().unwrap();
-    // Should unblock well before the 2s timeout.
     assert!(waited < Duration::from_millis(200), "waited {waited:?}");
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].message, "error here");
@@ -138,25 +145,13 @@ fn publish_for_other_file_does_not_unblock() {
     let store = Arc::new(DiagnosticStore::new());
     let path_a = Path::new("/src/a.rs");
     let path_b = Path::new("/src/b.rs");
-
     store.mark_dirty(path_a);
     store.mark_dirty(path_b);
 
-    // Waiter on file A with a short timeout.
-    let store2 = Arc::clone(&store);
-    let handle = std::thread::spawn(move || {
-        let start = Instant::now();
-        let result = store2.get_or_wait(Path::new("/src/a.rs"), Duration::from_millis(200));
-        (start.elapsed(), result)
-    });
+    let (waited, result) = park_waiter_then_publish(&store, "/src/a.rs", Duration::from_millis(200), path_b, vec![
+        dummy_diagnostic("b diag", DiagnosticSeverity::ERROR),
+    ]);
 
-    // Let the waiter park.
-    std::thread::sleep(Duration::from_millis(30));
-
-    // Publish for file B only — should not satisfy file A's waiter.
-    store.publish(path_b, vec![dummy_diagnostic("b diag", DiagnosticSeverity::ERROR)]);
-
-    let (waited, result) = handle.join().unwrap();
     // File A should have timed out (waited ~200ms), not unblocked early.
     assert!(waited >= Duration::from_millis(150), "unblocked too early: {waited:?}");
     assert!(result.is_empty());

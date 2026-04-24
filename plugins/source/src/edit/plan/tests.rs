@@ -36,6 +36,17 @@ fn code_fragment(
         fs_name: Some(name.to_owned()),
     }
 }
+/// Build a single-op `EditPlan` — eliminates the 6-line `EditPlan { ops: vec![...] }`
+/// boilerplate shared by most tests.
+fn single_op_plan(fragment_path: &[&str], kind: EditOpKind, content: &str) -> EditPlan {
+    EditPlan {
+        ops: vec![(0, EditOp {
+            fragment_path: fragment_path.iter().map(|s| (*s).to_owned()).collect(),
+            kind,
+            content: Some(content.to_owned()),
+        })],
+    }
+}
 
 // Issue 3: Replace must use full_span (matching body.rs read range)
 
@@ -47,22 +58,13 @@ fn replace_body_uses_full_span_including_doc_comment() {
     //            ^0              ^16              ^34^36
     // full_span covers doc comment + body: 0..36
     // byte_range covers just the fn node: 16..36
-    let mut frag = code_fragment("foo", SymbolKind::Function, 16..36, Some(0..15), vec![]);
-    frag.signature = Some("fn foo()".to_owned());
+    let frag = code_fragment("foo", SymbolKind::Function, 16..36, Some(0..15), vec![]);
 
-    let plan = EditPlan {
-        ops: vec![(0, EditOp {
-            fragment_path: vec!["foo".to_owned()],
-            kind: EditOpKind::Replace,
-            content: Some("/// New doc\nfn foo() {\n    99\n}\n".to_owned()),
-        })],
-    };
+    let plan = single_op_plan(&["foo"], EditOpKind::Replace, "/// New doc\nfn foo() {\n    99\n}\n");
 
     let resolved = plan.resolve(&[frag], source).unwrap();
     assert_eq!(resolved.len(), 1);
-
     // The resolved range must cover the full_span (0..36), not byte_range (16..36).
-    // line_start_of(source, 0) == 0.
     assert_eq!(
         resolved[0].byte_range,
         0..36,
@@ -73,33 +75,18 @@ fn replace_body_uses_full_span_including_doc_comment() {
     assert_eq!(modified, "/// New doc\nfn foo() {\n    99\n}\n");
 }
 
-/// Verifies that replacing a body with identical content is a no-op.
+/// Verifies that replacing a body with identical content is a no-op
+/// (simulates `cat body.rs > edit/replace`).
 #[rstest]
 fn replace_body_round_trip_is_noop() {
-    // Round-trip: reading the body (full_span) and writing it back via
-    // edit/replace must be a no-op.
     let source = "/// Doc\nfn bar() {}\n";
-    let mut frag = code_fragment("bar", SymbolKind::Function, 8..20, Some(0..7), vec![]);
-    frag.signature = Some("fn bar()".to_owned());
-    let frag = frag;
-
-    // Simulate: body content = source[full_span] (what body.rs returns).
-    let body_content = &source[0..20];
-
-    let plan = EditPlan {
-        ops: vec![(0, EditOp {
-            fragment_path: vec!["bar".to_owned()],
-            kind: EditOpKind::Replace,
-            content: Some(body_content.to_owned()),
-        })],
-    };
+    let frag = code_fragment("bar", SymbolKind::Function, 8..20, Some(0..7), vec![]);
+    // body content = source[full_span] (what body.rs returns).
+    let plan = single_op_plan(&["bar"], EditOpKind::Replace, &source[0..20]);
 
     let resolved = plan.resolve(&[frag], source).unwrap();
     let modified = EditPlan::apply(source, &resolved);
-    assert_eq!(
-        modified, source,
-        "round-trip (cat body.rs > edit/replace) must be a no-op"
-    );
+    assert_eq!(modified, source, "round-trip must be a no-op");
 }
 
 // Issue 4: Append into empty scopes
@@ -109,17 +96,8 @@ fn replace_body_round_trip_is_noop() {
 fn append_into_empty_impl_block() {
     let source = "impl Foo {}\n";
     //            ^0         ^11^12
-    let mut frag = code_fragment("Foo", SymbolKind::Impl, 0..12, None, vec![]);
-    frag.signature = Some("impl Foo".to_owned());
-    let frag = frag;
-
-    let plan = EditPlan {
-        ops: vec![(0, EditOp {
-            fragment_path: vec!["Foo".to_owned()],
-            kind: EditOpKind::Append,
-            content: Some("    fn bar() {}\n".to_owned()),
-        })],
-    };
+    let frag = code_fragment("Foo", SymbolKind::Impl, 0..12, None, vec![]);
+    let plan = single_op_plan(&["Foo"], EditOpKind::Append, "    fn bar() {}\n");
 
     let resolved = plan.resolve(&[frag], source).unwrap();
     assert_eq!(resolved.len(), 1);
@@ -127,7 +105,6 @@ fn append_into_empty_impl_block() {
     assert_eq!(resolved[0].byte_range.start, 10, "should insert before closing brace");
 
     let modified = EditPlan::apply(source, &resolved);
-    // The result should have the method inside the braces.
     assert!(modified.contains("impl Foo {"), "impl header preserved");
     assert!(modified.contains("fn bar()"), "appended method present");
     assert!(modified.ends_with("}\n"), "closing brace preserved");
@@ -139,20 +116,10 @@ fn append_into_scope_with_children_still_works() {
     let source = "impl Foo {\n    fn existing() {}\n}\n";
     //            ^0          ^11               ^30^31^32
     let mut child = code_fragment("existing", SymbolKind::Function, 15..29, None, vec![]);
-    child.signature = Some("fn existing()".to_owned());
     child.parent_name = Some("Foo".to_owned());
+    let frag = code_fragment("Foo", SymbolKind::Impl, 0..32, None, vec![child]);
 
-    let mut frag = code_fragment("Foo", SymbolKind::Impl, 0..32, None, vec![child]);
-    frag.signature = Some("impl Foo".to_owned());
-    let frag = frag;
-
-    let plan = EditPlan {
-        ops: vec![(0, EditOp {
-            fragment_path: vec!["Foo".to_owned()],
-            kind: EditOpKind::Append,
-            content: Some("    fn new_method() {}\n".to_owned()),
-        })],
-    };
+    let plan = single_op_plan(&["Foo"], EditOpKind::Append, "    fn new_method() {}\n");
 
     let resolved = plan.resolve(&[frag], source).unwrap();
     // Should insert after the last child's full_span.end (29).

@@ -47,9 +47,12 @@ fn trim_blocks_and_lstrip() {
     insta::assert_snapshot!(engine.render("test", &view));
 }
 
-/// Tests that the tokens filter formats values below 1k as plain numbers.
+/// Tests that the `tokens` filter converts bytes → tokens (bytes / 4) and formats
+/// below-1k counts as plain numbers, at-or-above-1k with decimal notation.
 #[rstest]
-fn tokens_filter_below_1k() {
+#[case::below_1k(3400, "~850")]
+#[case::above_1k(8400, "~2.1k")]
+fn tokens_filter(#[case] bytes: usize, #[case] expected: &str) {
     let engine = engine_with_fixture("tokens.j2");
 
     #[derive(Serialize)]
@@ -57,22 +60,7 @@ fn tokens_filter_below_1k() {
         count: usize,
     }
 
-    // Filter converts bytes → tokens (bytes / 4), so 3400 bytes → 850 tokens.
-    insta::assert_snapshot!(engine.render("test", &V { count: 3400 }));
-}
-
-/// Tests that the tokens filter formats values above 1k with decimal notation.
-#[rstest]
-fn tokens_filter_above_1k() {
-    let engine = engine_with_fixture("tokens.j2");
-
-    #[derive(Serialize)]
-    struct V {
-        count: usize,
-    }
-
-    // Filter converts bytes → tokens (bytes / 4), so 8400 bytes → 2100 tokens.
-    insta::assert_snapshot!(engine.render("test", &V { count: 8400 }));
+    assert_eq!(engine.render("test", &V { count: bytes }).trim(), expected);
 }
 
 /// Static view via `serialize_view` — the simple path.
