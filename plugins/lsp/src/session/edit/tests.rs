@@ -70,29 +70,38 @@ fn empty_workspace_edit() -> WorkspaceEdit {
     }
 }
 
-/// Tests applying a single replacement to one file.
+/// Verifies that [`apply_workspace_edit`] applied to a single-file edit produces
+/// the expected final file content across every supported edit shape.
 #[rstest]
-fn single_file_single_edit() {
-    let (_tmp, path) = tempfile_with("hello world");
-    let edit = single_file_edit(&path, vec![text_edit(0, 0, 0, 5, "goodbye")]);
-
+#[case::single_edit(
+    "hello world",
+    vec![text_edit(0, 0, 0, 5, "goodbye")],
+    "goodbye world",
+)]
+#[case::multiple_edits(
+    "aaa bbb ccc",
+    vec![text_edit(0, 0, 0, 3, "xxx"), text_edit(0, 8, 0, 11, "zzz")],
+    "xxx bbb zzz",
+)]
+#[case::multiline(
+    "line one\nline two\nline three",
+    vec![text_edit(1, 5, 1, 8, "TWO"), text_edit(2, 5, 2, 10, "THREE")],
+    "line one\nline TWO\nline THREE",
+)]
+#[case::insert_at_position("ab", vec![text_edit(0, 1, 0, 1, "X")], "aXb")]
+#[case::delete_range("hello world", vec![text_edit(0, 5, 0, 11, "")], "hello")]
+// 'a' + emoji (U+1F600, 4 bytes UTF-8, 2 UTF-16 code units) + 'b'.
+// Replace 'b' which sits at UTF-16 offset 3 (after 'a'=1 + emoji=2).
+#[case::utf16_surrogate(
+    "a\u{1F600}b",
+    vec![text_edit(0, 3, 0, 4, "Z")],
+    "a\u{1F600}Z",
+)]
+fn apply_workspace_edit_single_file(#[case] content: &str, #[case] edits: Vec<TextEdit>, #[case] expected: &str) {
+    let (_tmp, path) = tempfile_with(content);
+    let edit = single_file_edit(&path, edits);
     apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "goodbye world");
-}
-
-/// Tests applying multiple replacements to the same file.
-#[rstest]
-fn single_file_multiple_edits() {
-    let (_tmp, path) = tempfile_with("aaa bbb ccc");
-
-    // Replace "aaa" with "xxx" and "ccc" with "zzz" in the same file.
-    let edit = single_file_edit(&path, vec![
-        text_edit(0, 0, 0, 3, "xxx"),
-        text_edit(0, 8, 0, 11, "zzz"),
-    ]);
-
-    apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "xxx bbb zzz");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), expected);
 }
 
 /// Tests applying edits across multiple files simultaneously.
@@ -111,45 +120,6 @@ fn multiple_files() {
     assert_eq!(std::fs::read_to_string(&path2).unwrap(), "file TWO");
 }
 
-/// Tests applying edits on different lines of the same file.
-#[rstest]
-fn multiline_edits() {
-    let (_tmp, path) = tempfile_with("line one\nline two\nline three");
-
-    // Replace "two" on line 1 and "three" on line 2.
-    let edit = single_file_edit(&path, vec![
-        text_edit(1, 5, 1, 8, "TWO"),
-        text_edit(2, 5, 2, 10, "THREE"),
-    ]);
-
-    apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "line one\nline TWO\nline THREE");
-}
-
-/// Tests inserting text at a position using an empty range.
-#[rstest]
-fn insert_at_position() {
-    let (_tmp, path) = tempfile_with("ab");
-
-    // Insert "X" between "a" and "b" (empty range = insertion).
-    let edit = single_file_edit(&path, vec![text_edit(0, 1, 0, 1, "X")]);
-
-    apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "aXb");
-}
-
-/// Tests deleting a range by replacing it with empty text.
-#[rstest]
-fn delete_range() {
-    let (_tmp, path) = tempfile_with("hello world");
-
-    // Delete " world" (empty new_text = deletion).
-    let edit = single_file_edit(&path, vec![text_edit(0, 5, 0, 11, "")]);
-
-    apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
-}
-
 /// Tests that an empty workspace edit succeeds without error.
 #[rstest]
 fn empty_edit_warns_but_succeeds() {
@@ -157,107 +127,80 @@ fn empty_edit_warns_but_succeeds() {
     apply_workspace_edit(&empty_workspace_edit(), &passthrough_resolver()).unwrap();
 }
 
-/// Tests that edits handle UTF-16 surrogate positions correctly.
+/// Verifies [`apply_edits_to_rope`] applied to in-memory content produces the
+/// expected resulting string across the full range of edit shapes. `None` in
+/// `expected` means the call should error (out of range).
 #[rstest]
-fn utf16_surrogate_positions() {
-    // 'a' + emoji (U+1F600, 4 bytes UTF-8, 2 code units UTF-16) + 'b'
-    let (_tmp, path) = tempfile_with("a\u{1F600}b");
-
-    // Replace 'b' which is at UTF-16 offset 3 (after 'a'=1 + emoji=2).
-    let edit = single_file_edit(&path, vec![text_edit(0, 3, 0, 4, "Z")]);
-
-    apply_workspace_edit(&edit, &passthrough_resolver()).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "a\u{1F600}Z");
+#[case::single_replacement("hello world", vec![text_edit(0, 0, 0, 5, "goodbye")], Some("goodbye world"))]
+#[case::multiple_reverse_order(
+    "aaa bbb ccc",
+    vec![text_edit(0, 0, 0, 3, "xxx"), text_edit(0, 8, 0, 11, "zzz")],
+    Some("xxx bbb zzz"),
+)]
+#[case::insertion("ab", vec![text_edit(0, 1, 0, 1, "X")], Some("aXb"))]
+#[case::deletion("hello world", vec![text_edit(0, 5, 0, 11, "")], Some("hello"))]
+#[case::multiline(
+    "line one\nline two\nline three",
+    vec![text_edit(1, 5, 1, 8, "TWO"), text_edit(2, 5, 2, 10, "THREE")],
+    Some("line one\nline TWO\nline THREE"),
+)]
+#[case::out_of_range_errors("short", vec![text_edit(5, 0, 5, 1, "x")], None)]
+fn apply_edits_to_rope_cases(
+    #[case] content: &str,
+    #[case] edits: Vec<TextEdit>,
+    #[case] expected: Option<&str>,
+) {
+    let refs: Vec<&TextEdit> = edits.iter().collect();
+    let mut edits_refs = refs;
+    let result = apply_edits_to_rope(content, &mut edits_refs);
+    match expected {
+        Some(want) => assert_eq!(result.unwrap(), want),
+        None => assert!(result.is_err()),
+    }
 }
 
-/// Tests that a single rope replacement applies correctly.
+/// Verifies [`resolve_edits`] applied to a single-file edit produces exactly
+/// one result whose `modified` content matches expectations. When
+/// `expected_original` is `Some`, it is also asserted verbatim.
 #[rstest]
-fn rope_single_replacement() {
-    let content = "hello world";
-    let edit = text_edit(0, 0, 0, 5, "goodbye");
-    let mut edits = vec![&edit];
-    let result = apply_edits_to_rope(content, &mut edits).unwrap();
-    assert_eq!(result, "goodbye world");
-}
-
-/// Tests that multiple rope edits are applied in reverse order correctly.
-#[rstest]
-fn rope_multiple_edits_reverse_order() {
-    let content = "aaa bbb ccc";
-    let e1 = text_edit(0, 0, 0, 3, "xxx");
-    let e2 = text_edit(0, 8, 0, 11, "zzz");
-    let mut edits = vec![&e1, &e2];
-    let result = apply_edits_to_rope(content, &mut edits).unwrap();
-    assert_eq!(result, "xxx bbb zzz");
-}
-
-/// Tests rope insertion at a zero-width range.
-#[rstest]
-fn rope_insertion() {
-    let content = "ab";
-    let edit = text_edit(0, 1, 0, 1, "X");
-    let mut edits = vec![&edit];
-    let result = apply_edits_to_rope(content, &mut edits).unwrap();
-    assert_eq!(result, "aXb");
-}
-
-/// Tests rope deletion with empty replacement text.
-#[rstest]
-fn rope_deletion() {
-    let content = "hello world";
-    let edit = text_edit(0, 5, 0, 11, "");
-    let mut edits = vec![&edit];
-    let result = apply_edits_to_rope(content, &mut edits).unwrap();
-    assert_eq!(result, "hello");
-}
-
-/// Tests rope edits spanning multiple lines.
-#[rstest]
-fn rope_multiline() {
-    let content = "line one\nline two\nline three";
-    let e1 = text_edit(1, 5, 1, 8, "TWO");
-    let e2 = text_edit(2, 5, 2, 10, "THREE");
-    let mut edits = vec![&e1, &e2];
-    let result = apply_edits_to_rope(content, &mut edits).unwrap();
-    assert_eq!(result, "line one\nline TWO\nline THREE");
-}
-
-/// Tests that an out-of-range rope edit returns an error.
-#[rstest]
-fn rope_out_of_range_returns_error() {
-    let content = "short";
-    let edit = text_edit(5, 0, 5, 1, "x");
-    let mut edits = vec![&edit];
-    assert!(apply_edits_to_rope(content, &mut edits).is_err());
-}
-
-/// Tests that a single-file edit resolves to the correct modified content.
-#[rstest]
-fn resolve_single_file_single_edit() {
-    let (_tmp, path) = tempfile_with("hello world\n");
-
-    let edit = single_file_edit(&path, vec![text_edit(0, 0, 0, 5, "goodbye")]);
+#[case::single_edit(
+    "hello world\n",
+    vec![text_edit(0, 0, 0, 5, "goodbye")],
+    Some("hello world\n"),
+    "goodbye world\n",
+)]
+#[case::multiple_edits(
+    "aaa bbb ccc\n",
+    vec![text_edit(0, 0, 0, 3, "xxx"), text_edit(0, 8, 0, 11, "zzz")],
+    Some("aaa bbb ccc\n"),
+    "xxx bbb zzz\n",
+)]
+#[case::insertion(
+    "line one\nline two\n",
+    vec![text_edit(1, 0, 1, 0, "inserted\n")],
+    None,
+    "line one\ninserted\nline two\n",
+)]
+#[case::deletion(
+    "keep\nremove\ntrailing\n",
+    vec![text_edit(1, 0, 2, 0, "")],
+    None,
+    "keep\ntrailing\n",
+)]
+fn resolve_edits_single_file(
+    #[case] content: &str,
+    #[case] edits: Vec<TextEdit>,
+    #[case] expected_original: Option<&str>,
+    #[case] expected_modified: &str,
+) {
+    let (_tmp, path) = tempfile_with(content);
+    let edit = single_file_edit(&path, edits);
     let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
-
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].original, "hello world\n");
-    assert_eq!(results[0].modified, "goodbye world\n");
-}
-
-/// Tests that multiple edits in one file resolve to combined modified content.
-#[rstest]
-fn resolve_multi_edit_single_file() {
-    let (_tmp, path) = tempfile_with("aaa bbb ccc\n");
-
-    let edit = single_file_edit(&path, vec![
-        text_edit(0, 0, 0, 3, "xxx"),
-        text_edit(0, 8, 0, 11, "zzz"),
-    ]);
-    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
-
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].original, "aaa bbb ccc\n");
-    assert_eq!(results[0].modified, "xxx bbb zzz\n");
+    if let Some(original) = expected_original {
+        assert_eq!(results[0].original, original);
+    }
+    assert_eq!(results[0].modified, expected_modified);
 }
 
 /// Tests that edits across multiple files resolve to per-file results.
@@ -276,32 +219,6 @@ fn resolve_multiple_files() {
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].modified, "file ONE\n");
     assert_eq!(results[1].modified, "file TWO\n");
-}
-
-/// Tests that a pure insertion resolves to modified content with the new line.
-#[rstest]
-fn resolve_insertion_only() {
-    let (_tmp, path) = tempfile_with("line one\nline two\n");
-
-    // Insert a new line between line one and line two.
-    let edit = single_file_edit(&path, vec![text_edit(1, 0, 1, 0, "inserted\n")]);
-    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
-
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].modified, "line one\ninserted\nline two\n");
-}
-
-/// Tests that a pure deletion resolves to modified content without the removed line.
-#[rstest]
-fn resolve_deletion_only() {
-    let (_tmp, path) = tempfile_with("keep\nremove\ntrailing\n");
-
-    // Delete the second line entirely (line 1 through start of line 2).
-    let edit = single_file_edit(&path, vec![text_edit(1, 0, 2, 0, "")]);
-    let results = resolve_edits(&edit, &passthrough_resolver()).unwrap();
-
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].modified, "keep\ntrailing\n");
 }
 
 /// Tests that an empty workspace edit resolves to no results.
