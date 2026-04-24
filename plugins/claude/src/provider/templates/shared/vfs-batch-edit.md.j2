@@ -26,13 +26,9 @@ cat {{ paths.sym("source." ~ ext, "Baz", ext) }} > {{ paths.edit_stage("file." ~
 # Remove original symbols from the source file with `rmdir` or staged delete:
 rmdir {{ paths.sym_dir("source." ~ ext, "Foo") }} {{ paths.sym_dir("source." ~ ext, "Bar") }}
 
-# Apply / clear — mount-wide
-rm {{ paths.edit_staged_diff() }}        # apply all staged edits atomically
->  {{ paths.edit_staged_diff() }}        # clear all staged edits
-
-# Apply / clear — scoped to one file
-rm {{ paths.edit_staged_diff_for("file." ~ ext) }}    # apply only this file's ops
->  {{ paths.edit_staged_diff_for("file." ~ ext) }}    # clear only this file's ops
+# Apply / clear:
+rm {{ paths.edit_staged_diff() }} # apply all staged edits atomically
+>  {{ paths.edit_staged_diff() }} # clear all staged edits
 ```
 
 Apply returns an error if tree-sitter validation fails — no need to preview first.
