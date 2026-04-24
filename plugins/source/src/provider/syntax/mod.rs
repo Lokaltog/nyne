@@ -25,8 +25,7 @@ use crate::syntax::spec::Decomposer;
 mod content;
 /// Symbol lookup by shorthand, line number, and rename preview.
 mod lookup;
-/// Trailing newline decoration for symbol body reads and writes.
-mod newline;
+
 /// Symbol directory resolution — inventory, fragments, and LSP links.
 mod resolve;
 /// Route tree and handler/content functions.
