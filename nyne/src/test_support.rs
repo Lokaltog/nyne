@@ -141,6 +141,34 @@ pub struct StubWritable;
 impl Writable for StubWritable {
     fn write(&self, _ctx: &WriteContext<'_>, _data: &[u8]) -> Result<AffectedFiles> { Ok(vec![]) }
 }
+/// A writable that records every byte payload written to it.
+///
+/// Use when a test needs to assert on the data a splicing or middleware
+/// writable forwarded downstream. [`last_write`] returns the most recent
+/// buffer as a UTF-8 string (panicking on non-UTF-8 for test ergonomics).
+#[derive(Default)]
+pub struct RecordingWritable(std::sync::Mutex<Vec<u8>>);
+
+impl RecordingWritable {
+    /// Construct an empty recorder.
+    pub fn new() -> Self { Self::default() }
+
+    /// Return the last recorded write as a UTF-8 string.
+    pub fn last_write(&self) -> String {
+        String::from_utf8(self.0.lock().unwrap().clone()).expect("recorded write is valid UTF-8")
+    }
+
+    /// Return the last recorded write as raw bytes.
+    pub fn last_write_bytes(&self) -> Vec<u8> { self.0.lock().unwrap().clone() }
+}
+
+impl Writable for RecordingWritable {
+    fn write(&self, _ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {
+        *self.0.lock().unwrap() = data.to_vec();
+        Ok(vec![])
+    }
+}
+
 
 /// A provider that stops the chain and emits `stopped.txt`.
 pub struct StoppingProvider {

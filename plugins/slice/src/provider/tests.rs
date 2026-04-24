@@ -1,8 +1,7 @@
 use std::path::Path;
-use std::sync::Mutex;
 
-use nyne::router::{AffectedFiles, ReadContext, Readable, Writable, WriteContext};
-use nyne::test_support::StubFs;
+use nyne::router::{AffectedFiles, Writable, WriteContext};
+use nyne::test_support::{RecordingWritable, StubFs, StubReadable};
 use rstest::rstest;
 
 use super::*;
@@ -52,27 +51,10 @@ fn line_range(
     assert_eq!(spec.line_range(line_count), expected);
 }
 
-/// Static readable that returns fixed content.
-struct MockReadable(Vec<u8>);
-
-impl Readable for MockReadable {
-    fn read(&self, _ctx: &ReadContext<'_>) -> Result<Vec<u8>> { Ok(self.0.clone()) }
-}
-
-/// Writable that records the data it receives.
-struct MockWritable(Mutex<Vec<u8>>);
-
-impl Writable for MockWritable {
-    fn write(&self, _ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {
-        *self.0.lock().unwrap() = data.to_vec();
-        Ok(vec![])
-    }
-}
-
-fn make_splice(content: &str, start: usize, end: Option<usize>) -> (DefaultSplicingWritable, Arc<MockWritable>) {
-    let writable = Arc::new(MockWritable(Mutex::new(vec![])));
+fn make_splice(content: &str, start: usize, end: Option<usize>) -> (DefaultSplicingWritable, Arc<RecordingWritable>) {
+    let writable = Arc::new(RecordingWritable::new());
     let splice = DefaultSplicingWritable {
-        readable: Arc::new(MockReadable(content.as_bytes().to_vec())),
+        readable: Arc::new(StubReadable::new(content)),
         writable: Arc::clone(&writable) as Arc<dyn Writable>,
         start,
         end,
@@ -89,8 +71,6 @@ fn do_write(splice: &DefaultSplicingWritable, data: &str) -> Result<AffectedFile
     splice.write(&ctx, data.as_bytes())
 }
 
-fn written(mock: &MockWritable) -> String { String::from_utf8(mock.0.lock().unwrap().clone()).unwrap() }
-
 #[rstest]
 #[case::replace_single_line("aaa\nbbb\nccc\n", 2, None, "XXX", "aaa\nXXX\nccc\n")]
 #[case::replace_range("aaa\nbbb\nccc\nddd\n", 2, Some(3), "XXX\nYYY", "aaa\nXXX\nYYY\nddd\n")]
@@ -106,5 +86,5 @@ fn default_splicing_writable(
 ) {
     let (splice, mock) = make_splice(content, start, end);
     do_write(&splice, new_data).unwrap();
-    assert_eq!(written(&mock), expected);
+    assert_eq!(mock.last_write(), expected);
 }
