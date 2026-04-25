@@ -182,10 +182,7 @@ impl ProgressTracker {
     pub(super) fn note_begin(&self, token: NumberOrString) {
         debug!(target: "nyne::lsp", server = %self.server_name, ?token, "progress begin");
         match &mut *self.state.lock() {
-            State::Uninitialized { open } => {
-                open.insert(token);
-            }
-            State::Indexing(Indexing::Active { open }) => {
+            State::Uninitialized { open } | State::Indexing(Indexing::Active { open }) => {
                 open.insert(token);
             }
             State::Indexing(idx) => {
@@ -281,50 +278,56 @@ impl ProgressTracker {
         if !matches!(*state, State::Indexing(_)) {
             return true;
         }
-        let deadline = Instant::now() + timeout;
+        let start = Instant::now();
         loop {
+            // Single deadline check for the whole function: every
+            // path through the loop forces `Ready` on timeout, so
+            // centralizing the comparison keeps the arm bodies flat.
+            // `filter(!is_zero)` handles the exact-deadline boundary
+            // (Duration::ZERO would otherwise spin one extra round).
+            let Some(remaining) = timeout.checked_sub(start.elapsed()).filter(|d| !d.is_zero()) else {
+                self.force_ready(&mut state, timeout);
+                return false;
+            };
+            // Quiescent -> Ready transition: lifted above the match so
+            // the match arms are pure "what to wait on", not "what to
+            // wait on plus what to do after." A let-chain keeps the
+            // predicate flat without an extra block level.
+            if let State::Indexing(Indexing::Quiescent { since }) = &*state
+                && since.elapsed() >= self.debounce
+            {
+                info!(target: "nyne::lsp", server = %self.server_name, "indexed");
+                *state = State::Ready;
+                self.cv.notify_all();
+                return true;
+            }
             match &*state {
                 State::Uninitialized { .. } | State::Ready | State::Shutdown => return true,
+                // Active: pure wait. Any post-wait outcome (timeout,
+                // moved to Quiescent, moved to Ready, shutdown) is
+                // handled by the next iteration's deadline check and
+                // hoisted transition above — so no `if .timed_out()`
+                // branch here.
                 State::Indexing(Indexing::Active { .. }) => {
-                    let now = Instant::now();
-                    if now >= deadline {
-                        self.force_ready(&mut state, timeout);
-                        return false;
-                    }
-                    if self
-                        .cv
-                        .wait_while_for(
-                            &mut state,
-                            |s| matches!(s, State::Indexing(Indexing::Active { .. })),
-                            deadline - now,
-                        )
-                        .timed_out()
-                    {
-                        self.force_ready(&mut state, timeout);
-                        return false;
-                    }
+                    self.cv.wait_while_for(
+                        &mut state,
+                        |s| matches!(s, State::Indexing(Indexing::Active { .. })),
+                        remaining,
+                    );
                 }
+                // Quiescent: wait the remainder of the debounce window,
+                // capped by the grace deadline. A new `Begin` flips
+                // `Quiescent -> Active` and breaks the predicate early.
+                // `saturating_sub` is safe-by-construction (the hoisted
+                // `elapsed >= debounce` guard above already returned).
                 State::Indexing(Indexing::Quiescent { since }) => {
+                    // Compute elapsed first so the immutable borrow on
+                    // `state` ends before the `&mut state` below.
                     let elapsed = since.elapsed();
-                    if elapsed >= self.debounce {
-                        info!(target: "nyne::lsp", server = %self.server_name, "indexed");
-                        *state = State::Ready;
-                        self.cv.notify_all();
-                        return true;
-                    }
-                    let now = Instant::now();
-                    if now >= deadline {
-                        self.force_ready(&mut state, timeout);
-                        return false;
-                    }
-                    // Wait the remainder of the debounce window, but
-                    // not past the grace deadline. A new `Begin` flips
-                    // `Quiescent -> Active` and breaks the predicate
-                    // early; we then re-check from the top.
                     self.cv.wait_while_for(
                         &mut state,
                         |s| matches!(s, State::Indexing(Indexing::Quiescent { .. })),
-                        self.debounce.checked_sub(elapsed).unwrap().min(deadline - now),
+                        self.debounce.saturating_sub(elapsed).min(remaining),
                     );
                 }
             }
