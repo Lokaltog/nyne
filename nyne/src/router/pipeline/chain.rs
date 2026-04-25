@@ -5,6 +5,7 @@ use std::sync::Arc;
 use color_eyre::eyre::Result;
 
 use crate::router::{Op, Provider, ProviderId, Request};
+use crate::topo;
 
 /// Continuation handle — invoke to run the remaining providers in the chain.
 pub struct Next<'a> {
@@ -108,7 +109,7 @@ fn topological_sort(providers: &[Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provi
 }
 
 fn sort_by_deps(providers: &[&Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provider>>> {
-    let topo = crate::topo::sort(providers, |p| vec![p.id()], |p| p.dependencies().to_vec()).map_err(|c| {
+    let topo = topo::sort(providers, |p| vec![p.id()], |p| p.dependencies().to_vec()).map_err(|c| {
         color_eyre::eyre::eyre!(
             "dependency cycle detected involving provider {:?}",
             providers.get(c.cycle_item).map_or("unknown", |p| p.id().as_str())
@@ -125,7 +126,7 @@ fn sort_by_deps(providers: &[&Arc<dyn Provider>]) -> Result<Vec<Arc<dyn Provider
         .filter_map(|&idx| {
             let provider = providers.get(idx)?;
             Some((
-                topo.depths[idx],
+                topo.depths.get(idx).copied()?,
                 provider.priority(),
                 provider.id(),
                 Arc::clone(provider),

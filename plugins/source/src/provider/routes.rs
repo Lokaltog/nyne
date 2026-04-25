@@ -333,6 +333,7 @@ impl SyntaxProvider {
     /// Only the `edit/` sub-route accepts creates; other sub-routes fall
     /// through to the chain so downstream plugins (e.g. the `fs` plugin)
     /// can handle real file creates if they choose.
+    #[allow(clippy::unnecessary_wraps, reason = "signature dictated by on_create callback API")]
     pub(super) fn fragment_create(&self, ctx: &RouteCtx, req: &mut Request, name: &str) -> Result<()> {
         let Some(sf) = req.source_file() else {
             return Ok(());

@@ -148,6 +148,7 @@ impl ResolvedFragment {
     pub const fn shared(&self) -> &Arc<DecomposedSource> { &self.shared }
 
     /// The fragment at [`Self::segments`]. Guaranteed to exist by construction.
+    #[expect(clippy::expect_used, reason = "fragment existence validated during resolve")]
     pub fn fragment(&self) -> &super::fragment::Fragment {
         super::find_fragment(&self.shared.decomposed, &self.segments)
             .expect("ResolvedFragment invariant: fragment existence validated during resolve")

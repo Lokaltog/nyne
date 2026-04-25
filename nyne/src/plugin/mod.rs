@@ -22,6 +22,7 @@
 //! nyne::register_plugin!(MyPlugin);
 //! ```
 
+use color_eyre::eyre::eyre;
 use linkme::distributed_slice;
 
 pub use self::config::PluginConfig;
@@ -29,6 +30,7 @@ use crate::config::NyneConfig;
 use crate::dispatch::script::ScriptEntry;
 use crate::prelude::*;
 use crate::router::Provider;
+use crate::topo;
 
 /// Everything a plugin contributes after activation.
 ///
@@ -241,7 +243,7 @@ macro_rules! register_plugin {
 /// then topologically sorts plugins so dependencies activate first.
 #[allow(clippy::indexing_slicing)] // graph node weights are always valid plugin indices
 pub fn sort_by_deps(plugins: Vec<Box<dyn Plugin>>) -> Result<Vec<Box<dyn Plugin>>> {
-    let topo = crate::topo::sort(
+    let topo = topo::sort(
         &plugins,
         |p| p.provider_graph().iter().map(|&(id, _)| id).collect(),
         |p| {
@@ -251,7 +253,7 @@ pub fn sort_by_deps(plugins: Vec<Box<dyn Plugin>>) -> Result<Vec<Box<dyn Plugin>
                 .collect()
         },
     )
-    .map_err(|c| color_eyre::eyre::eyre!("plugin dependency cycle involving {:?}", plugins[c.cycle_item].id()))?;
+    .map_err(|c| eyre!("plugin dependency cycle involving {:?}", plugins[c.cycle_item].id()))?;
 
     let mut slots: Vec<_> = plugins.into_iter().map(Some).collect();
     Ok(topo.order.iter().filter_map(|&i| slots[i].take()).collect())

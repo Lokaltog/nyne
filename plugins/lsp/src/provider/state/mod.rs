@@ -106,13 +106,13 @@ impl LspState {
         let fragment_path = resolved.segments_arc();
         let source = resolved.shared().source.clone();
         let name_byte_offset = resolved.fragment().span.name_byte_offset;
-        let resolver = self.decomposition.resolver(resolved.into_source_file());
+        let frag_resolver = self.decomposition.resolver(resolved.into_source_file());
         Some(
             self.handles
                 .features
                 .get(feature.handle_index())?
                 .lazy_node(feature.file_name(), move |engine, tmpl| {
-                    let slr = resolver
+                    let slr = frag_resolver
                         .line_range(&fragment_path)?
                         .ok_or_else(|| eyre!("symbol no longer exists in source"))?;
                     let line_range = (slr.start - 1)..slr.end;

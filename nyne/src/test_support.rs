@@ -5,8 +5,8 @@
 //! duplicate these in individual test modules.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 use anymap2::SendSyncAnyMap;
 use color_eyre::eyre::{Result, bail};
@@ -15,8 +15,8 @@ use crate::config::NyneConfig;
 use crate::dispatch::activation::ActivationContext;
 use crate::process::{ProcessNameCache, Spawner};
 use crate::router::{
-    AffectedFiles, DirEntry, Filesystem, MemFs, Metadata, Next, Node, Provider, ProviderId, ProviderMeta, ReadContext,
-    Readable, Request, Writable, WriteContext,
+    AffectedFiles, DirEntry, Filesystem, MemFs, Metadata, Next, Node, Op, Provider, ProviderId, ProviderMeta,
+    ReadContext, Readable, Request, Writable, WriteContext,
 };
 
 /// Stub [`Filesystem`] — all methods bail. Use when the test never touches
@@ -111,6 +111,7 @@ impl StubReadable {
     }
 
     /// Attach a backing path so the readable reports as file-backed.
+    #[must_use]
     pub fn with_backing(mut self, path: impl Into<PathBuf>) -> Self {
         self.backing_path = Some(path.into());
         self
@@ -149,22 +150,29 @@ impl Writable for StubWritable {
 /// writable forwarded downstream. [`last_write`] returns the most recent
 /// buffer as a UTF-8 string (panicking on non-UTF-8 for test ergonomics).
 #[derive(Default)]
-pub struct RecordingWritable(std::sync::Mutex<Vec<u8>>);
+pub struct RecordingWritable(Mutex<Vec<u8>>);
 
 impl RecordingWritable {
     /// Construct an empty recorder.
     pub fn new() -> Self { Self::default() }
 
     /// Return the last recorded write as a UTF-8 string.
+    #[expect(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        reason = "test fixture: panic on poisoned mutex / non-UTF-8"
+    )]
     pub fn last_write(&self) -> String {
         String::from_utf8(self.0.lock().unwrap().clone()).expect("recorded write is valid UTF-8")
     }
 
     /// Return the last recorded write as raw bytes.
+    #[expect(clippy::unwrap_used, reason = "test fixture: panic on poisoned mutex")]
     pub fn last_write_bytes(&self) -> Vec<u8> { self.0.lock().unwrap().clone() }
 }
 
 impl Writable for RecordingWritable {
+    #[expect(clippy::unwrap_used, reason = "test fixture: panic on poisoned mutex")]
     fn write(&self, _ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {
         *self.0.lock().unwrap() = data.to_vec();
         Ok(vec![])
@@ -211,4 +219,4 @@ pub fn test_read_ctx() -> ReadContext<'static> {
 }
 /// Create a [`Request`] for a `Readdir` operation at `path`.
 #[must_use]
-pub fn readdir_req(path: &str) -> Request { Request::new(PathBuf::from(path), crate::router::Op::Readdir) }
+pub fn readdir_req(path: &str) -> Request { Request::new(PathBuf::from(path), Op::Readdir) }

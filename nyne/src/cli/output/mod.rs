@@ -12,7 +12,8 @@
 
 use std::sync::LazyLock;
 
-pub(super) use comfy_table::{Attribute, Cell, Color, Table};
+pub(super) use comfy_table::presets::UTF8_FULL;
+pub(super) use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
 pub(super) use console::{Term, style};
 
 /// Return a stdout terminal handle for CLI output.
@@ -38,8 +39,8 @@ pub(super) fn term() -> &'static Term {
 /// and `.add_attribute(Attribute::Bold)` for header emphasis.
 pub(super) fn new_table() -> Table {
     let mut t = Table::new();
-    t.load_preset(comfy_table::presets::UTF8_FULL)
-        .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+    t.load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::Dynamic);
     t
 }
 

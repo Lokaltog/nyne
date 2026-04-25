@@ -5,6 +5,7 @@
 //! LSP, etc.) into it during the activation phase, and providers clone an
 //! `Arc<ActivationContext>` to access those services at request time.
 
+use std::any;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -99,7 +100,7 @@ impl ActivationContext {
         self.extensions.get::<T>().ok_or_else(|| {
             eyre!(
                 "required service `{}` missing from ActivationContext — check provider_graph dependencies",
-                std::any::type_name::<T>(),
+                any::type_name::<T>(),
             )
         })
     }

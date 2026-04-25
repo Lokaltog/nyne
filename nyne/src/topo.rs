@@ -91,6 +91,10 @@ where
 }
 
 /// Depth (longest path from any root) for each item position.
+#[allow(
+    clippy::indexing_slicing,
+    reason = "node weights are item indices in [0, n_items); depths is sized to n_items"
+)]
 fn compute_depths(graph: &DiGraph<usize, ()>, topo_order: &[NodeIndex], n_items: usize) -> Vec<usize> {
     let mut depths = vec![0usize; n_items];
     for &node in topo_order {

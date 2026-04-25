@@ -60,9 +60,9 @@ impl Plugin for AnalysisPlugin {
                 let file_analysis = file_analysis.clone();
                 ext.content(move |ctx: &RouteCtx, req: &Request| -> Option<NamedNode> {
                     let resolved = decomposition.resolve_from_ctx(ctx, req)?;
-                    let resolver = decomposition.resolver(resolved.into_source_file());
+                    let frag_resolver = decomposition.resolver(resolved.into_source_file());
                     Some(tmpl.named_node(&file_analysis, provider::Content {
-                        resolver,
+                        resolver: frag_resolver,
                         engine: Arc::clone(&engine),
                     }))
                 });

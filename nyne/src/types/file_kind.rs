@@ -33,7 +33,7 @@ pub enum FileKind {
 impl From<FileType> for FileKind {
     /// Routes through [`NodeKind::from(FileType)`] to keep the
     /// directory/symlink/file classification in a single place.
-    fn from(ft: FileType) -> Self { crate::types::NodeKind::from(ft).into() }
+    fn from(ft: FileType) -> Self { NodeKind::from(ft).into() }
 }
 
 impl From<NodeKind> for FileKind {

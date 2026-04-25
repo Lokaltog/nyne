@@ -47,8 +47,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use color_eyre::eyre::Result;
-use nyne::router::{AffectedFiles, Writable, WriteContext};
-use nyne_diff::{DiffSource, FileEditResult, ValidationResult};
+use nyne::router::{AffectedFiles, Filesystem, NamedNode, Node, Request, Writable, WriteContext};
+use nyne_diff::{DiffRequest, DiffSource, FileEditResult, ValidationResult};
 use parking_lot::Mutex;
 
 use crate::edit::plan::{EditOp, EditOpKind, EditPlan};
@@ -171,8 +171,8 @@ impl EditStaging {
     /// SSOT for "what the `staged.diff` node looks like" — consumed by
     /// both the mount-root extension registration (`scope = None`) and
     /// the per-file fragment route (`scope = Some(source_file)`).
-    pub fn staged_diff_node(&self, scope: Option<PathBuf>, name: &str) -> nyne::router::NamedNode {
-        nyne::router::Node::file()
+    pub fn staged_diff_node(&self, scope: Option<PathBuf>, name: &str) -> NamedNode {
+        Node::file()
             .with_writable(ClearWritable {
                 staging: self.clone(),
                 scope,
@@ -245,8 +245,7 @@ impl BatchEditAction {
     /// Single source of truth for surfacing the diff capability — used
     /// by both the mount-root registration and the per-file fragment
     /// route.
-    pub fn attach_to(&self, req: &mut nyne::router::Request, fs: &Arc<dyn nyne::router::Filesystem>, name: &str) {
-        use nyne_diff::DiffRequest;
+    pub fn attach_to(&self, req: &mut Request, fs: &Arc<dyn Filesystem>, name: &str) {
         req.set_diff_source(self.clone(), Arc::clone(fs));
         req.nodes.add(self.staging.staged_diff_node(self.scope.clone(), name));
     }

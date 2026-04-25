@@ -19,9 +19,10 @@ use crate::plugin::Plugin;
 /// Trait for plugin configuration structs.
 ///
 /// Provides a standard deserialization path from a layered TOML document.
-/// Automatically implemented for any struct satisfying `Default + Serialize
-/// + Deserialize` via a blanket impl — your plugin config only needs the
-/// standard `#[derive(Default, Serialize, Deserialize)]` to participate.
+/// Automatically implemented for any struct satisfying the bounds
+/// `Default + Serialize + Deserialize` via a blanket impl — your plugin
+/// config only needs the standard
+/// `#[derive(Default, Serialize, Deserialize)]` to participate.
 ///
 /// Call `ctx.plugin_config::<Config>(self.id())` in your plugin's
 /// `activate()` to materialize the resolved config, and use
@@ -125,10 +126,10 @@ impl NyneConfig {
 /// Declare a plugin VFS-path config struct with serde defaults derived from
 /// the field list.
 ///
-/// Emits `#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize)]`
-/// + `#[serde(default, deny_unknown_fields)]` + a `Default` impl that maps
+/// Emits `#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize)]`,
+/// `#[serde(default, deny_unknown_fields)]`, and a `Default` impl that maps
 /// each field to the provided string literal. Eliminates the paired
-/// struct-definition + Default-impl boilerplate common to every plugin's
+/// struct-definition and `Default`-impl boilerplate common to every plugin's
 /// `VfsDirs` / `VfsFiles` config.
 ///
 /// ```ignore
