@@ -137,7 +137,7 @@ fn extract_changed_paths(line: &str, root: &Path, ignore_extensions: &[String], 
         else {
             continue;
         };
-        let rel = Path::new(fp).strip_root(root).and_then(Path::to_str).unwrap_or(fp);
+        let rel = Path::new(fp).strip_root_str(root).unwrap_or(fp);
         if is_ignored_extension(rel, ignore_extensions) {
             continue;
         }

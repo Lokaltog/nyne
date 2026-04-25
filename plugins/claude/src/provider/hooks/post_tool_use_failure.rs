@@ -56,7 +56,7 @@ impl Script for PostToolUseFailure {
             let chain = ctx.chain();
             match super::resolve_companion(chain, root, abs) {
                 Some(c) => c.source_file.and_then(|sf| sf.to_str().map(str::to_owned)),
-                None => abs.strip_root(root).and_then(Path::to_str).map(str::to_owned),
+                None => abs.strip_root_str(root).map(str::to_owned),
             }
         });
 

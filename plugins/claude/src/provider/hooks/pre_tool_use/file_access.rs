@@ -161,7 +161,7 @@ fn resolve_target<'a>(
     let activation = ctx.activation();
     let root = activation.root();
     let abs = Path::new(file_path);
-    let rel = abs.strip_root(root)?.to_str()?;
+    let rel = abs.strip_root_str(root)?;
 
     if super::super::resolve_companion(ctx.chain(), root, abs).is_some() {
         return None;

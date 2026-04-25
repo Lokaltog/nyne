@@ -133,6 +133,28 @@ pub trait PathExt {
     /// );
     /// ```
     fn strip_root(&self, root: &Path) -> Option<&Path>;
+
+    /// Like [`strip_root`](Self::strip_root) but returns the relative remainder
+    /// as a `&str`. Returns `None` if the path is not under `root` or the
+    /// relative part is not valid UTF-8.
+    ///
+    /// Use this at boundaries where the consumer wants a string slice (diff
+    /// rendering, JSON output, template variables) rather than rebuilding the
+    /// `Path → str` chain at every call site.
+    ///
+    /// ```
+    /// # use std::path::Path;
+    /// # use nyne::path_utils::PathExt;
+    /// assert_eq!(
+    ///     Path::new("/code/src/main.rs").strip_root_str(Path::new("/code")),
+    ///     Some("src/main.rs"),
+    /// );
+    /// assert_eq!(
+    ///     Path::new("/elsewhere").strip_root_str(Path::new("/code")),
+    ///     None
+    /// );
+    /// ```
+    fn strip_root_str(&self, root: &Path) -> Option<&str>;
 }
 
 impl PathExt for Path {
@@ -194,4 +216,6 @@ impl PathExt for Path {
         relative.to_str()?;
         Some(relative)
     }
+
+    fn strip_root_str(&self, root: &Path) -> Option<&str> { self.strip_root(root)?.to_str() }
 }

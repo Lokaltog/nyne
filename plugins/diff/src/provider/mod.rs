@@ -186,9 +186,7 @@ fn format_edit(edit: &FileEditResult, root: &Path) -> String {
 /// This is the single location where absolute display paths are normalized
 /// for diff output. All diff rendering flows through [`format_edit`], which
 /// calls this before passing paths to [`unified_diff`].
-fn strip_root_prefix<'a>(path: &'a str, root: &Path) -> &'a str {
-    Path::new(path).strip_root(root).and_then(Path::to_str).unwrap_or(path)
-}
+fn strip_root_prefix<'a>(path: &'a str, root: &Path) -> &'a str { Path::new(path).strip_root_str(root).unwrap_or(path) }
 
 /// Build validation summary lines for the diff header.
 ///

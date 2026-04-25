@@ -58,7 +58,7 @@ pub(super) fn extract_rel_paths(cmd: &str, root: &Path, chain: &Chain) -> Vec<St
     cmd.split_whitespace()
         .filter_map(|tok| {
             let tok = tok.trim_end_matches([',', ':', ';']);
-            let rel = Path::new(tok).strip_root(root)?.to_str()?;
+            let rel = Path::new(tok).strip_root_str(root)?;
             if super::resolve_companion(chain, root, Path::new(tok)).is_some() {
                 return None;
             }
@@ -96,7 +96,7 @@ pub(super) fn source_rel_path(
 
     match super::resolve_companion(chain, root, abs) {
         Some(c) => c.source_file.and_then(|sf| sf.to_str().map(str::to_owned)),
-        None => abs.strip_root(root).and_then(Path::to_str).map(str::to_owned),
+        None => abs.strip_root_str(root).map(str::to_owned),
     }
 }
 
