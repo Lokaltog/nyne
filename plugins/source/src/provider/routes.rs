@@ -323,6 +323,13 @@ impl SyntaxProvider {
     /// for the TTL window (refreshed on each open/close), then lazy-clear
     /// — restoring sink semantics (`ENOENT`).
     ///
+    /// **Stages an empty op on CREATE.** This makes content-free
+    /// interactions (`touch <endpoint>`, `> <endpoint>`) stage the op
+    /// even when no `WRITE` follows. A subsequent `WRITE` updates the
+    /// content via `EditStaging::stage`'s in-place dedupe — see
+    /// [`StageWritable::write`](crate::edit::staging::StageWritable) and
+    /// [`EditStaging::stage`](crate::edit::staging::EditStaging::stage).
+    ///
     /// Only the `edit/` sub-route accepts creates; other sub-routes fall
     /// through to the chain so downstream plugins (e.g. the `fs` plugin)
     /// can handle real file creates if they choose.
@@ -345,6 +352,12 @@ impl SyntaxProvider {
         if !self.decomposition.has_fragment(&sf, parent) {
             return Ok(());
         }
+
+        // Stage an empty op so `touch <endpoint>` (CREATE without WRITE)
+        // still records the user's intent. The dedupe + no-clobber guard
+        // in `EditStaging::stage` ensures a subsequent WRITE updates this
+        // op in place rather than appending a duplicate.
+        self.staging.stage(sf.clone(), parent.to_vec(), kind, None);
 
         req.nodes.add(
             Node::file()

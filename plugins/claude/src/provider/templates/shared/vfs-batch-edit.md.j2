@@ -4,7 +4,16 @@ Batch edit stages multiple operations across symbols and files, then applies the
 
 Prefer batch edits for 2+ operations. For a single change, use the Edit tool directly. Stage all related edits first, then apply together with `rm {{ paths.edit_staged_diff() }}`. This is safe (tree-sitter validated) and efficient (one atomic write).
 
-Writing to a staging endpoint stages the edit directly — no prior read required. Repeated writes to the same endpoint stage more operations. Stage edits with the `Write` tool.
+Writing to a staging endpoint stages the edit directly — no prior read required. Stage edits with the `Write` tool, or `touch <endpoint>` to stage an empty op (useful for `delete`, or for `replace` to remove a body).
+
+Staging is **idempotent by `(symbol, kind)`** — repeated interactions on the same endpoint update the existing op in place rather than appending a duplicate. The last non-empty write wins; an empty stage never clobbers earlier non-empty content. To correct a stage, simply rewrite the endpoint:
+
+```bash
+echo wrong > <Foo@/edit/replace>
+echo right > <Foo@/edit/replace>   # supersedes; no need to clear staged.diff
+```
+
+**Caveat — no stacking at the same anchor:** because of the dedupe, two writes to the *same* endpoint cannot stage two distinct ops. To insert multiple items at the same anchor, combine them into one write (`{ echo X; echo Y; } > Foo@/edit/insert-after`) or stage at distinct anchors.
 
 {{ hints.batch_edit_kinds_table() }}
 `append` writes inside the symbol's body (impls, modules, classes). `insert-after` places content as a sibling after the symbol closes.

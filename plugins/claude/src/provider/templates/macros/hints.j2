@@ -38,8 +38,8 @@
   ("insert-before", "Add a new symbol/docstring immediately before an existing one",                                       "Code to insert",                   "Baz",    "/// docs"),
   ("insert-after",  "Add a new symbol immediately after an existing one",                                                  "Code to insert",                   "Bar",    "fn helper(){}"),
   ("append",        "Extend an existing body (e.g., add a method inside an impl block)",                                   "Code appended inside the body",    "MyImpl", "fn method(){}"),
-  ("delete",        "Remove an entire symbol",                                                                             "Any non-empty byte — content is ignored", "Old",    "1"),
-  ("replace",       "Only when rewriting a significant portion of a symbol. For small/targeted edits, use the Edit tool.", "New body",                         "Foo",    "fn new_impl(){}"),
+  ("delete",        "Remove an entire symbol",                                                                             "Empty (touch) or any content — ignored", "Old",    ""),
+  ("replace",       "Only when rewriting a significant portion of a symbol. For small/targeted edits, use the Edit tool.", "New body (empty removes the body)",                         "Foo",    "fn new_impl(){}"),
 ] -%}
 
 {#-- Markdown table rendering of BATCH_EDIT_KINDS. --#}

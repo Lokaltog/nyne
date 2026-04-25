@@ -4,6 +4,40 @@
 //! stage edits, then `rm @/edit/staged.diff` to apply atomically with
 //! tree-sitter validation. The staging area is per-mount, keyed by source
 //! file.
+//!
+//! # Interaction model
+//!
+//! Any successful interaction with a staging endpoint records the op:
+//!
+//! - `touch <endpoint>` — stages an empty op (CREATE without WRITE).
+//! - `echo X > <endpoint>` — stages an op with content `X`.
+//! - `> <endpoint>` — truncates to empty, stages an empty op.
+//!
+//! Empty content is valid. For `replace` it removes the body; for
+//! `insert-before`/`insert-after`/`append` it's a no-op; for `delete` the
+//! content is irrelevant either way.
+//!
+//! # Idempotency and last-write-wins
+//!
+//! Staging is idempotent by `(fragment_path, kind)` — repeated interactions
+//! on the same endpoint update the existing op in place rather than
+//! appending duplicates. The last non-empty write wins; empty writes never
+//! clobber an earlier non-empty content. This means corrections work by
+//! simply rewriting the endpoint:
+//!
+//!     echo wrong > Foo@/edit/replace
+//!     echo right > Foo@/edit/replace   # supersedes the previous stage
+//!
+//! There is no need to clear `staged.diff` between corrections.
+//!
+//! **Caveat — no stacking at the same anchor**: because of the
+//! `(fragment_path, kind)` dedupe, two separate writes to the *same*
+//! endpoint cannot stage two distinct ops. To insert multiple items at the
+//! same anchor, combine them into a single write:
+//!
+//!     { echo "fn helper1() {}"; echo "fn helper2() {}"; } > Foo@/edit/insert-after
+//!
+//! Or stage at distinct anchors (e.g., before different sibling symbols).
 
 use std::collections::HashMap;
 use std::mem;
@@ -66,7 +100,19 @@ impl EditStaging {
 
     /// Stage an edit operation for a source file.
     ///
-    /// Returns the assigned sequence number.
+    /// Idempotent by `(fragment_path, kind)` — calling `stage` repeatedly
+    /// for the same target updates the existing op's content in place
+    /// (last-write-wins) rather than appending a duplicate. The original
+    /// sequence number is preserved so apply-time ordering reflects when
+    /// the op was first staged.
+    ///
+    /// **No-clobber guard**: an empty (`None`) content does not overwrite
+    /// an existing non-empty content. This protects content staged by an
+    /// earlier write from being erased by a later `CREATE`-only interaction
+    /// (e.g. a stale `touch` after the inode binding's TTL expired).
+    ///
+    /// Returns the sequence number — newly-assigned for fresh keys, or
+    /// preserved for existing keys.
     pub fn stage(
         &self,
         source_file: PathBuf,
@@ -74,17 +120,24 @@ impl EditStaging {
         kind: EditOpKind,
         content: Option<String>,
     ) -> u32 {
+        let mut ops = self.inner.ops.lock();
+        let entry = ops.entry(source_file).or_default();
+        if let Some((seq, op)) = entry
+            .iter_mut()
+            .find(|(_, op)| op.fragment_path == fragment_path && op.kind == kind)
+        {
+            // Last-write-wins, but never clobber non-empty content with empty.
+            if content.is_some() || op.content.is_none() {
+                op.content = content;
+            }
+            return *seq;
+        }
         let seq = self.inner.counter.fetch_add(1, Ordering::Relaxed);
-        self.inner
-            .ops
-            .lock()
-            .entry(source_file)
-            .or_default()
-            .push((seq, EditOp {
-                fragment_path,
-                kind,
-                content,
-            }));
+        entry.push((seq, EditOp {
+            fragment_path,
+            kind,
+            content,
+        }));
         seq
     }
 
@@ -274,12 +327,18 @@ pub struct StageWritable {
 
 impl Writable for StageWritable {
     fn write(&self, _ctx: &WriteContext<'_>, data: &[u8]) -> Result<AffectedFiles> {
-        let content = match self.kind {
-            EditOpKind::Delete => None,
-            _ => Some(String::from_utf8_lossy(data).into_owned()),
-        };
-        self.staging
-            .stage(self.source_file.clone(), self.fragment_path.clone(), self.kind, content);
+        // Empty writes (zero-byte) stage with content=None. Non-empty
+        // writes stage with the bytes as content. `Delete` resolves
+        // without reading content, so the kind-agnostic branch is correct
+        // for all op kinds. `EditStaging::stage` dedupes by
+        // (fragment_path, kind) — this write updates the empty op staged
+        // at CREATE time (via `fragment_create`).
+        self.staging.stage(
+            self.source_file.clone(),
+            self.fragment_path.clone(),
+            self.kind,
+            (!data.is_empty()).then(|| String::from_utf8_lossy(data).into_owned()),
+        );
         // Empty: the source file isn't actually mutated by staging — the
         // mutation happens at apply time (via `rm staged.diff`). Returning
         // the source path here would trip `notify_change` into invalidating
