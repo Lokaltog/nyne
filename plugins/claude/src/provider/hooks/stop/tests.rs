@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use rstest::rstest;
 
@@ -53,7 +54,7 @@ fn extract_changed_paths_cases(
     let line = tool_use_line(tool, path);
     let ignore_exts: Vec<String> = ignored.iter().map(|s| (*s).to_owned()).collect();
     let mut out = BTreeSet::new();
-    extract_changed_paths(&line, "/project/", &ignore_exts, &mut out);
+    extract_changed_paths(&line, Path::new("/project"), &ignore_exts, &mut out);
     assert_eq!(out.len(), expected_count);
 }
 
@@ -62,7 +63,7 @@ fn extract_changed_paths_cases(
 fn extract_strips_root_prefix() {
     let line = tool_use_line("Edit", "/project/src/lib.rs");
     let mut out = BTreeSet::new();
-    extract_changed_paths(&line, "/project/", &[], &mut out);
+    extract_changed_paths(&line, Path::new("/project"), &[], &mut out);
     assert_eq!(out.into_iter().next().unwrap(), "src/lib.rs");
 }
 
@@ -81,6 +82,6 @@ fn extract_deduplicates() {
     .to_string();
 
     let mut out = BTreeSet::new();
-    extract_changed_paths(&line, "/p/", &[], &mut out);
+    extract_changed_paths(&line, Path::new("/p"), &[], &mut out);
     assert_eq!(out.len(), 1);
 }

@@ -28,62 +28,32 @@ pub struct ActivationContext {
     /// Host root — the original project path on the host filesystem
     /// (before sandbox/overlay). Useful for display purposes (e.g.,
     /// statusline showing which project is mounted).
-    host_root: PathBuf,
+    pub(crate) host_root: PathBuf,
     /// Display root — the path the user sees as the project root inside
     /// the sandbox (`/code`). Used for template rendering, LSP path
     /// rewriting, and path-prefix computations. **Not** for filesystem
     /// access — the daemon uses `source_root` for I/O.
-    root: PathBuf,
+    pub(crate) root: PathBuf,
     /// Source root — the daemon's internal working directory.
     /// All filesystem access during FUSE callbacks goes through this
     /// path, which may be an overlayfs merged dir or a direct bind mount.
-    source_root: PathBuf,
+    pub(crate) source_root: PathBuf,
     /// Filesystem access abstraction.
-    fs: Arc<dyn Filesystem>,
+    pub(crate) fs: Arc<dyn Filesystem>,
     /// Process spawner with env isolation.
-    spawner: Arc<Spawner>,
+    pub(crate) spawner: Arc<Spawner>,
     /// Bounded PID → comm cache. Shared between the FUSE handler and
     /// plugins (e.g. visibility) so every `/proc/{pid}/comm` read goes
     /// through a single memoized lookup.
-    process_names: Arc<ProcessNameCache>,
+    pub(crate) process_names: Arc<ProcessNameCache>,
     /// Full configuration, stored for provider access.
-    config: Arc<NyneConfig>,
-    /// Display root with trailing slash — precomputed for path stripping.
-    root_prefix: String,
+    pub(crate) config: Arc<NyneConfig>,
     /// Plugin-provided services, keyed by type.
-    extensions: SendSyncAnyMap,
+    pub(crate) extensions: SendSyncAnyMap,
 }
 
 /// Methods for building and querying the shared activation context.
 impl ActivationContext {
-    /// Build a new activation context with core fields only.
-    ///
-    /// Domain services (git, syntax, LSP, etc.) are inserted by plugins
-    /// during activation via [`insert`](Self::insert).
-    pub fn new(
-        host_root: PathBuf,
-        root: PathBuf,
-        source_root: PathBuf,
-        fs: Arc<dyn Filesystem>,
-        config: Arc<NyneConfig>,
-        spawner: Arc<Spawner>,
-        process_names: Arc<ProcessNameCache>,
-    ) -> Self {
-        let mut root_prefix = root.display().to_string();
-        root_prefix.push('/');
-        Self {
-            host_root,
-            root,
-            source_root,
-            fs,
-            spawner,
-            process_names,
-            config,
-            root_prefix,
-            extensions: SendSyncAnyMap::new(),
-        }
-    }
-
     /// The display root — the path the user sees as the project root.
     pub fn root(&self) -> &Path { &self.root }
 
@@ -153,9 +123,6 @@ impl ActivationContext {
     /// and deserializes it via [`PluginConfig::from_section`]. Returns the
     /// type's `Default` on a missing section or deserialization failure.
     pub fn plugin_config<C: PluginConfig>(&self, id: &str) -> C { C::from_section(self.config().plugin.get(id)) }
-
-    /// Display root with trailing slash — for stripping absolute paths to relative.
-    pub fn root_prefix(&self) -> &str { &self.root_prefix }
 
     /// Resolve a relative path to its absolute source filesystem path.
     ///

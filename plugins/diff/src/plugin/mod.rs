@@ -10,7 +10,7 @@ impl Plugin for DiffPlugin {
 
     fn providers(&self, ctx: &Arc<ActivationContext>) -> Result<Vec<Arc<dyn Provider>>> {
         Ok(vec![Arc::new(DiffProvider {
-            root_prefix: ctx.root_prefix().to_owned(),
+            root: ctx.root().to_path_buf(),
         })])
     }
 }

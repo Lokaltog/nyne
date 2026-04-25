@@ -54,8 +54,8 @@ impl Script for Stop {
             _ => return Ok(HookOutput::empty()),
         };
 
-        let root_prefix = ctx.activation().root_prefix();
-        let changed_files = find_changed_files(Path::new(transcript_path), root_prefix, &self.config.ignore_extensions);
+        let root = ctx.activation().root();
+        let changed_files = find_changed_files(Path::new(transcript_path), root, &self.config.ignore_extensions);
 
         if changed_files.len() < self.config.min_files {
             return Ok(HookOutput::empty());
@@ -76,7 +76,7 @@ impl Script for Stop {
 /// Performs a single pass over the transcript: when a human prompt line is
 /// encountered, accumulated paths are cleared so only changes after the
 /// final prompt survive.
-fn find_changed_files(transcript: &Path, root_prefix: &str, ignore_extensions: &[String]) -> Vec<String> {
+fn find_changed_files(transcript: &Path, root: &Path, ignore_extensions: &[String]) -> Vec<String> {
     let Ok(file) = File::open(transcript) else {
         return Vec::new();
     };
@@ -103,7 +103,7 @@ fn find_changed_files(transcript: &Path, root_prefix: &str, ignore_extensions: &
             continue;
         }
 
-        extract_changed_paths(&line, root_prefix, ignore_extensions, &mut files);
+        extract_changed_paths(&line, root, ignore_extensions, &mut files);
     }
 
     files.into_iter().collect()
@@ -111,7 +111,7 @@ fn find_changed_files(transcript: &Path, root_prefix: &str, ignore_extensions: &
 
 /// Extract file paths from Edit/Write `tool_use` blocks in a single transcript
 /// line, filtering out ignored extensions.
-fn extract_changed_paths(line: &str, root_prefix: &str, ignore_extensions: &[String], out: &mut BTreeSet<String>) {
+fn extract_changed_paths(line: &str, root: &Path, ignore_extensions: &[String], out: &mut BTreeSet<String>) {
     let Ok(msg) = serde_json::from_str::<serde_json::Value>(line) else {
         return;
     };
@@ -137,7 +137,7 @@ fn extract_changed_paths(line: &str, root_prefix: &str, ignore_extensions: &[Str
         else {
             continue;
         };
-        let rel = fp.strip_prefix(root_prefix).unwrap_or(fp);
+        let rel = Path::new(fp).strip_root(root).and_then(Path::to_str).unwrap_or(fp);
         if is_ignored_extension(rel, ignore_extensions) {
             continue;
         }

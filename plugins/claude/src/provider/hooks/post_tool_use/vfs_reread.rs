@@ -5,6 +5,7 @@
 //! the underlying file — symbol names may have shifted due to the
 //! re-parse that every write triggers.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use nyne::prelude::*;
@@ -42,8 +43,8 @@ impl Script for VfsReread {
                 let kind = input.tool_kind()?;
                 let edit_input = input.tool_input_as::<EditToolInput>();
                 let file_path = util::tool_file_path(edit_input.as_ref(), input, kind)?;
-                let root = ctx.activation().root_prefix();
-                let companion = super::super::resolve_companion(ctx.chain(), root, &file_path)?;
+                let root = ctx.activation().root();
+                let companion = super::super::resolve_companion(ctx.chain(), root, Path::new(&file_path))?;
                 let rel = companion.source_file?.to_str()?.to_owned();
                 Some(minijinja::context! { rel, is_vfs => true })
             },

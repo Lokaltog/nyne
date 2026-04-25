@@ -6,9 +6,11 @@
 
 pub mod state;
 use std::iter;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use color_eyre::eyre::{Result, WrapErr, eyre};
+use nyne::path_utils::PathExt;
 use nyne::router::{
     AffectedFiles, CachePolicy, Filesystem, Next, Node, Op, Provider, ReadContext, Readable, Request, UnlinkContext,
     Unlinkable,
@@ -19,7 +21,7 @@ use tracing::debug;
 
 /// Diff middleware — creates preview nodes on lookup, applies edits on remove.
 pub struct DiffProvider {
-    pub(crate) root_prefix: String,
+    pub(crate) root: PathBuf,
 }
 
 nyne::define_provider!(DiffProvider, "diff", priority: -40);
@@ -43,7 +45,7 @@ impl Provider for DiffProvider {
                     Node::file()
                         .with_readable(DiffPreview {
                             source: Arc::clone(&diff.source),
-                            root_prefix: self.root_prefix.clone(),
+                            root: self.root.clone(),
                         })
                         .with_cache_policy(CachePolicy::NoCache)
                         .named(name),
@@ -115,7 +117,7 @@ impl Unlinkable for DiffUnlinkable {
 /// Readable that renders a [`DiffSource`] as a unified diff preview.
 struct DiffPreview {
     source: Arc<dyn DiffSource>,
-    root_prefix: String,
+    root: PathBuf,
 }
 
 impl Readable for DiffPreview {
@@ -131,7 +133,7 @@ impl Readable for DiffPreview {
         header_lines.push(format!("To apply: rm {}", ctx.path.display()));
 
         Ok(iter::once(format_header(&header_lines))
-            .chain(edits.iter().map(|e| format_edit(e, &self.root_prefix)))
+            .chain(edits.iter().map(|e| format_edit(e, &self.root)))
             .collect::<String>()
             .into_bytes())
     }
@@ -161,16 +163,16 @@ fn format_header(lines: &[String]) -> String {
 /// creates and modifications become unified diffs. Renames include both the
 /// comment header and a diff of the content change.
 ///
-/// `root_prefix` is stripped from display paths so that diff headers use
+/// `root` is stripped from display paths so that diff headers use
 /// project-relative paths compatible with `patch -p1`.
-fn format_edit(edit: &FileEditResult, root_prefix: &str) -> String {
-    let display = strip_root_prefix(&edit.display_path, root_prefix);
+fn format_edit(edit: &FileEditResult, root: &Path) -> String {
+    let display = strip_root_prefix(&edit.display_path, root);
     match &edit.outcome {
         EditOutcome::Delete => ["# Deleted: ", display, "\n"].concat(),
         EditOutcome::Create => unified_diff("", &edit.modified, display),
         EditOutcome::Rename { new_path } => {
             let new_path_str = new_path.display().to_string();
-            let new_display = strip_root_prefix(&new_path_str, root_prefix);
+            let new_display = strip_root_prefix(&new_path_str, root);
             let mut out = ["# Renamed: ", display, " -> ", new_display, "\n"].concat();
             out.push_str(&unified_diff(&edit.original, &edit.modified, new_display));
             out
@@ -184,7 +186,9 @@ fn format_edit(edit: &FileEditResult, root_prefix: &str) -> String {
 /// This is the single location where absolute display paths are normalized
 /// for diff output. All diff rendering flows through [`format_edit`], which
 /// calls this before passing paths to [`unified_diff`].
-fn strip_root_prefix<'a>(path: &'a str, root_prefix: &str) -> &'a str { path.strip_prefix(root_prefix).unwrap_or(path) }
+fn strip_root_prefix<'a>(path: &'a str, root: &Path) -> &'a str {
+    Path::new(path).strip_root(root).and_then(Path::to_str).unwrap_or(path)
+}
 
 /// Build validation summary lines for the diff header.
 ///

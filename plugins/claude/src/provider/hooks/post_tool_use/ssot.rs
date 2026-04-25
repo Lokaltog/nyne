@@ -53,8 +53,8 @@ impl Script for Ssot {
                     return None;
                 }
 
-                let root = ctx.activation().root_prefix();
-                let rel = util::source_rel_path(edit_input.as_ref(), input, kind, root, ctx.chain())?;
+                let rel =
+                    util::source_rel_path(edit_input.as_ref(), input, kind, ctx.activation().root(), ctx.chain())?;
                 Some(minijinja::context! { rel })
             },
         ))

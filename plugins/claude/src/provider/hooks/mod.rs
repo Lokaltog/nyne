@@ -22,9 +22,10 @@ mod util;
 /// Stop hook -- SSOT/DRY review after turns with code changes.
 pub(in crate::provider) mod stop;
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 
+use nyne::path_utils::PathExt;
 use nyne::router::{Chain, Op};
 use nyne::templates::{HandleBuilder, TemplateEngine};
 use nyne::{Script, ScriptEntry, provider_script_address};
@@ -77,9 +78,9 @@ pub(super) fn render_context(
 /// Returns `Some(Companion)` if the path targets a VFS companion namespace,
 /// `None` for regular filesystem paths. The caller can read
 /// `companion.source_file` to get the underlying source file path.
-pub(super) fn resolve_companion(chain: &Chain, root: &str, abs_path: &str) -> Option<Companion> {
+pub(super) fn resolve_companion(chain: &Chain, root: &Path, abs_path: &Path) -> Option<Companion> {
     chain
-        .evaluate(PathBuf::from(abs_path.strip_prefix(root)?), Op::Readdir)
+        .evaluate(abs_path.strip_root(root)?.to_path_buf(), Op::Readdir)
         .ok()?
         .companion()
         .cloned()

@@ -39,7 +39,7 @@ impl Script for BashHints {
             "PostToolUse",
             |input, ctx| {
                 let cmd = input.tool_input_as::<BashToolInput>()?.command?;
-                let rel_paths = util::extract_rel_paths(&cmd, ctx.activation().root_prefix(), ctx.chain());
+                let rel_paths = util::extract_rel_paths(&cmd, ctx.activation().root(), ctx.chain());
                 if rel_paths.is_empty() {
                     return None;
                 }

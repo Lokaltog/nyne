@@ -4,9 +4,11 @@
 //! but returns ENOENT because the edit renamed the symbol (the old path no
 //! longer exists). Emits a context message explaining the edit succeeded.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use color_eyre::eyre::Result;
+use nyne::path_utils::PathExt;
 use nyne::templates::TemplateEngine;
 use nyne::{Script, ScriptContext};
 
@@ -48,12 +50,13 @@ impl Script for PostToolUseFailure {
         }
 
         // Resolve the source file's relative path for the context message.
-        let root = ctx.activation().root_prefix();
+        let root = ctx.activation().root();
         let rel = file_path.and_then(|fp| {
+            let abs = Path::new(fp);
             let chain = ctx.chain();
-            match super::resolve_companion(chain, root, fp) {
+            match super::resolve_companion(chain, root, abs) {
                 Some(c) => c.source_file.and_then(|sf| sf.to_str().map(str::to_owned)),
-                None => fp.strip_prefix(root).map(str::to_owned),
+                None => abs.strip_root(root).and_then(Path::to_str).map(str::to_owned),
             }
         });
 

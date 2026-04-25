@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use anymap2::SendSyncAnyMap;
 use color_eyre::eyre::{Result, bail};
 
 use crate::config::NyneConfig;
@@ -66,15 +67,16 @@ macro_rules! load_fixture {
 /// context reference but don't exercise filesystem or config behavior.
 pub fn stub_activation_context() -> ActivationContext {
     let tmp = PathBuf::from("/tmp/nyne-test");
-    ActivationContext::new(
-        tmp.clone(),
-        tmp.clone(),
-        tmp,
-        Arc::new(StubFs),
-        Arc::new(NyneConfig::default()),
-        Arc::new(Spawner::new()),
-        Arc::new(ProcessNameCache::default()),
-    )
+    ActivationContext {
+        host_root: tmp.clone(),
+        root: tmp.clone(),
+        source_root: tmp,
+        fs: Arc::new(StubFs),
+        config: Arc::new(NyneConfig::default()),
+        spawner: Arc::new(Spawner::new()),
+        process_names: Arc::new(ProcessNameCache::default()),
+        extensions: SendSyncAnyMap::new(),
+    }
 }
 /// A readable that returns static content.
 ///

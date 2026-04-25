@@ -159,10 +159,11 @@ fn resolve_target<'a>(
     edit_input: Option<&EditToolInput>,
 ) -> Option<Target<'a>> {
     let activation = ctx.activation();
-    let root_prefix = activation.root_prefix();
-    let rel = file_path.strip_prefix(root_prefix)?;
+    let root = activation.root();
+    let abs = Path::new(file_path);
+    let rel = abs.strip_root(root)?.to_str()?;
 
-    if super::super::resolve_companion(ctx.chain(), root_prefix, file_path).is_some() {
+    if super::super::resolve_companion(ctx.chain(), root, abs).is_some() {
         return None;
     }
 

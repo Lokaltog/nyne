@@ -54,13 +54,15 @@ pub(super) fn extract_command_name(cmd: &str) -> String {
 
 /// Extract relative paths from a command string — tokens under root that
 /// aren't VFS virtual paths.
-pub(super) fn extract_rel_paths(cmd: &str, root_str: &str, chain: &Chain) -> Vec<String> {
+pub(super) fn extract_rel_paths(cmd: &str, root: &Path, chain: &Chain) -> Vec<String> {
     cmd.split_whitespace()
-        .filter(|tok| tok.starts_with(root_str) && super::resolve_companion(chain, root_str, tok).is_none())
         .filter_map(|tok| {
-            tok.trim_end_matches([',', ':', ';'])
-                .strip_prefix(root_str)
-                .map(str::to_owned)
+            let tok = tok.trim_end_matches([',', ':', ';']);
+            let rel = Path::new(tok).strip_root(root)?.to_str()?;
+            if super::resolve_companion(chain, root, Path::new(tok)).is_some() {
+                return None;
+            }
+            Some(rel.to_owned())
         })
         .collect()
 }
@@ -86,14 +88,15 @@ pub(super) fn source_rel_path(
     edit_input: Option<&EditToolInput>,
     input: &HookInput,
     kind: ToolKind,
-    root: &str,
+    root: &Path,
     chain: &Chain,
 ) -> Option<String> {
     let file_path = tool_file_path(edit_input, input, kind)?;
+    let abs = Path::new(&file_path);
 
-    match super::resolve_companion(chain, root, &file_path) {
+    match super::resolve_companion(chain, root, abs) {
         Some(c) => c.source_file.and_then(|sf| sf.to_str().map(str::to_owned)),
-        None => file_path.strip_prefix(root).map(str::to_owned),
+        None => abs.strip_root(root).and_then(Path::to_str).map(str::to_owned),
     }
 }
 

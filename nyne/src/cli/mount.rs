@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use anymap2::SendSyncAnyMap;
 use clap::Args;
 use color_eyre::eyre::{Result, WrapErr, ensure, eyre};
 use tracing::info;
@@ -309,15 +310,16 @@ fn build_fuse_session(
     // read `/proc/{pid}/comm` through this single cache so a first
     // request from a new PID hits procfs exactly once.
     let process_names = Arc::new(ProcessNameCache::new());
-    let mut activation_ctx = ActivationContext::new(
-        mount_path.clone(),
-        display_root.to_path_buf(),
-        storage_root.clone(),
-        Arc::clone(&fs_backend),
-        Arc::clone(nyne_config),
+    let mut activation_ctx = ActivationContext {
+        host_root: mount_path.clone(),
+        root: display_root.to_path_buf(),
+        source_root: storage_root.clone(),
+        fs: Arc::clone(&fs_backend),
         spawner,
-        Arc::clone(&process_names),
-    );
+        process_names: Arc::clone(&process_names),
+        config: Arc::clone(nyne_config),
+        extensions: SendSyncAnyMap::new(),
+    };
 
     // Build the gitignore-backed path filter and publish it to plugins
     // via the activation context. Middlewares consult it to bypass

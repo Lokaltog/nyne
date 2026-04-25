@@ -42,13 +42,8 @@ impl Script for Diagnostics {
                 let kind = input.tool_kind()?;
                 let edit_input = input.edit_input();
 
-                let rel = util::source_rel_path(
-                    edit_input.as_ref(),
-                    input,
-                    kind,
-                    ctx.activation().root_prefix(),
-                    ctx.chain(),
-                )?;
+                let rel =
+                    util::source_rel_path(edit_input.as_ref(), input, kind, ctx.activation().root(), ctx.chain())?;
 
                 #[cfg(feature = "lsp")]
                 let (analysis, changed) = run_analysis(ctx, edit_input.as_ref(), &rel);
