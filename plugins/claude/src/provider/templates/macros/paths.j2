@@ -11,34 +11,36 @@
   hook render context) or without arguments (for agent / skill docs).
 #}
 
-{#-- Symbol body (`file@/symbols/Name@/body.ext`). --#}
-{%- macro sym(file="<file>", name="<Symbol>", ext="<ext>") -%}
-{{ file }}@/symbols/{{ name }}@/body.{{ ext }}
-{%- endmacro -%}
-
-{#-- Symbol signature slice. --#}
-{%- macro sym_signature(file="<file>", name="<Symbol>", ext="<ext>") -%}
-{{ file }}@/symbols/{{ name }}@/signature.{{ ext }}
-{%- endmacro -%}
-
-{#-- Symbol decorators slice. --#}
-{%- macro sym_decorators(file="<file>", name="<Symbol>", ext="<ext>") -%}
-{{ file }}@/symbols/{{ name }}@/decorators.{{ ext }}
-{%- endmacro -%}
-
-{#-- Symbol docstring slice (auto-prefixed comment markers). --#}
-{%- macro sym_docstring(file="<file>", name="<Symbol>") -%}
-{{ file }}@/symbols/{{ name }}@/docstring.txt
-{%- endmacro -%}
-
-{#-- Symbol's namespace directory (`file@/symbols/Name@/`). --#}
+{#-- Symbol's namespace directory (`file@/symbols/Name@/`). The single
+     source of truth for the per-symbol path prefix — every macro below
+     that produces a path inside a symbol's namespace builds on this. --#}
 {%- macro sym_dir(file="<file>", name="<Symbol>") -%}
 {{ file }}@/symbols/{{ name }}@/
 {%- endmacro -%}
 
+{#-- Symbol body (`file@/symbols/Name@/body.ext`). --#}
+{%- macro sym(file="<file>", name="<Symbol>", ext="<ext>") -%}
+{{ sym_dir(file, name) }}body.{{ ext }}
+{%- endmacro -%}
+
+{#-- Symbol signature slice. --#}
+{%- macro sym_signature(file="<file>", name="<Symbol>", ext="<ext>") -%}
+{{ sym_dir(file, name) }}signature.{{ ext }}
+{%- endmacro -%}
+
+{#-- Symbol decorators slice. --#}
+{%- macro sym_decorators(file="<file>", name="<Symbol>", ext="<ext>") -%}
+{{ sym_dir(file, name) }}decorators.{{ ext }}
+{%- endmacro -%}
+
+{#-- Symbol docstring slice (auto-prefixed comment markers). --#}
+{%- macro sym_docstring(file="<file>", name="<Symbol>") -%}
+{{ sym_dir(file, name) }}docstring.txt
+{%- endmacro -%}
+
 {#-- Symbol metadata markdown (CALLERS, DEPS, REFERENCES, IMPLEMENTATION, DOC). --#}
 {%- macro sym_md(file="<file>", name="<Symbol>", key="CALLERS") -%}
-{{ file }}@/symbols/{{ name }}@/{{ key }}.md
+{{ sym_dir(file, name) }}{{ key }}.md
 {%- endmacro -%}
 
 {#-- Per-file symbol table (OVERVIEW.md under the symbols namespace). --#}
@@ -78,22 +80,22 @@
 
 {#-- Code actions directory for a symbol. --#}
 {%- macro sym_actions(file="<file>", name="<Symbol>") -%}
-{{ file }}@/symbols/{{ name }}@/actions/
+{{ sym_dir(file, name) }}actions/
 {%- endmacro -%}
 
 {#-- Single code action diff for a symbol. --#}
 {%- macro sym_action(file="<file>", name="<Symbol>", action="<action>") -%}
-{{ file }}@/symbols/{{ name }}@/actions/{{ action }}.diff
+{{ sym_dir(file, name) }}actions/{{ action }}.diff
 {%- endmacro -%}
 
 {#-- Symbol rename preview diff. --#}
 {%- macro sym_rename(file="<file>", name="<Symbol>", new_name="<new_name>") -%}
-{{ file }}@/symbols/{{ name }}@/rename/{{ new_name }}.diff
+{{ sym_dir(file, name) }}rename/{{ new_name }}.diff
 {%- endmacro -%}
 
 {#-- Edit staging entries: replace, insert-before, insert-after, delete, append. --#}
 {%- macro edit_stage(file="<file>", name="<Symbol>", kind="replace") -%}
-{{ file }}@/symbols/{{ name }}@/edit/{{ kind }}
+{{ sym_dir(file, name) }}edit/{{ kind }}
 {%- endmacro -%}
 
 {#-- Cross-file atomic staged diff. Rooted at the mount — aggregates every
@@ -104,9 +106,9 @@
 <mount-root>/@/edit/staged.diff
 {%- endmacro -%}
 
-{#-- Per-file staged diff. Surfaces only the edits staged against this
-     source file. `rm` applies only the scoped edits; `>` clears only the
-     scoped edits. --#}
-{%- macro edit_staged_diff_for(file="<file>") -%}
-{{ file }}@/edit/staged.diff
+{#-- Per-symbol staged diff. Surfaces only the edits staged against this
+     specific symbol. `rm` applies only the symbol-scoped edits; `>`
+     clears only the symbol-scoped edits. --#}
+{%- macro edit_staged_diff_for_symbol(file="<file>", name="<Symbol>") -%}
+{{ sym_dir(file, name) }}edit/staged.diff
 {%- endmacro -%}

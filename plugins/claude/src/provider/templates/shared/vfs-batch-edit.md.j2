@@ -23,6 +23,21 @@ Examples:
 ```bash
 {{ hints.batch_edit_kinds_examples("file." ~ ext) }}```
 
+### Scopes — preview, apply, clear
+
+`staged.diff` exists at two scopes. Pick by what you want to apply/clear:
+
+| Scope | Path | Aggregates |
+|-|-|-|
+| Mount-wide | `{{ paths.edit_staged_diff() }}` | Every staged edit across every file |
+| Per-symbol | `{{ paths.edit_staged_diff_for_symbol() }}` | Only edits staged against that one symbol |
+
+Both support the same three interactions:
+
+    cat <endpoint>   # preview the diff
+    rm  <endpoint>   # apply the scoped edits atomically
+    >   <endpoint>   # clear (drain) the scoped edits
+
 ### Extracting and Moving Symbols
 
 To extract symbols or move symbols from one file to another (e.g., extracting helpers into a new module), use batch staging in combination with `cat` — this is a more powerful, precise and token-efficient technique than using the Edit/Write tools, and preserves exact content (docstrings, attributes, etc.).
